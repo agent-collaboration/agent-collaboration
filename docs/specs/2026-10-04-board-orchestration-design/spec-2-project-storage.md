@@ -48,9 +48,9 @@ stateDiagram-v2
 
 | E | Entity | Same instance when | Belongs to / relates | Invariants | Observable states |
 |---|---|---|---|---|---|
-| E24 | **Central copy** | (project ID) | exactly one per project, for the project's whole life; written only by applying that project's replicated changes, plus, once, an admin import's initial history while the project is unheld (spec 3 FL-17) | holds the project's replicated records, its schema identity, its fence (the highest epoch it accepts) and its acknowledged position. It never holds unreplicated holder state. Its schema identity equals the holder's once the change that set it is acknowledged | not initialized (refuses pieces until central accepts the project) · unheld (an import initialized it at the imported head under the import epoch, with no holder; refuses pieces until a claim fences it, spec 3 FL-15, FL-16) · live (a holder is granted) · fenced with no holder (between a takeover's fence and its grant) · full (refuses pieces with `centralCopyFull`) · archived (its board is archived: the holder admits only the reader-state exceptions of spec 1 E2, and the copy keeps applying the holder's pieces) |
+| E24 | **Central copy** | (project ID) | exactly one per project, for the project's whole life, which ends only by retirement (spec 3 FL-18); written only by applying that project's replicated changes, plus, once, an admin import's initial history while the project is unheld (spec 3 FL-17) | holds the project's replicated records, its schema identity, its fence (the highest epoch it accepts) and its acknowledged position. It never holds unreplicated holder state. Its schema identity equals the holder's once the change that set it is acknowledged | not initialized (refuses pieces until central accepts the project) · unheld (an import initialized it at the imported head under the import epoch, with no holder; refuses pieces until a claim fences it, spec 3 FL-15, FL-16) · live (a holder is granted) · fenced, with no lease for the new epoch (between a takeover's fence and its grant: the copy records the target as that epoch's holder and refuses the old holder's pieces) · full (refuses pieces with `centralCopyFull`) · archived (its board is archived: the holder admits only the reader-state exceptions of spec 1 E2, and the copy keeps applying the holder's pieces) · retired (its records are deleted; every piece, import, claim and read answers `retired`, and the ID is never reused; spec 3 FL-18) |
 | E25 | **Replication piece** | (project, epoch, the position it continues from, the position it runs through, and, for one part of a larger transaction, the part's place in it), plus a digest of its content. Every part of one transaction shares the two positions, so the place is what tells them apart | one project; one epoch; sent by that epoch's holder | Holds only whole holder transactions, or one part of a transaction too large for one piece, with the part's place in that transaction. A replication position is the epoch plus a number that increases within that epoch; numbers may skip, and a piece continues from exactly the copy's acknowledged position. A piece repeated with the same identity and digest is a no-op. The same identity with a different digest is refused as `pieceConflict` and changes nothing | sent → applied \| refused (typed) \| unknown (until the acknowledged position is read) |
-| E26 | **Machine session** | (machine installation, session ID) | one machine; carries every project that machine replicates | Outlives any one network connection. Its observable state includes, for each project it replicates, the last acknowledged position, and resuming starts every project from there. Only a credential for that installation can open it (spec 3 FL-12) | connected · disconnected (resuming) · closed (credential rejected or revoked) |
+| E26 | **Machine session** | (machine installation, session ID) | one machine; carries every project that machine replicates | Outlives any one network connection. Its observable state includes, for each project it replicates, the last acknowledged position, and resuming starts every project from there. Only a credential for that installation can open it (spec 3 FL-12) | connected · disconnected (resuming; an expired or rejected credential closes only the connection) · ended (revoked, or replaced by a new session ID) |
 
 ## 4. Obligations: placement and writer authority (WA)
 
@@ -58,7 +58,11 @@ stateDiagram-v2
 - **WA-3** Every accepted project record MUST carry the writer epoch it was accepted under. A record is **accepted** when the holder admits it. It's **replicated** once its project's central copy (E24) has durably applied it under that epoch and acknowledged its position. Until then it's provisional; if its epoch is superseded first, it's **voided** into the rejected tail (WA-5). Every view and read copy MUST show which records it reflects as replicated and which as provisional. (U21)
 - **WA-3a Transactions replicate whole.** A central copy MUST show all of a holder transaction's records or none of them, in the holder's commit order. This holds even when one transaction is too large for one piece: no reader ever sees part of it. (U33; spec 1 RC)
 - **WA-3b Order, repeats and gaps.** A central copy MUST apply a piece only if it continues from exactly the copy's acknowledged position. A piece it has already applied changes nothing and returns the same acknowledged position. A piece that would leave a gap is refused as `positionGap`, which names the acknowledged position, and the holder resends from there. The holder MUST keep every captured change until its central copy acknowledges it. A backlog is always sent in pieces; the lease's length bounds how large it can grow (U38). (U33)
-- **WA-4** On a **clean move** (an admin request, spec 3 FL-10), the holder MUST make every accepted record replicated before releasing. The next epoch then starts at the next feed position, with no gap and no duplicate. A move MUST NOT complete while a schema migration is pending or failed. It's refused as `migrationPending`, which names the migration and its state. (U21, U39)
+- **WA-4** On a **clean move** (an admin request, spec 3 FL-10), no new holder MAY be granted, and no next writer MAY admit anything, until the project's central copy has acknowledged the old holder's final position.
+  - The holder stops admitting and answers the release at its final *captured* position. The registry then waits for the copy's acknowledgement of that position before it fences and grants.
+  - The next epoch starts at the next feed position, with no gap and no duplicate. Every record the old holder accepted is replicated before anyone else writes.
+  - A move MUST NOT complete while the holder has a schema migration it hasn't applied. When the holder reports one, the move is refused as `migrationPending`, naming the migration and the state the holder reports. A holder whose migration failed while it opened the project answers no release; spec 3 FL-10 says what the move sees then.
+  - (U21, U39) *Revised 2026-10-17 for agent-fleet-sync: the outcome is unchanged. Only the point at which the holder's own release answer is sent moved, to its final captured position, and the grant still waits for the copy.*
 - **WA-5** On a **takeover** (an admin request, spec 3 FL-10, possible at any time, including before the lease expires), the new epoch MUST start from the central copy's last acknowledged position. Records the old holder accepted after that point form its rejected tail (E22).
   - When the old holder returns, any attempt to replicate that tail MUST be refused **as a whole** (`staleEpoch`), and none of it may enter the project's feed.
   - The tail MUST be kept readable on the old holder's machine.
@@ -87,8 +91,32 @@ stateDiagram-v2
   - The record names the posting agent and the machine it came from.
   - When the holder isn't connected, the post MUST be refused at once as `holderUnreachable`, naming when the holder was last seen. Nothing is queued.
   - When the holder doesn't answer in time, the outcome is `unanswered`: the post may or may not have been admitted, and a retry with the same request ID returns the holder's recorded answer.
-  - Notifications follow the normal rules. A recipient on a machine with no delivery path waits for the interactions lane (P3).
+  - Notifications follow the normal rules and travel by WA-14 and spec 3 MS. A forwarded post itself is **not** queued: `holderUnreachable` still applies at once.
+- **WA-14 Outbox and inbox (U63).** Each Router keeps a durable **outbox** of the items it sends, with each one's custody status. It also keeps a durable **inbox** of the items received for its sessions, taken in order from its ledger cursor. Both survive restarts. A board notification for a recipient on another machine leaves the outbox only under spec 3 MS-5. The full contract is spec 3 MS-1 to MS-11.
 - **WA-12 Connections come and go; replication doesn't lose or repeat.** A dropped network connection, a Cloudflare deploy, or central objects losing their memory MUST NOT lose a replicated record or apply one twice. Replication resumes over the machine session (E26) from each project's last acknowledged position. (U35, U36)
+
+## 4.1 Realized by agent-fleet-sync (U78, U79)
+
+A project database's writer, its capture and pieces, the holder's lease, schema identity and normal migrations, clean moves, takeovers and rejected tails, and the machine session are realized by agent-fleet-sync. The board adds its own rules on top. The rules in spec 3 §4.2 apply here too:
+- board names on board surfaces, mapped from the library's names on the wire;
+- every obligation keeps its meaning;
+- the wire changes once, at the release cutover.
+
+| Obligation | agent-fleet-sync supplies | The board adds |
+|---|---|---|
+| WA-2 | writer admission and fencing (SO1, SO14) | project-to-database binding, the whole-project placement, posts forwarded to the holder (WA-13) |
+| WA-3 | per-commit acknowledgements and tails (SO3, SO17) | record epochs; provisional, replicated and voided views; board feed positions mapped to captured commits |
+| WA-3a, WA-12 | whole transactions; sessions that survive connections (SO2, SO20–SO24) | none |
+| WA-3b | continuation, replay and retention (SO3, SO9); the authoritative copy retained until acknowledged | the surface name `positionGap` |
+| WA-4 | the release, waiting for the copy, then fence and grant (SO16, SO31, SO48) | migration detail on the refusal, as the holder reports it (an agent-fleet-sync change) |
+| WA-5 | the authoritative cutoff and a readable tail (SO1, SO16, SO17) | request IDs and the digest report, lifecycle facts, voiding and `resubmits` |
+| WA-6 | the superseded-writer refusal (SO14, SO17) | the surface name `notWriter{current}`, and the marked read copy |
+| WA-7 | migration ordering, key guards, live fingerprints (SO5, SO6, SO10) | the expected-fingerprint catalog and mismatch diagnoses |
+| WA-8, WA-9 | databases and drivers (SO1, SO11, SO28, SO29) | one database per project, with exactly one authoritative central copy |
+| WA-10 | provisional writes and registration (SO44, SO45) | the directory acceptance gate, `projectRejected`, voiding, moving the database aside |
+| WA-11 | write pause and resume on expiry (SO14) | pausing and resuming wakes and schedules |
+| WA-13 | the consumer protocol (SO25, SO27, SO43) | posts-only authorization, `holderUnreachable` at once, `unanswered`, the bound |
+| WA-14 | outbox, relay and inbox (SO34, SO38, SO42) | payloads, stores and the release gate after replication |
 
 ## 5. Proof
 
@@ -113,6 +141,8 @@ stateDiagram-v2
 | U56 | E26, E10 | WA-13 (posts from another machine, forwarded to the holder) | V7, V9 (spec 3) |
 | U38 | E23 (spec 3) | WA-3b (backlog bound), WA-11 | V3 |
 | U39 | E23 (spec 3) | WA-4, WA-5 | V3 |
+| U63 | E30, E18 (spec 3) | WA-14 (outbox, relay and inbox; spec 3 MS-1…MS-12) | V10 (spec 3) |
+| U78, U79 | E23–E26 (spec 3, here) | §4.1: agent-fleet-sync realizes the mechanisms; board names on board surfaces; the new board schema; every obligation keeps its meaning | V3, V3d on the composed system |
 
 ## 7. Gaps
 
@@ -123,7 +153,7 @@ stateDiagram-v2
 | G14 | Which projects each machine keeps open and replicating. **Settled:** every project it holds a lease for. Posting into a project another machine holds is a separate path (U56, G27) | owner, 2026-10-13 |
 | G27 | Writing into a project another machine holds (U56). **Designed:** WA-13 and spec 3 FL-14, with posts only, forwarded through central, and refused when the holder is offline. The owner's confirmation of posts-only and refuse-when-offline is assumed and recorded in the brief | owner, 2026-10-13 |
 | G28 | The one-time multi-computer upgrade script (U54). **Designed:** spec 1 §5 (upgrade), spec 3 FL-15 to FL-17, PD3 (registry `Unheld` and `Claim`, admin import) and PD2 (claim seeding and the script). Same-name records stay separate by ID (U62). **Open (owner, review F19):** what a name collision becomes. Until it's decided, the script renames nothing: it reports each collision, and a real run refuses to upload while one exists | Lead, 2026-10-14 |
-| G29 | A reader's inbox keeps context from threads it watches in other workspaces (today's rule, PD1 §9), but only within this machine's projects. A watch that lives at another machine's holder, for example one a forwarded thread creation wrote there (WA-13), doesn't reach the origin machine's inbox. **Open for M4:** whether a forwarded post may carry a watch, and how the origin learns of that thread's activity (a read copy, or the holder's notification). | Lead, 2026-10-15 |
+| G29 | A reader's inbox keeps context from threads it watches in other workspaces (today's rule, PD1 §9), but only within this machine's projects. A watch that lives at another machine's holder, for example one a forwarded thread creation wrote there (WA-13), doesn't reach the origin machine's inbox. **Open for M4:** whether a forwarded post may carry a watch, and how the origin learns of that thread's activity (a read copy, or the holder's notification). | Lead, 2026-10-15 **Settled by U63:** the origin learns through the message path. Remote follows and their owed activity follow spec 3 MS-5 and MS-11 (2026-10-15). |
 | G17 | The largest single transaction a central copy can apply at once. Cloudflare's per-event CPU limit (30 s, up to 5 min) and 2 MB row limit bound it; it isn't measured yet | Lead, measured in V3d |
 | G18 | Behaviour proved only under the local Cloudflare runtime so far: the official transaction API applying a batch all-or-nothing (and a panic inside one), fencing, and resuming across a deploy and across objects restarting mid-apply. Local observation (workerd, 2026-10-12): a deliberate panic inside the transaction callback after a write left the request hanging; after a restart nothing from that transaction had persisted (fence, prefix and rows unchanged). Deployed behavior is still to confirm | Lead; closes with V3d |
 | G19 | Schema forms that wouldn't replicate correctly: tables without a declared primary key, triggers (central would run them a second time) and virtual tables. WA-7 refuses them, and the board's schema uses none of them today | Lead; tested in V3 |

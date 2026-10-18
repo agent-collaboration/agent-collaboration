@@ -10,7 +10,7 @@
   - "There's probably multiple we can extract as sessions" means several replay cases, not one pick.
   - The full replay-case extraction is the board agent's job, i.e. mine ("if not it's the board-codex-agent job"; a question-tool answer in the orchestration Lead's session, 2026-10-04 16:36Z, relayed by the process-definition lane and the orchestration Lead).
 - **Q5a (milestone `dropped`) moved to the process-definition lane,** which owns its meaning. I carry only the record field.
-- **Q7 (cross-machine board access) is mostly overtaken by the owner's 10-04 liaison direction:** a liaison agent per machine, and SSH to sunclaw running that machine's CLI. What's left is identity guidance for liaisons, not an owner question (see the end).
+- **Q7 (cross-machine board access) is mostly overtaken by the owner's 10-04 liaison direction:** a liaison agent per machine, and SSH to the other machine running its CLI. What's left is identity guidance for liaisons, not an owner question (see the end).
 - **New to my list: Q9 (P1(b), how the owner's words are recorded)**, handed over by the process-definition lane under the de-duplication. A2 (Host restart) is also mine to raise.
 
 ## Open questions, in order of leverage
@@ -23,7 +23,7 @@
 | Q3 | How should Router handle Host/client version skew? | (c) tolerate added fields; breaking changes bump the version and fail clearly with the parse detail | a small Router PR |
 | Q4 | Do the renames (workspace, project) reach the API and CLI, and what is the product called? | one hard cutover with the Router build; name `agent-collaboration` | the first build PR |
 | Q5 | b: is a subtask its own record? c: can small projects skip milestones? | b: yes, one level; c: PR-producing projects need ≥1 milestone, research-only ones none | the design cycle |
-| Q8 | Publish cleaned design docs on the public shared branch? | design docs only, no working notes | Sunclaw agents reading the designs |
+| Q8 | Publish cleaned design docs on the public shared branch? | design docs only, no working notes | agents on the other development machine reading the designs |
 
 **Owner-only actions:**
 - A1 (optional): reconnect the agent-router MCP in the earlier board Lead's session.
