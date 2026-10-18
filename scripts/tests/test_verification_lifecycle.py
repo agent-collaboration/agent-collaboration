@@ -286,21 +286,33 @@ class OwnershipSnapshotTests(unittest.TestCase):
 
 
 class ControlledLifecycleTests(unittest.TestCase):
-    def test_profile_edit_before_first_write_survives_and_reports_conflict(
+    def test_lifecycle_never_opens_saved_configuration_for_writing(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = LifecycleFixture(Path(folder), "stop")
+            profile_before = fixture.plan.profile.read_bytes()
+            config_before = fixture.codex_config.read_bytes()
+
+            self.assertIsNone(fixture.drive())
+
+            self.assertEqual(fixture.configuration_writes, [])
+            self.assertEqual(fixture.plan.profile.read_bytes(), profile_before)
+            self.assertEqual(fixture.codex_config.read_bytes(), config_before)
+
+    def test_profile_edit_before_host_survives_and_reports_conflict(
         self,
     ) -> None:
         with tempfile.TemporaryDirectory() as folder:
-            fixture = LifecycleFixture(Path(folder), "profile-beforewrite")
+            fixture = LifecycleFixture(Path(folder), "profile-before-host")
             error = fixture.drive()
             self.assertEqual(fixture.plan.profile.read_bytes(), fixture.owner_profile)
             self.assertIsInstance(error, RuntimeError)
-            self.assertIn("profile changed before temporary projection", str(error))
+            self.assertIn("saved debug profile or config.toml changed", str(error))
             self.assertEqual(fixture.phases, [])
             settlement = read_observed_json(
                 (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
             )
             self.assertIsNotNone(settlement["failure"])
-            self.assertFalse(settlement["profileRestoredExactly"])
+            self.assertFalse(settlement["codexHomeUnchangedExactly"])
 
     def test_expiry_inside_consumer_check_prevents_host_launch(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -313,11 +325,11 @@ class ControlledLifecycleTests(unittest.TestCase):
                 (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
             )
             self.assertIsNotNone(settlement["failure"])
-            self.assertTrue(settlement["profileRestoredExactly"])
+            self.assertTrue(settlement["codexHomeUnchangedExactly"])
 
-    def test_later_profile_edit_remains_preserved_by_existing_guard(self) -> None:
+    def test_later_profile_edit_is_reported_without_restoration(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
-            fixture = LifecycleFixture(Path(folder), "profile-afterwrite")
+            fixture = LifecycleFixture(Path(folder), "profile-after-host")
             _ = fixture.drive()
             self.assertEqual(fixture.plan.profile.read_bytes(), fixture.owner_profile)
             settlement = read_observed_json(
@@ -325,11 +337,11 @@ class ControlledLifecycleTests(unittest.TestCase):
             )
             self.assertEqual(
                 observed_object(settlement["failure"])["class"],
-                "ConcurrentProfileChange",
+                "ConfigurationChanged",
             )
-            self.assertFalse(settlement["profileRestoredExactly"])
+            self.assertFalse(settlement["codexHomeUnchangedExactly"])
 
-    def test_normal_explicit_stop_restores_original_profile(self) -> None:
+    def test_normal_explicit_stop_preserves_both_configuration_hashes(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             fixture = LifecycleFixture(Path(folder), "stop")
             original = fixture.plan.profile.read_bytes()
@@ -339,7 +351,50 @@ class ControlledLifecycleTests(unittest.TestCase):
                 (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
             )
             self.assertIsNone(settlement["failure"])
-            self.assertTrue(settlement["profileRestoredExactly"])
+            self.assertTrue(settlement["codexHomeUnchangedExactly"])
+            state = observed_object(settlement["configuration"])
+            self.assertEqual(state["before"], state["after"])
+            after = observed_object(state["after"])
+            self.assertEqual(
+                observed_object(after["profile"])["sha256"],
+                hashlib.sha256(original).hexdigest(),
+            )
+            self.assertEqual(
+                observed_object(after["config"])["sha256"],
+                hashlib.sha256(fixture.codex_config.read_bytes()).hexdigest(),
+            )
+            self.assertEqual(fixture.configuration_writes, [])
+            for stage in ["before-host-A", "host-A-ready", "host-A-stopped"]:
+                self.assertTrue(
+                    (fixture.plan.evidence / f"configuration-{stage}.json").is_file()
+                )
+
+    def test_config_edit_before_host_is_preserved_and_prevents_launch(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = LifecycleFixture(Path(folder), "config-before-host")
+
+            self.assertIsInstance(fixture.drive(), RuntimeError)
+
+            self.assertEqual(fixture.codex_config.read_bytes(), fixture.owner_config)
+            self.assertEqual(fixture.phases, [])
+            settlement = read_observed_json(
+                (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
+            )
+            self.assertFalse(settlement["codexHomeUnchangedExactly"])
+            self.assertEqual(len(fixture.configuration_writes), 1)
+
+    def test_config_edit_after_host_is_reported_and_never_restored(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = LifecycleFixture(Path(folder), "config-after-host")
+
+            self.assertIsInstance(fixture.drive(), RuntimeError)
+
+            self.assertEqual(fixture.codex_config.read_bytes(), fixture.owner_config)
+            settlement = read_observed_json(
+                (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
+            )
+            self.assertFalse(settlement["codexHomeUnchangedExactly"])
+            self.assertEqual(len(fixture.configuration_writes), 1)
 
     def test_reopen_cannot_launch_host_b_after_cleanup_expires_allocation(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -478,9 +533,9 @@ class ControlledLifecycleTests(unittest.TestCase):
                 router_root=evidence / "unused-root",
                 evidence=evidence,
                 port=43128,
-                original_port=43127,
                 expected_version="test-only",
                 profile=evidence / "unused-profile",
+                codex_config=evidence / "unused-config",
                 claude_node=Path(sys.executable),
                 claude_adapter=evidence / "unused-adapter",
                 claude_executable=Path(sys.executable),

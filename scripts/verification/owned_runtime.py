@@ -3,7 +3,6 @@
 
 import argparse
 import datetime as dt
-import hashlib
 import json
 import os
 import signal
@@ -22,6 +21,12 @@ from scripts.verification.process_ownership import (
     owned_closure,
     same_identity,
     signal_each_owned,
+)
+from scripts.verification.readonly_codex_home import (
+    CodexHomeSnapshot,
+    observe_configuration,
+    require_unchanged,
+    snapshot_configuration,
 )
 from scripts.verification.runtime_qualification import (
     qualify_global_claude,
@@ -49,9 +54,9 @@ class RuntimePlan(BaseModel):
     router_root: Path
     evidence: Path
     port: int = Field(gt=0, lt=65536)
-    original_port: int = Field(gt=0, lt=65536)
     expected_version: str
     profile: Path
+    codex_config: Path
     claude_node: Path
     claude_adapter: Path
     claude_executable: Path
@@ -259,6 +264,17 @@ def health_check(plan: RuntimePlan) -> JsonObject:
     return health
 
 
+def configuration_checkpoint(
+    plan: RuntimePlan, before: CodexHomeSnapshot, stage: str
+) -> None:
+    observation = observe_configuration(before, plan.profile, plan.codex_config)
+    save_record(
+        plan.evidence / f"configuration-{stage}.json",
+        observation.model_dump(mode="json"),
+    )
+    require_unchanged(observation)
+
+
 def verify_ready(plan: RuntimePlan) -> JsonObject:
     recorded = ProcessIdentity.model_validate_json(
         (plan.evidence / "router-identity.json").read_text()
@@ -271,6 +287,12 @@ def verify_ready(plan: RuntimePlan) -> JsonObject:
     started = read_observed_json((plan.evidence / "router-started.json").read_text())
     if sha256(Path(recorded.executable)) != started["binarySHA256"]:
         raise RuntimeError("live Router binary changed")
+    configuration_before = CodexHomeSnapshot.model_validate_json(
+        (plan.evidence / "codex-home-before.json").read_text()
+    )
+    require_unchanged(
+        observe_configuration(configuration_before, plan.profile, plan.codex_config)
+    )
     manifest = read_observed_json(
         (plan.router_root / "agent-communication/service.json").read_text()
     )
@@ -283,6 +305,7 @@ def verify_ready(plan: RuntimePlan) -> JsonObject:
         "pid": recorded.pid,
         "health": health_check(plan),
         "manifest": manifest,
+        "codexHomeUnchangedExactly": True,
         "credentialUsability": "not established by health; genuine provider journey is required",
     }
 
@@ -323,19 +346,16 @@ def run_lifecycle(plan: RuntimePlan) -> None:
     workspace.mkdir(mode=0o700, exist_ok=True)
     native_directory = plan.evidence / "native"
     native_directory.mkdir(mode=0o700, exist_ok=True)
-    profile_original = plan.profile.read_bytes()
-    original_endpoint = f"http://127.0.0.1:{plan.original_port}/v1".encode()
-    if profile_original.count(original_endpoint) != 1:
-        raise RuntimeError("debug profile original endpoint mismatch")
-    temporary_profile = profile_original.replace(
-        original_endpoint, f"http://127.0.0.1:{plan.port}/v1".encode()
+    configuration_before = snapshot_configuration(plan.profile, plan.codex_config)
+    save_record(
+        plan.evidence / "codex-home-before.json",
+        configuration_before.model_dump(mode="json"),
     )
     binary = binaries["codex-router"].path
     router = None
     router_known: dict[int, ProcessIdentity] = {}
     settlements: list[JsonObject] = []
     failure = None
-    profile_changed = False
     try:
         with (
             (plan.evidence / "router.stdout").open("xb") as stdout,
@@ -394,18 +414,6 @@ def run_lifecycle(plan: RuntimePlan) -> None:
             plan.evidence / "router-ready.json",
             {"pid": router.pid, "health": health_check(plan)},
         )
-        if plan.profile.read_bytes() != profile_original:
-            raise RuntimeError("profile changed before temporary projection")
-        _ = plan.profile.write_bytes(temporary_profile)
-        profile_changed = True
-        save_record(
-            plan.evidence / "profile-binding.json",
-            {
-                "originalSHA256": hashlib.sha256(profile_original).hexdigest(),
-                "temporarySHA256": hashlib.sha256(temporary_profile).hexdigest(),
-                "sourceAnchor": "crates/codex-native-integration/src/debug_profile_projection.rs:107",
-            },
-        )
         for phase in ["A", "B"]:
             if dt.datetime.now(dt.UTC) >= plan.deadline:
                 raise TimeoutError(
@@ -414,6 +422,7 @@ def run_lifecycle(plan: RuntimePlan) -> None:
             if (plan.evidence / "stop.json").exists():
                 break
             check_root_consumers(plan.router_root, router.pid)
+            configuration_checkpoint(plan, configuration_before, f"before-host-{phase}")
             host = None
             known: dict[int, ProcessIdentity] = {}
             try:
@@ -496,6 +505,9 @@ def run_lifecycle(plan: RuntimePlan) -> None:
                             save_record(
                                 plan.evidence / f"host-{phase}-ready.json", manifest
                             )
+                            configuration_checkpoint(
+                                plan, configuration_before, f"host-{phase}-ready"
+                            )
                             print(
                                 json.dumps(
                                     {"hostPhase": phase, "pid": host.pid, "ready": True}
@@ -538,6 +550,9 @@ def run_lifecycle(plan: RuntimePlan) -> None:
                     if result.remaining or result.exit != 0 or result.errors:
                         raise RuntimeError("Host cleanup incomplete")
             check_root_consumers(plan.router_root, router.pid)
+            configuration_checkpoint(
+                plan, configuration_before, f"host-{phase}-stopped"
+            )
             if directive == "stop":
                 break
     except BaseException as error:
@@ -562,21 +577,22 @@ def run_lifecycle(plan: RuntimePlan) -> None:
                     "cleanupUnknown": True,
                     "error": type(error).__name__,
                 }
-        if profile_changed:
-            if plan.profile.read_bytes() == temporary_profile:
-                _ = plan.profile.write_bytes(profile_original)
-            else:
-                failure = {
-                    "class": "ConcurrentProfileChange",
-                    "message": "original preserved in memory; newer profile left untouched",
-                }
+        configuration_after = observe_configuration(
+            configuration_before, plan.profile, plan.codex_config
+        )
+        if not configuration_after.unchanged and failure is None:
+            failure = {
+                "class": "ConfigurationChanged",
+                "message": "saved configuration changed or unreadable; left untouched",
+            }
         save_record(
             plan.evidence / "lifecycle-settlement.json",
             {
                 "failure": failure,
                 "hosts": settlements,
                 "router": router_result,
-                "profileRestoredExactly": plan.profile.read_bytes() == profile_original,
+                "codexHomeUnchangedExactly": configuration_after.unchanged,
+                "configuration": configuration_after.model_dump(mode="json"),
                 "evidencePreserved": True,
             },
         )
