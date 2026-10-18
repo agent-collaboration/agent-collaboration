@@ -7,6 +7,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, TypeAdapter
 
+type SectionKey = tuple[tuple[str, ...], int]
+
 
 class SectionFingerprint(BaseModel):
     model_config: t.ClassVar[ConfigDict] = ConfigDict(frozen=True, extra="forbid")
@@ -199,15 +201,44 @@ def fingerprint_sections(
     return tuple(result)
 
 
+def _array_element_owners(
+    sections: tuple[SectionFingerprint, ...],
+) -> dict[SectionKey, tuple[SectionKey, ...]]:
+    active_arrays: dict[tuple[str, ...], int] = {}
+    owners: dict[SectionKey, tuple[SectionKey, ...]] = {}
+    for section in sections:
+        if section.header.startswith("[["):
+            # A new parent element ends every nested array's previous scope.
+            active_arrays = {
+                path: occurrence
+                for path, occurrence in active_arrays.items()
+                if path[: len(section.table)] != section.table
+            }
+            active_arrays[section.table] = section.occurrence
+        owners[(section.table, section.occurrence)] = tuple(
+            (path, occurrence)
+            for path, occurrence in sorted(active_arrays.items())
+            if section.table[: len(path)] == path
+        )
+    return owners
+
+
 def compare_sections(
     before: tuple[SectionFingerprint, ...], after: tuple[SectionFingerprint, ...]
 ) -> tuple[SectionChange, ...]:
     old = {(section.table, section.occurrence): section for section in before}
     new = {(section.table, section.occurrence): section for section in after}
+    old_owners = _array_element_owners(before)
+    new_owners = _array_element_owners(after)
     changes: list[SectionChange] = []
     for table, occurrence in sorted(old.keys() | new.keys()):
         left, right = old.get((table, occurrence)), new.get((table, occurrence))
-        if left is not None and right is not None and left.sha256 == right.sha256:
+        if (
+            left is not None
+            and right is not None
+            and left.sha256 == right.sha256
+            and old_owners[(table, occurrence)] == new_owners[(table, occurrence)]
+        ):
             continue
         representative = right or left
         assert representative is not None

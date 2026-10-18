@@ -609,6 +609,74 @@ for line in sys.stdin:
 
 
 class ConfigurationAttributionTests(unittest.TestCase):
+    def assert_array_child_move_rejected(
+        self, before_text: str, after_text: str
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text(before_text)
+            before = readonly_codex_home.snapshot_configuration(profile, config)
+            _ = config.write_text(after_text)
+            edited_config = readonly_codex_home.fingerprint(config)
+
+            observation = readonly_codex_home.observe_configuration(
+                before, profile, config
+            )
+            self.assertEqual(observation.kind, "observed")
+            with self.assertRaises(readonly_codex_home.ConfigurationChanged):
+                readonly_codex_home.require_read_only_configuration(observation)
+
+            self.assertEqual(readonly_codex_home.fingerprint(profile), before.profile)
+            self.assertEqual(readonly_codex_home.fingerprint(config), edited_config)
+            self.assertEqual(profile.read_text(), "saved profile")
+            self.assertEqual(config.read_text(), after_text)
+
+    def test_protected_child_move_to_later_array_entry_is_rejected(self) -> None:
+        self.assert_array_child_move_rejected(
+            '[[skills.config]]\npath = "first"\n[skills.config.rules]\nx = 1\n[[skills.config]]\npath = "second"\n',
+            '[[skills.config]]\npath = "first"\n[[skills.config]]\npath = "second"\n[skills.config.rules]\nx = 1\n',
+        )
+
+    def test_protected_child_move_to_earlier_array_entry_is_rejected(self) -> None:
+        self.assert_array_child_move_rejected(
+            '[[skills.config]]\npath = "first"\n[[skills.config]]\npath = "second"\n[skills.config.rules]\nx = 1\n',
+            '[[skills.config]]\npath = "first"\n[skills.config.rules]\nx = 1\n[[skills.config]]\npath = "second"\n',
+        )
+
+    def test_nested_protected_array_child_move_is_rejected(self) -> None:
+        self.assert_array_child_move_rejected(
+            '[[skills.config]]\npath = "outer"\n[[skills.config.rules]]\nname = "first"\n[skills.config.rules.details]\nx = 1\n[[skills.config.rules]]\nname = "second"\n',
+            '[[skills.config]]\npath = "outer"\n[[skills.config.rules]]\nname = "first"\n[[skills.config.rules]]\nname = "second"\n[skills.config.rules.details]\nx = 1\n',
+        )
+
+    def test_external_array_child_moves_remain_allowed(self) -> None:
+        for table in ["desktop.panels", 'projects."/another/repository".views']:
+            with self.subTest(table=table), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                profile, config = root / "profile", root / "config"
+                _ = profile.write_text("saved profile")
+                first = f'[[{table}]]\nname = "first"\n'
+                second = f'[[{table}]]\nname = "second"\n'
+                child = f'[{table}.details]\nvalue = "PRIVATE_VALUE_CANARY"\n'
+                _ = config.write_text(first + child + second)
+                before = readonly_codex_home.snapshot_configuration(profile, config)
+                _ = config.write_text(first + second + child)
+                edited_config = readonly_codex_home.fingerprint(config)
+
+                observation = readonly_codex_home.observe_configuration(
+                    before, profile, config
+                )
+                readonly_codex_home.require_read_only_configuration(observation)
+
+                self.assertFalse(observation.unchanged)
+                self.assertNotIn("PRIVATE_VALUE_CANARY", observation.model_dump_json())
+                self.assertEqual(
+                    readonly_codex_home.fingerprint(profile), before.profile
+                )
+                self.assertEqual(readonly_codex_home.fingerprint(config), edited_config)
+
     def test_other_worktree_with_same_path_prefix_is_still_unrelated(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
