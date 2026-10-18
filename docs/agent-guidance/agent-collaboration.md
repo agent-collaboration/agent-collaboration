@@ -261,4 +261,4 @@ instructions do not grant permissions or install tools. The supported interfaces
 are the local Rust SDK and CLI, which call the collaboration tools over
 `control.sock`, and the Host's loopback Streamable HTTP MCP endpoint, which serves
 the same tools.
-Remote MCP exposure and other language SDK implementations follow separately.
+Other language SDK implementations follow separately.
