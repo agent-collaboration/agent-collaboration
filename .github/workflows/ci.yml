@@ -153,6 +153,14 @@ jobs:
     name: Test Rust workspace
     runs-on: ubuntu-latest
     steps:
+      # The steps below build the workspace under several package selections and
+      # feature sets, which together outgrow the runner's free disk. Remove
+      # preinstalled SDKs this job never uses.
+      - name: Free runner disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
