@@ -8,7 +8,6 @@ import typing as t
 from pathlib import Path
 
 from .board_journey_peer import qualified_peer_entry
-
 from .board_journey_runtime import (
     BoardClient,
     BoardRuntime,
@@ -17,13 +16,13 @@ from .board_journey_runtime import (
     write_header,
 )
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     array_value,
     field,
-    fixture_identity,
     file_digest,
+    fixture_identity,
     json_value,
     object_value,
     run_command,
@@ -508,9 +507,7 @@ class BoardFixture:
                             },
                         },
                         "links": [record_reference("workstream", self.workstream)],
-                        "producerTime": datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat(),
+                        "producerTime": datetime.datetime.now(datetime.UTC).isoformat(),
                         "anchor": None,
                     },
                 },

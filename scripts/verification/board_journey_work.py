@@ -253,10 +253,10 @@ def meaningful_views_and_pending_settlement(fixture: BoardFixture) -> None:
             [selected_task.get("subtasksChecked"), selected_task.get("subtasksTotal")],
         ),
     )
-    owner_read_start = datetime.datetime.now(datetime.timezone.utc)
+    owner_read_start = datetime.datetime.now(datetime.UTC)
     owner = fixture.client.observe("view_owner", {}, "G4/VW-3")
     cli_owner = fixture.client.cli(["view", "owner"], "real CLI owner view outcome")
-    owner_read_end = datetime.datetime.now(datetime.timezone.utc)
+    owner_read_end = datetime.datetime.now(datetime.UTC)
     cli_owner_record = object_value(cli_owner.get("record"))
     fixture.receipt.equal(
         "CLI and MCP expose the identical owner obligations",

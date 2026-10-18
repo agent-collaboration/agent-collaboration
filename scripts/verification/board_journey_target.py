@@ -6,9 +6,9 @@ import typing as t
 from pathlib import Path
 
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     file_digest,
     run_command,
 )

@@ -12,8 +12,8 @@ from pathlib import Path
 from .board_journey_peer import qualified_peer_entry
 from .board_journey_runtime import BoardRuntime
 from .board_journey_values import (
-    JsonObject,
     JourneyFailure,
+    JsonObject,
     file_digest,
     json_value,
     object_value,
@@ -102,7 +102,8 @@ class MailPeer:
                         connection = self.listener.accept()[0]
                         with connection:
                             self.receive(connection)
-        except Exception as error:
+        # Publish every worker failure so the waiting caller records its cause.
+        except Exception as error:  # noqa: BLE001
             with self.condition:
                 self.error = error
                 self.condition.notify_all()

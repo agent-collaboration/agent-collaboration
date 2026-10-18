@@ -11,8 +11,8 @@ from pathlib import Path
 
 from .board_journey_target import JourneyTarget
 from .board_journey_values import (
-    JsonObject,
     JourneyFailure,
+    JsonObject,
     run_command,
 )
 

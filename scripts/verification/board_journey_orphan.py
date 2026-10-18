@@ -6,9 +6,9 @@ from pathlib import Path
 
 from .board_journey_fixture import BoardFixture
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     array_value,
     field,
     file_digest,

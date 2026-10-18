@@ -10,8 +10,8 @@ import sys
 from pathlib import Path
 
 from .board_journey_values import (
-    JsonObject,
     JourneyFailure,
+    JsonObject,
 )
 
 PRODUCER_VERSION = "2.1.301"
@@ -57,7 +57,7 @@ def qualified_peer_entry(repository: Path, socket_path: Path) -> tuple[str, Json
         raise JourneyFailure(
             "cannot obtain producer-equivalent procStart for the owned live PID"
         )
-    now = int(datetime.datetime.now(datetime.timezone.utc).timestamp() * 1_000)
+    now = int(datetime.datetime.now(datetime.UTC).timestamp() * 1_000)
     # Registration with an explicit user name, no tmux/job/agent/log/host-session env.
     # Undefined producer properties are absent, exactly as JSON.stringify omits them.
     entry: JsonObject = {

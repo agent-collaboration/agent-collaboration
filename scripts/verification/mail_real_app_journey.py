@@ -1,7 +1,9 @@
-#!/usr/bin/env python3
 """M2c mail/wake journey against frozen debug Host/Router artifacts."""
 
 import argparse
+import http.client
+import sqlite3
+import subprocess
 import sys
 import traceback
 import typing as t
@@ -9,7 +11,7 @@ from pathlib import Path
 
 from .board_journey_runtime import BoardRuntime, JourneyReceipt
 from .board_journey_target import JourneyTarget
-from .board_journey_values import JsonObject, JsonValue, JourneyFailure, file_digest
+from .board_journey_values import JourneyFailure, JsonObject, JsonValue, file_digest
 from .mail_journey_messages import MailMessages
 from .mail_journey_migration import observe_migration
 from .mail_journey_peer import MailPeer
@@ -102,7 +104,14 @@ def main() -> int:
             receipt.record(
                 {"kind": "case", "case": name, "stage": "complete", "passed": True}
             )
-    except Exception as error:
+    except (
+        JourneyFailure,
+        OSError,
+        ValueError,
+        sqlite3.Error,
+        subprocess.SubprocessError,
+        http.client.HTTPException,
+    ) as error:
         failed = True
         receipt.record(
             {
@@ -124,7 +133,12 @@ def main() -> int:
                     "artifact integrity",
                     (digest, file_digest(artifact)),
                 )
-        except Exception as error:
+        except (
+            JourneyFailure,
+            OSError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as error:
             failed = True
             receipt.record(
                 {

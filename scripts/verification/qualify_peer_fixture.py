@@ -11,8 +11,8 @@ from pathlib import Path
 
 from .board_journey_peer import qualified_peer_entry
 from .board_journey_values import (
-    JsonObject,
     JourneyFailure,
+    JsonObject,
     json_value,
     object_value,
 )

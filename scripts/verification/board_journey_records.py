@@ -53,7 +53,7 @@ def record_evaluator(fixture: BoardFixture, fields: JsonObject) -> JsonObject:
             },
         },
         "links": [record_reference("project", fixture.project)],
-        "producerTime": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "producerTime": datetime.datetime.now(datetime.UTC).isoformat(),
         "anchor": None,
         **fields,
     }

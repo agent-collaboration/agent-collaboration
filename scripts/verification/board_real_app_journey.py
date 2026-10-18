@@ -1,8 +1,10 @@
-#!/usr/bin/env python3
 """Observe the board's real CLI/MCP outcomes against an identified debug build."""
 
 import argparse
 import datetime
+import http.client
+import sqlite3
+import subprocess
 import sys
 import traceback
 import typing as t
@@ -17,28 +19,29 @@ from .board_journey_failures import (
     unavailable_siblings_preserve_healthy_inbox,
 )
 from .board_journey_fixture import BoardFixture
+from .board_journey_notifications import reviewer_role_notifications
+from .board_journey_pages import complete_post_continuation_and_participants
 from .board_journey_records import keyed_replay_moves_and_late_facts
-from .board_journey_target import JourneyTarget
+from .board_journey_roles import role_authority_and_cardinality
 from .board_journey_runtime import (
     BoardRuntime,
     JourneyReceipt,
-)
-from .board_journey_values import (
-    JsonObject,
-    JsonValue,
-    file_digest,
-    run_command,
 )
 from .board_journey_scope import (
     project_watch_keeps_foreign_thread_context,
     rejected_scope_and_workspace_summary,
     semantic_acknowledgement_rejection,
 )
-from .board_journey_pages import complete_post_continuation_and_participants
-from .board_journey_work import meaningful_views_and_pending_settlement
-from .board_journey_roles import role_authority_and_cardinality
 from .board_journey_subjects import required_subjects_and_recorded_refile
-from .board_journey_notifications import reviewer_role_notifications
+from .board_journey_target import JourneyTarget
+from .board_journey_values import (
+    JourneyFailure,
+    JsonObject,
+    JsonValue,
+    file_digest,
+    run_command,
+)
+from .board_journey_work import meaningful_views_and_pending_settlement
 
 CASES: t.Final[dict[str, t.Callable[[BoardFixture], None]]] = {
     "rejected-scope": rejected_scope_and_workspace_summary,
@@ -112,7 +115,14 @@ def observe_case(name: str, fixture: BoardFixture) -> bool:
         fixture.runtime.start()
         fixture.create()
         CASES[name](fixture)
-    except Exception as error:
+    except (
+        JourneyFailure,
+        OSError,
+        ValueError,
+        sqlite3.Error,
+        subprocess.SubprocessError,
+        http.client.HTTPException,
+    ) as error:
         failed = True
         receipt.record(
             {
@@ -127,7 +137,12 @@ def observe_case(name: str, fixture: BoardFixture) -> bool:
         try:
             fixture.runtime.stop()
             fixture.runtime.target.require_unchanged_binaries()
-        except Exception as error:
+        except (
+            JourneyFailure,
+            OSError,
+            ValueError,
+            subprocess.SubprocessError,
+        ) as error:
             failed = True
             receipt.record(
                 {
@@ -162,9 +177,7 @@ def main() -> int:
         parser.error("--expected-head is required for a runtime observation")
     source_root = options.source_root
     selected = options.cases or list(CASES)
-    timestamp = datetime.datetime.now(datetime.timezone.utc).strftime(
-        "%Y-%m-%dT%H%M%SZ"
-    )
+    timestamp = datetime.datetime.now(datetime.UTC).strftime("%Y-%m-%dT%H%M%SZ")
     output = options.output_directory
     if output is None:
         output = repository / "tmp/verify-m2/observations" / timestamp
@@ -208,7 +221,7 @@ def main() -> int:
             }
         )
         return 1 if failed else 0
-    except Exception as error:
+    except (JourneyFailure, OSError, ValueError, subprocess.SubprocessError) as error:
         receipt.record(
             {
                 "kind": "setupFailure",

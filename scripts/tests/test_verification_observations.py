@@ -4,10 +4,13 @@ import copy
 import json
 import sqlite3
 import tempfile
+import threading
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
+from scripts.verification.board_journey_values import JourneyFailure
 from scripts.verification.interaction_readback import (
     callback_prompt,
     compare_reopen,
@@ -17,6 +20,7 @@ from scripts.verification.interaction_readback import (
     require_advertised_settings,
     require_callback_capture,
 )
+from scripts.verification.mail_journey_peer import MailPeer
 from scripts.verification.native_correlation import (
     correlate_message,
 )
@@ -39,6 +43,23 @@ from scripts.verification.typed_observations import (
     SettingsCatalog,
     observed_object,
 )
+
+
+class PeerFailureReceiptTests(unittest.TestCase):
+    def test_unexpected_worker_failure_is_reported_to_waiting_caller(self) -> None:
+        peer = MailPeer.__new__(MailPeer)
+        peer.condition = threading.Condition()
+        peer.error = None
+        with patch(
+            "scripts.verification.mail_journey_peer.selectors.DefaultSelector",
+            side_effect=TypeError("controlled worker initialization failure"),
+        ):
+            peer.serve()
+        with self.assertRaisesRegex(
+            JourneyFailure,
+            "owned peer failed: controlled worker initialization failure",
+        ):
+            peer.wait_for_count(1)
 
 
 class PortableProviderQualificationTests(unittest.TestCase):

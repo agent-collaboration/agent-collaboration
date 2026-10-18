@@ -2,8 +2,10 @@
 
 import argparse
 import contextlib
+import http.client
 import json
 import sqlite3
+import subprocess
 import sys
 import traceback
 import typing as t
@@ -19,9 +21,9 @@ from .board_journey_runtime import (
 )
 from .board_journey_target import JourneyTarget
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     array_value,
     field,
     file_digest,
@@ -550,7 +552,15 @@ def main() -> int:
                     ),
                 )
         passed = True
-    except Exception as error:
+    except (
+        JourneyFailure,
+        OSError,
+        ValueError,
+        KeyError,
+        sqlite3.Error,
+        subprocess.SubprocessError,
+        http.client.HTTPException,
+    ) as error:
         receipt.record(
             {
                 "kind": "caseFailure",

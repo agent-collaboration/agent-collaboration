@@ -1,8 +1,8 @@
 """Observe Router-local wake slots, replacement authority and every bounded timer refusal."""
 
 import json
-from datetime import datetime
 import typing as t
+from datetime import datetime
 
 from .board_journey_runtime import BoardClient
 from .board_journey_values import (

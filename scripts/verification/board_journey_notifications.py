@@ -12,9 +12,9 @@ import typing as t
 from .board_journey_fixture import BoardFixture
 from .board_journey_roles import RoleScenario, record_payloads
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     field,
     fixture_identity,
     json_value,

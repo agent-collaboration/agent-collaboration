@@ -16,9 +16,9 @@ from .board_journey_values import (
     JsonValue,
     array_value,
     field,
+    fixture_identity,
     object_value,
     string_value,
-    fixture_identity,
 )
 
 

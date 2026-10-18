@@ -6,14 +6,14 @@ import json
 import re
 import socket
 import sqlite3
-import urllib.parse
 import typing as t
+import urllib.parse
 
 from .board_journey_runtime import BoardClient
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     field,
     fixture_identity,
     json_value,

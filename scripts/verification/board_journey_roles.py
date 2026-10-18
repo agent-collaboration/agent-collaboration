@@ -6,9 +6,9 @@ import typing as t
 from .board_journey_fixture import BoardFixture, accepted_decision, human_actor
 from .board_journey_runtime import decision_values, project_request
 from .board_journey_values import (
+    JourneyFailure,
     JsonObject,
     JsonValue,
-    JourneyFailure,
     array_value,
     field,
     fixture_identity,

@@ -9,25 +9,25 @@ import typing as t
 
 from .board_journey_runtime import BoardClient, BoardRuntime
 from .board_journey_values import (
-    JsonObject,
     JourneyFailure,
+    JsonObject,
     field,
     fixture_identity,
-    object_value,
     json_value,
+    object_value,
     string_value,
 )
 
 
 def utc_millis() -> int:
-    now = datetime.datetime.now(datetime.timezone.utc)
-    delta = now - datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
+    delta = now - datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
     return delta.days * 86400000 + delta.seconds * 1000 + delta.microseconds // 1000
 
 
 def parsed_millis(value: str) -> int:
-    timestamp = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
-    delta = timestamp - datetime.datetime(1970, 1, 1, tzinfo=datetime.timezone.utc)
+    timestamp = datetime.datetime.fromisoformat(value)
+    delta = timestamp - datetime.datetime(1970, 1, 1, tzinfo=datetime.UTC)
     return delta.days * 86400000 + delta.seconds * 1000 + delta.microseconds // 1000
 
 
@@ -60,7 +60,7 @@ def legacy_copy(source: BoardRuntime, destination: BoardRuntime) -> dict[str, st
             _ = connection.execute(
                 "DELETE FROM _sqlx_migrations WHERE version>=20261016000100"
             )
-            for name in ids:
+            for name, wakeup_id in ids.items():
                 target_name = (
                     "m2c-upgrade-slot"
                     if name in ["older", "newest"]
@@ -83,7 +83,7 @@ def legacy_copy(source: BoardRuntime, destination: BoardRuntime) -> dict[str, st
                 elif name == "far":
                     timing = {"kind": "after", "seconds": 259200}
                 definition: JsonObject = {
-                    "wakeupId": ids[name],
+                    "wakeupId": wakeup_id,
                     "changeId": fixture_identity(),
                     "message": {
                         "target": {
@@ -108,7 +108,7 @@ def legacy_copy(source: BoardRuntime, destination: BoardRuntime) -> dict[str, st
                 _ = connection.execute(
                     "INSERT INTO wakeup_definitions(wakeup_id,change_id,wakeup_status,definition_json,anchor_at_ms,evaluated_through_ms,next_due_at_ms,expires_at_ms,first_fire_json,pending_delivery_id,created_at_ms,updated_at_ms) VALUES (?,?,?,?,?,?,?,?,NULL,NULL,?,?)",
                     (
-                        ids[name],
+                        wakeup_id,
                         definition["changeId"],
                         state,
                         json.dumps(definition),
