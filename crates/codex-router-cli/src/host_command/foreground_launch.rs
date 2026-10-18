@@ -27,6 +27,7 @@ use codex_router_host::ManagedUpdateInputs;
 use codex_router_host::PreExecTelemetry;
 
 use super::HostCommandError;
+mod debug_profile_loader;
 mod router_child_command;
 
 use crate::CliContext;
@@ -75,14 +76,7 @@ pub(super) async fn run_foreground_host(
     let launch_started_at = std::time::Instant::now();
     let codex_home = resolve_codex_home(context)?;
     let isolated_debug = launch_mode.is_isolated();
-    let debug_profile = if isolated_debug {
-        let path = codex_home.join("codex-router-debug.config.toml");
-        let profile = codex_native_integration::DebugCodexProfile::read(&codex_home, port)
-            .map_err(|source| HostCommandError::IsolatedDebugProfile { path, source })?;
-        Some(profile)
-    } else {
-        None
-    };
+    let debug_profile = debug_profile_loader::load_debug_profile(&codex_home, launch_mode, port)?;
     if isolated_debug {
         let protected_root = owner_home
             .ok_or(HostCommandError::OwnerHomeUnavailable)?

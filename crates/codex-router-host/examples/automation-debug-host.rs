@@ -196,28 +196,8 @@ fn luna_profile_from_text(
     text: &str,
     selected_port: u16,
 ) -> Result<DebugCodexProfile, Box<dyn std::error::Error>> {
-    let mut profile: toml::Table = toml::from_str(text)?;
-    let provider = profile
-        .get_mut("model_providers")
-        .and_then(toml::Value::as_table_mut)
-        .and_then(|providers| providers.get_mut("codex-router-debug"))
-        .and_then(toml::Value::as_table_mut)
-        .ok_or("debug profile is missing its sole debug provider")?;
-    let configured_endpoint = provider
-        .get("base_url")
-        .and_then(toml::Value::as_str)
-        .ok_or("debug profile is missing its debug provider endpoint")?;
-    let configured_port = configured_endpoint
-        .strip_prefix("http://127.0.0.1:")
-        .and_then(|value| value.strip_suffix("/v1"))
-        .ok_or("debug profile endpoint is not the expected loopback route")?
-        .parse::<u16>()?;
-    // Validate the complete saved profile before changing only its in-memory endpoint.
-    DebugCodexProfile::parse(text, configured_port)?;
-    provider.insert(
-        "base_url".into(),
-        toml::Value::String(format!("http://127.0.0.1:{selected_port}/v1")),
-    );
+    let projected = codex_native_integration::project_debug_profile_endpoint(text, selected_port)?;
+    let mut profile: toml::Table = toml::from_str(&projected)?;
     profile.insert("model".into(), toml::Value::String("gpt-5.6-luna".into()));
     profile.insert(
         "model_reasoning_effort".into(),
