@@ -66,6 +66,7 @@ class LifecycleFixture:
         self.ready: bool = False
         self.exited: bool = False
         self.prelaunch_expired: bool = False
+        self.inventory_timeout_emitted: bool = False
         self.phases: list[str] = []
         self.launched: list[str] = []
         self.configuration_writes: list[str] = []
@@ -99,7 +100,10 @@ class LifecycleFixture:
         profile = root / "debug-profile"
         _ = profile.write_text('url="http://127.0.0.1:43127/v1"\n')
         self.codex_config: Path = root / "config.toml"
-        _ = self.codex_config.write_text('model = "fixture-model"\n')
+        _ = self.codex_config.write_text(
+            'model = "fixture-model"\n'
+            + f'[projects.{json.dumps(str(root.resolve()))}]\ntrust_level = "trusted"\n'
+        )
         self.global_bin: Path = root / "global-bin"
         self.global_bin.mkdir()
         claude = self.global_bin / "claude"
@@ -119,6 +123,7 @@ class LifecycleFixture:
             expected_version="fixture",
             profile=profile,
             codex_config=self.codex_config,
+            native_cwd=root,
             claude_node=Path(sys.executable),
             claude_adapter=root / "unused-adapter",
             claude_executable=planned,
@@ -168,6 +173,13 @@ class LifecycleFixture:
             )
         if command[0] != "/bin/ps":
             raise AssertionError(f"unexpected external command: {command[0]}")
+        if (
+            self.scenario == "inventory-timeout"
+            and self.ready
+            and not self.inventory_timeout_emitted
+        ):
+            self.inventory_timeout_emitted = True
+            raise subprocess.TimeoutExpired(command, 5)
         return subprocess.run(
             command, capture_output=True, text=True, check=True, timeout=5
         )
@@ -218,6 +230,11 @@ class LifecycleFixture:
                 _ = self.plan.profile.write_bytes(self.owner_profile)
             if self.scenario == "config-after-host":
                 _ = self.codex_config.write_bytes(self.owner_config)
+            if self.scenario == "external-desktop-after-host":
+                _ = self.codex_config.write_text(
+                    self.codex_config.read_text()
+                    + "[desktop.preferences]\nopen = true\n"
+                )
             if self.scenario in {
                 "stop",
                 "reopen",
@@ -226,6 +243,7 @@ class LifecycleFixture:
                 "profile-after-host",
                 "config-before-host",
                 "config-after-host",
+                "external-desktop-after-host",
             }:
                 _ = (
                     self.plan.evidence

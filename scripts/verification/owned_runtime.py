@@ -24,8 +24,13 @@ from scripts.verification.process_ownership import (
 )
 from scripts.verification.readonly_codex_home import (
     CodexHomeSnapshot,
+    ConfigurationObservation,
+    ConfigurationUnreadable,
+    configuration_references,
     observe_configuration,
-    require_unchanged,
+    register_guard_identifiers,
+    require_read_only_configuration,
+    require_trusted_native_cwd,
     snapshot_configuration,
 )
 from scripts.verification.runtime_qualification import (
@@ -57,6 +62,7 @@ class RuntimePlan(BaseModel):
     expected_version: str
     profile: Path
     codex_config: Path
+    native_cwd: Path
     claude_node: Path
     claude_adapter: Path
     claude_executable: Path
@@ -267,12 +273,35 @@ def health_check(plan: RuntimePlan) -> JsonObject:
 def configuration_checkpoint(
     plan: RuntimePlan, before: CodexHomeSnapshot, stage: str
 ) -> None:
-    observation = observe_configuration(before, plan.profile, plan.codex_config)
+    observation = observe_run_configuration(plan, before)
     save_record(
         plan.evidence / f"configuration-{stage}.json",
         observation.model_dump(mode="json"),
     )
-    require_unchanged(observation)
+    require_read_only_configuration(observation)
+
+
+def run_configuration_references(plan: RuntimePlan) -> tuple[str, ...]:
+    return configuration_references(
+        plan.evidence,
+        (
+            plan.repository,
+            plan.native_cwd,
+            plan.router_root,
+            plan.evidence,
+            plan.evidence.parent,
+        ),
+    )
+
+
+def observe_run_configuration(
+    plan: RuntimePlan, before: CodexHomeSnapshot
+) -> ConfigurationObservation:
+    try:
+        references = run_configuration_references(plan)
+    except (OSError, ValueError) as error:
+        return ConfigurationUnreadable(before=before, error=type(error).__name__)
+    return observe_configuration(before, plan.profile, plan.codex_config, references)
 
 
 def verify_ready(plan: RuntimePlan) -> JsonObject:
@@ -290,9 +319,8 @@ def verify_ready(plan: RuntimePlan) -> JsonObject:
     configuration_before = CodexHomeSnapshot.model_validate_json(
         (plan.evidence / "codex-home-before.json").read_text()
     )
-    require_unchanged(
-        observe_configuration(configuration_before, plan.profile, plan.codex_config)
-    )
+    configuration = observe_run_configuration(plan, configuration_before)
+    require_read_only_configuration(configuration)
     manifest = read_observed_json(
         (plan.router_root / "agent-communication/service.json").read_text()
     )
@@ -305,7 +333,8 @@ def verify_ready(plan: RuntimePlan) -> JsonObject:
         "pid": recorded.pid,
         "health": health_check(plan),
         "manifest": manifest,
-        "codexHomeUnchangedExactly": True,
+        "codexHomeUnchangedExactly": configuration.unchanged,
+        "configurationGuardPassed": configuration.guard_passed,
         "credentialUsability": "not established by health; genuine provider journey is required",
     }
 
@@ -323,6 +352,7 @@ def run_lifecycle(plan: RuntimePlan) -> None:
     if plan.router_root.resolve() == Path.home() / ".codex-router":
         raise RuntimeError("production Router root is outside verification scope")
     binaries = qualify_normal_binaries(plan.qualification)
+    require_trusted_native_cwd(plan.codex_config, plan.native_cwd)
     host_environment = os.environ.copy()
     _ = host_environment.pop("CLAUDE_CODE_EXECUTABLE", None)
     claude_binding = qualify_global_claude(
@@ -346,7 +376,11 @@ def run_lifecycle(plan: RuntimePlan) -> None:
     workspace.mkdir(mode=0o700, exist_ok=True)
     native_directory = plan.evidence / "native"
     native_directory.mkdir(mode=0o700, exist_ok=True)
-    configuration_before = snapshot_configuration(plan.profile, plan.codex_config)
+    if caller_id := os.environ.get("CODEX_THREAD_ID"):
+        register_guard_identifiers(plan.evidence, {"sessionId": caller_id})
+    configuration_before = snapshot_configuration(
+        plan.profile, plan.codex_config, run_configuration_references(plan)
+    )
     save_record(
         plan.evidence / "codex-home-before.json",
         configuration_before.model_dump(mode="json"),
@@ -505,6 +539,7 @@ def run_lifecycle(plan: RuntimePlan) -> None:
                             save_record(
                                 plan.evidence / f"host-{phase}-ready.json", manifest
                             )
+                            register_guard_identifiers(plan.evidence, manifest)
                             configuration_checkpoint(
                                 plan, configuration_before, f"host-{phase}-ready"
                             )
@@ -577,13 +612,11 @@ def run_lifecycle(plan: RuntimePlan) -> None:
                     "cleanupUnknown": True,
                     "error": type(error).__name__,
                 }
-        configuration_after = observe_configuration(
-            configuration_before, plan.profile, plan.codex_config
-        )
-        if not configuration_after.unchanged and failure is None:
+        configuration_after = observe_run_configuration(plan, configuration_before)
+        if not configuration_after.guard_passed and failure is None:
             failure = {
                 "class": "ConfigurationChanged",
-                "message": "saved configuration changed or unreadable; left untouched",
+                "message": "saved profile or configuration attribution failed; left untouched",
             }
         save_record(
             plan.evidence / "lifecycle-settlement.json",
@@ -592,6 +625,7 @@ def run_lifecycle(plan: RuntimePlan) -> None:
                 "hosts": settlements,
                 "router": router_result,
                 "codexHomeUnchangedExactly": configuration_after.unchanged,
+                "configurationGuardPassed": configuration_after.guard_passed,
                 "configuration": configuration_after.model_dump(mode="json"),
                 "evidencePreserved": True,
             },

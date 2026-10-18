@@ -20,6 +20,7 @@ from scripts.verification import (
     owned_runtime,
     process_inventory,
     process_ownership,
+    readonly_codex_home,
     runtime_qualification,
 )
 from scripts.verification.native_correlation import read_carrier_correlation
@@ -306,7 +307,7 @@ class ControlledLifecycleTests(unittest.TestCase):
             error = fixture.drive()
             self.assertEqual(fixture.plan.profile.read_bytes(), fixture.owner_profile)
             self.assertIsInstance(error, RuntimeError)
-            self.assertIn("saved debug profile or config.toml changed", str(error))
+            self.assertIn("saved profile changed", str(error))
             self.assertEqual(fixture.phases, [])
             settlement = read_observed_json(
                 (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
@@ -493,6 +494,21 @@ class ControlledLifecycleTests(unittest.TestCase):
             native_correlation.lookup_process_identity = original
         self.assertEqual(child.returncode, 0)
 
+    def test_inventory_timeout_records_failure_and_settles_owned_children(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = LifecycleFixture(Path(folder), "inventory-timeout")
+            self.assertIsInstance(fixture.drive(), subprocess.TimeoutExpired)
+            settlement = read_observed_json(
+                (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
+            )
+            self.assertIsNotNone(settlement["failure"])
+            self.assertEqual(fixture.phases, ["A"])
+            for child in fixture.children:
+                self.assertIsNotNone(child.poll())
+            hosts = settlement["hosts"]
+            assert isinstance(hosts, list)
+            self.assertEqual(observed_object(hosts[0])["remaining"], {})
+
     def test_recorded_harmless_child_is_released(self) -> None:
         with harmless_child() as (child, identity):
             result = owned_runtime.stop_owned(child, {child.pid: identity})
@@ -536,6 +552,7 @@ class ControlledLifecycleTests(unittest.TestCase):
                 expected_version="test-only",
                 profile=evidence / "unused-profile",
                 codex_config=evidence / "unused-config",
+                native_cwd=evidence,
                 claude_node=Path(sys.executable),
                 claude_adapter=evidence / "unused-adapter",
                 claude_executable=Path(sys.executable),
@@ -589,3 +606,213 @@ for line in sys.stdin:
         )
         self.assertTrue(result["supported"])
         self.assertEqual(child.returncode, 0)
+
+
+class ConfigurationAttributionTests(unittest.TestCase):
+    def test_other_worktree_with_same_path_prefix_is_still_unrelated(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text('model = "fixed"\n')
+            run_path = root / "repository"
+            before = readonly_codex_home.snapshot_configuration(
+                profile, config, (str(run_path),)
+            )
+            _ = config.write_text(
+                f'model = "fixed"\n[projects."{run_path}.another-worktree"]\ntrust_level = "trusted"\n'
+            )
+            self.assertTrue(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config, (str(run_path),)
+                ).guard_passed
+            )
+
+    def test_native_cwd_requires_preexisting_trust_without_writing_it(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            config = root / "config"
+            _ = config.write_text('model = "fixed"\n')
+            with self.assertRaises(readonly_codex_home.ConfigurationChanged):
+                readonly_codex_home.require_trusted_native_cwd(config, root)
+            self.assertEqual(config.read_text(), 'model = "fixed"\n')
+            _ = config.write_text(
+                f'[projects."{root.resolve()}"]\ntrust_level = "trusted"\n'
+            )
+            readonly_codex_home.require_trusted_native_cwd(config, root)
+
+    def test_external_desktop_and_unrelated_project_changes_keep_values_private(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text('model = "fixed"\n')
+            before = readonly_codex_home.snapshot_configuration(
+                profile, config, (str(root),)
+            )
+            _ = config.write_text(
+                'model = "fixed"\n[desktop.preferences]\nsecret = "PRIVATE_VALUE_CANARY"\n[projects."/another/repository"]\ntrust_level = "trusted"\n'
+            )
+            observation = readonly_codex_home.observe_configuration(
+                before, profile, config, (str(root),)
+            )
+            self.assertTrue(observation.guard_passed)
+            self.assertFalse(observation.unchanged)
+            self.assertNotIn("PRIVATE_VALUE_CANARY", observation.model_dump_json())
+            self.assertIsNone(
+                readonly_codex_home.require_read_only_configuration(observation)
+            )
+
+    def test_root_unknown_and_run_references_fail_inside_external_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text('model = "fixed"\n')
+            references = (str(root), "exact-run-identifier")
+            before = readonly_codex_home.snapshot_configuration(
+                profile, config, references
+            )
+            for suffix in [
+                'model = "changed"\n',
+                'model = "fixed"\n[unknown]\nvalue = true\n',
+                f'model = "fixed"\n[desktop.preferences]\npath = "{root}/owned"\n',
+                'model = "fixed"\n[desktop.preferences]\nid = "exact-run-identifier"\n',
+                f'model = "fixed"\n[projects."{root}/owned"]\ntrust_level = "trusted"\n',
+                'model = "fixed"\n[projects."/"]\ntrust_level = "trusted"\n',
+            ]:
+                with self.subTest(suffix=suffix):
+                    _ = config.write_text(suffix)
+                    observation = readonly_codex_home.observe_configuration(
+                        before, profile, config, references
+                    )
+                    self.assertFalse(observation.guard_passed)
+                    with self.assertRaises(readonly_codex_home.ConfigurationChanged):
+                        readonly_codex_home.require_read_only_configuration(observation)
+
+    def test_removed_sections_and_strict_saved_profile(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text(
+                'model = "fixed"\n[desktop.preferences]\nflag = true\n'
+            )
+            before = readonly_codex_home.snapshot_configuration(profile, config)
+            _ = config.write_text('model = "fixed"\n')
+            self.assertTrue(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config
+                ).guard_passed
+            )
+            _ = profile.write_text("different profile")
+            self.assertFalse(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config
+                ).guard_passed
+            )
+
+    def test_multiline_header_lookalikes_never_become_external_sections(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text('note = """\n[desktop.preferences]\nold\n"""\n')
+            before = readonly_codex_home.snapshot_configuration(profile, config)
+            _ = config.write_text('note = """\n[desktop.preferences]\nnew\n"""\n')
+            observation = readonly_codex_home.observe_configuration(
+                before, profile, config
+            )
+            self.assertFalse(observation.guard_passed)
+            self.assertEqual(len(before.config_sections), 1)
+
+    def test_invalid_tables_stop_without_restore(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            _ = config.write_text('model = "fixed"\n')
+            before = readonly_codex_home.snapshot_configuration(profile, config)
+            for text in ["invalid = [", "[desktop\nflag = true\n"]:
+                _ = config.write_text(text)
+                self.assertFalse(
+                    readonly_codex_home.observe_configuration(
+                        before, profile, config
+                    ).guard_passed
+                )
+                self.assertEqual(config.read_text(), text)
+
+    def test_repeated_array_tables_keep_every_occurrence_and_reject_unexpected_edit(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            original = '[[skills.config]]\npath = "first"\n[[skills.config]]\npath = "second"\n'
+            _ = config.write_text(original)
+            before = readonly_codex_home.snapshot_configuration(profile, config)
+            self.assertEqual(
+                [
+                    s.occurrence
+                    for s in before.config_sections
+                    if s.table == ("skills", "config")
+                ],
+                [0, 1],
+            )
+            self.assertTrue(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config
+                ).guard_passed
+            )
+            _ = config.write_text(original.replace('"second"', '"changed"'))
+            self.assertFalse(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config
+                ).guard_passed
+            )
+
+    def test_unchanged_preexisting_trusted_cwd_is_allowed_and_new_identity_is_protected(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            profile, config = root / "profile", root / "config"
+            _ = profile.write_text("saved profile")
+            original = f'[projects."{root}"]\ntrust_level = "trusted"\n'
+            _ = config.write_text(original)
+            before = readonly_codex_home.snapshot_configuration(
+                profile, config, (str(root),)
+            )
+            self.assertTrue(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config, (str(root),)
+                ).guard_passed
+            )
+            readonly_codex_home.register_guard_identifiers(
+                root, {"target": {"sessionId": "actual-new-run-session"}}
+            )
+            references = readonly_codex_home.configuration_references(root, (root,))
+            _ = config.write_text(
+                original + '[desktop.preferences]\nsession = "actual-new-run-session"\n'
+            )
+            self.assertFalse(
+                readonly_codex_home.observe_configuration(
+                    before, profile, config, references
+                ).guard_passed
+            )
+
+    def test_controller_labels_external_change_without_claiming_whole_file_equality(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            fixture = LifecycleFixture(Path(folder), "external-desktop-after-host")
+            self.assertIsNone(fixture.drive())
+            settlement = read_observed_json(
+                (fixture.plan.evidence / "lifecycle-settlement.json").read_text()
+            )
+            self.assertTrue(settlement["configurationGuardPassed"])
+            self.assertFalse(settlement["codexHomeUnchangedExactly"])
+            self.assertIsNone(settlement["failure"])
