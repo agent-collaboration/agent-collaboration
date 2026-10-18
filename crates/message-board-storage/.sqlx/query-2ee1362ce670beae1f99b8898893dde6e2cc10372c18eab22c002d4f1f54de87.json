@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"count!: i64\" FROM sqlite_schema WHERE type = 'table' AND name IN ('record_identities', 'project_feed', 'feed_checkpoint', 'request_ledger', 'project_state')",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "2ee1362ce670beae1f99b8898893dde6e2cc10372c18eab22c002d4f1f54de87"
+}

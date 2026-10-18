@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities WHERE kind = 'move' AND json_extract(payload, '$.record.moveName') = ? AND json_extract(payload, '$.record.requester.actor.identity.kind') = 'human' AND json_extract(payload, '$.record.requester.actor.identity.humanId') = ? AND json_extract(payload, '$.record.outcome.kind') = 'rejected' ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5a62d0dc7a19e628bc27c163391a677b673f113d7d293b40189b400e987a4bc3"
+}

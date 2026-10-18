@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities WHERE kind = 'roleAssignment' AND json_extract(payload, '$.record.holder.actor.identity.kind') = 'session' AND json_extract(payload, '$.record.holder.actor.identity.session.endpoint.serviceId') = ? AND json_extract(payload, '$.record.holder.actor.identity.session.endpoint.endpointId') = ? AND json_extract(payload, '$.record.holder.actor.identity.session.sessionId') = ? AND json_extract(payload, '$.record.ended') IS NULL AND (? OR json_extract(payload, '$.record.role') IN ('lead','implementer','verifier')) ORDER BY id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3cf8238c902c437d026fa083a39a22f5ccd960db8e3e90996e0ea42f846a5398"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities WHERE kind = 'planRevision' AND json_extract(payload, '$.record.supersededBy') IS NULL ORDER BY json_extract(payload, '$.record.revision') DESC, id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "962cf82f51c0119d8b5b5eb09edbd520557f62e952a17aa68bfafc87a2c00c47"
+}

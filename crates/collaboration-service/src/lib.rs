@@ -1,6 +1,21 @@
 //! Owner-local communication service, independent of the Host executable.
 pub mod collaboration_application;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
+mod project_store_registry;
+pub use project_store_registry::{ProjectRegistryError, ProjectStoreRegistry};
+mod fleet_client;
+pub use fleet_client::{FleetClient, FleetClientError};
+mod local_lease_authority;
+pub use local_lease_authority::{GrantResult, LocalLeaseAuthority};
+mod board_views;
+mod project_admission;
+mod project_replication_position;
+pub use project_admission::{
+    IntentReply, ProjectAdmission, ProjectAdmissionError, ProjectAdmissionProps,
+};
+pub use project_replication_position::{
+    ProjectReplicationPosition, ReplicatedPositionFuture, UnacknowledgedProjectReplication,
+};
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
 mod automation_retention_worker;
@@ -9,8 +24,8 @@ pub use automation_retention_worker::AutomationRetentionWorker;
 pub use service_identity::ServiceIdentity;
 pub use service_identity::subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SubscriptionWaitFilter, SubscriptionWaitResult,
-    SystemSubscriptionClock,
+    SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
+    SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
 };
 mod endpoint_directory;
 pub use endpoint_directory::{EndpointDirectory, EndpointInventoryReader, EndpointSnapshot};
@@ -196,3 +211,6 @@ mod automation_inspection_failure;
 mod delivery_reconciliation;
 mod operation_receipt_projection;
 mod run_reconciliation;
+
+#[cfg(test)]
+mod test_subject_workstream;

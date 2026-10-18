@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO thread_subjects(thread_id, subject_kind, subject_id) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "d71ce56d8c1429759885d3d1382fdaaa991d39b77740784100522de65912919f"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT kind AS \"kind!: String\", COUNT(*) AS \"count!: i64\" FROM record_identities GROUP BY kind ORDER BY kind",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e7b56861244fb36ddd1e7b07c8f2e559bdcc2fd532796e8ba6595286b6ba4109"
+}

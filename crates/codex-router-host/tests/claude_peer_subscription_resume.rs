@@ -37,6 +37,10 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         );
 
         let posted_message = fixture.post_activity().await?;
+        let message_board::RecordPosition::Project(posted_position) = posted_message.position
+        else {
+            return Err(std::io::Error::other("posted activity is not project-qualified").into());
+        };
         let held_sleep = fixture
             .next_owner_sleep("held Batch quiescence", Some(PRESENCE_RECHECK))
             .await?;
@@ -49,7 +53,7 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
             .roots()
             .first()
             .ok_or_else(|| std::io::Error::other("held subscription lost its pending root"))?;
-        assert_eq!(held_root.root_message_id(), fixture.root_message_id());
+        assert_eq!(held_root.thread_id(), fixture.thread_id());
         assert_eq!(held_root.pending_count(), 1);
         assert!(held_root.held_since().is_some());
         assert_eq!(held_root.next_retry_at(), None);
@@ -136,15 +140,16 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         assert!(!batch_activity.draining);
         assert_eq!(batch_activity.ranges.len(), 1);
         assert_eq!(
-            batch_activity.ranges[0].root_message_id,
-            *fixture.root_message_id()
+            batch_activity.ranges[0].project_id,
+            posted_message.project_id
         );
+        assert_eq!(batch_activity.ranges[0].thread_id, *fixture.thread_id());
         assert_eq!(
-            batch_activity.ranges[0].from_activity_sequence, posted_message.activity_sequence,
+            batch_activity.ranges[0].from, posted_position,
             "the stored root range starts at the only posted message"
         );
         assert_eq!(
-            batch_activity.ranges[0].through_activity_sequence, posted_message.activity_sequence,
+            batch_activity.ranges[0].through, posted_position,
             "the stored root range ends at the only posted message"
         );
 
@@ -177,8 +182,8 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         assert_eq!(unread_inbox.records.len(), 1);
         assert!(matches!(
             unread_inbox.records.as_slice(),
-            [InboxActivity::MessageCreated { message, .. }]
-                if message.message_id == posted_message.message_id
+            [InboxActivity::PostCreated { post, .. }]
+                if post.post_id == posted_message.post_id
         ));
         let settled_subscription = fixture.subscription().await?;
         assert!(settled_subscription.roots().is_empty());

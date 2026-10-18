@@ -103,10 +103,11 @@ impl SubscriptionPushStore {
         &self,
         record: &PushRecord,
     ) -> Result<PushRecord, BoardError> {
-        if record.kind != PushKind::DirectMessage {
-            return Err(BoardError::board_unavailable());
-        }
-        let mode = record.mode.ok_or_else(BoardError::board_unavailable)?;
+        let mode = match record.kind {
+            PushKind::DirectMessage => record.mode.ok_or_else(BoardError::board_unavailable)?,
+            PushKind::BoardNotification => MessageDelivery::Auto,
+            _ => return Err(BoardError::board_unavailable()),
+        };
         let line = render_push_line(&PushLineInput {
             link: RouterLink::new(
                 MachineId::from(self.machine.service_id().clone()),

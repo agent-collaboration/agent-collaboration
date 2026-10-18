@@ -1,6 +1,6 @@
 use crate::{
-    ActivitySequence, BoardId, Identity, MessageId, MessageText, ParticipantRole, ProjectId,
-    TopicId,
+    BoardId, FeedCursor, Identity, ParticipantRole, PostId, PostText, ProjectId, ThreadId,
+    WorkspaceId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -9,15 +9,17 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase")]
 pub enum BoardFailureKind {
     ArchivedBoard,
-    TopLevelMessageCooldown,
+    #[serde(rename = "postCooldown")]
+    TopLevelPostCooldown,
     ReferenceTargetNotFound,
     InvalidIdentity,
-    InvalidTopicName,
-    InvalidRootMessage,
+    InvalidProjectName,
+    InvalidRootPost,
     PositionBeyondLatest,
     InvalidAcknowledgement,
     InvalidCursor,
     InvalidField,
+    InvalidShape,
     NameConflict,
     ResourceNotFound,
     ResourceAlreadyExists,
@@ -36,7 +38,7 @@ pub enum BoardFailureKind {
     StaleImplementer,
     SelfReplace,
     OrchestratorRoleChange,
-    SessionTopicPost,
+    SessionProjectPost,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -56,7 +58,7 @@ pub enum BoardNextAction {
     SelectDifferentName,
     RetryLater,
     UnresolveThread,
-    PostThreadMessage,
+    PostThreadPost,
     CreateThread,
     JoinThread,
     ReplaceOrchestrator,
@@ -71,15 +73,15 @@ pub enum BoardNextAction {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ResourceIdentity {
     #[serde(rename_all = "camelCase")]
-    Project { project_id: ProjectId },
+    Workspace { workspace_id: WorkspaceId },
     #[serde(rename_all = "camelCase")]
     Board { board_id: BoardId },
     #[serde(rename_all = "camelCase")]
-    Topic { topic_id: TopicId },
+    Project { project_id: ProjectId },
     #[serde(rename_all = "camelCase")]
-    Message { message_id: MessageId },
+    Post { post_id: PostId },
     #[serde(rename_all = "camelCase")]
-    Thread { root_message_id: MessageId },
+    Thread { thread_id: ThreadId },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -114,12 +116,12 @@ pub enum BoardErrorDetails {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ParticipantRefusalDetails {
-    pub root_message_id: MessageId,
-    pub missing_root_message_ids: Vec<MessageId>,
+    pub thread_id: ThreadId,
+    pub missing_thread_ids: Vec<ThreadId>,
     pub actor: Identity,
     pub allowed_roles: Vec<ParticipantRole>,
     pub holder: Option<Identity>,
-    pub holder_last_seen_activity: Option<ActivitySequence>,
+    pub holder_last_seen_position: Option<FeedCursor>,
     pub target: Option<Identity>,
     pub named_holder: Option<Identity>,
 }
@@ -127,9 +129,9 @@ pub struct ParticipantRefusalDetails {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadCreateRefusalDetails {
-    pub topic_id: TopicId,
+    pub project_id: ProjectId,
     pub actor: Identity,
-    pub text: MessageText,
+    pub text: PostText,
     pub allowed_roles: Vec<ParticipantRole>,
 }
 
@@ -138,10 +140,10 @@ pub struct ParticipantRefusal {
     pub kind: BoardFailureKind,
     pub message: String,
     pub next_action: BoardNextAction,
-    pub root_message_id: MessageId,
+    pub thread_id: ThreadId,
     pub actor: Identity,
     pub holder: Option<Identity>,
-    pub holder_last_seen_activity: Option<ActivitySequence>,
+    pub holder_last_seen_position: Option<FeedCursor>,
     pub target: Option<Identity>,
     pub named_holder: Option<Identity>,
 }
@@ -168,32 +170,32 @@ impl BoardError {
     }
 
     #[must_use]
-    pub fn participant_required(root_message_id: MessageId, actor: Identity) -> Self {
-        Self::participants_required(root_message_id.clone(), vec![root_message_id], actor)
+    pub fn participant_required(thread_id: ThreadId, actor: Identity) -> Self {
+        Self::participants_required(thread_id.clone(), vec![thread_id], actor)
     }
 
     #[must_use]
     pub fn participants_required(
-        root_message_id: MessageId,
-        missing_root_message_ids: Vec<MessageId>,
+        thread_id: ThreadId,
+        missing_thread_ids: Vec<ThreadId>,
         actor: Identity,
     ) -> Self {
         Self {
             kind: BoardFailureKind::ParticipantRequired,
             stage: BoardFailureStage::Admission,
             message: format!(
-                "This session must join the Thread before session delivery. Run: agent-collaboration board thread join --root-message-id {} --actor self --role participant --no-watch --json",
-                String::from(root_message_id.clone())
+                "This session must join the Thread before session delivery. Run: agent-collaboration thread join --thread-id {} --actor self --role participant --no-watch --json",
+                String::from(thread_id.clone())
             ),
             next_action: BoardNextAction::JoinThread,
             details: BoardErrorDetails::ParticipantRefusal {
                 refusal: Box::new(ParticipantRefusalDetails {
-                    root_message_id,
-                    missing_root_message_ids,
+                    thread_id,
+                    missing_thread_ids,
                     actor,
                     allowed_roles: Self::all_roles(),
                     holder: None,
-                    holder_last_seen_activity: None,
+                    holder_last_seen_position: None,
                     target: None,
                     named_holder: None,
                 }),
@@ -202,15 +204,15 @@ impl BoardError {
     }
 
     #[must_use]
-    pub fn session_topic_post(topic_id: TopicId, actor: Identity, text: MessageText) -> Self {
+    pub fn session_project_post(project_id: ProjectId, actor: Identity, text: PostText) -> Self {
         Self {
-            kind: BoardFailureKind::SessionTopicPost,
+            kind: BoardFailureKind::SessionProjectPost,
             stage: BoardFailureStage::Admission,
             message: "A session creates a Thread with thread create and an explicit Role and Watch choice.".to_owned(),
             next_action: BoardNextAction::CreateThread,
             details: BoardErrorDetails::ThreadCreateRefusal {
                 refusal: Box::new(ThreadCreateRefusalDetails {
-                    topic_id,
+                    project_id,
                     actor,
                     text,
                     allowed_roles: Self::all_roles(),
@@ -221,10 +223,10 @@ impl BoardError {
 
     #[must_use]
     pub fn orchestrator_already_exists(
-        root_message_id: MessageId,
+        thread_id: ThreadId,
         actor: Identity,
         holder: Identity,
-        holder_last_seen_activity: ActivitySequence,
+        holder_last_seen_position: FeedCursor,
     ) -> Self {
         Self {
             kind: BoardFailureKind::OrchestratorAlreadyExists,
@@ -233,12 +235,12 @@ impl BoardError {
             next_action: BoardNextAction::ReplaceOrchestrator,
             details: BoardErrorDetails::ParticipantRefusal {
                 refusal: Box::new(ParticipantRefusalDetails {
-                root_message_id,
-                missing_root_message_ids: Vec::new(),
+                thread_id,
+                missing_thread_ids: Vec::new(),
                 actor,
                 allowed_roles: vec![ParticipantRole::Orchestrator],
                 holder: Some(holder),
-                holder_last_seen_activity: Some(holder_last_seen_activity),
+                holder_last_seen_position: Some(holder_last_seen_position),
                 target: None,
                 named_holder: None,
                 }),
@@ -248,10 +250,10 @@ impl BoardError {
 
     #[must_use]
     pub fn implementer_already_exists(
-        root_message_id: MessageId,
+        thread_id: ThreadId,
         actor: Identity,
         holder: Identity,
-        holder_last_seen_activity: ActivitySequence,
+        holder_last_seen_position: FeedCursor,
     ) -> Self {
         Self {
             kind: BoardFailureKind::ImplementerAlreadyExists,
@@ -262,12 +264,12 @@ impl BoardError {
             next_action: BoardNextAction::ReplaceImplementer,
             details: BoardErrorDetails::ParticipantRefusal {
                 refusal: Box::new(ParticipantRefusalDetails {
-                    root_message_id,
-                    missing_root_message_ids: Vec::new(),
+                    thread_id,
+                    missing_thread_ids: Vec::new(),
                     actor,
                     allowed_roles: vec![ParticipantRole::Implementer],
                     holder: Some(holder),
-                    holder_last_seen_activity: Some(holder_last_seen_activity),
+                    holder_last_seen_position: Some(holder_last_seen_position),
                     target: None,
                     named_holder: None,
                 }),
@@ -284,12 +286,12 @@ impl BoardError {
             next_action: refusal.next_action,
             details: BoardErrorDetails::ParticipantRefusal {
                 refusal: Box::new(ParticipantRefusalDetails {
-                    root_message_id: refusal.root_message_id,
-                    missing_root_message_ids: Vec::new(),
+                    thread_id: refusal.thread_id,
+                    missing_thread_ids: Vec::new(),
                     actor: refusal.actor,
                     allowed_roles: Self::all_roles(),
                     holder: refusal.holder,
-                    holder_last_seen_activity: refusal.holder_last_seen_activity,
+                    holder_last_seen_position: refusal.holder_last_seen_position,
                     target: refusal.target,
                     named_holder: refusal.named_holder,
                 }),
@@ -319,12 +321,12 @@ impl BoardError {
     #[must_use]
     pub fn top_level_message_cooldown(retry_after_seconds: u64) -> Self {
         Self {
-            kind: BoardFailureKind::TopLevelMessageCooldown,
+            kind: BoardFailureKind::TopLevelPostCooldown,
             stage: BoardFailureStage::Admission,
             message: format!(
                 "Wait {retry_after_seconds} seconds before another top-level message in this board, or add a thread message to an existing unresolved thread."
             ),
-            next_action: BoardNextAction::PostThreadMessage,
+            next_action: BoardNextAction::PostThreadPost,
             details: BoardErrorDetails::Cooldown {
                 retry_after_seconds,
             },

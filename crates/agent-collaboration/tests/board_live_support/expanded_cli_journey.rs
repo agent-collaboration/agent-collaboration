@@ -2,18 +2,19 @@ use super::board_cli_runner::{
     require_record_message_ids, result, run_board_cli, run_rejected_board_cli,
 };
 use crate::proof_context::{ProofContext, ProofResult};
-use collaboration_client::board::{Identity, Message, MessageId};
+use collaboration_client::board::{Identity, Post, PostId};
 use serde_json::{Value, json};
 use std::{io::Write, os::unix::fs::OpenOptionsExt};
 
 pub(super) struct AgentExchange<'a> {
     pub alpha_identity: &'a Identity,
     pub beta_identity: &'a Identity,
-    pub first_project_id: &'a str,
+    pub first_workspace_id: &'a str,
     pub first_board_id: &'a str,
-    pub first_topic_id: &'a str,
-    pub root_message: &'a Message,
-    pub contribution_message: &'a Message,
+    pub first_project_id: &'a str,
+    pub first_subject: &'a str,
+    pub root_message: &'a Post,
+    pub contribution_message: &'a Post,
 }
 
 pub(super) async fn exercise_after_agent_exchange(
@@ -23,9 +24,10 @@ pub(super) async fn exercise_after_agent_exchange(
     let AgentExchange {
         alpha_identity,
         beta_identity,
-        first_project_id,
+        first_workspace_id,
         first_board_id,
-        first_topic_id,
+        first_project_id,
+        first_subject,
         root_message,
         contribution_message,
     } = exchange;
@@ -38,37 +40,38 @@ pub(super) async fn exercise_after_agent_exchange(
             "inbox",
             "fetch",
             "--scope",
-            "project",
-            "--project-id",
-            first_project_id,
+            "workspace",
+            "--workspace-id",
+            first_workspace_id,
             "--reader",
             &alpha_actor,
         ],
     )
     .await?;
-    let contribution_sequence = contribution_message.activity_sequence.get();
+    let contribution_cursor = match contribution_message.position {
+        message_board::RecordPosition::Project(cursor) => cursor,
+        message_board::RecordPosition::Fleet(_) | message_board::RecordPosition::Unsequenced => {
+            return Err("post has no project position".into());
+        }
+    };
     let inbox_records = result(&alpha_inbox, "/page/records")?
         .as_array()
         .ok_or("alpha inbox records were not an array")?;
     if !inbox_records.iter().any(|record| {
-        record.pointer("/message/messageId").and_then(Value::as_str)
-            == Some(contribution_message.message_id.as_str())
-            && record.get("activitySequence").and_then(Value::as_u64) == Some(contribution_sequence)
+        record.pointer("/post/postId").and_then(Value::as_str)
+            == Some(contribution_message.post_id.as_str())
+            && record.pointer("/position/position") == Some(&json!(contribution_cursor))
     }) {
         return Err("alpha inbox omitted beta's watched-thread contribution".into());
     }
-    let contribution_sequence_text = contribution_sequence.to_string();
+    let entry = json!({"requestId":message_board::RequestId::generate(),"resubmits":null,"observedEpoch":contribution_cursor.epoch,"scope":{"kind":"thread","thread":{"thread":root_message.post_id}},"through":contribution_cursor}).to_string();
     run_board_cli(
         &proof.service_directory,
         [
             "inbox",
             "acknowledge",
-            "--scope",
-            "thread",
-            "--root-message-id",
-            root_message.message_id.as_str(),
-            "--through-activity-sequence",
-            &contribution_sequence_text,
+            "--entry",
+            &entry,
             "--actor",
             &alpha_actor,
         ],
@@ -80,9 +83,9 @@ pub(super) async fn exercise_after_agent_exchange(
             "inbox",
             "fetch",
             "--scope",
-            "project",
-            "--project-id",
-            first_project_id,
+            "workspace",
+            "--workspace-id",
+            first_workspace_id,
             "--reader",
             &alpha_actor,
         ],
@@ -100,8 +103,8 @@ pub(super) async fn exercise_after_agent_exchange(
         [
             "thread",
             "unwatch",
-            "--root-message-id",
-            root_message.message_id.as_str(),
+            "--thread-id",
+            root_message.post_id.as_str(),
             "--actor",
             &beta_actor,
         ],
@@ -112,8 +115,8 @@ pub(super) async fn exercise_after_agent_exchange(
         [
             "thread",
             "watch",
-            "--root-message-id",
-            root_message.message_id.as_str(),
+            "--thread-id",
+            root_message.post_id.as_str(),
             "--actor",
             &beta_actor,
         ],
@@ -124,25 +127,27 @@ pub(super) async fn exercise_after_agent_exchange(
         [
             "thread",
             "resolve",
-            "--root-message-id",
-            root_message.message_id.as_str(),
+            "--thread-id",
+            root_message.post_id.as_str(),
             "--actor",
             &alpha_actor,
+            "--reason",
+            "live lifecycle proof",
         ],
     )
     .await?;
     run_rejected_board_cli(
         &proof.service_directory,
-        "threadResolved",
+        "closed",
         [
-            "message",
             "post",
-            "--message-id",
-            MessageId::generate().as_str(),
+            "post",
+            "--post-id",
+            PostId::generate().as_str(),
             "--placement",
             "thread",
-            "--root-message-id",
-            root_message.message_id.as_str(),
+            "--thread-id",
+            root_message.post_id.as_str(),
             "--text",
             "must be rejected while resolved",
             "--actor",
@@ -155,25 +160,25 @@ pub(super) async fn exercise_after_agent_exchange(
         [
             "thread",
             "unresolve",
-            "--root-message-id",
-            root_message.message_id.as_str(),
+            "--thread-id",
+            root_message.post_id.as_str(),
             "--actor",
             &alpha_actor,
         ],
     )
     .await?;
 
-    let second_project_id = collaboration_client::board::ProjectId::generate();
+    let second_workspace_id = collaboration_client::board::WorkspaceId::generate();
     let second_board_id = collaboration_client::board::BoardId::generate();
-    let second_topic_id = collaboration_client::board::TopicId::generate();
-    let cross_project_message_id = MessageId::generate();
+    let second_project_id = collaboration_client::board::ProjectId::generate();
+    let cross_project_message_id = PostId::generate();
     run_board_cli(
         &proof.service_directory,
         [
-            "project",
+            "workspace",
             "create",
-            "--project-id",
-            second_project_id.as_str(),
+            "--workspace-id",
+            second_workspace_id.as_str(),
             "--name",
             "Live cross-project proof",
             "--description",
@@ -186,11 +191,12 @@ pub(super) async fn exercise_after_agent_exchange(
     run_board_cli(
         &proof.service_directory,
         [
+            "board",
             "create",
             "--board-id",
             second_board_id.as_str(),
-            "--project-id",
-            second_project_id.as_str(),
+            "--workspace-id",
+            second_workspace_id.as_str(),
             "--name",
             "Cross-project board",
             "--actor",
@@ -201,86 +207,109 @@ pub(super) async fn exercise_after_agent_exchange(
     run_board_cli(
         &proof.service_directory,
         [
-            "topic",
+            "project",
             "create",
-            "--topic-id",
-            second_topic_id.as_str(),
+            "--project-id",
+            second_project_id.as_str(),
             "--board-id",
             second_board_id.as_str(),
-            "--name",
+            "--title",
             "Cross references",
             "--actor",
             &beta_actor,
         ],
     )
     .await?;
+    let cross_subject = super::arrange_discussion_subject(proof, &second_project_id).await?;
+    let cross_about = format!("workstream:{}", cross_subject.as_str());
+    let cross_text = proof.workspace.join("cross-project-root.md");
+    std::fs::write(&cross_text, "Cross-project reference proof")?;
     let cross_project_post = run_board_cli(
         &proof.service_directory,
         [
-            "message",
-            "post",
-            "--message-id",
+            "thread",
+            "create",
+            "--post-id",
             cross_project_message_id.as_str(),
-            "--placement",
-            "topic",
-            "--topic-id",
-            second_topic_id.as_str(),
-            "--text",
-            "Cross-project reference proof",
-            "--reference-message",
-            contribution_message.message_id.as_str(),
+            "--project-id",
+            second_project_id.as_str(),
+            "--about",
+            &cross_about,
+            "--role",
+            "orchestrator",
+            "--no-watch",
+            "--text-file",
+            cross_text.to_str().ok_or("cross text path")?,
+            "--reference-post",
+            contribution_message.post_id.as_str(),
             "--reference-thread",
-            root_message.message_id.as_str(),
+            root_message.post_id.as_str(),
             "--actor",
             &beta_actor,
         ],
     )
     .await?;
-    let cross_project_sequence = result(&cross_project_post, "/message/activitySequence")?
-        .as_u64()
-        .ok_or("cross-project post omitted activity sequence")?;
+    let cross_post = proof
+        .client
+        .post_show(collaboration_client::board::PostShowRequest {
+            post_id: cross_project_message_id.clone(),
+        })
+        .await?
+        .0;
+    let cross_project_cursor = match cross_post.position {
+        message_board::RecordPosition::Project(cursor) => cursor,
+        message_board::RecordPosition::Fleet(_) | message_board::RecordPosition::Unsequenced => {
+            return Err("cross-project post has no feed cursor".into());
+        }
+    };
+    if result(&cross_project_post, "/record/result/decision/kind")?.as_str() != Some("accepted") {
+        return Err("cross-project post was not accepted".into());
+    }
     super::filtered_search_journey::exercise(
         proof,
         super::filtered_search_journey::FilteredSearchProof {
             reader: &beta_actor,
-            selected_project_id: second_project_id.as_str(),
+            selected_workspace_id: second_workspace_id.as_str(),
             selected_board_id: second_board_id.as_str(),
-            selected_topic_id: second_topic_id.as_str(),
+            selected_project_id: second_project_id.as_str(),
+            selected_subject: &cross_about,
             selected_message_id: cross_project_message_id.as_str(),
-            watched_root_id: root_message.message_id.as_str(),
-            watched_project_id: first_project_id,
+            watched_root_id: root_message.post_id.as_str(),
+            watched_workspace_id: first_workspace_id,
             thread_text: contribution_message.text.as_str(),
         },
     )
     .await?;
     let project_inventory = run_board_cli(
         &proof.service_directory,
-        ["project", "list", "--limit", "100"],
+        ["workspace", "list", "--limit", "100"],
     )
     .await?;
     let project_records = result(&project_inventory, "/page/records")?
         .as_array()
         .ok_or("project inventory records were not an array")?;
-    for expected_project_id in [first_project_id, second_project_id.as_str()] {
+    for expected_project_id in [first_workspace_id, second_workspace_id.as_str()] {
         if !project_records.iter().any(|project| {
-            project.get("projectId").and_then(Value::as_str) == Some(expected_project_id)
+            project.get("workspaceId").and_then(Value::as_str) == Some(expected_project_id)
         }) {
             return Err(format!("CLI project inventory omitted {expected_project_id}").into());
         }
     }
-    let range_upper = cross_project_sequence.to_string();
+    let range_upper_value = json!({"kind":"aggregate","cursor":{"perProject":{first_project_id:contribution_cursor, second_project_id.as_str():cross_project_cursor}}});
+    let range_upper = range_upper_value.to_string();
+    let range_start = json!({"kind":"aggregate","cursor":{"perProject":{}}}).to_string();
     let all_project_history = run_board_cli(
         &proof.service_directory,
         [
-            "message",
+            "post",
             "list",
             "--scope",
-            "all-projects",
+            "all-workspaces",
             "--selection",
             "range",
-            "--from-activity-sequence",
-            "0",
-            "--to-activity-sequence",
+            "--from",
+            &range_start,
+            "--to",
             &range_upper,
         ],
     )
@@ -288,7 +317,7 @@ pub(super) async fn exercise_after_agent_exchange(
     require_record_message_ids(
         &all_project_history,
         &[
-            root_message.message_id.as_str(),
+            root_message.post_id.as_str(),
             cross_project_message_id.as_str(),
         ],
     )?;
@@ -296,6 +325,7 @@ pub(super) async fn exercise_after_agent_exchange(
     run_board_cli(
         &proof.service_directory,
         [
+            "board",
             "archive",
             "--board-id",
             first_board_id,
@@ -304,20 +334,25 @@ pub(super) async fn exercise_after_agent_exchange(
         ],
     )
     .await?;
+    let archive_text = proof.workspace.join("archive-refused-root.md");
+    std::fs::write(&archive_text, "must be rejected after archive")?;
     run_rejected_board_cli(
         &proof.service_directory,
-        "archivedBoard",
+        "archived",
         [
-            "message",
-            "post",
-            "--message-id",
-            MessageId::generate().as_str(),
-            "--placement",
-            "topic",
-            "--topic-id",
-            first_topic_id,
-            "--text",
-            "must be rejected after archive",
+            "thread",
+            "create",
+            "--post-id",
+            PostId::generate().as_str(),
+            "--project-id",
+            first_project_id,
+            "--about",
+            first_subject,
+            "--role",
+            "orchestrator",
+            "--no-watch",
+            "--text-file",
+            archive_text.to_str().ok_or("archive text path")?,
             "--actor",
             &alpha_actor,
         ],
@@ -333,16 +368,16 @@ pub(super) async fn exercise_after_agent_exchange(
         .ok_or("debug Host marker omitted its PID")?;
     let persistence_state = json!({
         "hostPid": host_pid,
-        "firstProjectId": first_project_id,
+        "firstWorkspaceId": first_workspace_id,
         "firstBoardId": first_board_id,
-        "firstTopicId": first_topic_id,
-        "secondProjectId": second_project_id,
+        "firstWorkspaceId": first_project_id,
+        "secondWorkspaceId": second_workspace_id,
         "secondBoardId": second_board_id,
-        "secondTopicId": second_topic_id,
-        "rootMessageId": root_message.message_id,
-        "contributionMessageId": contribution_message.message_id,
+        "secondWorkspaceId": second_project_id,
+        "threadId": root_message.post_id,
+        "contributionMessageId": contribution_message.post_id,
         "crossProjectMessageId": cross_project_message_id,
-        "rangeUpperActivitySequence": cross_project_sequence,
+        "rangeUpper": range_upper_value,
         "alphaIdentity": alpha_identity,
         "betaIdentity": beta_identity,
     });
@@ -355,9 +390,9 @@ pub(super) async fn exercise_after_agent_exchange(
     proof.record(
         "boardFullCliJourneyReadyForHostRestart",
         json!({
-            "firstProjectId":first_project_id,
-            "secondProjectId":second_project_id,
-            "rangeUpperActivitySequence":cross_project_sequence,
+            "firstWorkspaceId":first_workspace_id,
+            "secondWorkspaceId":second_workspace_id,
+            "rangeUpper":range_upper_value,
         }),
     )?;
     Ok(())

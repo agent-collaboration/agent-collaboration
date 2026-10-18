@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT wakeup_id,wakeup_status,definition_json FROM wakeup_definitions ORDER BY created_at_ms DESC,wakeup_id DESC",
+  "describe": {
+    "columns": [
+      {
+        "name": "wakeup_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "wakeup_definitions",
+            "name": "wakeup_id"
+          }
+        }
+      },
+      {
+        "name": "wakeup_status",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "wakeup_definitions",
+            "name": "wakeup_status"
+          }
+        }
+      },
+      {
+        "name": "definition_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "wakeup_definitions",
+            "name": "definition_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 0
+    },
+    "nullable": [
+      true,
+      false,
+      false
+    ]
+  },
+  "hash": "f7145d35f21eec647936cdc53da3f6de0a206730a2c607003f05477a0cca770f"
+}

@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE mail_items SET status_json=?,status_version=?,result_json=?,submit_attempted_at=COALESCE(submit_attempted_at,?),terminal_at=?,item_json=CASE WHEN ? THEN NULL ELSE item_json END,projection_json=CASE WHEN ? THEN NULL ELSE projection_json END,payload_bytes=CASE WHEN ? THEN 0 ELSE payload_bytes END WHERE item_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 9
+    },
+    "nullable": []
+  },
+  "hash": "631b21f5a4a179b8aaff1ca5991f3414cffa4f54a852646d0a04ba6dcccf8f31"
+}

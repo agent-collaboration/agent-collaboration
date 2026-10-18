@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE thread_subscriptions SET membership_kind = ?, membership_id = ?, thread_id = ? WHERE reader = ? AND scope = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "b0d9140d4da4f6d973ed0cff7ed2ecbb139da7bd49f6a8a605fba47d41e98f13"
+}

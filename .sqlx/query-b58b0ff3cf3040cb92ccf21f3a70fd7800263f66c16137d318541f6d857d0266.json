@@ -1,0 +1,158 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT item_id,digest,direction,item_json,status_json,status_version,payload_bytes,projection_json,result_json,submit_attempted_at,created_at,terminal_at FROM mail_items WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "item_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "item_id"
+          }
+        }
+      },
+      {
+        "name": "digest",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "digest"
+          }
+        }
+      },
+      {
+        "name": "direction",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "direction"
+          }
+        }
+      },
+      {
+        "name": "item_json",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "item_json"
+          }
+        }
+      },
+      {
+        "name": "status_json",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "status_json"
+          }
+        }
+      },
+      {
+        "name": "status_version",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "status_version"
+          }
+        }
+      },
+      {
+        "name": "payload_bytes",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "payload_bytes"
+          }
+        }
+      },
+      {
+        "name": "projection_json",
+        "ordinal": 7,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "projection_json"
+          }
+        }
+      },
+      {
+        "name": "result_json",
+        "ordinal": 8,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "result_json"
+          }
+        }
+      },
+      {
+        "name": "submit_attempted_at",
+        "ordinal": 9,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "submit_attempted_at"
+          }
+        }
+      },
+      {
+        "name": "created_at",
+        "ordinal": 10,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "created_at"
+          }
+        }
+      },
+      {
+        "name": "terminal_at",
+        "ordinal": 11,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "mail_items",
+            "name": "terminal_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "b58b0ff3cf3040cb92ccf21f3a70fd7800263f66c16137d318541f6d857d0266"
+}

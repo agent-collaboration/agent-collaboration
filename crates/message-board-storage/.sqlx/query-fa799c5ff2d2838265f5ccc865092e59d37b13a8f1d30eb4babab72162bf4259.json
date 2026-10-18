@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO notify_intents(intent_id, cause_kind, cause_id, recipient, assignment_revision, state) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "fa799c5ff2d2838265f5ccc865092e59d37b13a8f1d30eb4babab72162bf4259"
+}

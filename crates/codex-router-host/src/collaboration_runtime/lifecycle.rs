@@ -128,10 +128,10 @@ impl CollaborationRuntime {
                 }
             }
         }
-        if let Some(store) = self.board_store.take() {
+        if let Some(store) = self.project_admission.take() {
             match std::sync::Arc::try_unwrap(store) {
                 Ok(store) => {
-                    if store.into_inner().close().await.is_err() {
+                    if store.close().await.is_err() {
                         failure.get_or_insert(io::Error::other("board storage close failed"));
                     }
                 }

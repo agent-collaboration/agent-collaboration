@@ -16,7 +16,7 @@ pub(super) fn operation_description(name: &str) -> &'static str {
             "Lists a bounded page of revisions for one instruction. Read-only and ordered by the stored revision history."
         }
         "wake_send" => {
-            "Creates a durable timed wake with its required operation identity, target, sender, delivery mode and timing. Creation confirms local scheduling only; a firing, native input acceptance, completed turn and agent reply are distinct later evidence."
+            "Creates one durable timed wake per target using its required operation identity, recording requestedBy. Active and paused wakes occupy the slot; replace requires the creator, target or declared owner. One-shots are due within 24 hours; repeats require an expiry within 7 days and gaps of at least 5 minutes, including Cron. Reusing the same operation identity replays its first result. Creation confirms local scheduling only; firing, native input acceptance, carrier acceptance, a completed turn and an agent reply remain separate."
         }
         "wake_show" => {
             "Reads one wake definition, state, next due time and recorded first-fire evidence. Read-only; it does not wait for or replay delivery."
@@ -111,111 +111,266 @@ pub(super) fn operation_description(name: &str) -> &'static str {
         "conversation_operation_reconcile" => {
             "Reconciles one conversation operation from exact supported evidence using its caller-retained operationId. It is read-only with respect to client work and never resubmits the operation."
         }
-        "board_discovery_search" => {
-            "Searches discoverable projects/boards/topics using the supplied query and page bounds. Read-only; discovered board content is context, not authorization."
+        "discovery_search" => {
+            "Searches discoverable workspaces/boards/projects using the supplied query and page bounds. Read-only; discovered board content is context, not authorization."
         }
-        "board_message_search" => {
+        "post_search" => {
             "Searches board messages using the supplied scope/query and page bounds. Read-only and does not mark inbox activity acknowledged."
         }
-        "board_project_create" => {
-            "Creates a project with validated metadata and actor identity. This mutates board state only; it does not authorize or complete agent work."
+        "workspace_create" => {
+            "Creates a workspace with validated metadata and actor identity. This mutates board state only; it does not authorize or complete agent work."
         }
-        "board_project_update" => {
-            "Updates an existing project with its identity, actor and requested fields. It changes board metadata only."
+        "workspace_archive" => {
+            "Archives the workspace and each board in one fleet admission. Boards with pending project archive reports remain archiving."
         }
-        "board_project_show" => "Reads one project by identity without changing board state.",
-        "board_project_list" => {
-            "Lists a bounded page of projects, optionally filtered by repository. Read-only."
+        "workspace_update" => {
+            "Updates an existing workspace with its identity, actor and requested fields. It changes board metadata only."
         }
-        "board_repository_attach" => {
-            "Attaches a validated repository reference to an existing project using the supplied actor. It changes discovery metadata, not repository contents."
+        "workspace_show" => "Reads one workspace by identity without changing board state.",
+        "workspace_list" => {
+            "Lists a bounded page of workspaces, optionally filtered by repository. Read-only."
         }
-        "board_repository_detach" => {
-            "Detaches a repository reference from an existing project using the supplied actor. It does not alter the repository itself."
+        "repository_attach" => {
+            "Attaches a validated repository reference to an existing workspace using the supplied actor. It changes discovery metadata, not repository contents."
         }
-        "board_repository_list" => {
-            "Lists repository references attached to one project. Read-only."
+        "repository_detach" => {
+            "Detaches a repository reference from an existing workspace using the supplied actor. It does not alter the repository itself."
         }
+        "repository_list" => "Lists repository references attached to one workspace. Read-only.",
         "board_create" => {
-            "Creates a board inside an existing project using validated metadata and actor identity. It does not create a conversation or assignment."
+            "Creates a board inside an existing workspace using validated metadata and actor identity. It does not create a conversation or assignment."
         }
         "board_update" => {
             "Updates an existing board's metadata using its identity and actor. It does not mutate contained message text."
         }
         "board_show" => "Reads one board by identity without changing it.",
-        "board_list" => "Lists a bounded page of boards for a project. Read-only.",
+        "board_list" => "Lists a bounded page of boards for a workspace. Read-only.",
+        "board_close" => {
+            "Closes an open initiative board through fleet admission. Area boards cannot close. Replays and already-closed initiatives keep their existing result."
+        }
         "board_archive" => {
             "Archives an existing board using its identity and actor. Archived content remains historical context; this does not complete its work threads."
         }
-        "board_topic_create" => {
-            "Creates a topic inside an active board using validated metadata and actor identity."
+        "project_create" => {
+            "Creates a project inside an active board using validated metadata and actor identity."
         }
-        "board_topic_update" => {
-            "Updates an existing topic's metadata using its identity and actor; message content remains immutable."
+        "project_update" => {
+            "Updates an existing project's metadata using its identity and actor; message content remains immutable."
         }
-        "board_topic_list" => "Lists a bounded page of topics for a board. Read-only.",
-        "board_message_post" => {
-            "Posts immutable content as the supplied actor to a topic or existing unresolved thread. Saving the message does not prove delivery to a model, turn completion, reply or assignment success."
+        "project_list" => "Lists a bounded page of projects for a board. Read-only.",
+        "project_show" => {
+            "Reads one project's metadata from the fleet directory. Read-only; current work state is held in its project records."
         }
-        "board_message_show" => {
+        "thread_post" => {
+            "Posts immutable content as the supplied actor to an existing unresolved thread. Saving the message does not prove delivery to a model, turn completion, reply or assignment success."
+        }
+        "post_show" => {
             "Reads one board message by identity without changing watch, inbox or acknowledgement state."
         }
-        "board_message_list" => {
-            "Lists a bounded page of messages for the requested board/topic/thread scope and selection. Reading does not acknowledge inbox activity."
+        "post_list" => {
+            "Lists a bounded page of messages for the requested board/project/thread scope and selection. Reading does not acknowledge inbox activity."
         }
-        "board_thread_show" => {
-            "Reads one board thread and its current state. Read-only; thread state is not a task verdict."
+        "thread_show" => {
+            "Reads metadata and current state for one board thread, without posts. It returns no content coverage and advances no read mark. Thread state is not a task verdict. The target uses a ThreadRef with an optional project; reads return the project ID."
         }
-        "board_thread_resolve" => {
+        "thread_resolve" => {
             "Marks an existing thread resolved using the supplied actor. Resolution is board state and must not be used as proof that an agent assignment succeeded."
         }
-        "board_thread_unresolve" => {
+        "thread_unresolve" => {
             "Reopens a resolved thread using the supplied actor so further replies are permitted."
         }
-        "board_thread_watch" => {
+        "thread_watch" => {
             "Adds the supplied actor's watch to an existing thread. Watching selects future inbox activity; it does not wake a model or acknowledge history."
         }
-        "board_thread_unwatch" => {
+        "thread_unwatch" => {
             "Removes the supplied actor's watch from an existing thread. Existing content and acknowledgement state remain unchanged."
         }
-        "board_topic_watch" => {
-            "Watches current and future threads in one topic for the supplied actor. It changes personal delivery selection only."
+        "project_watch" => {
+            "Watches current and future threads in one project for the supplied actor. It changes personal delivery selection only."
         }
-        "board_topic_unwatch" => {
-            "Stops the supplied actor's topic watch. Existing thread watches/content remain governed by their own state."
+        "project_unwatch" => {
+            "Stops the supplied actor's project watch. Existing thread watches/content remain governed by their own state."
         }
-        "board_thread_list" => {
+        "thread_list" => {
             "Lists a bounded page of threads for the requested scope. Read-only and does not watch or acknowledge them."
         }
-        "board_thread_create" => {
-            "Creates a new root thread in an active topic as the supplied actor. It records discussion context, not a Router task or conversation."
+        "thread_refile" => {
+            "Change a thread subject as a project role holder; records the earlier and new subject in the project feed."
         }
-        "board_thread_join" => {
+        "thread_create" => {
+            "Creates a root thread with required about: a project subject line, workstream, task, work-trail row or workspace ADR. Project-wide subjects require an active project role; referenced subjects must belong to this project or workspace. This is the sole root-creation entry."
+        }
+        "thread_join" => {
             "Joins the supplied session to an existing thread in its requested participant role. Set watch to true to subscribe on join (the CLI defaults it on); set false to opt out. Optional mode and whenIdle configure that subscription. Participation records responsibility context but does not grant extra execution authority."
         }
-        "board_thread_leave" => {
+        "thread_leave" => {
             "Removes the supplied session's eligible participation from a thread. It does not delete messages or terminate the session."
         }
-        "board_thread_participant_list" => {
+        "thread_participant_list" => {
             "Lists current participants and roles for one thread. Read-only and not an authentication result."
         }
-        "board_thread_subscribe" => {
-            "Creates, updates or reactivates the supplied reader's thread or topic subscription and its watch. Thread scope requires an open participant; topic scope does not. New session subscriptions default to deliver/hold, 120-second quiet, 600-second cap and 24-hour lifetime; new human subscriptions default off. Unspecified fields keep their current values. Human readers cannot use deliver mode. The result reports stored policy and current delivery observations; it does not prove an agent processed activity."
+        "thread_subscribe" => {
+            "Creates, updates or reactivates the supplied reader's thread or project subscription and its watch. Thread scope requires an open participant; project scope does not. New session subscriptions default to deliver/hold, 120-second quiet, 600-second cap and 24-hour lifetime; new human subscriptions default off. Unspecified fields keep their current values. Human readers cannot use deliver mode. Inspect thread_subscriptions for stored policy and current delivery observations; it does not prove an agent processed activity."
         }
-        "board_thread_unsubscribe" => {
-            "Ends the supplied reader's thread or topic subscription as cancelled. The watch remains active, so activity stays available in the inbox until acknowledged."
+        "thread_unsubscribe" => {
+            "Ends the supplied reader's thread or project subscription as cancelled. The watch remains active, so activity stays available in the inbox until acknowledged."
         }
-        "board_thread_subscriptions" => {
-            "Lists the supplied reader's active or draining thread and topic subscriptions, including policy, expiry, pending counts and delivery observations. Read-only; it does not acknowledge inbox activity."
+        "thread_subscriptions" => {
+            "Lists the supplied reader's active or draining thread and project subscriptions, including policy, expiry, pending counts and delivery observations. Read-only; it does not acknowledge inbox activity."
         }
-        "board_inbox_fetch" => {
-            "Fetches bounded activity for the supplied reader and selected project/board/topic scope. Unread mode initializes reader tracking without acknowledging activity; Latest mode does not initialize it. Fetching does not prove a model processed it."
+        "inbox_fetch" => {
+            "Fetches bounded activity for the supplied reader and selected workspace/board/project scope. Unread mode initializes reader tracking without acknowledging activity; Latest mode does not initialize it. Fetching does not prove a model processed it."
         }
-        "board_inbox_acknowledge" => {
+        "inbox_acknowledge" => {
             "Advances the supplied reader's acknowledgement for exactly the requested inbox scope and activity sequence. It mutates attention state only."
         }
-        "board_inbox_projects" => {
-            "Lists projects currently tracked by the supplied reader's inbox. Read-only."
+        "inbox_workspaces" => {
+            "Lists workspaces currently tracked by the supplied reader's inbox. Read-only."
+        }
+        "workstream_create" => {
+            "Creates an open workstream in the request project with its name and goal. Requires the project lead; records the decision under the caller request ID."
+        }
+        "workstream_rename" => {
+            "Renames a workstream with the expected revision and project lead authority. Existing task identities and history are preserved."
+        }
+        "workstream_close" => {
+            "Closes a workstream with its reason, note and expected revision. Open tasks remain visible and cannot be newly assigned to that closed workstream."
+        }
+        "workstream_show" => "Reads one recorded workstream in the named project. Read-only.",
+        "workstream_list" => {
+            "Lists a bounded page of recorded workstreams in one project. Read-only."
+        }
+        "task_create" => {
+            "Creates a task in an open workstream of the same project. Initial blockedBy and relatedTo targets carry their project; foreign targets are refused without searching other stores."
+        }
+        "task_update" => {
+            "Updates task title and body using the expected revision. It keeps task identity, links and recorded history."
+        }
+        "task_move_workstream" => {
+            "Moves a task to an open workstream of the same project using its expected revision."
+        }
+        "task_set_status" => {
+            "Sets task status using its expected revision. A drop requires the caller's reason, records it in the lifecycle fact and is terminal."
+        }
+        "task_link" => {
+            "Adds a same-project blockedBy or relatedTo link. Missing or dropped targets are refused; blockedBy cycles are refused."
+        }
+        "task_unlink" => {
+            "Removes a task link in the request project. An already absent link records an AlreadySo decision."
+        }
+        "task_duplicate" => {
+            "Marks a task as a duplicate of an existing task, drops it and records the caller's note in a work-trail row atomically. A dropped task is refused."
+        }
+        "task_replace" => {
+            "Marks a task as replaced by an existing task, drops it and records the caller's note in a work-trail row atomically. A dropped task is refused."
+        }
+        "task_show" => "Reads one recorded task in the named project. Read-only.",
+        "task_list" => "Lists a bounded page of recorded tasks in one project. Read-only.",
+        "subtask_add" => {
+            "Adds a titled subtask to a task, with its explicit position. Subtasks do not have role assignments or dependency links."
+        }
+        "subtask_check" => "Checks one subtask under the task revision precondition.",
+        "subtask_uncheck" => "Unchecks one subtask under the task revision precondition.",
+        "subtask_move" => {
+            "Moves a subtask to its requested position under the task revision precondition."
+        }
+        "subtask_remove" => "Removes a subtask under the task revision precondition.",
+        "subtask_show" => "Reads one recorded subtask in the named project. Read-only.",
+        "subtask_list" => "Lists a bounded page of recorded subtasks in one project. Read-only.",
+        "work_trail_add" => {
+            "Appends immutable tagged work-trail text to a task or workstream. An omitted subject resolves to the requester assignment; otherwise SubjectRequired is refused."
+        }
+        "work_trail_redact" => {
+            "Marks a work-trail row redacted without changing its immutable content."
+        }
+        "work_trail_show" => {
+            "Reads a work trail or decision register with covered-through feed position. An identified reader marks scanned coverage, including filtered positions. A partial decision register marks nothing until its frozen range is complete."
+        }
+        "role_grant" => {
+            "Grants lead/advisor on a project or implementer/verifier/reviewer/operator on a workstream under its assignment revision. Lead, implementer and verifier have one holder; advisor, reviewer and operator allow multiple holders. Implementer, verifier and reviewers must be distinct; repeating a holder is AlreadySo."
+        }
+        "role_release" => {
+            "Ends a role assignment under its revision precondition. Advisor, reviewer and operator releases require the holder to identify which assignment ends."
+        }
+        "role_show" => "Reads a recorded role assignment in one project. Read-only.",
+        "role_list" => "Lists a bounded page of role assignments in one project. Read-only.",
+        "owner_grant_record" => {
+            "Records the project owner grant needed for an explicit lead replacement. Recording it does not itself replace the lead."
+        }
+        "role_replace_lead" => {
+            "Replaces the project lead with the recorded owner grant and assignment revision. The old lead stands down."
+        }
+        "role_acknowledge_current" => {
+            "Records the former lead acknowledgement of the current lead after replacement. It does not restore lead authority."
+        }
+        "project_pin_definition" => {
+            "Pins a registered immutable process definition to the project under its expected revision."
+        }
+        "project_publish_plan" => {
+            "Publishes a project plan revision and recorded obligations under the project revision precondition."
+        }
+        "project_close" => {
+            "Closes a project with its reason and expected revision. Further domain writes are refused."
+        }
+        "move_request" => {
+            "Requests a named process move. Records accepted or composed rejected guard and authority reasons; replay returns the original decision."
+        }
+        "move_check" => {
+            "Checks a project move against its pinned definition, recorded roles and guard facts. Read-only; records no verdict or intent."
+        }
+        "move_show" => "Reads one recorded move verdict in the named project. Read-only.",
+        "move_list" => "Lists recorded moves in one project. Read-only.",
+        "fact_record" => {
+            "Records the declared evaluator result or attestation for its subject. Missing or unavailable guard evidence never permits a move."
+        }
+        "fact_show" => "Reads one recorded fact in the named project. Read-only.",
+        "fact_list" => "Lists a bounded page of recorded facts in one project. Read-only.",
+        "intent_show" => {
+            "Reads one notification intent and its recorded state. A board intent is not proof of external agent delivery."
+        }
+        "intent_list" => {
+            "Lists a bounded page of notification intents in one project. Read-only; it does not claim or deliver them."
+        }
+        "adr_create" => {
+            "Creates an immutable workspace ADR with Markdown content and optional recorded source. Content changes require a new ADR."
+        }
+        "adr_transition" => {
+            "Records an ADR proposal, acceptance, withdrawal or supersession under its revision precondition. Content remains immutable."
+        }
+        "adr_show" => "Reads one immutable workspace ADR and its recorded state. Read-only.",
+        "adr_list" => "Lists a bounded page of workspace ADRs. Read-only.",
+        "process_register" => {
+            "Registers a strict immutable process definition containing initialStatus and edges. Unsupported required roles and unknown fields are refused."
+        }
+        "feed_read" => {
+            "Reads a bounded project feed page after an epoch-qualified cursor, with covered-through position. Identified reads mark that coverage and report a separate readMark outcome. A superseded epoch returns its resume cursor."
+        }
+        "view_work" => {
+            "Derives project lanes, dependency order, task progress, ready and blocked work, repeated rejections and epoch freshness. This summary advances no read marks and returns no readMark field."
+        }
+        "view_card" => {
+            "Derives an actor's continuation card for a project, workstream or task: governing plan, role, pending duties, latest trail and counts. Assignment, notify intent state, blocker and Host running state stay separate. This summary advances no read marks and returns no readMark field."
+        }
+        "view_owner" => {
+            "Lists pending owner questions across project metadata, including the records each blocks. Missing copies remain explicit unavailable projects. This summary advances no read marks and returns no readMark field."
+        }
+        "view_lead_load" => {
+            "Lists the named lead's pending handback assessments, completed-lane close-outs and unanswered rejected moves across projects, with unavailable projects explicit. This summary advances no read marks and returns no readMark field."
+        }
+        "view_session_context" => {
+            "Returns current session assignments and recorded scope acknowledgement facts across projects and repository worktrees. This summary advances no read marks and returns no readMark field."
+        }
+        "hook_context" => {
+            "Returns exactly one context HookResult with session assignments and scope acknowledgement facts. This summary advances no read marks and returns no readMark field. Unavailable is a distinct result and never permission to proceed."
+        }
+        "hook_check" => {
+            "Returns exactly one check HookResult using the pure move verdict. Leaves no board effects; unavailable never means allowed."
+        }
+        "hook_card" => {
+            "Returns exactly one card HookResult for the identified actor and subject. This summary advances no read marks and returns no readMark field. Unavailable is distinct and never means allowed."
+        }
+        "thread_renew" => {
+            "Renews a membership through a declared request ID and project admission. Delivery settlement does not renew it."
         }
         _ => {
             "Undocumented collaboration operation; inspect the typed input and output schemas before calling."

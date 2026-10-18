@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT f.entry AS \"entry!: String\", CASE WHEN f.record_kind = 'workTrailRow' THEN t.redacted END AS \"redacted: bool\" FROM project_feed f LEFT JOIN work_trail_rows t ON t.row_id = f.record_id WHERE f.position > ? AND f.position <= ? ORDER BY f.position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entry!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "redacted: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "488180b5ac152ae65e7db54037100d26623e1f331b4d03702fc7f1ad30faa247"
+}

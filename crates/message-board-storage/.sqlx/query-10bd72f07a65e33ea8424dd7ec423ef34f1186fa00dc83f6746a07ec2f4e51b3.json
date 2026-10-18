@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO workstreams(workstream_id, project_id) VALUES (?, ?) ON CONFLICT(workstream_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "10bd72f07a65e33ea8424dd7ec423ef34f1186fa00dc83f6746a07ec2f4e51b3"
+}

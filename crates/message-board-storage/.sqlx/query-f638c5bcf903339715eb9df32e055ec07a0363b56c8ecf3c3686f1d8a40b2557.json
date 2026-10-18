@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO request_ledger(request_id, canonical_hash, observed_epoch, accepted_in, decision, resubmits) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "f638c5bcf903339715eb9df32e055ec07a0363b56c8ecf3c3686f1d8a40b2557"
+}

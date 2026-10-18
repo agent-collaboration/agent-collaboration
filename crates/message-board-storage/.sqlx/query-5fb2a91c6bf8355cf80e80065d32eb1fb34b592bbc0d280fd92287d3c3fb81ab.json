@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO record_identities(kind, id, payload) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "5fb2a91c6bf8355cf80e80065d32eb1fb34b592bbc0d280fd92287d3c3fb81ab"
+}

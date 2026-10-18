@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE operation_receipts SET final_result_json=? WHERE operation_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "0ca37c817c4b7bd299059db21095646f3af55ea5fb523b778eee2cbaa44ff83a"
+}

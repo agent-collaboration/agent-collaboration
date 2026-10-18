@@ -7,7 +7,6 @@ pub(super) async fn run_board_cli(
     arguments: impl IntoIterator<Item = impl Into<OsString>>,
 ) -> ProofResult<Value> {
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
-    command.arg("board");
     command.args(arguments.into_iter().map(Into::into));
     command
         .arg("--service-directory")
@@ -36,7 +35,6 @@ pub(super) async fn run_rejected_board_cli(
     arguments: impl IntoIterator<Item = impl Into<OsString>>,
 ) -> ProofResult<Value> {
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
-    command.arg("board");
     command.args(arguments.into_iter().map(Into::into));
     command
         .arg("--service-directory")
@@ -45,8 +43,15 @@ pub(super) async fn run_rejected_board_cli(
         .kill_on_drop(true);
     let output = command.output().await?;
     let response: Value = serde_json::from_slice(&output.stdout)?;
-    if output.status.code() != Some(4)
-        || response.pointer("/error/kind").and_then(Value::as_str) != Some(expected_kind)
+    let reasons = response
+        .pointer("/result/record/result/decision/reasons")
+        .and_then(Value::as_array);
+    if !output.status.success()
+        || !reasons.is_some_and(|reasons| {
+            reasons
+                .iter()
+                .any(|reason| reason.get("kind").and_then(Value::as_str) == Some(expected_kind))
+        })
     {
         return Err(format!(
             "board CLI did not return expected {expected_kind} rejection: status {:?}, response {response}",
@@ -72,7 +77,7 @@ pub(super) fn require_record_message_ids(
         .ok_or("board CLI records were not an array")?;
     for expected_message_id in expected_message_ids {
         if !records.iter().any(|record| {
-            record.get("messageId").and_then(Value::as_str) == Some(*expected_message_id)
+            record.get("postId").and_then(Value::as_str) == Some(*expected_message_id)
         }) {
             return Err(format!("board CLI records omitted message {expected_message_id}").into());
         }

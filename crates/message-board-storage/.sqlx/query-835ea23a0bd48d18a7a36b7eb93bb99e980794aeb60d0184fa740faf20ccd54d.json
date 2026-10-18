@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT\nCASE WHEN json_type(payload,'$.kind')='text' THEN json_extract(payload,'$.kind') END AS \"kind?: String\",\nCASE WHEN json_type(payload,'$.record.subtaskId')='text' THEN json_extract(payload,'$.record.subtaskId') END AS \"id?: String\",\nCASE WHEN json_type(payload,'$.record.envelope.id')='text' THEN json_extract(payload,'$.record.envelope.id') END AS \"envelope_id?: String\",\nCASE WHEN json_type(payload,'$.record.envelope.scope.project')='text' THEN json_extract(payload,'$.record.envelope.scope.project') END AS \"project?: String\",\nCASE WHEN json_type(payload,'$.record.taskId')='text' THEN json_extract(payload,'$.record.taskId') END AS \"task?: String\"\nFROM record_identities WHERE kind='subtask' AND id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "envelope_id?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "project?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "task?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "835ea23a0bd48d18a7a36b7eb93bb99e980794aeb60d0184fa740faf20ccd54d"
+}

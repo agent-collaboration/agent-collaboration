@@ -107,7 +107,7 @@ pub enum CollaborationFailure {
 }
 pub struct CollaborationRuntime {
     owner_human_id: Option<message_board::HumanId>,
-    board_store: Option<std::sync::Arc<tokio::sync::Mutex<message_board_storage::BoardStore>>>,
+    project_admission: Option<std::sync::Arc<collaboration_service::ProjectAdmission>>,
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
         Option<std::sync::Arc<tokio::sync::Mutex<collaboration_service::ProviderOperationStore>>>,
@@ -261,23 +261,19 @@ impl CollaborationRuntime {
         if let Some(journal) = &journal {
             identity = identity.with_journal(std::sync::Arc::clone(journal));
         }
-        let mut board_store = None;
-        match message_board_storage::BoardStore::open(
-            &inputs.directory.join("project-board.sqlite"),
-        )
-        .await
-        {
-            Ok(store) => {
-                let store = std::sync::Arc::new(tokio::sync::Mutex::new(store));
-                identity = identity.with_board_store(store.clone());
-                board_store = Some(store);
+        let opened_board =
+            board_composition::open_board_admission(&inputs.directory, machine_identity.clone())
+                .await;
+        let project_admission = match opened_board {
+            Ok(admission) => {
+                identity = identity.with_project_admission(admission.clone());
+                Some(admission)
             }
-            Err(_) => {
-                tracing::warn!(
-                    "board storage unavailable; other collaboration remains independent"
-                );
+            Err(error) => {
+                tracing::warn!(%error,"board storage unavailable; other collaboration remains independent");
+                None
             }
-        }
+        };
         let mut automation_store = None;
         let mut settings_backend = None;
         match automation_storage::AutomationStore::open(&inputs.directory.join("automation.sqlite"))
@@ -415,9 +411,11 @@ impl CollaborationRuntime {
         let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
             std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
         let subscription_delivery = automation_store.as_ref().map(|push_store| {
-            let board_availability = match board_store.as_ref() {
-                Some(store) => collaboration_service::BoardAvailability::Available(
-                    std::sync::Arc::clone(store),
+            let board_availability = match project_admission.as_ref() {
+                Some(admission) => collaboration_service::BoardAvailability::Available(
+                    std::sync::Arc::new(tokio::sync::Mutex::new(
+                        admission.subscription_window_store(push_store.clone()),
+                    )),
                 ),
                 None => collaboration_service::BoardAvailability::Unavailable,
             };
@@ -607,6 +605,11 @@ impl CollaborationRuntime {
                 router_proxy_endpoint,
             },
         )?;
+        if let Some(admission) = &project_admission
+            && let Err(error) = admission.recover_creating_projects().await
+        {
+            tracing::warn!(%error, "project creation recovery unavailable; unrelated collaboration remains available");
+        }
         let shutdown = CancellationToken::new();
         if let Some(service) = &subscription_delivery
             && let Err(error) = service.start().await
@@ -614,6 +617,12 @@ impl CollaborationRuntime {
             service.shutdown().await;
             drop(manifest);
             return Err(io::Error::other(error));
+        }
+        if let (Some(service), Some(admission)) = (&subscription_delivery, &project_admission) {
+            service
+                .recover_board_intents(admission.clone())
+                .await
+                .map_err(io::Error::other)?;
         }
         // Binding above establishes this runtime owns the listeners before recovery can mutate state.
         let automation_task = wake_worker.map(|worker| tokio::spawn(worker.run(shutdown.clone())));
@@ -662,7 +671,7 @@ impl CollaborationRuntime {
         });
         let mut runtime = Self {
             owner_human_id,
-            board_store,
+            project_admission,
             subscription_delivery,
             provider_store,
             external_provider_supervisor,
@@ -930,6 +939,8 @@ impl CollaborationRuntime {
 #[path = "collaboration_runtime/collaboration_api_serving.rs"]
 mod collaboration_api_serving;
 use collaboration_api_serving::{BoundCollaborationApi, ServedCollaborationApi};
+#[path = "collaboration_runtime/board_composition.rs"]
+mod board_composition;
 #[path = "collaboration_runtime/lifecycle.rs"]
 mod lifecycle;
 

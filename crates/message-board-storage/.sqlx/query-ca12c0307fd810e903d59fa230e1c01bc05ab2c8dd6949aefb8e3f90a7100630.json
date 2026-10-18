@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT workspace_id AS \"workspace_id!: String\" FROM fleet_workspaces WHERE name = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ca12c0307fd810e903d59fa230e1c01bc05ab2c8dd6949aefb8e3f90a7100630"
+}

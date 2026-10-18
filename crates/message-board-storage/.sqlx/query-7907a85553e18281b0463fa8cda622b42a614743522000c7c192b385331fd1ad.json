@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT project_id AS \"project_id!: String\" FROM legacy_cursor_scopes WHERE scope = ? ORDER BY project_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7907a85553e18281b0463fa8cda622b42a614743522000c7c192b385331fd1ad"
+}

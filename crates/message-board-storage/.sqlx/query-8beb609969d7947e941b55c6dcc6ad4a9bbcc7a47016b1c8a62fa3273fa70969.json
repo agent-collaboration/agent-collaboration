@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities INDEXED BY context_scope_facts WHERE kind = 'fact' AND json_extract(payload, '$.record.kind.kind') = 'scopeAcknowledgement' AND json_array(json_extract(payload, '$.record.kind.fact.session.endpoint.serviceId'), json_extract(payload, '$.record.kind.fact.session.endpoint.endpointId'), json_extract(payload, '$.record.kind.fact.session.sessionId')) = json_array(?, ?, ?) AND id > ? ORDER BY id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8beb609969d7947e941b55c6dcc6ad4a9bbcc7a47016b1c8a62fa3273fa70969"
+}

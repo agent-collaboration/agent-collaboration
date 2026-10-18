@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", json_quote(json_extract(payload, '$.record.ended')) AS \"ended!: String\" FROM record_identities WHERE kind = 'roleAssignment' AND json_extract(payload, '$.record.holder.actor.identity.kind') = 'human' AND json_extract(payload, '$.record.holder.actor.identity.humanId') = ? ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ended!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b7be9c9c99bfbc7165817e65607d53f84b592baeae6844a21bdefbcdaf88642d"
+}

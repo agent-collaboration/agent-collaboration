@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT (EXISTS(SELECT 1 FROM read_marks WHERE reader = ?) OR EXISTS(SELECT 1 FROM project_watches WHERE reader = ? AND active = 1) OR EXISTS(SELECT 1 FROM thread_watches WHERE reader = ? AND active = 1)) AS \"interest!: bool\", EXISTS(SELECT 1 FROM read_marks WHERE reader = ? AND scope = ?) AS \"initialized!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "interest!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "initialized!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "31b1e8935f245ecbe41e330bd008190a4253083a76f338928fdf9e70be0239ee"
+}

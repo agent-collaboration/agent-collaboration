@@ -4,7 +4,7 @@ use crate::{
     PushHeaderFacts, PushId, PushKind, PushOrigin, SessionRef,
 };
 use chrono::{DateTime, Utc};
-use message_board::{ActivitySequence, MessageId};
+use message_board::{FeedCursor, ProjectId, ThreadId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -15,9 +15,10 @@ pub const MAX_PUSH_ACTIVITY_RANGES: usize = 20;
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PushActivityRange {
-    pub root_message_id: MessageId,
-    pub from_activity_sequence: ActivitySequence,
-    pub through_activity_sequence: ActivitySequence,
+    pub thread_id: ThreadId,
+    pub project_id: ProjectId,
+    pub from: FeedCursor,
+    pub through: FeedCursor,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -35,11 +36,11 @@ impl PushActivitySnapshot {
             && self
                 .ranges
                 .iter()
-                .all(|range| range.from_activity_sequence <= range.through_activity_sequence)
+                .all(|range| range.from.position <= range.through.position)
             && self
                 .ranges
                 .iter()
-                .map(|range| &range.root_message_id)
+                .map(|range| &range.thread_id)
                 .collect::<HashSet<_>>()
                 .len()
                 == self.ranges.len()
@@ -93,38 +94,60 @@ impl PushRecordDraft {
         }
 
         let is_subscription_activity = self.kind == PushKind::SubscriptionActivity;
-        match (
-            is_subscription_activity,
-            self.body.as_ref(),
-            self.activity.as_ref(),
-        ) {
-            (true, None, Some(activity)) if activity.is_valid() => {
-                let PushHeaderFacts::SubscriptionActivity {
-                    root_count,
-                    held_since,
-                    ..
-                } = &self.header_facts
-                else {
-                    return Err(PushRecordValidationError::InvalidActivityFacts);
-                };
-                if usize::from(*root_count) != activity.ranges.len()
-                    || held_since.is_some() != activity.held
-                {
-                    return Err(PushRecordValidationError::InvalidActivityFacts);
-                }
+        if self.kind == PushKind::BoardNotification {
+            if self.body.is_some() || self.activity.is_some() {
+                return Err(PushRecordValidationError::InvalidBodyContent);
             }
-            (false, Some(body), None) => {
-                if MessageText::try_from(body.clone()).is_err() {
-                    return Err(PushRecordValidationError::InvalidBody);
-                }
-                if self.kind == PushKind::DirectMessage
-                    && body.len() > MAX_DIRECT_MESSAGE_BODY_BYTES
-                {
-                    return Err(PushRecordValidationError::DirectMessageTooLarge);
-                }
+            let PushHeaderFacts::BoardNotification {
+                project, intent, ..
+            } = &self.header_facts
+            else {
+                return Err(PushRecordValidationError::HeaderKindMismatch);
+            };
+            let origin = self
+                .origin_router_ref
+                .as_deref()
+                .ok_or(PushRecordValidationError::InvalidOriginReference)?;
+            let origin = crate::RouterOriginRef::parse_canonical(origin)
+                .map_err(|_| PushRecordValidationError::InvalidOriginReference)?;
+            if !matches!(origin, crate::RouterOriginRef::BoardIntent { project: source_project, intent: source_intent } if source_project == *project && source_intent == *intent)
+            {
+                return Err(PushRecordValidationError::InvalidOriginReference);
             }
-            (true, _, _) => return Err(PushRecordValidationError::InvalidActivityContent),
-            (false, _, _) => return Err(PushRecordValidationError::InvalidBodyContent),
+        } else {
+            match (
+                is_subscription_activity,
+                self.body.as_ref(),
+                self.activity.as_ref(),
+            ) {
+                (true, None, Some(activity)) if activity.is_valid() => {
+                    let PushHeaderFacts::SubscriptionActivity {
+                        root_count,
+                        held_since,
+                        ..
+                    } = &self.header_facts
+                    else {
+                        return Err(PushRecordValidationError::InvalidActivityFacts);
+                    };
+                    if usize::from(*root_count) != activity.ranges.len()
+                        || held_since.is_some() != activity.held
+                    {
+                        return Err(PushRecordValidationError::InvalidActivityFacts);
+                    }
+                }
+                (false, Some(body), None) => {
+                    if MessageText::try_from(body.clone()).is_err() {
+                        return Err(PushRecordValidationError::InvalidBody);
+                    }
+                    if self.kind == PushKind::DirectMessage
+                        && body.len() > MAX_DIRECT_MESSAGE_BODY_BYTES
+                    {
+                        return Err(PushRecordValidationError::DirectMessageTooLarge);
+                    }
+                }
+                (true, _, _) => return Err(PushRecordValidationError::InvalidActivityContent),
+                (false, _, _) => return Err(PushRecordValidationError::InvalidBodyContent),
+            }
         }
 
         Ok(PushRecord {
@@ -194,7 +217,7 @@ pub struct PushRecordShowParams {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PushActivityRangeRead {
     pub range: PushActivityRange,
-    pub messages: Vec<message_board::Message>,
+    pub posts: Vec<message_board::Post>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]

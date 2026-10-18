@@ -1,8 +1,8 @@
 use message_board::{
-    ActingForIdentity, ActivitySequence, BoardId, CommonDirectory, HumanId, Identity, MessageId,
-    MessageListScope, MessagePostRequest, MessageReferences, MessageSelection, MessageText,
-    NormalizedOrigin, Placement, ProjectId, ReferenceTarget, ResourceName, ServiceId,
-    SessionEndpointRef, SessionId, SessionRef, TopicId, normalize_git_origin_url,
+    ActingForIdentity, ActivitySequence, BoardId, CommonDirectory, HumanId, Identity,
+    NormalizedOrigin, PostId, PostListScope, PostReferences, PostSelection, PostText, ProjectId,
+    ReferenceTarget, ResourceName, ServiceId, SessionEndpointRef, SessionId, SessionRef, ThreadId,
+    ThreadPostRequest, WorkspaceId, normalize_git_origin_url,
 };
 use serde_json::json;
 
@@ -13,7 +13,8 @@ fn id_string(sequence_suffix: u32) -> String {
 #[test]
 fn inbox_fetch_requires_explicit_top_level_scope_and_supports_latest() {
     let request = serde_json::from_value::<message_board::InboxFetchRequest>(json!({
-        "scope": {"kind": "topic", "topicId": id_string(1)},
+        "scope": {"kind": "project", "projectId": id_string(1)},
+        "protocolVersion":1,"actingFor":null,"initializations":[],
         "reader": {"kind": "human", "humanId": "reader"},
         "readMode": "latest",
         "page": {}
@@ -23,6 +24,7 @@ fn inbox_fetch_requires_explicit_top_level_scope_and_supports_latest() {
         "scoped latest request must decode: {request:?}"
     );
     let missing_scope = serde_json::from_value::<message_board::InboxFetchRequest>(json!({
+        "protocolVersion":1,"actingFor":null,"initializations":[],
         "reader": {"kind": "human", "humanId": "reader"},
         "readMode": "unread",
         "page": {}
@@ -43,11 +45,11 @@ fn search_queries_are_trimmed_nonempty_and_utf8_byte_bounded() {
 
 #[test]
 fn resource_ids_accept_only_canonical_uuid_v7() {
-    let project_id = ProjectId::try_from(id_string(1)).expect("fixture is UUIDv7");
-    assert_eq!(project_id.as_str(), id_string(1));
+    let workspace_id = WorkspaceId::try_from(id_string(1)).expect("fixture is UUIDv7");
+    assert_eq!(workspace_id.as_str(), id_string(1));
 
-    assert!(ProjectId::try_from("550e8400-e29b-41d4-a716-446655440000".to_owned()).is_err());
-    assert!(ProjectId::try_from(id_string(2).to_uppercase()).is_err());
+    assert!(WorkspaceId::try_from("550e8400-e29b-41d4-a716-446655440000".to_owned()).is_err());
+    assert!(WorkspaceId::try_from(id_string(2).to_uppercase()).is_err());
 }
 
 #[test]
@@ -113,74 +115,85 @@ fn acting_for_contract_can_only_represent_a_human() {
 }
 
 #[test]
-fn message_contract_uses_closed_camel_case_variants() {
-    let request = MessagePostRequest {
-        message_id: MessageId::try_from(id_string(4)).expect("message ID"),
-        placement: Placement::Thread {
-            root_message_id: MessageId::try_from(id_string(3)).expect("root ID"),
+fn post_contract_uses_closed_camel_case_variants() {
+    let request = ThreadPostRequest {
+        request_id: message_board::RequestId::generate(),
+        protocol_version: message_board::ProtocolVersion::CURRENT,
+        resubmits: None,
+        observed_epoch: None,
+        post_id: PostId::try_from(id_string(4)).expect("message ID"),
+        placement: message_board::PostTarget::Thread {
+            thread: ThreadId::try_from(id_string(3)).expect("root ID").into(),
         },
         actor: Identity::Human {
             human_id: HumanId::try_from("reviewer".to_owned()).expect("human ID"),
         },
         acting_for: None,
-        text: MessageText::try_from("Please inspect this edge.".to_owned()).expect("message text"),
-        references: MessageReferences::try_from(vec![ReferenceTarget::Message {
-            message_id: MessageId::try_from(id_string(2)).expect("target ID"),
+        text: PostText::try_from("Please inspect this edge.".to_owned()).expect("message text"),
+        addressees: Vec::new(),
+        references: PostReferences::try_from(vec![ReferenceTarget::Post {
+            post_id: PostId::try_from(id_string(2)).expect("target ID"),
         }])
         .expect("references"),
     };
     let encoded = serde_json::to_value(request).expect("serialize request");
     assert_eq!(encoded["placement"]["kind"], "thread");
-    assert_eq!(encoded["placement"]["rootMessageId"], id_string(3));
-    assert_eq!(encoded["references"][0]["kind"], "message");
+    assert_eq!(encoded["placement"]["thread"]["thread"], id_string(3));
+    assert_eq!(encoded["references"][0]["kind"], "post");
 }
 
 #[test]
 fn duplicate_and_excess_references_are_rejected() {
     let target = ReferenceTarget::Thread {
-        root_message_id: MessageId::try_from(id_string(1)).expect("root ID"),
+        thread_id: ThreadId::try_from(id_string(1)).expect("root ID"),
     };
-    assert!(MessageReferences::try_from(vec![target.clone(), target]).is_err());
+    assert!(PostReferences::try_from(vec![target.clone(), target]).is_err());
 
     let references: Vec<ReferenceTarget> = (1..=65)
-        .map(|suffix| ReferenceTarget::Message {
-            message_id: MessageId::try_from(id_string(suffix)).expect("message ID"),
+        .map(|suffix| ReferenceTarget::Post {
+            post_id: PostId::try_from(id_string(suffix)).expect("message ID"),
         })
         .collect();
-    assert!(MessageReferences::try_from(references).is_err());
+    assert!(PostReferences::try_from(references).is_err());
 }
 
 #[test]
 fn history_variants_preserve_scope_and_validate_range_order() {
-    let scope = MessageListScope::Project {
-        project_id: ProjectId::try_from(id_string(1)).expect("project ID"),
+    let project_position = |position| message_board::ReadPosition::Project {
+        cursor: message_board::FeedCursor {
+            epoch: message_board::EpochNumber::try_from(1).unwrap(),
+            position: message_board::FeedPosition::try_from(position).unwrap(),
+        },
     };
-    let selection = MessageSelection::AfterPosition {
-        after_activity_sequence: ActivitySequence::try_from(40).expect("activity sequence"),
+    let scope = PostListScope::Workspace {
+        workspace_id: WorkspaceId::try_from(id_string(1)).expect("workspace ID"),
+    };
+    let selection = PostSelection::AfterPosition {
+        after: project_position(40),
     };
     assert_eq!(
         serde_json::to_value(scope).expect("serialize scope")["kind"],
-        "project"
+        "workspace"
     );
     assert_eq!(
         serde_json::to_value(selection).expect("serialize selection"),
         json!({
-            "kind": "afterPosition", "afterActivitySequence": 40
+            "kind": "afterPosition", "after":{"kind":"project","cursor":{"epoch":1,"position":40}}
         })
     );
     assert!(
-        MessageSelection::Range {
-            from_activity_sequence: ActivitySequence::try_from(41).expect("activity sequence"),
-            to_activity_sequence: ActivitySequence::try_from(40).expect("activity sequence"),
+        PostSelection::Range {
+            from: project_position(41),
+            to: project_position(40),
         }
         .validate()
         .is_err()
     );
     assert!(
-        serde_json::from_value::<MessageSelection>(json!({
+        serde_json::from_value::<PostSelection>(json!({
             "kind": "range",
-            "fromActivitySequence": 41,
-            "toActivitySequence": 40
+            "from":{"kind":"project","cursor":{"epoch":1,"position":41}},
+            "to":{"kind":"project","cursor":{"epoch":1,"position":40}}
         }))
         .is_err()
     );
@@ -218,16 +231,22 @@ fn participant_role_note_and_closed_state_are_validated_in_rust() {
     let replacement = Identity::Human {
         human_id: HumanId::try_from("successor".to_owned()).unwrap(),
     };
-    let joined = ActivitySequence::try_from(10).unwrap();
-    let closed = ActivitySequence::try_from(12).unwrap();
+    let joined = message_board::FeedCursor {
+        epoch: message_board::EpochNumber::try_from(1).unwrap(),
+        position: message_board::FeedPosition::try_from(10).unwrap(),
+    };
+    let closed = message_board::FeedCursor {
+        position: message_board::FeedPosition::try_from(12).unwrap(),
+        ..joined
+    };
     assert!(
         Participant::new(ParticipantProps {
             identity: identity.clone(),
             role: ParticipantRole::Reviewer,
             note: Some(note),
-            joined_at_activity: joined,
-            last_seen_activity: joined,
-            closed_at_activity: None,
+            joined_at_position: joined,
+            last_seen_position: joined,
+            closed_at_position: None,
             closed_reason: None,
             replaced_by: None,
         })
@@ -238,9 +257,9 @@ fn participant_role_note_and_closed_state_are_validated_in_rust() {
             identity: identity.clone(),
             role: ParticipantRole::Reviewer,
             note: None,
-            joined_at_activity: joined,
-            last_seen_activity: closed,
-            closed_at_activity: Some(closed),
+            joined_at_position: joined,
+            last_seen_position: closed,
+            closed_at_position: Some(closed),
             closed_reason: Some(ParticipantClosedReason::Left),
             replaced_by: None,
         })
@@ -251,9 +270,9 @@ fn participant_role_note_and_closed_state_are_validated_in_rust() {
             identity: identity.clone(),
             role: ParticipantRole::Reviewer,
             note: None,
-            joined_at_activity: joined,
-            last_seen_activity: closed,
-            closed_at_activity: Some(closed),
+            joined_at_position: joined,
+            last_seen_position: closed,
+            closed_at_position: Some(closed),
             closed_reason: Some(ParticipantClosedReason::Replaced),
             replaced_by: Some(replacement.clone()),
         })
@@ -265,9 +284,9 @@ fn participant_role_note_and_closed_state_are_validated_in_rust() {
             identity: identity.clone(),
             role: ParticipantRole::Orchestrator,
             note: None,
-            joined_at_activity: joined,
-            last_seen_activity: closed,
-            closed_at_activity: Some(closed),
+            joined_at_position: joined,
+            last_seen_position: closed,
+            closed_at_position: Some(closed),
             closed_reason: Some(ParticipantClosedReason::Replaced),
             replaced_by: Some(identity),
         })
@@ -279,9 +298,9 @@ fn participant_role_note_and_closed_state_are_validated_in_rust() {
             identity: replacement,
             role: ParticipantRole::Participant,
             note: None,
-            joined_at_activity: closed,
-            last_seen_activity: joined,
-            closed_at_activity: None,
+            joined_at_position: closed,
+            last_seen_position: joined,
+            closed_at_position: None,
             closed_reason: None,
             replaced_by: None,
         })
@@ -296,9 +315,9 @@ fn participant_deserialization_rejects_unknown_closed_sets_and_cross_fields() {
         "identity": {"kind": "human", "humanId": "owner"},
         "role": "orchestrator",
         "note": null,
-        "joinedAtActivity": 1,
-        "lastSeenActivity": 2,
-        "closedAtActivity": 2,
+        "joinedAtPosition": {"epoch":1,"position":1},
+        "lastSeenPosition": {"epoch":1,"position":2},
+        "closedAtPosition": {"epoch":1,"position":2},
         "closedReason": "replaced",
         "replacedBy": {"kind": "human", "humanId": "successor"}
     });
@@ -347,8 +366,8 @@ fn repository_locators_enforce_and_publish_the_utf8_byte_bound() {
 #[test]
 fn distinct_resource_id_types_do_not_interchange() {
     let _board_id = BoardId::try_from(id_string(1)).expect("board ID");
-    let _topic_id = TopicId::try_from(id_string(2)).expect("topic ID");
-    let _project_id = ProjectId::try_from(id_string(3)).expect("project ID");
+    let _project_id = ProjectId::try_from(id_string(2)).expect("project ID");
+    let _workspace_id = WorkspaceId::try_from(id_string(3)).expect("workspace ID");
 }
 
 #[test]
@@ -363,79 +382,62 @@ fn every_public_operation_has_a_typed_schema_contract() {
     }
     use message_board::*;
     contracts!(
-        ProjectCreateRequest,
-        ProjectCreateResult,
-        ProjectUpdateRequest,
-        ProjectUpdateResult,
-        ProjectShowRequest,
-        ProjectShowResult,
-        ProjectListRequest,
-        ProjectListResult,
+        RequestResult,
+        WorkspaceCreateRequest,
+        WorkspaceUpdateRequest,
+        WorkspaceShowRequest,
+        WorkspaceShowResult,
+        WorkspaceListRequest,
+        WorkspaceListResult,
         RepositoryAttachRequest,
-        RepositoryAttachResult,
         RepositoryDetachRequest,
-        RepositoryDetachResult,
         RepositoryListRequest,
         RepositoryListResult,
         BoardCreateRequest,
-        BoardCreateResult,
         BoardUpdateRequest,
-        BoardUpdateResult,
         BoardShowRequest,
         BoardShowResult,
         BoardListRequest,
         BoardListResult,
         BoardArchiveRequest,
-        BoardArchiveResult,
-        TopicCreateRequest,
-        TopicCreateResult,
-        TopicUpdateRequest,
-        TopicUpdateResult,
-        TopicListRequest,
-        TopicListResult,
-        MessagePostRequest,
-        MessagePostResult,
-        MessageShowRequest,
-        MessageShowResult,
-        MessageListRequest,
-        MessageListResult,
+        ProjectCreateRequest,
+        ProjectUpdateRequest,
+        ProjectListRequest,
+        ProjectListResult,
+        ThreadPostRequest,
+        PostShowRequest,
+        PostShowResult,
+        PostListRequest,
+        PostListResult,
         ThreadShowRequest,
         ThreadShowResult,
         ThreadResolveRequest,
-        ThreadResolveResult,
         ThreadUnresolveRequest,
-        ThreadUnresolveResult,
         ThreadWatchRequest,
-        ThreadWatchResult,
         ThreadUnwatchRequest,
-        ThreadUnwatchResult,
         ThreadListRequest,
         ThreadListResult,
         ThreadCreateRequest,
-        ThreadCreateResult,
         ThreadJoinRequest,
-        ThreadJoinResult,
         ThreadLeaveRequest,
-        ThreadLeaveResult,
         ThreadParticipantListRequest,
         ThreadParticipantListResult,
         InboxFetchRequest,
         InboxFetchResult,
         InboxAcknowledgeRequest,
-        InboxAcknowledgeResult,
-        InboxProjectsRequest,
-        InboxProjectsResult,
+        InboxWorkspacesRequest,
+        InboxWorkspacesResult,
     );
 }
 
 #[test]
 fn actionable_failure_factories_preserve_closed_details() {
     use message_board::{
-        BoardError, BoardErrorDetails, BoardFailureKind, BoardNextAction, MessageText, TopicId,
+        BoardError, BoardErrorDetails, BoardFailureKind, BoardNextAction, PostText, ProjectId,
     };
     let failure = BoardError::top_level_message_cooldown(7);
-    assert_eq!(failure.kind, BoardFailureKind::TopLevelMessageCooldown);
-    assert_eq!(failure.next_action, BoardNextAction::PostThreadMessage);
+    assert_eq!(failure.kind, BoardFailureKind::TopLevelPostCooldown);
+    assert_eq!(failure.next_action, BoardNextAction::PostThreadPost);
     assert_eq!(
         failure.details,
         BoardErrorDetails::Cooldown {
@@ -447,16 +449,16 @@ fn actionable_failure_factories_preserve_closed_details() {
         BoardError::thread_resolved().message,
         "This thread is resolved. Mark it unresolved before adding a thread message."
     );
-    let topic_id = TopicId::try_from(id_string(92)).expect("topic ID");
-    let text = MessageText::try_from("reuse this submitted root text".to_owned()).expect("text");
-    let topic_refusal = BoardError::session_topic_post(
-        topic_id,
+    let project_id = ProjectId::try_from(id_string(92)).expect("project ID");
+    let text = PostText::try_from("reuse this submitted root text".to_owned()).expect("text");
+    let project_refusal = BoardError::session_project_post(
+        project_id,
         Identity::Human {
-            human_id: HumanId::try_from("topic-author".to_owned()).expect("human ID"),
+            human_id: HumanId::try_from("project-author".to_owned()).expect("human ID"),
         },
         text.clone(),
     );
-    let BoardErrorDetails::ThreadCreateRefusal { refusal } = topic_refusal.details else {
+    let BoardErrorDetails::ThreadCreateRefusal { refusal } = project_refusal.details else {
         panic!("expected Thread Create refusal details");
     };
     assert_eq!(refusal.text, text);

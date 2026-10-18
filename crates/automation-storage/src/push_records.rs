@@ -2,10 +2,10 @@
 use crate::{AutomationStore, StorageError, push_record_rows};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, PushDeliveryState, PushId, PushKind, PushOrigin, PushRecord,
-    PushRecordDraft, RouterOriginRef, SessionRef,
+    DeliveryOutcome, DeliveryReceipt, PushId, PushKind, PushOrigin, PushRecord, PushRecordDraft,
+    RouterOriginRef, SessionRef,
 };
-use sqlx::SqliteConnection;
+use sqlx::{Connection, SqliteConnection};
 use std::time::Duration;
 
 const PUSH_INSERT_RETRY_WINDOW: Duration = Duration::from_secs(5);
@@ -62,121 +62,11 @@ impl AutomationStore {
         insert_push_record_with_connection(&mut self.connection, record).await
     }
 
-    pub async fn mark_push_attempted(
-        &mut self,
-        push_id: &PushId,
-    ) -> Result<PushRecord, StorageError> {
-        let result = sqlx::query!(
-            "UPDATE router_pushes SET delivery_state='attempted',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND delivery_state IN ('pending','held')",
-            push_id.as_str()
-        )
-        .execute(&mut self.connection)
-        .await?;
-        if result.rows_affected() != 1 {
-            return self.push_transition_error(push_id).await;
-        }
-        self.get_push_record(push_id)
-            .await?
-            .ok_or(StorageError::PushNotFound)
-    }
-
-    pub async fn restore_push_pending_after_not_started(
-        &mut self,
-        push_id: &PushId,
-    ) -> Result<PushRecord, StorageError> {
-        let result = sqlx::query!(
-            "UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND delivery_state='attempted'",
-            push_id.as_str()
-        )
-        .execute(&mut self.connection)
-        .await?;
-        if result.rows_affected() != 1 {
-            return self.push_transition_error(push_id).await;
-        }
-        self.get_push_record(push_id)
-            .await?
-            .ok_or(StorageError::PushNotFound)
-    }
-
-    pub async fn hold_push_record(
-        &mut self,
-        push_id: &PushId,
-        outcome: DeliveryReceipt,
-    ) -> Result<PushRecord, StorageError> {
-        if !matches!(
-            outcome.outcome,
-            DeliveryOutcome::NotSubmitted {
-                retryable: true,
-                ..
-            }
-        ) {
-            return Err(StorageError::InvalidRecord);
-        }
-        let record = self
-            .get_push_record(push_id)
-            .await?
-            .ok_or(StorageError::PushNotFound)?;
-        if record.kind == PushKind::DirectMessage
-            && (record.mode == Some(collaboration_protocol::MessageDelivery::Steer)
-                || record.guard.is_some())
-        {
-            return Err(StorageError::InvalidRecord);
-        }
-        let outcome_json = push_record_rows::serialize_json(&outcome)?;
-        let result = sqlx::query!(
-            "UPDATE router_pushes SET delivery_state='held',last_outcome_json=?,settled_at=NULL WHERE push_id=? AND delivery_state='attempted'",
-            outcome_json,
-            push_id.as_str()
-        )
-        .execute(&mut self.connection)
-        .await?;
-        if result.rows_affected() != 1 {
-            return self.push_transition_error(push_id).await;
-        }
-        self.get_push_record(push_id)
-            .await?
-            .ok_or(StorageError::PushNotFound)
-    }
-
-    pub async fn settle_push_record(
-        &mut self,
-        push_id: &PushId,
-        outcome: DeliveryReceipt,
-        settled_at: DateTime<Utc>,
-    ) -> Result<PushRecord, StorageError> {
-        let state = settled_state(&outcome.outcome);
-        let outcome_json = push_record_rows::serialize_json(&outcome)?;
-        let settled_at = push_record_rows::serialize_timestamp(settled_at);
-        let result = sqlx::query!(
-            "UPDATE router_pushes SET delivery_state=?,last_outcome_json=?,settled_at=? WHERE push_id=? AND delivery_state='attempted'",
-            push_record_rows::serialize_delivery_state(state),
-            outcome_json,
-            settled_at,
-            push_id.as_str()
-        )
-        .execute(&mut self.connection)
-        .await?;
-        if result.rows_affected() != 1 {
-            return self.push_transition_error(push_id).await;
-        }
-        self.get_push_record(push_id)
-            .await?
-            .ok_or(StorageError::PushNotFound)
-    }
-
     pub async fn get_push_record(
         &mut self,
         push_id: &PushId,
     ) -> Result<Option<PushRecord>, StorageError> {
-        let row = sqlx::query_as!(
-            push_record_rows::PushRecordRow,
-            "SELECT push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE push_id=?",
-            push_id.as_str()
-        )
-        .fetch_optional(&mut self.connection)
-        .await?;
-        row.map(push_record_rows::PushRecordRow::into_record)
-            .transpose()
+        read_push_with_connection(&mut self.connection, push_id).await
     }
 
     pub async fn get_push_record_by_router_ref(
@@ -185,7 +75,7 @@ impl AutomationStore {
     ) -> Result<Option<PushRecord>, StorageError> {
         let rows = sqlx::query_as!(
             push_record_rows::PushRecordRow,
-            "SELECT push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE origin_kind='router' AND origin_router_ref=? ORDER BY created_at,push_id",
+            "SELECT push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE origin_kind='router' AND origin_router_ref=? ORDER BY created_at,push_id",
             origin_router_ref
         )
         .fetch_all(&mut self.connection)
@@ -225,7 +115,7 @@ impl AutomationStore {
         let (service_id, endpoint_id, session_id) = session_key(target);
         let rows = sqlx::query_as!(
             push_record_rows::PushRecordRow,
-            "SELECT push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND delivery_state='pending' ORDER BY created_at,push_id",
+            "SELECT push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND delivery_state='pending' ORDER BY created_at,push_id",
             service_id,
             endpoint_id,
             session_id
@@ -244,7 +134,7 @@ impl AutomationStore {
         let (service_id, endpoint_id, session_id) = session_key(target);
         let rows = sqlx::query_as!(
             push_record_rows::PushRecordRow,
-            "SELECT push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND delivery_state='held' ORDER BY created_at,push_id",
+            "SELECT push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND delivery_state='held' ORDER BY created_at,push_id",
             service_id,
             endpoint_id,
             session_id
@@ -306,7 +196,7 @@ impl AutomationStore {
         let (service_id, endpoint_id, session_id) = session_key(&request.target);
         let rows = sqlx::query_as!(
             push_record_rows::PushRecordRow,
-            "SELECT push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE kind=? AND target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND read_at IS NULL ORDER BY created_at DESC,push_id DESC LIMIT ?",
+            "SELECT push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE kind=? AND target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND read_at IS NULL ORDER BY created_at DESC,push_id DESC LIMIT ?",
             kind,
             service_id,
             endpoint_id,
@@ -331,7 +221,7 @@ impl AutomationStore {
         let (with_service_id, with_endpoint_id, with_session_id) = session_key(&request.with);
         let rows = sqlx::query_as!(
             push_record_rows::PushRecordRow,
-            "SELECT push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE kind=? AND ((target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND origin_service_id=? AND origin_endpoint_id=? AND origin_session_id=?) OR (target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND origin_service_id=? AND origin_endpoint_id=? AND origin_session_id=?)) ORDER BY created_at DESC,push_id DESC LIMIT ?",
+            "SELECT push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE kind=? AND ((target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND origin_service_id=? AND origin_endpoint_id=? AND origin_session_id=?) OR (target_service_id=? AND target_endpoint_id=? AND target_session_id=? AND origin_service_id=? AND origin_endpoint_id=? AND origin_session_id=?)) ORDER BY created_at DESC,push_id DESC LIMIT ?",
             kind,
             caller_service_id,
             caller_endpoint_id,
@@ -401,22 +291,37 @@ impl AutomationStore {
             .checked_sub_signed(ChronoDuration::days(30))
             .ok_or(StorageError::InvalidRecord)?;
         let cutoff = push_record_rows::serialize_timestamp(cutoff);
-        let result = sqlx::query!(
-            "DELETE FROM router_pushes WHERE push_id IN (SELECT push_id FROM router_pushes WHERE created_at < ? ORDER BY created_at,push_id LIMIT ?)",
-            cutoff,
-            i64::from(batch_size)
-        )
-        .execute(&mut self.connection)
-        .await?;
-        Ok(result.rows_affected())
-    }
-
-    async fn push_transition_error<T>(&mut self, push_id: &PushId) -> Result<T, StorageError> {
-        if self.get_push_record(push_id).await?.is_none() {
-            Err(StorageError::PushNotFound)
-        } else {
-            Err(StorageError::PushStateConflict)
+        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let candidates = sqlx::query!(
+            "SELECT push_id,retention,delivery_state,created_at,settled_at FROM router_pushes WHERE (retention='creationAge' AND created_at<?) OR (retention='mailTerminalAge' AND settled_at<?) OR retention NOT IN ('creationAge','mailTerminalAge') ORDER BY CASE WHEN retention='mailTerminalAge' THEN settled_at ELSE created_at END,push_id LIMIT ?",
+            cutoff, cutoff, i64::from(batch_size)
+        ).fetch_all(&mut *transaction).await?;
+        let mut pruned = 0;
+        for candidate in candidates {
+            let retention: crate::push_retention::PushRetention =
+                serde_json::from_value(serde_json::Value::String(candidate.retention))
+                    .map_err(|_| StorageError::InvalidRecord)?;
+            let state = push_record_rows::decode_delivery_state(&candidate.delivery_state)?;
+            retention.validate_clock(state, candidate.settled_at.as_deref())?;
+            let age_from = match retention {
+                crate::push_retention::PushRetention::CreationAge => candidate.created_at,
+                crate::push_retention::PushRetention::MailTerminalAge => {
+                    candidate.settled_at.ok_or(StorageError::InvalidRecord)?
+                }
+            };
+            // Validate the stored clock before the destructive operation.
+            crate::push_record_rows::decode_timestamp(age_from)?;
+            let id: PushId = candidate
+                .push_id
+                .try_into()
+                .map_err(|_| StorageError::InvalidRecord)?;
+            pruned += sqlx::query!("DELETE FROM router_pushes WHERE push_id=?", id.as_str())
+                .execute(&mut *transaction)
+                .await?
+                .rows_affected();
         }
+        transaction.commit().await?;
+        Ok(pruned)
     }
 }
 
@@ -424,6 +329,22 @@ pub(crate) async fn insert_push_record_with_connection(
     connection: &mut SqliteConnection,
     record: &PushRecord,
 ) -> Result<(), StorageError> {
+    insert_push_record_with_retention(
+        connection,
+        record,
+        crate::push_retention::PushRetention::CreationAge,
+    )
+    .await
+}
+
+pub(crate) async fn insert_push_record_with_retention(
+    connection: &mut SqliteConnection,
+    record: &PushRecord,
+    retention: crate::push_retention::PushRetention,
+) -> Result<(), StorageError> {
+    let retention = push_record_rows::serialize_json(&retention)?;
+    let retention: String =
+        serde_json::from_str(&retention).map_err(|_| StorageError::InvalidRecord)?;
     push_record_rows::validate_router_origin_reference(
         record.kind,
         &record.origin,
@@ -458,8 +379,9 @@ pub(crate) async fn insert_push_record_with_connection(
         .transpose()?;
 
     let result = sqlx::query!(
-        "INSERT INTO router_pushes (push_id,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',NULL,?,NULL,NULL,?,?) ON CONFLICT(push_id) DO NOTHING",
+        "INSERT INTO router_pushes (push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pending',NULL,?,NULL,NULL,?,?) ON CONFLICT(push_id) DO NOTHING",
         record.push_id.as_str(),
+        retention,
         kind,
         origin_kind,
         origin_service_id,
@@ -501,20 +423,6 @@ fn validate_limit(limit: u32) -> Result<(), StorageError> {
     }
 }
 
-fn settled_state(outcome: &DeliveryOutcome) -> PushDeliveryState {
-    match outcome {
-        DeliveryOutcome::Started
-        | DeliveryOutcome::Steered
-        | DeliveryOutcome::StartedOrSteered
-        | DeliveryOutcome::Queued
-        | DeliveryOutcome::PeerMessageWritten => PushDeliveryState::Delivered,
-        DeliveryOutcome::Unknown => PushDeliveryState::OutcomeUnknown,
-        DeliveryOutcome::NotSubmitted { .. } | DeliveryOutcome::Rejected(_) => {
-            PushDeliveryState::Rejected
-        }
-    }
-}
-
 fn is_sqlite_busy(error: &StorageError) -> bool {
     let StorageError::Database(sqlx_error) = error else {
         return false;
@@ -524,4 +432,35 @@ fn is_sqlite_busy(error: &StorageError) -> bool {
         .and_then(|database_error| database_error.code())
         .and_then(|code| code.parse::<i32>().ok())
         .is_some_and(|code| code & SQLITE_PRIMARY_CODE_MASK == SQLITE_BUSY_PRIMARY_CODE)
+}
+
+pub(crate) async fn read_push_with_connection(
+    connection: &mut SqliteConnection,
+    push_id: &PushId,
+) -> Result<Option<PushRecord>, StorageError> {
+    let row = sqlx::query_as!(
+            push_record_rows::PushRecordRow,
+            "SELECT push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json FROM router_pushes WHERE push_id=?",
+            push_id.as_str()
+        )
+        .fetch_optional(connection)
+        .await?;
+    row.map(push_record_rows::PushRecordRow::into_record)
+        .transpose()
+}
+pub(crate) fn draft_for_record(record: &PushRecord) -> PushRecordDraft {
+    PushRecordDraft {
+        push_id: record.push_id.clone(),
+        kind: record.kind,
+        origin: record.origin.clone(),
+        origin_router_ref: record.origin_router_ref.clone(),
+        target: record.target.clone(),
+        mode: record.mode,
+        guard: record.guard.clone(),
+        reply_to_push_id: record.reply_to_push_id.clone(),
+        header_facts: record.header_facts.clone(),
+        body: record.body.clone(),
+        activity: record.activity.clone(),
+        created_at: record.created_at,
+    }
 }

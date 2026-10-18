@@ -1,4 +1,5 @@
 //! L3 normal-prefix and unavailable-socket cases through the real local Runtime and SQLite.
+use crate::owned_resource_cleanup::readback::CleanupReadback;
 use crate::{
     owned_resource_cleanup::{
         CleanupAction, CleanupObservation, CleanupOutcome, MatrixCleanupReport,
@@ -10,13 +11,12 @@ use crate::{
 use automation_storage::AutomationStore;
 use collaboration_client::{
     CollaborationClient,
-    board::{EndReason, SubscriptionScope, SubscriptionState, ThreadShowRequest},
+    board::{EndReason, SubscriptionState, ThreadShowRequest},
     protocol::{
         EndpointRef, SavedMessage, ScheduleShowRequest, SessionRef, ThreadSubscriptionState,
         ThreadSubscriptionsRequest, WakeShowRequest, WakeState,
     },
 };
-use message_board_storage::BoardStore;
 use std::{fmt, path::Path};
 
 #[path = "owned_resource_cleanup_producer_report.rs"]
@@ -329,7 +329,7 @@ async fn check_public_state(
     for pair in &expected.pairs {
         if !checked_actors.contains(&&pair.actor) {
             let subscriptions = client
-                .board_thread_subscriptions(ThreadSubscriptionsRequest {
+                .thread_subscriptions(ThreadSubscriptionsRequest {
                     actor: pair.actor.clone(),
                 })
                 .await?;
@@ -342,13 +342,16 @@ async fn check_public_state(
     }
     if let Some(pair) = expected.pairs.first() {
         let thread = client
-            .board_thread_show(ThreadShowRequest {
-                root_message_id: pair.root_message_id.clone(),
-                reader: Some(pair.actor.clone()),
+            .thread_show(ThreadShowRequest {
+                thread: pair.root_message_id.clone().into(),
+                reader: message_board::ReadActor::Identified {
+                    reader: pair.actor.clone(),
+                },
+                include_redacted: false,
             })
             .await?;
         ensure(
-            thread.thread.root_message_id == pair.root_message_id
+            thread.thread.thread_id == pair.root_message_id
                 && thread.watch_status.is_some_and(|watch| !watch.watching),
             "public exact-reader Watch was not inactive",
         )?;
@@ -369,7 +372,7 @@ async fn check_fixture_stores(
     let board = fixture
         .board
         .as_mut()
-        .ok_or("fixture-owned BoardStore was not opened")?;
+        .ok_or("fixture-owned cleanup readback was not opened")?;
     let automation = fixture
         .automation
         .as_mut()
@@ -377,7 +380,7 @@ async fn check_fixture_stores(
     check_store_state(board, automation, &fixture.expected, expectation).await
 }
 async fn check_store_state(
-    board: &mut BoardStore,
+    board: &mut CleanupReadback,
     automation: &mut AutomationStore,
     expected: &ExpectedResources,
     expectation: StoreExpectation,
@@ -385,10 +388,7 @@ async fn check_store_state(
     let retired = matches!(expectation, StoreExpectation::Retired);
     for pair in &expected.pairs {
         let record = board
-            .get_thread_subscription_record(
-                &pair.actor,
-                &SubscriptionScope::thread(pair.root_message_id.clone()),
-            )
+            .subscription_state(&pair.actor, &pair.root_message_id)
             .await?
             .ok_or("exact actor/root subscription history disappeared")?;
         let state_matches = matches!(
@@ -404,16 +404,11 @@ async fn check_store_state(
             state_matches,
             "exact SQLite subscription was not the literal expected local state",
         )?;
-        let thread = board
-            .show_thread(ThreadShowRequest {
-                root_message_id: pair.root_message_id.clone(),
-                reader: Some(pair.actor.clone()),
-            })
-            .await?;
         ensure(
-            thread
-                .watch_status
-                .is_some_and(|watch| watch.watching != retired),
+            board
+                .watch_active(&pair.actor, &pair.root_message_id)
+                .await?
+                != retired,
             "exact SQLite Watch state changed unexpectedly",
         )?;
     }
@@ -460,10 +455,10 @@ async fn check_reopened_stores(
     let mut board = None;
     let mut automation = None;
     let observed: ProofResult<()> = async {
-        board = Some(BoardStore::open(&directory.join("project-board.sqlite")).await?);
+        board = Some(CleanupReadback::open(directory).await?);
         automation = Some(AutomationStore::open(&directory.join("automation.sqlite")).await?);
         check_store_state(
-            board.as_mut().ok_or("reopened BoardStore missing")?,
+            board.as_mut().ok_or("reopened cleanup readback missing")?,
             automation
                 .as_mut()
                 .ok_or("reopened AutomationStore missing")?,
@@ -474,7 +469,7 @@ async fn check_reopened_stores(
     }
     .await;
     let board_close: ProofResult<()> = match board {
-        Some(board) => board.close().await.map_err(Into::into),
+        Some(board) => board.close().await,
         None => Ok(()),
     };
     let automation_close: ProofResult<()> = match automation {
@@ -586,10 +581,7 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
 -> ProofResult<()> {
     use collaboration_client::{
         BoardClientError,
-        board::{
-            BoardFailureKind, Identity, MessageId, MessagePostRequest, MessageReferences,
-            MessageShowRequest, Placement,
-        },
+        board::{BoardFailureKind, Identity},
         protocol::{EndpointId, SessionId},
     };
     let directory = tempfile::Builder::new()
@@ -635,7 +627,7 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
         Some(Ok(_)) => ActualHelperPrefix::Completed,
         Some(Err(error))
             if matches!(error.downcast_ref::<BoardClientError>(),
-            Some(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::TopLevelMessageCooldown) =>
+            Some(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::TopLevelPostCooldown) =>
         {
             ActualHelperPrefix::Cooldown
         }
@@ -652,7 +644,7 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
             Ok(roots) => roots,
             Err(error) => {
                 let typed_cooldown = matches!(error.downcast_ref::<BoardClientError>(),
-                    Some(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::TopLevelMessageCooldown);
+                    Some(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::TopLevelPostCooldown);
                 return Err(Box::new(ActualProducerFailure { typed_cooldown, cause: error }) as CaseError);
             }
         };
@@ -660,10 +652,11 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
         ensure(first_root != second_root && fixture.expected.pairs.len() == 4,
             "actual helper did not establish four distinct sender/reader root pairs")?;
         let board = fixture.board.as_mut().ok_or("fixture-owned board missing")?;
-        let first = board.show_message(MessageShowRequest { message_id: first_root.clone() }).await?;
-        let second = board.show_message(MessageShowRequest { message_id: second_root.clone() }).await?;
-        ensure(first.0.message_id == *first_root && second.0.message_id == *second_root
-            && first.0.board_id != second.0.board_id, "actual helper did not create roots on distinct boards")?;
+        let first = board.thread_record(first_root).await?.ok_or("first root missing")?;
+        let second = board.thread_record(second_root).await?.ok_or("second root missing")?;
+        ensure(first.thread_id == *first_root && second.thread_id == *second_root
+            && first.envelope.scope.board != second.envelope.scope.board,
+            "actual helper did not create roots on distinct boards")?;
         for actor in actors.as_ref().ok_or("actual helper actors missing")? {
             for root in roots.iter() {
                 ensure(fixture.expected.pairs.iter().any(|pair| pair.actor == *actor && pair.root_message_id == *root),
@@ -672,14 +665,20 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
         }
         let mut outsider = fixture.peer_target()?;
         outsider.session_id = SessionId::try_from("fixture-cleanup-outsider".to_owned())?;
-        let outsider_actor = serde_json::from_value(serde_json::json!({"kind":"session","session":outsider}))?;
-        let denied = fixture.owned.as_ref().ok_or("actual producer client missing")?.client.board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(), placement: Placement::Thread { root_message_id: first_root.clone() },
-            actor: outsider_actor, acting_for: None,
-            text: collaboration_client::board::MessageText::try_from("Rejected unjoined fixture post".to_owned())?,
-            references: MessageReferences::try_from(Vec::new())?,
-        }).await;
-        ensure(matches!(denied, Err(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::ParticipantRequired),
+        let outsider_actor: message_board::Identity = serde_json::from_value(serde_json::json!({"kind":"session","session":outsider}))?;
+        let denied = fixture.owned.as_ref().ok_or("actual producer client missing")?.client.thread_post(
+            serde_json::from_value::<message_board::ThreadPostRequest>(serde_json::json!({
+                "requestId":message_board::RequestId::generate(),"protocolVersion":1,"resubmits":null,
+                "observedEpoch":null,"postId":message_board::PostId::generate(),
+                "placement":{"kind":"thread","thread":{"thread":first_root}},
+                "actor":outsider_actor,"actingFor":null,"addressees":[],
+                "text":"Rejected unjoined fixture post","references":[],
+            }))?
+        ).await?;
+        ensure(matches!(denied.result, message_board::RequestResult::Decided(
+            message_board::RequestDecision::Rejected { reasons }
+        ) if reasons.iter().any(|reason| matches!(reason, message_board::Refusal::Thread(reason)
+            if matches!(reason.as_ref(), message_board::ThreadRefusal::ParticipantRequired { .. })))),
             "unjoined fixture session bypassed thread participant ACL")
     }.await;
     let expected = fixture.expected.clone();
@@ -808,35 +807,25 @@ async fn check_fixture_absent_roots(
         fixture
             .board
             .as_mut()
-            .ok_or("fixture-owned BoardStore missing")?,
+            .ok_or("fixture-owned cleanup readback missing")?,
         pairs,
     )
     .await
 }
 async fn check_absent_roots(
-    board: &mut BoardStore,
+    board: &mut CleanupReadback,
     pairs: &[ActorRootExpectation],
 ) -> ProofResult<()> {
-    use collaboration_client::board::{BoardFailureKind, BoardFailureStage, MessageShowRequest};
     for pair in pairs {
         ensure(
             board
-                .get_thread_subscription_record(
-                    &pair.actor,
-                    &SubscriptionScope::thread(pair.root_message_id.clone()),
-                )
+                .subscription_state(&pair.actor, &pair.root_message_id)
                 .await?
                 .is_none(),
             "never-created helper subscription appeared",
         )?;
-        let message = board
-            .show_message(MessageShowRequest {
-                message_id: pair.root_message_id.clone(),
-            })
-            .await;
         ensure(
-            matches!(message, Err(error) if error.kind == BoardFailureKind::ResourceNotFound
-            && error.stage == BoardFailureStage::Inspection),
+            board.thread_record(&pair.root_message_id).await?.is_none(),
             "never-created helper root appeared or absence read was inconclusive",
         )?;
     }
@@ -846,9 +835,9 @@ async fn check_reopened_absent_roots(
     directory: &Path,
     pairs: &[ActorRootExpectation],
 ) -> ProofResult<()> {
-    let mut board = BoardStore::open(&directory.join("project-board.sqlite")).await?;
+    let mut board = CleanupReadback::open(directory).await?;
     let observed = check_absent_roots(&mut board, pairs).await;
-    let board_close: ProofResult<()> = board.close().await.map_err(Into::into);
+    let board_close: ProofResult<()> = board.close().await;
     match (observed, board_close) {
         (Ok(()), Ok(())) => Ok(()),
         (observed, board_close) => Err(Box::new(ReopenFailure {

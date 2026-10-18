@@ -3,7 +3,7 @@ use super::{
     BatchId, InvalidSubscriptionField, SubscriptionGeneration, SubscriptionScope,
     SubscriptionWindowId, invalid_subscription_field,
 };
-use crate::{ActivitySequence, MessageId, TopicId};
+use crate::{FeedCursor, ProjectId, ThreadId};
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -13,43 +13,43 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PendingRootNotice {
     /// The Thread whose pending messages this notice locates.
-    pub root_id: MessageId,
-    /// The Topic containing the Thread.
-    pub topic_id: TopicId,
+    pub thread_id: ThreadId,
+    /// The Project containing the Thread.
+    pub project_id: ProjectId,
     /// The first pending message sequence, greater than the Reader's Delivered cursor.
-    pub from_sequence: ActivitySequence,
+    pub from: FeedCursor,
     /// The latest pending message sequence included by this notice.
-    pub through_sequence: ActivitySequence,
+    pub through: FeedCursor,
     /// Number of pending messages between the two sequence bounds.
-    pub message_count: u64,
+    pub post_count: u64,
 }
 
 impl PendingRootNotice {
     pub fn new(
-        root_id: MessageId,
-        topic_id: TopicId,
-        from_sequence: ActivitySequence,
-        through_sequence: ActivitySequence,
-        message_count: u64,
+        thread_id: ThreadId,
+        project_id: ProjectId,
+        from: FeedCursor,
+        through: FeedCursor,
+        post_count: u64,
     ) -> Result<Self, InvalidSubscriptionField> {
-        if from_sequence > through_sequence {
+        if from.position > through.position {
             return Err(invalid_subscription_field(
-                "fromSequence",
-                "must not exceed throughSequence",
+                "from",
+                "must not exceed through",
             ));
         }
-        if message_count == 0 {
+        if post_count == 0 {
             return Err(invalid_subscription_field(
-                "messageCount",
+                "postCount",
                 "must be greater than zero",
             ));
         }
         Ok(Self {
-            root_id,
-            topic_id,
-            from_sequence,
-            through_sequence,
-            message_count,
+            thread_id,
+            project_id,
+            from,
+            through,
+            post_count,
         })
     }
 }
@@ -73,9 +73,9 @@ pub struct SubscriptionBatch {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SubscriptionBatchRootSettlement {
-    pub root_message_id: MessageId,
+    pub thread_id: ThreadId,
     pub window_id: SubscriptionWindowId,
-    pub delivered_through: ActivitySequence,
+    pub delivered_through: FeedCursor,
     pub subscription_scope: SubscriptionScope,
     pub subscription_generation: SubscriptionGeneration,
 }

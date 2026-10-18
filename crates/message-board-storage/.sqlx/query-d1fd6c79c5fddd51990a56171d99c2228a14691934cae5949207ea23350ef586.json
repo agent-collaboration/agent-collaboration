@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT request_id AS \"request_id!: String\" FROM request_ledger WHERE json_extract(decision, '$.kind') = 'voided' AND json_extract(decision, '$.cause.kind') = 'projectRejected' ORDER BY request_id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d1fd6c79c5fddd51990a56171d99c2228a14691934cae5949207ea23350ef586"
+}

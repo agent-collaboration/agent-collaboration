@@ -27,3 +27,9 @@ threads-required = "num-test-threads"
 [[profile.ci.overrides]]
 filter = "binary(checked_query_diagnostics)"
 slow-timeout = { period = "120s", terminate-after = 10 }
+
+# U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
+# protocol proof observes both firings; its own receive deadlines remain bounded.
+[[profile.ci.overrides]]
+filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
+slow-timeout = { period = "60s", terminate-after = 6 }

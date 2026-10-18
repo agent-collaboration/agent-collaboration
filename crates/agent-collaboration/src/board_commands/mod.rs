@@ -1,19 +1,28 @@
 //! Descriptive message-board commands over the public communication client.
 mod board_arguments;
+mod board_entity_arguments;
+mod board_entity_execution;
+mod board_entity_metadata_preparation;
+mod board_entity_preparation;
 mod board_execution;
+mod board_inbox_arguments;
 mod board_preparation;
+mod board_request_arguments;
 mod board_search_commands;
 mod board_subscription_arguments;
 mod board_thread_list_preparation;
 mod board_thread_subscription_preparation;
 mod board_thread_wait_preparation;
 mod board_value_parsing;
+mod board_view_commands;
+mod board_wait_execution;
 
 use board_arguments::BoardArguments;
 use std::ffi::OsString;
 
 /// Runs a board command without opening board storage in the CLI process.
-pub fn run_board_command(arguments: Vec<OsString>) -> i32 {
+pub fn run_board_command(mut arguments: Vec<OsString>) -> i32 {
+    arguments.insert(0, OsString::from("agent-collaboration"));
     let machine = arguments.iter().any(|argument| argument == "--json");
     let parsed =
         match crate::automation_argument_feedback::parse_arguments::<BoardArguments>(arguments) {

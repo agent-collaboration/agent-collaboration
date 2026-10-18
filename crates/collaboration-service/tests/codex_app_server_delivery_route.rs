@@ -577,6 +577,7 @@ async fn exercise_held_empty_thread(
     let control = served.client("held-thread-message").await?;
     let started = control
         .send_message(collaboration_client::MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             message: collaboration_client::PublicMessageContent::HumanUser {
                 text: "hello".to_owned().try_into()?,

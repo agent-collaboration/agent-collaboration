@@ -1,77 +1,94 @@
-//! A board request naming a local repository of another Router is refused before any read or
-//! write, naming `repository.serviceId`, whichever request carries the repository.
-use collaboration_service::ServiceIdentity;
-use message_board::*;
-use message_board_storage::BoardStore;
-use serde_json::{Value, json};
-use std::sync::Arc;
-mod board_control_support;
-
-const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-const FOREIGN_SERVICE_ID: &str = "00000000-0000-4000-8000-000000000099";
+//! Foreign local locators are refused at every public boundary before metadata changes.
+use serde_json::json;
+#[path = "support/board_fixture.rs"]
+pub mod board_fixture;
+use board_fixture::{BoardFixture, TestError, accepted};
 
 #[tokio::test]
+#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
 async fn foreign_local_repositories_are_refused_on_every_request_that_names_one()
--> Result<(), Box<dyn std::error::Error>> {
-    // Arrange: a project, and requests that each name another Router's local repository.
-    let path = std::env::temp_dir().join(format!(
-        "repository-ownership-{}.sqlite",
-        MessageId::generate().as_str()
-    ));
-    let store = Arc::new(tokio::sync::Mutex::new(BoardStore::open(&path).await?));
-    let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-        .map_err(std::io::Error::other)?
-        .with_board_store(Arc::clone(&store));
-    let actor = json!({"kind":"human","humanId":"owner"});
-    let project_id = ProjectId::generate();
-    let foreign =
-        json!({"kind":"local","serviceId":FOREIGN_SERVICE_ID,"commonDirectory":"/work/repo"});
-    let requests = vec![
-        json!({"jsonrpc":"2.0","id":"create","method":"board/projectCreate","params":{"projectId":project_id,"name":"Project","description":"","actor":actor}}),
-        json!({"jsonrpc":"2.0","id":"list","method":"board/projectList","params":{"repository":foreign,"page":{"limit":10,"cursor":null}}}),
-        json!({"jsonrpc":"2.0","id":"attach","method":"board/repositoryAttach","params":{"projectId":project_id,"repository":foreign,"actor":actor}}),
-        json!({"jsonrpc":"2.0","id":"detach","method":"board/repositoryDetach","params":{"projectId":project_id,"repository":foreign,"actor":actor}}),
-    ];
-
-    // Act.
-    let responses = board_control_support::send_raw_board_requests(identity, requests).await?;
-
-    // Assert: the refusal BoardError::invalid_field gives for repository.serviceId.
+-> Result<(), TestError> {
+    let fixture = BoardFixture::start().await?;
+    let foreign = json!({"kind":"local","serviceId":"00000000-0000-4000-8000-000000000099","commonDirectory":"/work/repo"});
+    let before = fixture
+        .api
+        .call("workspace_show", json!({"workspaceId":fixture.workspace}))
+        .await?;
     let message = "Correct repository.serviceId: must match the selected board service.";
-    let expected = json!({
-        "code": -32050,
-        "message": message,
-        "data": {
-            "kind": "invalidField",
-            "stage": "validation",
-            "message": message,
-            "nextAction": "correctRequest",
-            "details": {
-                "kind": "fieldConstraint",
-                "field": "repository.serviceId",
-                "requirement": "must match the selected board service"
-            }
-        }
-    });
-    if responses
-        .first()
-        .and_then(|response| response.get("result"))
-        .is_none()
-    {
-        return Err(format!("project creation failed: {responses:?}").into());
+    let expected = json!({"code":-32050,"message":message,"data":{"kind":"invalidField","stage":"validation","message":message,"nextAction":"correctRequest","details":{"kind":"fieldConstraint","field":"repository.serviceId","requirement":"must match the selected board service"}}});
+    for tool in ["workspace_list", "repository_attach", "repository_detach"] {
+        let request = if tool == "workspace_list" {
+            json!({"repository":foreign,"page":{"limit":10,"cursor":null}})
+        } else {
+            let mut header = fixture.header();
+            header["workspaceId"] = json!(fixture.workspace);
+            header["repository"] = foreign.clone();
+            header
+        };
+        let response = fixture.api.call(tool, request).await?;
+        assert_eq!(response.get("error"), Some(&expected), "{tool}: {response}");
+        assert!(
+            response
+                .get("result")
+                .is_none_or(serde_json::Value::is_null),
+            "foreign repository request succeeded"
+        );
     }
-    for response in responses.iter().skip(1) {
-        if response.get("error") != Some(&expected) {
-            return Err(format!("unexpected foreign repository response: {response}").into());
-        }
-        if response
-            .get("result")
-            .is_some_and(|result| result != &Value::Null)
-        {
-            return Err(format!("foreign repository request succeeded: {response}").into());
-        }
+    assert_eq!(
+        fixture
+            .api
+            .call("workspace_show", json!({"workspaceId":fixture.workspace}))
+            .await?,
+        before
+    );
+    fixture.stop().await
+}
+
+#[tokio::test]
+#[allow(clippy::panic_in_result_fn)]
+async fn workspace_repository_filter_matches_typed_locator_fields() -> Result<(), TestError> {
+    let fixture = BoardFixture::start().await?;
+    let repositories = [
+        json!({"normalizedOrigin":"github.com/example/project","kind":"origin"}),
+        json!({"commonDirectory":"/work/project/.git","kind":"local","serviceId":"00000000-0000-4000-8000-000000000001"}),
+    ];
+    for repository in &repositories {
+        let mut request = fixture.header();
+        request.as_object_mut().ok_or("header")?.extend(
+            json!({"workspaceId":fixture.workspace,"repository":repository})
+                .as_object()
+                .ok_or("fields")?
+                .clone(),
+        );
+        accepted(&fixture.api.call("repository_attach", request).await?);
     }
-    drop(store);
-    std::fs::remove_file(path)?;
-    Ok(())
+    for repository in repositories {
+        let response = fixture
+            .api
+            .call(
+                "workspace_list",
+                json!({"repository":repository,"page":{"limit":1,"cursor":null}}),
+            )
+            .await?;
+        assert_eq!(
+            response.pointer("/result/page/records/0/workspaceId"),
+            Some(&json!(fixture.workspace)),
+            "{response}"
+        );
+        assert!(
+            response
+                .pointer("/result/page/nextCursor")
+                .is_some_and(serde_json::Value::is_null)
+        );
+    }
+    let response = fixture.api.call("workspace_list", json!({"repository":{"kind":"origin","normalizedOrigin":"github.com/example/another"},"page":{"limit":1,"cursor":null}})).await?;
+    assert_eq!(
+        response
+            .pointer("/result/page/records")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len),
+        Some(0),
+        "{response}"
+    );
+    fixture.stop().await
 }

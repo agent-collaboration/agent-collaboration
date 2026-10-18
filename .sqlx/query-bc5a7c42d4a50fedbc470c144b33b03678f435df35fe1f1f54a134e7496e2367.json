@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE router_pushes SET delivery_state='outcome_unknown',last_outcome_json=?,settled_at=? WHERE push_id=? AND delivery_state='attempted' AND last_outcome_json IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "bc5a7c42d4a50fedbc470c144b33b03678f435df35fe1f1f54a134e7496e2367"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", payload AS \"payload!: String\" FROM cached_fleet_records WHERE kind = 'processDefinition' AND json_extract(payload, '$.record.reference.name') = ? AND json_extract(payload, '$.record.reference.version') = ? AND json_extract(payload, '$.record.reference.sourceHash') = ? ORDER BY id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "0615feabf74ecf9b98184c39b9f7316c2d8c86eacdf72e8a4d7b5c30ba070d80"
+}

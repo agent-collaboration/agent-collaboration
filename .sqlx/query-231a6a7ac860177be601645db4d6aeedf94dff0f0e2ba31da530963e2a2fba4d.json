@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT epoch, position FROM board_intent_scan_cursors WHERE project_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "epoch",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "board_intent_scan_cursors",
+            "name": "epoch"
+          }
+        }
+      },
+      {
+        "name": "position",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "board_intent_scan_cursors",
+            "name": "position"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false
+    ]
+  },
+  "hash": "231a6a7ac860177be601645db4d6aeedf94dff0f0e2ba31da530963e2a2fba4d"
+}

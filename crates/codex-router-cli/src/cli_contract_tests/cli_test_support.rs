@@ -76,18 +76,6 @@ pub(super) fn assert_router_profile_contract(output: &str, port: u16) {
     assert!(!output.contains("oauth"));
 }
 
-pub(super) fn git_diff_text(workspace_root: &Path, args: &[&str]) -> String {
-    let output = match ProcessCommand::new("git")
-        .args(args)
-        .current_dir(workspace_root)
-        .output()
-    {
-        Ok(output) if output.status.success() => output,
-        _ => return String::new(),
-    };
-    String::from_utf8_lossy(&output.stdout).into_owned()
-}
-
 #[track_caller]
 pub(super) fn must_ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
     match result {

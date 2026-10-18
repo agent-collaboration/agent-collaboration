@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT type AS \"type!: String\", name AS \"name!: String\", sql AS \"sql?: String\" FROM sqlite_schema ORDER BY type, name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "type!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "name!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sql?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8425909424b5b557305032970687a955156b66fe706864667b456875c9a0f38d"
+}

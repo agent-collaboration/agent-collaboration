@@ -1,0 +1,68 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT p.thread_id AS \"thread_id!: String\", p.reader AS \"reader!: String\", p.joined_epoch AS \"joined_epoch!: i64\", p.joined_position AS \"joined_position!: i64\", p.role AS \"role!: String\", p.active AS \"active!: i64\", p.payload AS \"payload!: String\" FROM json_each(?) k CROSS JOIN thread_participants p ON p.thread_id = CAST(k.value AS TEXT) ORDER BY p.thread_id, p.joined_position, p.reader",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "reader!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "joined_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "joined_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "role!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "active!: i64",
+        "type_info": {
+          "name": "BOOLEAN"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5cc03611f86bb4b5b4a7f7bf3698cfd9ab253aa10c833381fa232b5e719474bf"
+}

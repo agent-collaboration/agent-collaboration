@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT membership_kind AS \"membership_kind!: String\", membership_id AS \"membership_id!: String\", thread_id AS \"thread_id: String\" FROM thread_subscriptions WHERE reader = ? AND scope = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "membership_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "membership_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "thread_id: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "2168be82c908ddb08671ad913292f9174d3ccbbe4b203bbfed449f5c3533e1b1"
+}

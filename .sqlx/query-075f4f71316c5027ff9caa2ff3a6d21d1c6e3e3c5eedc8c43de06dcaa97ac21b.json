@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT push_id FROM router_pushes WHERE delivery_state='attempted' AND last_outcome_json IS NULL AND kind IN (?, ?, ?, ?, ?, ?) ORDER BY push_id LIMIT 128",
+  "describe": {
+    "columns": [
+      {
+        "name": "push_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "router_pushes",
+            "name": "push_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "075f4f71316c5027ff9caa2ff3a6d21d1c6e3e3c5eedc8c43de06dcaa97ac21b"
+}

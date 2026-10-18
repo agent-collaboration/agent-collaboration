@@ -5,8 +5,8 @@ use sqlx_core::{
 };
 
 use crate::{
-    Turso, TursoConnectOptions, TursoStatement, engine_connection::EngineConnection,
-    error::map_turso_error,
+    Turso, TursoConnectOptions, TursoStatement, busy_wait::BusyWait,
+    engine_connection::EngineConnection, error::map_turso_error,
 };
 
 /// One owned Turso engine connection
@@ -111,13 +111,13 @@ impl TursoConnection {
         while let Some(depth) = self.transaction_state.pop_pending_rollback() {
             let sql = sqlx_core::transaction::rollback_ansi_transaction_sql(depth);
             self.forget_cached_statements();
-            if let Err(error) = self.raw().execute(sql.as_str(), ()).await {
+            if let Err(error) = self.execute_raw_statement(sql.as_str()).await {
                 if depth == 1 && rollback_error_is_inactive_transaction(&error) {
                     continue;
                 }
 
                 self.transaction_state.mark_rollback_failed();
-                return Err(map_turso_error(error));
+                return Err(error);
             }
         }
 
@@ -131,6 +131,26 @@ impl TursoConnection {
 
     pub(crate) fn raw(&self) -> &turso::Connection {
         &self.raw
+    }
+
+    pub(crate) async fn execute_raw_statement(&self, sql: &str) -> Result<u64, Error> {
+        let mut waiting = BusyWait::new(self.options.get_busy_timeout());
+        loop {
+            match self.raw().execute(sql, ()).await {
+                Ok(changes) => return Ok(changes),
+                Err(error) => waiting.wait_after_error(error).await?,
+            }
+        }
+    }
+
+    pub(crate) async fn prepare_raw_statement(&self, sql: &str) -> Result<turso::Statement, Error> {
+        let mut waiting = BusyWait::new(self.options.get_busy_timeout());
+        loop {
+            match self.raw().prepare(sql).await {
+                Ok(statement) => return Ok(statement),
+                Err(error) => waiting.wait_after_error(error).await?,
+            }
+        }
     }
 
     pub(crate) fn cached_statement(&mut self, sql: &str) -> Option<TursoStatement> {
@@ -175,13 +195,10 @@ impl TursoConnection {
     async fn read_schema_version(&mut self) -> Result<i64, Error> {
         let mut statement = match self.schema_version_statement.take() {
             Some(statement) => statement,
-            None => self
-                .raw
-                .prepare("PRAGMA schema_version")
-                .await
-                .map_err(map_turso_error)?,
+            None => self.prepare_raw_statement("PRAGMA schema_version").await?,
         };
-        let schema_version = read_schema_cookie(&mut statement).await;
+        let schema_version =
+            read_schema_cookie(&mut statement, self.options.get_busy_timeout()).await;
         self.schema_version_statement = Some(statement);
         schema_version
     }
@@ -193,9 +210,12 @@ impl TursoConnection {
     }
 }
 
-async fn read_schema_cookie(statement: &mut turso::Statement) -> Result<i64, Error> {
+async fn read_schema_cookie(
+    statement: &mut turso::Statement,
+    timeout: std::time::Duration,
+) -> Result<i64, Error> {
     let mut rows = statement.query(()).await.map_err(map_turso_error)?;
-    let value = match rows.next().await.map_err(map_turso_error)? {
+    let value = match BusyWait::new(timeout).next_row(&mut rows).await? {
         Some(row) => row.get_value(0).map_err(map_turso_error)?,
         None => turso::Value::Null,
     };
@@ -209,7 +229,7 @@ async fn read_schema_cookie(statement: &mut turso::Statement) -> Result<i64, Err
     }
 }
 
-fn rollback_error_is_inactive_transaction(error: &turso::Error) -> bool {
+fn rollback_error_is_inactive_transaction(error: &Error) -> bool {
     error
         .to_string()
         .contains("cannot rollback - no transaction is active")
@@ -228,8 +248,9 @@ impl Connection for TursoConnection {
     }
 
     async fn ping(&mut self) -> Result<(), Error> {
-        let _ = self.raw();
-        Ok(())
+        // SQLx pool return calls ping before admitting an idle connection. A
+        // queued rollback must release its native lock before that closing fact.
+        self.clear_pending_rollback().await
     }
 
     async fn begin(&mut self) -> Result<Transaction<'_, Self::Database>, Error> {
@@ -239,11 +260,11 @@ impl Connection for TursoConnection {
     fn shrink_buffers(&mut self) {}
 
     async fn flush(&mut self) -> Result<(), Error> {
-        Ok(())
+        self.clear_pending_rollback().await
     }
 
     fn should_flush(&self) -> bool {
-        false
+        !self.transaction_state.pending_rollback_depths.is_empty()
     }
 
     fn cached_statements_size(&self) -> usize

@@ -1,98 +1,59 @@
+use super::board_inbox_arguments::*;
 use super::{board_arguments::*, board_preparation::CommandContext};
 use collaboration_client::board::*;
 use collaboration_client::{BoardRepositoryError, BoardRepositoryLocation};
 use std::{fs::File, io::Read, path::Path};
 
-pub(super) fn message_scope(arguments: &MessageListArguments) -> Result<MessageListScope, String> {
+pub(super) fn message_scope(arguments: &PostListArguments) -> Result<PostListScope, String> {
     let supplied = [
-        arguments.topic_id.is_some(),
-        arguments.root_message_id.is_some(),
-        arguments.board_id.is_some(),
         arguments.project_id.is_some(),
+        arguments.thread_id.is_some(),
+        arguments.board_id.is_some(),
+        arguments.workspace_id.is_some(),
     ]
     .into_iter()
     .filter(|value| *value)
     .count();
     match arguments.scope {
-        MessageScopeKind::Topic if supplied == 1 => arguments
-            .topic_id
-            .clone()
-            .map(|value| parse_uuid_v7(value, "--topic-id"))
-            .transpose()?
-            .map(|topic_id| MessageListScope::Topic { topic_id }),
-        MessageScopeKind::Thread if supplied == 1 => arguments
-            .root_message_id
-            .clone()
-            .map(|value| parse_uuid_v7(value, "--root-message-id"))
-            .transpose()?
-            .map(|root_message_id| MessageListScope::Thread { root_message_id }),
-        MessageScopeKind::Board if supplied == 1 => arguments
-            .board_id
-            .clone()
-            .map(|value| parse_uuid_v7(value, "--board-id"))
-            .transpose()?
-            .map(|board_id| MessageListScope::Board { board_id }),
-        MessageScopeKind::Project if supplied == 1 => arguments
+        PostScopeKind::Project if supplied == 1 => arguments
             .project_id
             .clone()
             .map(|value| parse_uuid_v7(value, "--project-id"))
             .transpose()?
-            .map(|project_id| MessageListScope::Project { project_id }),
-        MessageScopeKind::AllProjects if supplied == 0 => Some(MessageListScope::AllProjects),
+            .map(|project_id| PostListScope::Project { project_id }),
+        PostScopeKind::Thread if supplied == 1 => arguments
+            .thread_id
+            .clone()
+            .map(parse_thread_ref)
+            .transpose()?
+            .map(|thread| PostListScope::Thread { thread }),
+        PostScopeKind::Board if supplied == 1 => arguments
+            .board_id
+            .clone()
+            .map(|value| parse_uuid_v7(value, "--board-id"))
+            .transpose()?
+            .map(|board_id| PostListScope::Board { board_id }),
+        PostScopeKind::Workspace if supplied == 1 => arguments
+            .workspace_id
+            .clone()
+            .map(|value| parse_uuid_v7(value, "--workspace-id"))
+            .transpose()?
+            .map(|workspace_id| PostListScope::Workspace { workspace_id }),
+        PostScopeKind::AllWorkspaces if supplied == 0 => Some(PostListScope::AllWorkspaces),
         _ => None,
     }
     .ok_or_else(|| {
-        "--scope requires exactly its matching ID flag (or no ID for all-projects)".into()
+        "--scope requires exactly its matching ID flag (or no ID for all-workspaces)".into()
     })
 }
 
-pub(super) fn message_selection(
-    arguments: &MessageListArguments,
-) -> Result<MessageSelection, String> {
-    match arguments.selection {
-        MessageSelectionKind::Latest
-            if arguments.after_activity_sequence.is_none()
-                && arguments.from_activity_sequence.is_none()
-                && arguments.to_activity_sequence.is_none() =>
-        {
-            Ok(MessageSelection::Latest)
-        }
-        MessageSelectionKind::AfterPosition
-            if arguments.after_activity_sequence.is_some()
-                && arguments.from_activity_sequence.is_none()
-                && arguments.to_activity_sequence.is_none() =>
-        {
-            Ok(MessageSelection::AfterPosition {
-                after_activity_sequence: activity_sequence(
-                    arguments.after_activity_sequence.unwrap_or_default(),
-                    "--after-activity-sequence",
-                )?,
-            })
-        }
-        MessageSelectionKind::Range
-            if arguments.after_activity_sequence.is_none()
-                && arguments.from_activity_sequence.is_some()
-                && arguments.to_activity_sequence.is_some() =>
-        {
-            Ok(MessageSelection::Range {
-                from_activity_sequence: activity_sequence(
-                    arguments.from_activity_sequence.unwrap_or_default(),
-                    "--from-activity-sequence",
-                )?,
-                to_activity_sequence: activity_sequence(
-                    arguments.to_activity_sequence.unwrap_or_default(),
-                    "--to-activity-sequence",
-                )?,
-            })
-        }
-        _ => Err("--selection latest takes no bounds; after-position requires --after-activity-sequence; range requires --from-activity-sequence and --to-activity-sequence".into()),
+pub(super) fn message_selection(arguments: &PostListArguments) -> Result<PostSelection, String> {
+    match (&arguments.selection,&arguments.after,&arguments.from,&arguments.to) {
+        (PostSelectionKind::Latest,None,None,None) => Ok(PostSelection::Latest),
+        (PostSelectionKind::AfterPosition,Some(after),None,None) => Ok(PostSelection::AfterPosition { after:serde_json::from_str(after).map_err(|_| "--after requires typed project or aggregate ReadPosition JSON")? }),
+        (PostSelectionKind::Range,None,Some(from),Some(to)) => Ok(PostSelection::Range { from:serde_json::from_str(from).map_err(|_| "--from requires typed ReadPosition JSON")?,to:serde_json::from_str(to).map_err(|_| "--to requires typed ReadPosition JSON")? }),
+        _ => Err("--selection latest takes no bounds; after-position requires --after; range requires --from and --to".to_owned()),
     }
-}
-
-pub(super) fn activity_sequence(value: u64, flag: &str) -> Result<ActivitySequence, String> {
-    value
-        .try_into()
-        .map_err(|_| format!("{flag} must not exceed the maximum SQLite activity position"))
 }
 
 pub(super) fn parse_mutation_identity(
@@ -123,6 +84,13 @@ pub(super) fn parse_acting_for(value: &str) -> Result<ActingForIdentity, String>
     serde_json::from_str(value).map_err(|_| "--acting-for must be valid human identity JSON".into())
 }
 
+pub(super) fn parse_thread_ref(value: String) -> Result<ThreadRef, String> {
+    value.parse().map_err(|_| {
+        "--thread-id must be a canonical lowercase UUIDv7 or project UUIDv7/thread UUIDv7"
+            .to_owned()
+    })
+}
+
 pub(super) fn parse_uuid_v7<TIdentity>(value: String, flag: &str) -> Result<TIdentity, String>
 where
     TIdentity: TryFrom<String>,
@@ -146,9 +114,9 @@ where
 pub(super) trait GeneratedIdentity {
     fn generate() -> Self;
 }
-impl GeneratedIdentity for ProjectId {
+impl GeneratedIdentity for WorkspaceId {
     fn generate() -> Self {
-        ProjectId::generate()
+        WorkspaceId::generate()
     }
 }
 impl GeneratedIdentity for BoardId {
@@ -156,14 +124,14 @@ impl GeneratedIdentity for BoardId {
         BoardId::generate()
     }
 }
-impl GeneratedIdentity for TopicId {
+impl GeneratedIdentity for ProjectId {
     fn generate() -> Self {
-        TopicId::generate()
+        ProjectId::generate()
     }
 }
-impl GeneratedIdentity for MessageId {
+impl GeneratedIdentity for PostId {
     fn generate() -> Self {
-        MessageId::generate()
+        PostId::generate()
     }
 }
 
@@ -198,20 +166,6 @@ pub(super) fn command_context(arguments: CommonArguments) -> CommandContext {
     CommandContext {
         service_directory: arguments.service_directory,
         json: arguments.json,
-    }
-}
-
-pub(super) fn require_only<TValue>(
-    required: Option<TValue>,
-    conflicting: Option<TValue>,
-    required_flag: &str,
-    conflicting_flag: &str,
-) -> Result<TValue, String> {
-    match (required, conflicting) {
-        (Some(value), None) => Ok(value),
-        _ => Err(format!(
-            "{required_flag} is required and {conflicting_flag} must be omitted for this variant"
-        )),
     }
 }
 
@@ -272,35 +226,71 @@ pub(super) fn read_message_file(path: &Path) -> Result<String, String> {
 
 pub(super) fn inbox_scope(arguments: &InboxFetchArguments) -> Result<InboxScope, String> {
     let supplied = [
-        arguments.project_id.is_some(),
+        arguments.workspace_id.is_some(),
         arguments.board_id.is_some(),
-        arguments.topic_id.is_some(),
+        arguments.project_id.is_some(),
     ]
     .into_iter()
     .filter(|value| *value)
     .count();
     if supplied != 1 {
-        return Err("--scope requires exactly its matching project/board/topic ID".into());
+        return Err("--scope requires exactly its matching workspace/board/project ID".into());
     }
     match arguments.scope {
-        InboxScopeKind::Project => arguments
-            .project_id
+        InboxScopeKind::Workspace => arguments
+            .workspace_id
             .clone()
-            .map(|value| parse_uuid_v7(value, "--project-id"))
+            .map(|value| parse_uuid_v7(value, "--workspace-id"))
             .transpose()?
-            .map(|project_id| InboxScope::Project { project_id }),
+            .map(|workspace_id| InboxScope::Workspace { workspace_id }),
         InboxScopeKind::Board => arguments
             .board_id
             .clone()
             .map(|value| parse_uuid_v7(value, "--board-id"))
             .transpose()?
             .map(|board_id| InboxScope::Board { board_id }),
-        InboxScopeKind::Topic => arguments
-            .topic_id
+        InboxScopeKind::Project => arguments
+            .project_id
             .clone()
-            .map(|value| parse_uuid_v7(value, "--topic-id"))
+            .map(|value| parse_uuid_v7(value, "--project-id"))
             .transpose()?
-            .map(|topic_id| InboxScope::Topic { topic_id }),
+            .map(|project_id| InboxScope::Project { project_id }),
     }
-    .ok_or_else(|| "--scope requires exactly its matching project/board/topic ID".into())
+    .ok_or_else(|| "--scope requires exactly its matching workspace/board/project ID".into())
+}
+
+/// Notification targets are validated at the CLI boundary and rechecked by admission.
+pub(super) fn parse_addressees(values: Vec<String>) -> Result<Vec<NotifyTarget>, String> {
+    values
+        .into_iter()
+        .map(|value| {
+            serde_json::from_str(&value)
+                .map_err(|_| "--addressee must be typed NotifyTarget JSON".to_owned())
+        })
+        .collect()
+}
+
+pub(super) fn read_actor(value: Option<&str>) -> Result<ReadActor, String> {
+    match value {
+        Some(value) => Ok(ReadActor::Identified {
+            reader: parse_identity(value, "--reader")?,
+        }),
+        None => Ok(ReadActor::Anonymous {}),
+    }
+}
+
+pub(super) fn parse_thread_subject(value: &str) -> Result<ThreadSubject, String> {
+    let (kind, value) = value.split_once(':').ok_or(
+        "--about requires project:<line>, workstream:<id>, task:<id>, row:<id>, or adr:<id>",
+    )?;
+    Ok(match kind {
+        "project" => ThreadSubject::Project {
+            line: SubjectLine::try_from(value.to_owned()).map_err(|error| error.to_string())?,
+        },
+        "workstream" => ThreadSubject::Workstream(parse_uuid_v7(value.to_owned(), "--about")?),
+        "task" => ThreadSubject::Task(parse_uuid_v7(value.to_owned(), "--about")?),
+        "row" => ThreadSubject::WorkTrailRow(parse_uuid_v7(value.to_owned(), "--about")?),
+        "adr" => ThreadSubject::WorkspaceAdr(parse_uuid_v7(value.to_owned(), "--about")?),
+        _ => return Err("--about requires project, workstream, task, row, or adr".into()),
+    })
 }

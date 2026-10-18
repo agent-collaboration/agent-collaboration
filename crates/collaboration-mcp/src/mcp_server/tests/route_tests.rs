@@ -145,7 +145,7 @@ async fn direct_message_tools_store_show_list_and_reply_through_the_application(
     let (server, owner) = message_server(temporary.path()).await;
     let target = fixture_session("claude-local", "target-session");
     let sender = fixture_session("codex-local", "reported-sender");
-    let request: collaboration_client::MessageSendRequest =
+    let request: super::super::message_tools::UndecodedMessageSend =
         serde_json::from_value(serde_json::json!({
             "target":target,
             "message":{"kind":"agent","sender":sender,"text":"reporting identity"},
@@ -241,7 +241,7 @@ async fn router_show_by_an_unrelated_session_is_a_typed_not_permitted_error() {
     // Arrange
     let temporary = tempfile::tempdir().expect("temporary directory");
     let (server, owner) = message_server(temporary.path()).await;
-    let request: collaboration_client::MessageSendRequest =
+    let request: super::super::message_tools::UndecodedMessageSend =
         serde_json::from_value(serde_json::json!({
             "target":fixture_session("claude-local", "target-session"),
             "message":{"kind":"agent","sender":fixture_session("codex-local", "sender"),"text":"private"},
@@ -493,6 +493,7 @@ fn message_send_post_submission_failure_matches_advertised_output_schema() {
     }))
     .expect("target");
     let stored_but_unknown = collaboration_service::collaboration_application::MessageFailure {
+        existing: None,
         kind: collaboration_service::collaboration_application::MessageFailureKind::OutcomeUnknown,
         stage: collaboration_service::collaboration_application::MessageFailureStage::Store,
         message: "The message was stored; whether it was delivered is unknown.".to_owned(),
@@ -553,10 +554,10 @@ fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
     let filter: collaboration_protocol::ThreadSubscriptionWaitFilter =
         serde_json::from_value(serde_json::json!({
             "kind":"roots",
-            "rootMessageIds":["019f0000-0000-7000-8000-000000000005"]
+            "threads":[{"thread":"019f0000-0000-7000-8000-000000000005"}]
         }))
         .expect("thread-root wait filter");
-    let tool_result = super::super::thread_wait_outcome_unknown(&actor, &filter);
+    let tool_result = super::super::thread_wait_outcome_unknown(&actor, &filter, &[]);
     assert_eq!(tool_result.is_error, Some(true));
     let structured = tool_result
         .structured_content
@@ -579,8 +580,8 @@ fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
         "activity may have been handed off",
         "subscriptions",
         "unread inbox",
-        "board thread subscriptions",
-        "board inbox fetch",
+        "thread subscriptions",
+        "inbox fetch",
     ] {
         assert!(message.contains(phrase), "{message}");
     }
@@ -589,7 +590,7 @@ fn thread_wait_unknown_outcome_retains_inspection_identity_and_guidance() {
     let schema = server
         .resolved_tools()
         .into_iter()
-        .find(|tool| tool.name == "board_thread_wait")
+        .find(|tool| tool.name == "thread_wait")
         .and_then(|tool| tool.output_schema)
         .expect("advertised board_thread_wait output schema");
     let schema = Value::Object((*schema).clone());
@@ -658,7 +659,7 @@ async fn message_rejections_before_submission_have_no_effect_and_keep_service_de
         "endpoint":{"serviceId":"00000000-0000-4000-8000-0000000000ff","endpointId":"codex-local"},
         "sessionId":"elsewhere"
     });
-    let send: collaboration_client::MessageSendRequest =
+    let send: super::super::message_tools::UndecodedMessageSend =
         serde_json::from_value(serde_json::json!({
             "target":foreign_target,
             "message":{"kind":"humanUser","text":"wrong Router"},
@@ -698,6 +699,7 @@ fn a_message_stored_without_a_known_delivery_names_its_target_with_unknown_effec
     let target: collaboration_protocol::SessionRef =
         serde_json::from_value(fixture_session("codex-local", "message-thread")).expect("target");
     let stored_but_unknown = collaboration_service::collaboration_application::MessageFailure {
+        existing: None,
         kind: collaboration_service::collaboration_application::MessageFailureKind::OutcomeUnknown,
         stage: collaboration_service::collaboration_application::MessageFailureStage::Store,
         message: "The message was stored; whether it was delivered is unknown.".to_owned(),

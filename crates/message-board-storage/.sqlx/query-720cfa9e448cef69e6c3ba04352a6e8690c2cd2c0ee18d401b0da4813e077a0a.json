@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO thread_subscriptions(reader, scope, membership_kind, membership_id, thread_id) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "720cfa9e448cef69e6c3ba04352a6e8690c2cd2c0ee18d401b0da4813e077a0a"
+}

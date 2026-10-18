@@ -169,6 +169,7 @@ async fn insert_content(
     };
     let mailbox_json = serde_json::to_string(&content)?;
     let definition = WakeDefinition {
+        created_by: collaboration_protocol::WakeCreator::Owner {},
         wakeup_id: wakeup_id.clone(),
         change_id: change_id.clone(),
         message: SavedMessage {

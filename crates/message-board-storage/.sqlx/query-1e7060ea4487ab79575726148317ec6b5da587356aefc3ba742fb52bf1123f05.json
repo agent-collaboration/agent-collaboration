@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT reader AS \"reader!: String\", scope AS \"scope!: String\", membership_kind AS \"membership_kind!: String\", membership_id AS \"membership_id!: String\", thread_id AS \"thread_id: String\" FROM thread_subscriptions ORDER BY reader, scope LIMIT 101",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reader!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "scope!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "membership_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "membership_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "thread_id: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1e7060ea4487ab79575726148317ec6b5da587356aefc3ba742fb52bf1123f05"
+}

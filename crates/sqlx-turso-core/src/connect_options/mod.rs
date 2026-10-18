@@ -65,7 +65,7 @@ impl TursoConnectOptions {
         self.0.open_mode == OpenMode::CreateIfMissing
     }
 
-    /// Returns the busy timeout applied to each connection
+    /// Returns the driver's maximum lock-wait budget for a statement
     pub fn get_busy_timeout(&self) -> Duration {
         self.0.busy_timeout
     }
@@ -111,7 +111,7 @@ impl TursoConnectOptions {
         self
     }
 
-    /// Sets the busy timeout applied to each connection
+    /// Sets the driver's maximum lock-wait budget for a statement
     pub fn busy_timeout(mut self, busy_timeout: Duration) -> Self {
         Arc::make_mut(&mut self.0).busy_timeout = busy_timeout;
         self

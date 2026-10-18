@@ -24,6 +24,8 @@ async fn skipped_one_shot_cli_wait_reports_no_firing() -> Result<(), Box<dyn std
     let operation_id = OperationId::generate();
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: operation_id.clone(),
             message,
             timing: agent_automation::TimingRule::After { seconds: 1 },

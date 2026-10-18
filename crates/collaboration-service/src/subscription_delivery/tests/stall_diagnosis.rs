@@ -4,12 +4,9 @@ use sqlx::Connection;
 use std::sync::Arc;
 
 #[tokio::test(start_paused = true)]
-async fn timeout_free_original_elapsed_clock_reaches_due_selection_and_prepared_delivery() {
+async fn runtime_timer_clock_reaches_due_selection_and_prepared_delivery() {
     let fixture = OwnerFixture::new().await;
-    let clock = Arc::new(ElapsedClock {
-        wall_start: fixture.clock.now(),
-        monotonic_start: tokio::time::Instant::now(),
-    });
+    let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
     let runtime = fixture.runtime_with_clock(clock.clone()).await;
     fixture
         .post_at(&fixture.root, "Timeout-free original clock", clock.now())
@@ -48,9 +45,16 @@ async fn timeout_free_original_elapsed_clock_reaches_due_selection_and_prepared_
 async fn virtual_timeout_can_expire_while_a_real_sqlite_due_query_remains_in_progress() {
     let fixture = OwnerFixture::new().await;
     fixture.post(&fixture.root, "Due before query").await;
+    fixture
+        .store
+        .lock()
+        .await
+        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+        .await
+        .unwrap();
     let mut blocker = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("board.sqlite")),
+            .filename(fixture.directory.path().join("automation.sqlite")),
     )
     .await
     .unwrap();
@@ -63,7 +67,7 @@ async fn virtual_timeout_can_expire_while_a_real_sqlite_due_query_remains_in_pro
     let now = fixture.clock.now();
     let (started, started_receiver) = tokio::sync::oneshot::channel();
     let mut query = tokio::spawn(async move {
-        let mut store = store.lock().await;
+        let store = store.lock().await;
         started.send(()).unwrap();
         store.due_subscription_roots(&reader, now).await
     });

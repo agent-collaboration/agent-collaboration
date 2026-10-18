@@ -35,7 +35,7 @@ pub(crate) async fn verify_subscription_notice(
         || !shown
             .activity_ranges
             .iter()
-            .flat_map(|range| &range.messages)
+            .flat_map(|range| &range.posts)
             .any(|message| message.text.as_str() == body_marker)
     {
         return Err("Subscription link did not expand the target's posted activity".into());

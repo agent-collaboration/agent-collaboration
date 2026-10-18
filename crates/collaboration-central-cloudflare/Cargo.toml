@@ -1,0 +1,61 @@
+[package]
+name = "collaboration-central-cloudflare"
+version = "0.1.93"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+conformance = ["dep:collaboration-central-conformance", "collaboration-central-core/conformance"]
+conformance-faults = ["conformance"]
+
+[dependencies]
+collaboration-central-core = { path = "../collaboration-central-core" }
+collaboration-replication-protocol = { path = "../collaboration-replication-protocol" }
+collaboration-central-conformance = { path = "../collaboration-central-conformance", default-features = false, optional = true }
+worker = "=0.8.7"
+worker-sys = "=0.8.7"
+worker-macros = "=0.8.7"
+chrono = { version = "=0.4.45", features = ["serde"] }
+futures-util = "0.3.34"
+futures-channel = "0.3.34"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.150"
+serde-wasm-bindgen = "0.6.5"
+sha2 = "0.10.9"
+thiserror = "2.0.18"
+uuid = { version = "=1.26.0", features = ["v7", "js"] }
+web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "SubtleCrypto", "CryptoKey"] }
+js-sys = "=0.3.106"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+manual_ok_or = "deny"
+manual_unwrap_or = "deny"
+needless_collect = "deny"
+panic = "deny"
+panic_in_result_fn = "deny"
+redundant_clone = "deny"
+string_slice = "deny"
+todo = "deny"
+uninlined_format_args = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+
+
+[profile.release]
+lto = true
+opt-level = "s"
+codegen-units = 1

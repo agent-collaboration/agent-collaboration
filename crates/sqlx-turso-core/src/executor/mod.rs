@@ -26,7 +26,8 @@ use self::{
 };
 use crate::{
     Turso, TursoAdapterError, TursoArguments, TursoColumn, TursoConnection, TursoQueryResult,
-    TursoRow, TursoStatement, column::collect_column_names, error::map_turso_error,
+    TursoRow, TursoStatement, busy_wait::BusyWait, column::collect_column_names,
+    error::map_turso_error,
 };
 
 type QueryOutputStream = BoxStream<'static, Result<Either<TursoQueryResult, TursoRow>, Error>>;
@@ -53,10 +54,22 @@ impl TursoConnection {
             // comparison sees. Forgetting before it starts also covers a batch that fails or is
             // dropped part-way.
             self.forget_cached_statements();
-            self.raw()
-                .execute_batch(sql.as_str())
-                .await
-                .map_err(map_turso_error)?;
+            let mut parser = turso_parser::parser::Parser::new(sql.as_str().as_bytes());
+            let mut start = 0;
+            while parser
+                .next_cmd()
+                .map_err(|error| map_turso_error(turso::Error::Error(error.to_string())))?
+                .is_some()
+            {
+                let end = parser.offset();
+                let statement = sql.as_str().get(start..end).ok_or_else(|| {
+                    Error::Protocol(
+                        "Turso parser returned an invalid statement boundary".to_owned(),
+                    )
+                })?;
+                self.execute_raw_statement(statement).await?;
+                start = end;
+            }
             drop(logger);
             let batch_result: Either<TursoQueryResult, TursoRow> =
                 Either::Left(TursoQueryResult::default());
@@ -87,6 +100,7 @@ impl TursoConnection {
                 columns,
                 column_names,
                 logger,
+                busy_wait: BusyWait::new(self.options().get_busy_timeout()),
             })),
             RowStreamState::next,
         )
@@ -100,11 +114,7 @@ impl TursoConnection {
             return Ok(statement);
         }
 
-        let statement = self
-            .raw()
-            .prepare(sql.as_str())
-            .await
-            .map_err(map_turso_error)?;
+        let statement = self.prepare_raw_statement(sql.as_str()).await?;
         let statement = TursoStatement::with_raw(
             sql.as_str().to_owned(),
             turso_columns(statement.columns()),
@@ -130,10 +140,7 @@ impl TursoConnection {
                 .await?;
         }
 
-        self.raw()
-            .prepare(sql.as_str())
-            .await
-            .map_err(map_turso_error)
+        self.prepare_raw_statement(sql.as_str()).await
     }
 }
 

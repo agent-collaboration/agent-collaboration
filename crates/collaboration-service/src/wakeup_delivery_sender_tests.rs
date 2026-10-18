@@ -67,6 +67,8 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::After { seconds: 1 },

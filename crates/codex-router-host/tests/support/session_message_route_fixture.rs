@@ -8,10 +8,11 @@ use collaboration_protocol::{
     RouterAccess, SessionId, SessionRef, ThreadSubscribeRequest, WakeSendRequest, WakeShowRequest,
 };
 use message_board::{
-    BoardCreateRequest, BoardId, Description, HumanId, Identity, MessageId, MessagePostRequest,
-    MessageReferences, ParticipantRole, Placement, ProjectCreateRequest, ProjectId, ResourceName,
-    SubscriptionMode, SubscriptionPolicyPatch, SubscriptionScope, SubscriptionTimingPatch,
-    ThreadJoinRequest, TopicCreateRequest, TopicId,
+    BoardCreateRequest, BoardId, BoardKind, Description, EpochNumber, HumanId, Identity,
+    ParticipantRole, PostId, PostReferences, PostText, ProjectCreateRequest, ProjectId,
+    ProtocolVersion, RequestDecision, RequestId, RequestResult, ResourceName, SubscriptionMode,
+    SubscriptionPolicyPatch, SubscriptionScope, SubscriptionTimingPatch, ThreadId,
+    ThreadJoinRequest, ThreadPostRequest, WorkspaceCreateRequest, WorkspaceId, WriteReply,
 };
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
@@ -60,6 +61,7 @@ for line in sys.stdin:
 
 pub(super) fn message(target: SessionRef) -> MessageSendRequest {
     MessageSendRequest {
+        item_id: None,
         target,
         message: PublicMessageContent::HumanUser {
             text: MessageText::try_from("routed message".to_owned()).expect("message"),
@@ -149,99 +151,157 @@ pub(super) async fn post_thread_activity_for_sessions(
     let owner = Identity::Human {
         human_id: HumanId::try_from("route-test-owner".to_owned()).expect("owner"),
     };
-    let project_id = ProjectId::generate();
-    let board_id = BoardId::generate();
-    let topic_id = TopicId::generate();
-    client
-        .board_project_create(ProjectCreateRequest {
-            project_id: project_id.clone(),
-            name: ResourceName::try_from("Route project".to_owned()).expect("project"),
-            description: Description::try_from(String::new()).expect("description"),
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await
-        .expect("project");
-    client
-        .board_create(BoardCreateRequest {
-            board_id: board_id.clone(),
-            project_id,
-            name: ResourceName::try_from("Route board".to_owned()).expect("board"),
-            description: Description::try_from(String::new()).expect("description"),
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await
-        .expect("board");
-    client
-        .board_topic_create(TopicCreateRequest {
-            topic_id: topic_id.clone(),
-            board_id,
-            name: ResourceName::try_from("Route topic".to_owned()).expect("topic"),
-            description: Description::try_from(String::new()).expect("description"),
-            actor: owner.clone(),
-            acting_for: None,
-        })
-        .await
-        .expect("topic");
-    let root = client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Topic { topic_id },
-            actor: owner.clone(),
-            acting_for: None,
-            text: message_board::MessageText::try_from("Route root".to_owned()).expect("root text"),
-            references: MessageReferences::try_from(Vec::new()).expect("references"),
-        })
-        .await
-        .expect("root post");
-    let root_message_id = root.message.message_id;
-    for target in readers {
-        let reader: Identity = serde_json::from_value(json!({
-            "kind":"session", "session": target
-        }))
-        .expect("session reader");
-        client
-            .board_thread_join(ThreadJoinRequest {
-                mode: None,
-                when_idle: None,
-                root_message_id: root_message_id.clone(),
-                actor: reader.clone(),
-                role: ParticipantRole::Participant,
-                watch: true,
-                replace: None,
-                note: None,
+    let workspace = WorkspaceId::generate();
+    let board = BoardId::generate();
+    let project = ProjectId::generate();
+    assert_board_accepted(
+        &client
+            .workspace_create(WorkspaceCreateRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                resubmits: None,
+                workspace_id: workspace.clone(),
+                name: ResourceName::try_from("Route workspace".to_owned()).expect("workspace"),
+                description: Description::try_from(String::new()).expect("description"),
+                actor: owner.clone(),
+                acting_for: None,
             })
             .await
-            .expect("reader joined");
-        client
-            .board_thread_subscribe(ThreadSubscribeRequest {
-                actor: reader,
-                scope: SubscriptionScope::thread(root_message_id.clone()),
-                policy: SubscriptionPolicyPatch {
-                    mode: Some(SubscriptionMode::Deliver),
-                    timing: SubscriptionTimingPatch {
-                        quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
-                    },
-                    ..SubscriptionPolicyPatch::default()
+            .expect("workspace"),
+    );
+    assert_board_accepted(
+        &client
+            .board_create(BoardCreateRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                resubmits: None,
+                board_id: board.clone(),
+                workspace_id: workspace,
+                name: ResourceName::try_from("Route board".to_owned()).expect("board"),
+                description: Description::try_from(String::new()).expect("description"),
+                kind: BoardKind::Area {},
+                actor: owner.clone(),
+                acting_for: None,
+            })
+            .await
+            .expect("board"),
+    );
+    assert_board_accepted(
+        &client
+            .project_create(ProjectCreateRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                resubmits: None,
+                project_id: project.clone(),
+                board_id: board,
+                title: ResourceName::try_from("Route project".to_owned()).expect("project"),
+                actor: owner.clone(),
+                acting_for: None,
+            })
+            .await
+            .expect("project"),
+    );
+    assert_board_accepted(&client.role_grant(serde_json::from_value(json!({"requestId":RequestId::generate(),"protocolVersion":1,"resubmits":null,"observedEpoch":1,"actor":owner,"actingFor":null,"projectId":project,"operation":{"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"lead","holder":owner,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}})).expect("role request")).await.expect("route lead"));
+    let root = PostId::generate();
+    let thread = ThreadId::from(root.clone());
+    assert_board_accepted(
+        &client
+            .thread_create(message_board::ThreadCreateRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                resubmits: None,
+                observed_epoch: Some(EpochNumber::try_from(1).expect("epoch")),
+                post_id: root,
+                project_id: project,
+                about: message_board::ThreadSubject::Project {
+                    line: "Route discussion".to_owned().try_into().expect("subject"),
                 },
+                role: None,
+                watch: false,
+                actor: owner.clone(),
+                acting_for: None,
+                text: PostText::try_from("Route root".to_owned()).expect("root text"),
+                references: PostReferences::try_from(Vec::new()).expect("references"),
+                addressees: Vec::new(),
             })
             .await
-            .expect("session subscription");
+            .expect("root post"),
+    );
+    for target in readers {
+        let reader: Identity = serde_json::from_value(json!({"kind":"session", "session": target}))
+            .expect("session reader");
+        assert_board_accepted(
+            &client
+                .thread_join(ThreadJoinRequest {
+                    request_id: RequestId::generate(),
+                    protocol_version: ProtocolVersion::CURRENT,
+                    resubmits: None,
+                    observed_epoch: Some(EpochNumber::try_from(1).expect("epoch")),
+                    thread: (thread.clone()).into(),
+                    actor: reader.clone(),
+                    role: ParticipantRole::Participant,
+                    watch: true,
+                    mode: None,
+                    when_idle: None,
+                    replace: None,
+                    note: None,
+                })
+                .await
+                .expect("reader joined"),
+        );
+        assert_board_accepted(
+            &client
+                .thread_subscribe(ThreadSubscribeRequest {
+                    request_id: RequestId::generate(),
+                    protocol_version: ProtocolVersion::CURRENT,
+                    resubmits: None,
+                    observed_epoch: Some(EpochNumber::try_from(1).expect("epoch")),
+                    actor: reader,
+                    acting_for: None,
+                    scope: SubscriptionScope::thread(thread.clone()).into(),
+                    policy: SubscriptionPolicyPatch {
+                        mode: Some(SubscriptionMode::Deliver),
+                        timing: SubscriptionTimingPatch {
+                            quiet_seconds: Some(0),
+                            cap_seconds: Some(0),
+                        },
+                        ..SubscriptionPolicyPatch::default()
+                    },
+                })
+                .await
+                .expect("session subscription"),
+        );
     }
-    client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread { root_message_id },
-            actor: owner,
-            acting_for: None,
-            text: message_board::MessageText::try_from("Route reply".to_owned())
-                .expect("reply text"),
-            references: MessageReferences::try_from(Vec::new()).expect("references"),
-        })
-        .await
-        .expect("reply post");
+    assert_board_accepted(
+        &client
+            .thread_post(ThreadPostRequest {
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                resubmits: None,
+                observed_epoch: Some(EpochNumber::try_from(1).expect("epoch")),
+                post_id: PostId::generate(),
+                placement: message_board::PostTarget::Thread {
+                    thread: thread.into(),
+                },
+                actor: owner,
+                acting_for: None,
+                text: PostText::try_from("Route reply".to_owned()).expect("reply text"),
+                references: PostReferences::try_from(Vec::new()).expect("references"),
+                addressees: Vec::new(),
+            })
+            .await
+            .expect("reply post"),
+    );
+}
+
+fn assert_board_accepted(reply: &WriteReply) {
+    assert!(
+        matches!(
+            reply.result,
+            RequestResult::Decided(RequestDecision::Accepted { .. })
+        ),
+        "board fixture refused: {reply:?}"
+    );
 }
 
 pub(super) fn publish_peer(registry: &Path, session_id: &SessionId, protocol: u64, socket: &Path) {
@@ -395,6 +455,7 @@ pub(super) async fn load_provider_target(
 }
 
 pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: SessionRef) {
+    // Omitted expiry ends a day after due; a fixed historical date is already expired.
     let request: WakeSendRequest = serde_json::from_value(json!({
         "operationId": OperationId::generate(),
         "message": {
@@ -403,8 +464,8 @@ pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: Ses
             "delivery": "auto",
             "generationGuard": null
         },
-        "timing": {"kind":"at","at":"2026-01-01T00:00:00.000Z"},
-        "expiry": {"kind":"none"}
+        "timing": {"kind":"at","at":chrono::Utc::now()},
+        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind":"none"}
     }))
     .expect("wake request");
     let wake = client.send_wakeup(request).await.expect("wake accepted");

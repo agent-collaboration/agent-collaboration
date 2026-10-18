@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT s.reader AS \"reader!: String\", s.scope AS \"scope!: String\", s.membership_kind AS \"membership_kind!: String\", s.membership_id AS \"membership_id!: String\", json_quote(json_extract(r.payload, '$.record.ended')) AS \"ended!: String\" FROM thread_subscriptions s LEFT JOIN record_identities r ON r.kind = s.membership_kind AND r.id = s.membership_id WHERE s.thread_id = ? ORDER BY s.membership_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reader!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "scope!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "membership_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "membership_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "ended!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "54e767ea1c80a941bb9dd960f8357bc3926977db5e8c82a99b04f9b955aa8458"
+}

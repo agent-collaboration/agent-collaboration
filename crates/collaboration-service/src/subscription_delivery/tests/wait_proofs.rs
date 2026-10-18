@@ -15,12 +15,12 @@ async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
     let runtime = fixture.runtime().await;
     let first_service = runtime.service.clone();
     let first_reader = fixture.reader.clone();
-    let topic = fixture.topic.clone();
+    let topic = fixture.project.clone();
     let first = tokio::spawn(async move {
         first_service
             .wait(
                 first_reader,
-                SubscriptionWaitFilter::Topic(topic),
+                SubscriptionWaitFilter::Project(topic),
                 60,
                 usize::MAX,
             )
@@ -53,10 +53,7 @@ async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
         panic!("session notice");
     };
     assert!(line.as_str().starts_with("🧵 Router: new thread activity"));
-    assert_eq!(
-        first_batch.roots[0].through_sequence,
-        first_post.message.activity_sequence
-    );
+    assert_eq!(first_batch.roots[0].through, first_post);
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
@@ -71,10 +68,7 @@ async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
         panic!("session notice");
     };
     assert_ne!(first_id, second_id);
-    assert_eq!(
-        second_batch.roots[0].from_sequence,
-        second_post.message.activity_sequence
-    );
+    assert_eq!(second_batch.roots[0].from, second_post);
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
@@ -90,13 +84,16 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
         .await;
     let reader = human("human-poll-reader");
     {
-        let mut store = fixture.store.lock().await;
-        store
-            .join_thread(
+        fixture
+            .join_request(
                 ThreadJoinRequest {
+                    request_id: message_board::RequestId::generate(),
+                    protocol_version: message_board::ProtocolVersion::CURRENT,
+                    observed_epoch: None,
+                    resubmits: None,
                     mode: None,
                     when_idle: None,
-                    root_message_id: fixture.root.clone(),
+                    thread: (fixture.root.clone()).into(),
                     actor: reader.clone(),
                     role: ParticipantRole::Participant,
                     watch: true,
@@ -107,8 +104,8 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
             )
             .await
             .unwrap();
-        store
-            .subscribe_thread_subscription(
+        fixture
+            .subscribe(
                 ThreadSubscriptionSubscribeRequest {
                     reader: reader.clone(),
                     scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -145,7 +142,7 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
     let SubscriptionWaitResult::Ranges { batch } = waiter.await.unwrap() else {
         panic!("human gets ranges");
     };
-    assert_eq!(batch.roots[0].message_count, 1);
+    assert_eq!(batch.roots[0].post_count, 1);
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
@@ -200,9 +197,9 @@ async fn poll_wait_timeout_is_empty_and_non_poll_wait_is_rejected() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::WaitQueued))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(59).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(!waiter.is_finished());
     fixture.clock.advance(1).await;
     assert!(waiter.await.unwrap().is_none());
@@ -213,7 +210,7 @@ async fn poll_wait_timeout_is_empty_and_non_poll_wait_is_rejected() {
 async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
     let fixture = OwnerFixture::new().await;
     let runtime = fixture.runtime().await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     let mut events = runtime.service.observe_owners();
     drop(runtime);
     loop {
@@ -228,7 +225,8 @@ async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
             .await
             .get_thread_subscription_record(
                 &fixture.reader,
-                &SubscriptionScope::thread(fixture.root.clone())
+                &SubscriptionScope::thread(fixture.root.clone()),
+                fixture.clock.now()
             )
             .await
             .unwrap()
@@ -253,9 +251,9 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
     fixture.post(&later_root, "Later pending root").await;
     let oldest_notice = PendingRootNotice::new(
         oldest_root.clone(),
-        fixture.topic.clone(),
-        oldest_post.message.activity_sequence,
-        oldest_post.message.activity_sequence,
+        fixture.project.clone(),
+        oldest_post,
+        oldest_post,
         1,
     )
     .unwrap();
@@ -285,7 +283,7 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
         panic!("session wait returns a stored notice");
     };
     assert_eq!(first_batch.roots.len(), 1);
-    assert_eq!(first_batch.roots[0].root_id, oldest_root);
+    assert_eq!(first_batch.roots[0].thread_id, oldest_root);
     assert!(serde_json::to_vec(&first_batch.roots).unwrap().len() <= maximum_root_notice_bytes);
     tokio::time::timeout(
         Duration::from_secs(30),
@@ -324,7 +322,7 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
         panic!("session wait returns a stored notice");
     };
     assert_eq!(second_batch.roots.len(), 1);
-    assert_eq!(second_batch.roots[0].root_id, later_root);
+    assert_eq!(second_batch.roots[0].thread_id, later_root);
     assert_ne!(first_id, second_id);
     assert!(serde_json::to_vec(&second_batch.roots).unwrap().len() <= maximum_root_notice_bytes);
     tokio::time::timeout(

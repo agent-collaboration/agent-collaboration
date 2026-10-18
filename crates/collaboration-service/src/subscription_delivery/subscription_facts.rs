@@ -1,13 +1,15 @@
+use super::ProjectSubscriptionRecord;
 use chrono::{DateTime, Utc};
-use message_board::{
-    MessageId, SubscriptionMode, SubscriptionScope, ThreadSubscriptionRecord, WhenIdle,
-};
+use message_board::{ProjectId, SubscriptionMode, SubscriptionScope, ThreadId, WhenIdle};
 use std::{collections::HashMap, time::Duration};
 use tokio::time::Instant;
+
+pub(super) const STORAGE_RETRY_INTERVAL: Duration = Duration::from_secs(1);
 
 pub(super) const PRESENCE_INTERVAL: Duration = Duration::from_secs(30);
 
 pub(super) struct RootSubscriptionFacts {
+    pub project: ProjectId,
     pub mode: SubscriptionMode,
     pub when_idle: WhenIdle,
     pub quiet_seconds: u64,
@@ -20,23 +22,25 @@ pub(super) struct RootSubscriptionFacts {
 }
 
 pub(super) fn root_facts(
-    records: &[ThreadSubscriptionRecord],
-) -> HashMap<MessageId, RootSubscriptionFacts> {
+    records: &[ProjectSubscriptionRecord],
+) -> HashMap<ThreadId, RootSubscriptionFacts> {
     let mut facts = HashMap::new();
     // Storage excludes shadowed Topic roots; a Thread record still takes precedence here.
-    for record in records
-        .iter()
-        .filter(|record| matches!(record.scope(), SubscriptionScope::Thread { .. }))
-        .chain(
-            records
-                .iter()
-                .filter(|record| matches!(record.scope(), SubscriptionScope::Topic { .. })),
-        )
+    for record in
+        records
+            .iter()
+            .filter(|record| matches!(record.record.scope(), SubscriptionScope::Thread { .. }))
+            .chain(records.iter().filter(|record| {
+                matches!(record.record.scope(), SubscriptionScope::Project { .. })
+            }))
     {
+        let project = record.project.clone();
+        let record = &record.record;
         for root in record.roots() {
             facts
-                .entry(root.root_message_id().clone())
+                .entry(root.thread_id().clone())
                 .or_insert_with(|| RootSubscriptionFacts {
+                    project: project.clone(),
                     mode: record.policy().mode(),
                     when_idle: record.policy().when_idle(),
                     quiet_seconds: record.policy().timing().quiet_seconds(),

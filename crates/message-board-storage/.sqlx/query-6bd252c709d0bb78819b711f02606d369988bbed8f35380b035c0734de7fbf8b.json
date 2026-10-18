@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO work_trail_rows(row_id, redacted) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "6bd252c709d0bb78819b711f02606d369988bbed8f35380b035c0734de7fbf8b"
+}

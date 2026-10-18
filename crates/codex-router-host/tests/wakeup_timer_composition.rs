@@ -24,8 +24,9 @@ async fn host_records_firing_without_native_backend_acceptance()
     })
     .await?;
     let client = CollaborationClient::connect(&root, "wake-timer-test", "1").await?;
+    // Omitted expiry ends a day after due; a fixed historical date is already expired.
     let request: WakeSendRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},"sessionId":"fixture-only-new-thread"},"content":{"kind":"humanUser","text":"Check"},"delivery":"auto","generationGuard":null},"timing":{"kind":"at","at":"2026-01-01T00:00:00.000Z"},"expiry":{"kind":"none"}}),
+        json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},"sessionId":"fixture-only-new-thread"},"content":{"kind":"humanUser","text":"Check"},"delivery":"auto","generationGuard":null},"timing":{"kind":"at","at":chrono::Utc::now()},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
     )?;
     let created = client.send_wakeup(request).await?;
     let id = created.definition.wakeup_id;

@@ -123,7 +123,7 @@ fn advertised_tool_output_schemas_have_object_roots() {
 #[test]
 fn described_success_types_keep_their_output_root_description() {
     let server = CollaborationMcpServer::catalog_only();
-    for name in ["board_message_show", "board_thread_show"] {
+    for name in ["post_show", "thread_show"] {
         let schema = server
             .resolved_tools()
             .into_iter()
@@ -262,37 +262,36 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         .into_iter()
         .filter_map(|tool| tool.output_schema.map(|schema| (tool.name, schema)))
         .collect::<std::collections::BTreeMap<_, _>>();
-    assert_eq!(advertised.len(), 107);
+    assert_eq!(advertised.len(), 170);
 
+    let position = serde_json::json!({"kind":"project","position":{"epoch":1,"position":1}});
     let message = serde_json::json!({
-        "messageId":"019f0000-0000-7000-8000-000000000001",
+        "postId":"019f0000-0000-7000-8000-000000000001",
         "boardId":"019f0000-0000-7000-8000-000000000002",
-        "topicId":"019f0000-0000-7000-8000-000000000003",
-        "placement":{"kind":"topic","topicId":"019f0000-0000-7000-8000-000000000003"},
-        "actor":{"kind":"human","humanId":"schema-test"},
-        "actingFor":null,
-        "text":"schema test",
-        "references":[],
-        "activitySequence":1
+        "projectId":"019f0000-0000-7000-8000-000000000003",
+        "placement":{"kind":"thread","threadId":"019f0000-0000-7000-8000-000000000001"},
+        "actor":{"kind":"human","humanId":"schema-test"},"actingFor":null,
+        "text":"schema test","references":[],"position":position,
+        "envelope":{"id":"019f0000-0000-7000-8000-000000000001",
+            "scope":{"workspace":"019f0000-0000-7000-8000-000000000007",
+                "board":"019f0000-0000-7000-8000-000000000002","project":"019f0000-0000-7000-8000-000000000003"},
+            "actor":{"actor":{"kind":"declared","identity":{"kind":"human","humanId":"schema-test"}},
+                "installation":"00000000-0000-4000-8000-000000000001","machine":"schema-test"},
+            "request":null,"position":position,"routerTime":"2026-10-12T00:00:00Z"}
     });
     let pending_root = serde_json::json!({
-        "rootId":"019f0000-0000-7000-8000-000000000006",
-        "topicId":"019f0000-0000-7000-8000-000000000007",
-        "fromSequence":1,"throughSequence":1,"messageCount":1
+        "threadId":"019f0000-0000-7000-8000-000000000006",
+        "projectId":"019f0000-0000-7000-8000-000000000007",
+        "from":{"epoch":1,"position":1},"through":{"epoch":1,"position":1},"postCount":1
     });
-    let wait_notice = serde_json::json!({
-        "batch":{
-            "kind":"notice","pushId":"019f0000-0000-7000-8000-000000000004",
-            "line":"🧵 Router: new thread activity @fixture · 1 thread · 1 message · router://fixture/push/019f0000-0000-7000-8000-000000000004",
-            "held":false,"draining":false,"roots":[pending_root]
-        }
-    });
-    let wait_ranges = serde_json::json!({
-        "batch":{
-            "kind":"ranges","held":true,"heldSince":"2026-10-01T00:00:00Z",
-            "draining":false,"roots":[pending_root]
-        }
-    });
+    let wait_notice = serde_json::json!({"renewals":[],"outcome":{"kind":"batch","batch":{
+        "kind":"notice","pushId":"019f0000-0000-7000-8000-000000000004",
+        "line":"🧵 Router: new thread activity @fixture · 1 thread · 1 message · router://fixture/push/019f0000-0000-7000-8000-000000000004",
+        "held":false,"draining":false,"roots":[pending_root]
+    }}});
+    let wait_ranges = serde_json::json!({"renewals":[],"outcome":{"kind":"batch","batch":{
+        "kind":"ranges","held":true,"heldSince":"2026-10-01T00:00:00Z","draining":false,"roots":[pending_root]
+    }}});
     let provider_endpoint = serde_json::json!({
         "serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"
     });
@@ -318,30 +317,28 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
     let mut close_operation = provider_operation.clone();
     close_operation["operation"] = serde_json::json!("conversationClose");
     let active_subscription = serde_json::json!({
-        "scope":{"kind":"thread","rootMessageId":"019f0000-0000-7000-8000-000000000005"},
+        "projectId":"019f0000-0000-7000-8000-000000000007",
+        "scope":{"kind":"thread","threadId":"019f0000-0000-7000-8000-000000000005"},
         "policy":{"mode":"deliver","whenIdle":"hold",
             "timing":{"quietSeconds":120,"capSeconds":600},"lifetime":86400},
         "state":"active","expiresAt":"2026-09-28T00:00:00Z","pendingCount":0,
         "presence":{"kind":"running"}
     });
-    let ended_subscription = serde_json::json!({
-        "scope":{"kind":"thread","rootMessageId":"019f0000-0000-7000-8000-000000000005"},
-        "policy":{"mode":"deliver","whenIdle":"hold",
-            "timing":{"quietSeconds":120,"capSeconds":600},"lifetime":86400},
-        "state":"ended","endReason":{"kind":"cancelled"},
-        "expiresAt":"2026-09-28T00:00:00Z","pendingCount":0,
-        "presence":{"kind":"running"}
-    });
+    let recorded_write = serde_json::json!({"result":{"kind":"decided","decision":{
+        "kind":"accepted","records":[],"positions":[],"change":"alreadySo"}},"reader":null});
     let valid_instances = std::collections::BTreeMap::from([
         ("approval_list", serde_json::json!({"approvals":[]})),
-        ("board_message_show", message),
-        ("board_thread_subscribe", active_subscription.clone()),
-        ("board_thread_unsubscribe", ended_subscription),
+        ("post_show", message),
+        ("thread_subscribe", recorded_write.clone()),
+        ("thread_unsubscribe", recorded_write),
         (
-            "board_thread_subscriptions",
-            serde_json::json!({"subscriptions":[active_subscription]}),
+            "thread_subscriptions",
+            serde_json::json!({"subscriptions":[active_subscription],"unavailable":[]}),
         ),
-        ("board_thread_wait", serde_json::json!({"batch":null})),
+        (
+            "thread_wait",
+            serde_json::json!({"renewals":[],"outcome":{"kind":"timedOut"}}),
+        ),
         (
             "conversation_create",
             serde_json::json!({"kind":"pending","operationId":OperationId::generate()}),
@@ -448,7 +445,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
                     panic!("success result narrowed for {name}: {error}; {valid}")
                 });
         }
-        if name.as_ref() == "board_thread_wait" {
+        if name.as_ref() == "thread_wait" {
             for valid in [&wait_notice, &wait_ranges] {
                 advertised_validator
                     .validate(valid)

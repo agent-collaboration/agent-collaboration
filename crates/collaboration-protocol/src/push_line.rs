@@ -190,6 +190,7 @@ pub enum PushKind {
     Question,
     SubscriptionActivity,
     SubscriptionExpiry,
+    BoardNotification,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -208,6 +209,12 @@ pub enum PushOrigin {
     deny_unknown_fields
 )]
 pub enum PushHeaderFacts {
+    BoardNotification {
+        project: message_board::ProjectId,
+        intent: message_board::NotifyIntentId,
+        cause: message_board::RecordRef,
+        summary: crate::MessageText,
+    },
     DirectMessage {
         sender_display_name: Option<SessionDisplayName>,
     },
@@ -246,6 +253,7 @@ impl PushHeaderFacts {
             Self::Question { .. } => PushKind::Question,
             Self::SubscriptionActivity { .. } => PushKind::SubscriptionActivity,
             Self::SubscriptionExpiry { .. } => PushKind::SubscriptionExpiry,
+            Self::BoardNotification { .. } => PushKind::BoardNotification,
         }
     }
 }

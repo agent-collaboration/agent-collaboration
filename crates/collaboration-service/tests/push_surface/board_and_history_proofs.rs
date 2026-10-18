@@ -1,3 +1,4 @@
+#![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
 //! Real Control proofs for off-board DMs and retained conversation views.
 use super::*;
 use chrono::{DateTime, Duration, Utc};
@@ -6,13 +7,16 @@ use collaboration_service::{
     AutomationRetentionWorker, BoardAvailability, MachineIdentity, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
 };
-use message_board_storage::BoardStore;
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use collaboration_service::{
+    FleetClient, LocalLeaseAuthority, ProjectAdmission, ProjectAdmissionProps, ProjectStoreRegistry,
+};
+use sqlx::{ConnectOptions, Connection};
 use std::path::PathBuf;
 
 struct BoardControlFixture {
     pushes: Arc<TokioMutex<AutomationStore>>,
     board_path: PathBuf,
+    baseline: message_board::FeedCursor,
     retention: AutomationRetentionWorker,
     control: ControlHarness,
     _directory: tempfile::TempDir,
@@ -21,12 +25,24 @@ struct BoardControlFixture {
 impl BoardControlFixture {
     async fn start() -> Self {
         let directory = tempfile::tempdir().expect("isolated Control databases");
-        let board_path = directory.path().join("board.sqlite");
-        let board = Arc::new(TokioMutex::new(
-            BoardStore::open(&board_path)
-                .await
-                .expect("real board store"),
-        ));
+        let registry = Arc::new(ProjectStoreRegistry::new(directory.path()));
+        let admission = Arc::new(
+            ProjectAdmission::new(ProjectAdmissionProps {
+                registry: registry.clone(),
+                fleet: Arc::new(
+                    FleetClient::open_local_stand_in(directory.path())
+                        .await
+                        .expect("native fleet"),
+                ),
+                leases: Arc::new(LocalLeaseAuthority::default()),
+                identity: MachineIdentity::new(
+                    UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("UUID"),
+                    Some("off-board proof"),
+                )
+                .expect("identity"),
+            })
+            .expect("admission"),
+        );
         let pushes = Arc::new(TokioMutex::new(
             AutomationStore::open(&directory.path().join("automation.sqlite"))
                 .await
@@ -35,7 +51,9 @@ impl BoardControlFixture {
         let delivery = Arc::new(RecordingDelivery::new(Arc::clone(&pushes)));
         let presence = Arc::new(RunningPresence);
         let owner = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Available(Arc::clone(&board)),
+            board_availability: BoardAvailability::Available(Arc::new(TokioMutex::new(
+                admission.subscription_window_store(pushes.clone()),
+            ))),
             push_store: Arc::clone(&pushes),
             delivery: delivery.clone(),
             presence: presence.clone(),
@@ -49,7 +67,7 @@ impl BoardControlFixture {
         owner.start().await.expect("real reader owner starts");
         let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
             .expect("service identity")
-            .with_board_store(board)
+            .with_project_admission(admission)
             .with_automation_store(Arc::clone(&pushes))
             .with_session_delivery(delivery)
             .with_subscription_delivery_service(owner.clone(), presence);
@@ -58,9 +76,65 @@ impl BoardControlFixture {
             .expect("real retention worker");
         let mut control = ControlHarness::start(identity).await;
         control.owner = Some(owner);
+        let actor = json!({"kind":"human","humanId":"fixture"});
+        let header = || json!({"requestId":message_board::RequestId::generate(),"resubmits":null,"protocolVersion":1,"actor":actor,"actingFor":null});
+        let workspace = message_board::WorkspaceId::generate();
+        let board = message_board::BoardId::generate();
+        let project = message_board::ProjectId::generate();
+        let mut create = header();
+        create["workspaceId"] = json!(workspace);
+        create["name"] = json!("workspace");
+        create["description"] = json!("");
+        assert!(
+            control
+                .served
+                .call("workspace_create", create)
+                .await
+                .expect("workspace")
+                .get("result")
+                .is_some()
+        );
+        let mut create = header();
+        create["workspaceId"] = json!(workspace);
+        create["boardId"] = json!(board);
+        create["name"] = json!("board");
+        create["description"] = json!("");
+        create["kind"] = json!({"kind":"area"});
+        assert!(
+            control
+                .served
+                .call("board_create", create)
+                .await
+                .expect("board")
+                .get("result")
+                .is_some()
+        );
+        let mut create = header();
+        create["boardId"] = json!(board);
+        create["projectId"] = json!(project);
+        create["title"] = json!("project");
+        assert!(
+            control
+                .served
+                .call("project_create", create)
+                .await
+                .expect("project")
+                .get("result")
+                .is_some()
+        );
+        let store = registry
+            .existing_project(&project)
+            .await
+            .expect("registry")
+            .expect("native project");
+        let board_path = store.path().to_owned();
+        let read = store.snapshot().await.expect("snapshot");
+        let baseline = read.high_water();
+        read.finish().await.expect("finish");
         Self {
             pushes,
             board_path,
+            baseline,
             retention,
             control,
             _directory: directory,
@@ -88,17 +162,20 @@ impl BoardControlFixture {
     }
 }
 
-async fn board_content_counts(path: &std::path::Path) -> (i64, i64) {
-    let mut observer = SqliteConnection::connect_with(
-        &SqliteConnectOptions::new()
-            .filename(path)
-            .foreign_keys(true),
-    )
-    .await
-    .expect("open real board observer");
+async fn board_content_counts(
+    path: &std::path::Path,
+    baseline: message_board::FeedCursor,
+) -> (i64, i64) {
+    let mut observer = sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .create_if_missing(false)
+        .connect()
+        .await
+        .expect("native observer");
     let counts = sqlx::query_as::<_, (i64, i64)>(
-        "SELECT (SELECT count(*) FROM board_messages),(SELECT count(*) FROM board_activity)",
+        "SELECT (SELECT count(*) FROM posts),(SELECT count(*) FROM project_feed WHERE position > ?)",
     )
+    .bind(i64::try_from(baseline.position.get()).expect("position"))
     .fetch_one(&mut observer)
     .await
     .expect("count stored board content");
@@ -109,7 +186,10 @@ async fn board_content_counts(path: &std::path::Path) -> (i64, i64) {
 #[tokio::test]
 async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
     let mut fixture = BoardControlFixture::start().await;
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     let sender = session("claude-local", "off-board-sender");
     let target = session("codex-local", "off-board-recipient");
     let sent = fixture
@@ -129,7 +209,10 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
         .and_then(Value::as_str)
         .expect("Control send created a push")
         .to_owned();
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     let shown = fixture
         .control
         .call("router/show", json!({"caller":target,"reference":push_id}))
@@ -138,7 +221,10 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
         shown.pointer("/result/record/body").and_then(Value::as_str),
         Some("off-board body")
     );
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     fixture.close().await;
 }
 
@@ -380,6 +466,9 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
     assert!(history.iter().all(|record| record.created_at >= cutoff));
     assert!(history.iter().any(|record| record.target == correspondent));
     assert!(history.iter().any(|record| record.read_at.is_some()));
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     fixture.close().await;
 }

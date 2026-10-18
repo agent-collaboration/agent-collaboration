@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE thread_participants SET role = ?, active = ?, payload = ? WHERE reader = ? AND thread_id = ? AND joined_epoch = ? AND joined_position = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "66fff722502b48f2ef5369795085b800b0e942b0a9996bb033d1294f71e3c30e"
+}

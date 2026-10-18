@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO thread_participants(reader, thread_id, joined_epoch, joined_position, role, active, payload) VALUES (?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "f926ae4293506ec408669b31a61d2916922b012e0688a84c2dd6b7d70f934bdc"
+}

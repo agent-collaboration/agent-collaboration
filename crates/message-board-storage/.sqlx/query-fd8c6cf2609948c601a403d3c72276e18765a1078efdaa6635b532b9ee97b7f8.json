@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE thread_subjects SET subject_kind = ?, subject_id = ? WHERE thread_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "fd8c6cf2609948c601a403d3c72276e18765a1078efdaa6635b532b9ee97b7f8"
+}

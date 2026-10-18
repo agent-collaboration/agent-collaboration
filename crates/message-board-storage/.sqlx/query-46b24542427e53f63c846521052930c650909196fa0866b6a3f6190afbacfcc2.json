@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT canonical_hash AS \"canonical_hash!: String\", payload AS \"payload!: String\" FROM fleet_request_ledger WHERE request_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "canonical_hash!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "46b24542427e53f63c846521052930c650909196fa0866b6a3f6190afbacfcc2"
+}

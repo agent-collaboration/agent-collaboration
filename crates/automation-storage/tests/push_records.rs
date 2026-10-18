@@ -98,6 +98,75 @@ fn push_id() -> PushId {
     PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push id")
 }
 
+#[tokio::test]
+async fn board_notification_is_stored_once_and_interrupted_delivery_becomes_unknown() {
+    let database = TestDatabase::new();
+    let mut store = AutomationStore::open(&database.path)
+        .await
+        .expect("automation store");
+    let project = message_board::ProjectId::generate();
+    let intent = message_board::NotifyIntentId::generate();
+    let draft = PushRecordDraft {
+        push_id: push_id(),
+        kind: PushKind::BoardNotification,
+        origin: PushOrigin::Router(PushKind::BoardNotification),
+        origin_router_ref: Some(
+            RouterOriginRef::BoardIntent {
+                project: project.clone(),
+                intent: intent.clone(),
+            }
+            .canonical_string()
+            .expect("board source"),
+        ),
+        target: session("codex-local", "board-recipient"),
+        mode: None,
+        guard: None,
+        reply_to_push_id: None,
+        header_facts: PushHeaderFacts::BoardNotification {
+            project,
+            intent,
+            cause: message_board::RoleAssignmentId::generate().into(),
+            summary: collaboration_protocol::MessageText::try_from("Role assigned".to_owned())
+                .expect("summary"),
+        },
+        body: None,
+        activity: None,
+        created_at: Utc::now(),
+    };
+    let record = store
+        .insert_push_record(draft.clone())
+        .await
+        .expect("stored board push");
+    let mut duplicate = draft;
+    duplicate.push_id = push_id();
+    assert!(
+        store.insert_push_record(duplicate).await.is_err(),
+        "one push per claimed intent source"
+    );
+    store
+        .mark_push_attempted(&record.push_id)
+        .await
+        .expect("attempt");
+    assert_eq!(
+        store
+            .settle_interrupted_pushes(Utc::now())
+            .await
+            .expect("recovery"),
+        1
+    );
+    let recovered = store
+        .get_push_record(&record.push_id)
+        .await
+        .expect("read")
+        .expect("saved push");
+    assert_eq!(recovered.delivery_state, PushDeliveryState::OutcomeUnknown);
+    assert_eq!(
+        recovered.last_outcome.expect("unknown receipt").outcome,
+        DeliveryOutcome::Unknown
+    );
+    store.close().await.expect("close");
+}
+
 fn wake_push_draft(
     push_id: PushId,
     target: SessionRef,

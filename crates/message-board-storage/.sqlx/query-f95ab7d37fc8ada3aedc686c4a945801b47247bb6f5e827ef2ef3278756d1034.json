@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", json_quote(json_extract(payload, '$.record.envelope.routerTime')) AS \"router_time!: String\" FROM record_identities WHERE kind = 'post' AND json_extract(payload, '$.record.placement.kind') = 'project' AND json_extract(payload, '$.record.actor.kind') = 'session' AND json_extract(payload, '$.record.placement.projectId') = ? AND json_extract(payload, '$.record.actor.session.endpoint.serviceId') = ? AND json_extract(payload, '$.record.actor.session.endpoint.endpointId') = ? AND json_extract(payload, '$.record.actor.session.sessionId') = ? ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "router_time!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "f95ab7d37fc8ada3aedc686c4a945801b47247bb6f5e827ef2ef3278756d1034"
+}

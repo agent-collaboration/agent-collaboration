@@ -1,0 +1,1362 @@
+{
+  "case": "lead-replacement-board-design",
+  "summary": "The board-design project (the board state layer, then the board orchestration design and its M1-M3 implementation) on its own board. lead-a held the orchestrator seat from 2026-09-30. On 2026-10-11 the same Lead continued in a new Claude session after context compaction (lead-b took the seat), and on 2026-10-12 in a branched session (lead-c). The thread history records both as seat replacements with a note; the board models each as an owner grant relayed by the incoming session, then role_replace_lead. Before the first replacement lead-a settled the M1 handback and answered the lease owner question; a protocol-types handback made just before the replacement stayed pending through both replacements and was settled by lead-c, together with M3.6 and M2.4 handbacks. It stops with M1 shipped, M2 and M3 in progress, nothing owed to the lead, and one owner item open: the Cloudflare staging account and deploy token.",
+  "sources": [
+    "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')",
+    "the thread's participant history (seat replacements at activities 6061 and 6147, with their notes)",
+    "PR #136 (M1 collaboration API cutover, merged 2026-10-08 as 5b29c0fb)",
+    "git log of feat/replication-protocol (e1230950, eb285289, 08932942, ae49d278, b69b4a7f) and feat/board-model (7773336c)",
+    "the M2 Sidekick's report on feat/board-model",
+    "the M3 Sidekick's report on feat/replication-protocol",
+    "docs/specs/2026-10-04-board-orchestration-design/requirements.md (U40-U59 owner rows)"
+  ],
+  "actors": [
+    {
+      "alias": "lead-a",
+      "kind": "session",
+      "note": "board-design Lead, Claude Opus 5.5; held the orchestrator seat 2026-09-30 to 2026-10-11"
+    },
+    {
+      "alias": "lead-b",
+      "kind": "session",
+      "note": "the same Lead continued in a new Claude session after context compaction (2026-10-11)"
+    },
+    {
+      "alias": "lead-c",
+      "kind": "session",
+      "note": "the same Lead continued in a branched Claude session (2026-10-12)"
+    },
+    {
+      "alias": "owner",
+      "kind": "human",
+      "note": "words relayed by agents (U51)"
+    },
+    {
+      "alias": "sidekick-m1",
+      "kind": "session",
+      "note": "M1 Sidekick, native Opus 5.5 subagent of the Lead"
+    },
+    {
+      "alias": "reviewer-opus",
+      "kind": "session",
+      "note": "fresh native Opus xhigh reviewer of M1 (verifier)"
+    },
+    {
+      "alias": "sidekick-proto",
+      "kind": "session",
+      "note": "Sidekick that wrote the replication protocol types (identity not on the board)"
+    },
+    {
+      "alias": "sidekick-proto2",
+      "kind": "session",
+      "note": "fresh Sol high Sidekick on the protocol frame enums"
+    },
+    {
+      "alias": "sidekick-m2",
+      "kind": "session",
+      "note": "Sol 6.1 xhigh M2 Sidekick (ended by the provider's filter on 2026-10-13)"
+    },
+    {
+      "alias": "sidekick-m2b",
+      "kind": "session",
+      "note": "fresh Sol 6.1 xhigh session that finished M2.4"
+    },
+    {
+      "alias": "sidekick-m3",
+      "kind": "session",
+      "note": "Sol 6.1 xhigh M3 Sidekick"
+    }
+  ],
+  "setup": [
+    {
+      "op": "workspace_create",
+      "args": {
+        "workspaceId": "$workspace",
+        "name": "codex-router",
+        "description": "Agent Router"
+      }
+    },
+    {
+      "op": "board_create",
+      "args": {
+        "boardId": "$board",
+        "workspaceId": "$workspace",
+        "name": "Board state layer",
+        "description": "Design the board's state layer and prove it before any Router change",
+        "kind": {
+          "kind": "area"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-09-30T22:18:57Z",
+      "actor": "lead-a",
+      "op": "project_create",
+      "args": {
+        "projectId": "$project",
+        "boardId": "$board",
+        "title": "Board state layer and orchestration design"
+      },
+      "note": "Coordination root posted by lead-a.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 2,
+      "at": "2026-09-30T22:18:58Z",
+      "actor": "lead-a",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "project",
+          "subject": "$project"
+        },
+        "role": "lead",
+        "holder": "@lead-a",
+        "model": "claude-opus-5.5",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "First lead names itself (U51).",
+      "approxTime": true
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-02T14:00:30Z",
+      "actor": "lead-a",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.structure",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decisions, board structure: keep the levels and rename two (project -> workspace, topic -> project; a board gets kind initiative or area; a thread is conversation only). New entities: milestone, task (with subtask) and ADR; logs live in their own store and are linked. Tasks change status only through a recorded move, dependsOn forms a DAG with cycles rejected, subtasks go one level deep, and a task carries a typed PR link plus links[]. A milestone is a thin delivery checkpoint whose order and PR stack derive from the task DAG.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": []
+      },
+      "note": "Relayed by lead-a. Later superseded in part by U40-U44 (see lead-b's rows).",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-07T14:08:20Z",
+      "actor": "lead-a",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.m1",
+        "name": "M1 collaboration API cutover",
+        "goal": "One stateless MCP server on axum serving every collaboration operation; Control removed."
+      },
+      "note": "Implementation plan ready: M0 driver, M1 API cutover, M2 board on per-project stores, M3 replication and central.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-07T14:08:21Z",
+      "actor": "lead-a",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.m2",
+        "name": "M2 board model",
+        "goal": "The board on per-project stores: workstreams, tasks, the work trail, views and hooks."
+      },
+      "note": "M2 held until the replication and blocking-IO decisions.",
+      "approxTime": true
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-07T14:08:22Z",
+      "actor": "lead-a",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.m3",
+        "name": "M3 replication and central",
+        "goal": "Replication protocol, project leases and the central fleet server."
+      },
+      "note": "M3 held until the replication decision.",
+      "approxTime": true
+    },
+    {
+      "seq": 7,
+      "at": "2026-10-07T14:08:23Z",
+      "actor": "lead-a",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.m1",
+        "workstreamId": "$ws.m1",
+        "title": "Collaboration API: one stateless MCP server; Control removed",
+        "body": "Milestone M1 of the plan; shipped as #136.",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "M1 task.",
+      "approxTime": true
+    },
+    {
+      "seq": 8,
+      "at": "2026-10-08T01:11:19Z",
+      "actor": "lead-a",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m1"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-m1",
+        "model": "claude-opus-5.5",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "M1 started on the owner's correction relayed by the chief of staff; slice by slice, each returning for the Lead's verification.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 9,
+      "at": "2026-10-08T06:04:30Z",
+      "actor": "sidekick-m1",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.m1-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m1"
+        },
+        "text": "M1 development complete: feat/collaboration-api-cutover fcea6f3c..c5e2f053, 9 commits, 369 files. Gates as CI runs them on c5e2f053: fmt, deny, audit, file-size, workspace clippy, prepare-sqlx --check, quota harness 14/14; workspace nextest 3267/3269 (two pre-existing codex-router-auth timing tests failed; that crate is untouched). Isolated debug-Host smoke passed: service.json v3, control.sock 0600, MCP tools/list 107. Not run: a Codex conversation prompt (no model auth in the isolated home).",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "c5e2f053bfb7ccf3d2604de75e94595d4bca92e0"
+          }
+        ]
+      },
+      "note": "Implementer handback; its content is what lead-a's 06:05 post reports from the Sidekick.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')",
+      "approxTime": true
+    },
+    {
+      "seq": 10,
+      "at": "2026-10-08T06:05:08Z",
+      "actor": "lead-a",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m1"
+        },
+        "role": "verifier",
+        "holder": "@reviewer-opus",
+        "model": "claude-opus-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "Independent implementation review by a fresh native Opus xhigh reviewer.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 11,
+      "at": "2026-10-08T08:01:20Z",
+      "actor": "lead-a",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.m1-closed",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m1"
+        },
+        "text": "M1 closed on the Opus side: review chain not ready -> ready with fixes -> ready; open accepted findings 8 -> 1 -> 0, no recurrence. Branch fcea6f3c..3a6fad92, version 0.1.64. Real MCP clients proven (Claude Code mcp list and get Connected; Codex app-server 107 tools). Gates on the final head: fmt, deny, audit, file-size, workspace clippy, prepare-sqlx --check, quota harness 14/14, affected packages 1350/1350. Deferred and logged: events listen re-attach cost; blocking std::fs in client connect; block_on in the native endpoint selector. Still open: the Sol xhigh review; push and PR; merge, tag and release stay owner gates.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.m1-handback"
+            }
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "3a6fad92af73545f6e1a13d2cdc3a3cb7096c275"
+          }
+        ]
+      },
+      "note": "Settles the M1 handback while lead-a is lead. It must stay settled after both replacements.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 12,
+      "at": "2026-10-08T11:26:26Z",
+      "actor": "lead-a",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.merged-136",
+          "kind": {
+            "kind": "prFact",
+            "fact": {
+              "repository": "github.com/ShravanSunder/codex-router",
+              "number": 136,
+              "kind": {
+                "kind": "merged",
+                "mergeCommit": "5b29c0fbc43c2be5715b1cec1d96f270ac516aff"
+              },
+              "recordedBy": "@lead-a"
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.m1"
+            }
+          ],
+          "producerTime": "2026-10-08T11:26:26Z",
+          "anchor": null
+        }
+      },
+      "note": "#136 'Collaboration API: one stateless MCP server on axum; Control removed (0.1.66)' merged.",
+      "source": "PR #136"
+    },
+    {
+      "seq": 13,
+      "at": "2026-10-08T11:26:30Z",
+      "actor": "lead-a",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.m1",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "M1 shipped.",
+      "approxTime": true
+    },
+    {
+      "seq": 14,
+      "at": "2026-10-08T12:10:38Z",
+      "actor": "lead-a",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.oq-lease",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decision needed: does a holder keep admitting writes after its lease expires, before any takeover? (WA-6's 'ended' is ambiguous.) Lead recommends keep writing: local-first, with loss only through an explicit takeover. The lease Advisor (Sol xhigh) agrees with option B: a separate lease registry plus project fencing.",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m3"
+            }
+          }
+        ]
+      },
+      "note": "Blocks the replication and central workstream (specs 2-3 rewrite).",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 15,
+      "at": "2026-10-09T18:08:06Z",
+      "actor": "lead-a",
+      "op": "workstream_close",
+      "args": {
+        "workstreamId": "$ws.m1",
+        "reason": "done",
+        "note": "#136 merged (0.1.66) and its follow-up #139 released in v0.1.81; production Host restarted onto it",
+        "expectedRevision": "$current"
+      },
+      "note": "M1 lane done.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 16,
+      "at": "2026-10-09T20:20:01Z",
+      "actor": "lead-a",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.lease-decision",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decision: project leases (replaces the A/B/C question). 4-hour leases renewed every 15 minutes off the hot path. Before expiry, normal writes. After expiry with no holder change, new board writes are refused with leaseExpired, that project's wakes and schedules pause, reads keep working, and all of it resumes on renewal. No automatic release on shutdown and no automatic forced takeover: every holder change is an explicit admin or owner request; a clean move drains and hands over with nothing lost; a takeover fences first, then grants, and voids the unpushed tail with a warning. Always push in pieces (G13). Move and takeover go through a separate admin endpoint with separate credentials; machine credentials only renew, push and release. The owner chose refusal after expiry over the Lead's recommendation.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.oq-lease"
+            }
+          }
+        ]
+      },
+      "note": "Answers the owner question; any later decision row linking it settles it.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 17,
+      "at": "2026-10-11T20:00:00Z",
+      "actor": "lead-a",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-proto",
+        "model": null,
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "The commission is not on the board; placed before the branch's first commit (20:59:16).",
+      "approxTime": true
+    },
+    {
+      "seq": 18,
+      "at": "2026-10-11T21:00:30Z",
+      "actor": "sidekick-proto",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.proto-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "text": "Replication protocol types done locally on feat/replication-protocol: the collaboration replication protocol crate (ba22a993) with its lock entry aligned to the workspace version (e1230950).",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "e1230950242c5624e7bc909d5c5e4495f73b0da7"
+          }
+        ]
+      },
+      "note": "Handed back to lead-a just before the replacement; lead-b reports it waiting for the spec re-review. Time placed after the commit (20:59:55).",
+      "source": "feat/replication-protocol git log; board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')",
+      "approxTime": true
+    },
+    {
+      "seq": 19,
+      "at": "2026-10-11T21:31:00Z",
+      "actor": "lead-b",
+      "op": "owner_grant_record",
+      "args": {
+        "grantId": "$grant.lead-b",
+        "grant": {
+          "kind": "replaceLead",
+          "project": "$project",
+          "newHolder": "@lead-b",
+          "reason": "The owner continued the board-design Lead in a new Claude session after context compaction."
+        }
+      },
+      "note": "Relayed by the incoming session (provenance 'relayed by lead-b'). The source records only the seat replacement and its note.",
+      "source": "participant history (activity 6061)",
+      "approxTime": true
+    },
+    {
+      "seq": 20,
+      "at": "2026-10-11T21:31:10Z",
+      "actor": "lead-b",
+      "op": "role_replace_lead",
+      "args": {
+        "newHolder": "@lead-b",
+        "ownerGrant": "$grant.lead-b",
+        "reason": "Context compaction: the same board-design Lead continues in a new session.",
+        "expectedAssignmentRevision": "$current"
+      },
+      "note": "lead-a ends stoodDown; lead-b becomes lead in the same transaction (RL-4).",
+      "source": "participant history (activity 6061)",
+      "approxTime": true
+    },
+    {
+      "seq": 21,
+      "at": "2026-10-11T21:31:36Z",
+      "actor": "lead-b",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.u40-u43",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decisions U40-U43 (2026-10-11): workstreams, not milestones, each carried by an implementer and verifier pair, with none by default; tasks and subtasks stay lightweight. A workspace holds ADRs and a project holds a decision register. The work trail is part of the board, separate from threads. A task has a title, body, status, blockedBy and relatedTo; duplicate and replace are actions. Spec 1 reworked accordingly; the Sol spec review's 2 blockers and 9 major findings are fixed. Supersedes the milestone and task-gate parts of the 2026-10-02 structure decision.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.structure"
+            }
+          }
+        ]
+      },
+      "note": "lead-b's first checkpoint after taking the seat; a changed decision links the one it replaces.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 22,
+      "at": "2026-10-11T21:31:37Z",
+      "actor": "lead-b",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.oq-task-defaults",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decision needed on the Lead's task and workstream defaults: task kind (G22); whether relatedTo may cross projects and whether tasks get links[] (G23).",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m2"
+            }
+          }
+        ]
+      },
+      "note": "Owner items listed in lead-b's checkpoint; they block the M2 board model.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 23,
+      "at": "2026-10-11T21:31:38Z",
+      "actor": "lead-b",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.oq-adr-metadata",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decision needed: where workspace ADRs live (G10); how much project metadata central keeps (G11); permission to remove the stale worktrees.",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m2"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m3"
+            }
+          }
+        ]
+      },
+      "note": "Owner items listed in lead-b's checkpoint.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 24,
+      "at": "2026-10-11T23:54:35Z",
+      "actor": "lead-b",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.u44",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner 2026-10-11 ('for the workstreams etc ok') settles the task and workstream defaults as U44: every task is in exactly one workstream and can move between workstreams; status todo, doing, done or dropped, with dropped final; no task kind; relatedTo stays in the project; no links[] (PRs and docs are evidence pointers on work-trail rows); any actor may write tasks; a workstream's implementer and verifier are different actors.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.oq-task-defaults"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.u40-u43"
+            }
+          }
+        ]
+      },
+      "note": "Settles G22/G23. G10 and G11 stay open.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 25,
+      "at": "2026-10-11T23:54:36Z",
+      "actor": "lead-b",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-proto2",
+        "model": "sol-high",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "A fresh Sol high Sidekick implements the frame enums; sidekick-proto's assignment ends replaced. Its handback stays pending.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 26,
+      "at": "2026-10-12T11:14:00Z",
+      "actor": "sidekick-proto2",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.proto2-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "text": "Protocol frame and renewal work done locally: session payload ownership corrected (eb285289), renewal attempt identity tested (08932942), renewed lease replay state exposed (ae49d278).",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "eb285289fb4e05f99b182679c1f199c50de83c4d"
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "089329428a867de2e8cf7adab5e27c1d4a1d5ce2"
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "ae49d278ae88427ab74dbc1746d89c49048c2567"
+          }
+        ]
+      },
+      "note": "Handed back to lead-b. Time placed after the last commit (11:13:37).",
+      "source": "feat/replication-protocol git log",
+      "approxTime": true
+    },
+    {
+      "seq": 27,
+      "at": "2026-10-12T11:57:00Z",
+      "actor": "lead-c",
+      "op": "owner_grant_record",
+      "args": {
+        "grantId": "$grant.lead-c",
+        "grant": {
+          "kind": "replaceLead",
+          "project": "$project",
+          "newHolder": "@lead-c",
+          "reason": "The owner continued the board-design Lead in a branched Claude session."
+        }
+      },
+      "note": "Relayed by the incoming session. A grant is single-use, so the second replacement needs its own grant.",
+      "source": "participant history (activity 6147)",
+      "approxTime": true
+    },
+    {
+      "seq": 28,
+      "at": "2026-10-12T11:57:10Z",
+      "actor": "lead-c",
+      "op": "role_replace_lead",
+      "args": {
+        "newHolder": "@lead-c",
+        "ownerGrant": "$grant.lead-c",
+        "reason": "Branched session: the same board-design Lead continues.",
+        "expectedAssignmentRevision": "$current"
+      },
+      "note": "lead-b ends stoodDown; lead-c becomes lead.",
+      "source": "participant history (activity 6147)",
+      "approxTime": true
+    },
+    {
+      "seq": 29,
+      "at": "2026-10-12T11:57:42Z",
+      "actor": "lead-c",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.u45-u49",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decisions recorded: U45 holderUnreachable after 30 minutes; U46 central keeps small project metadata (settles G11); U47 the work-trail row is text, tags, links and a redacted filter; U48 a workspace ADR's text is Markdown in its record, export helper deferred (settles G10); U49 the logical session is separate from the connection. Stale worktrees removed with the owner's permission. Spec review READY after four Sol passes. Protocol types accepted: the e1230950 base, then eb285289, 08932942 and ae49d278.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.oq-adr-metadata"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.proto-handback"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.proto2-handback"
+            }
+          }
+        ]
+      },
+      "note": "lead-c's first checkpoint. Settles the remaining owner question and both protocol handbacks (lead-c is lead at this position).",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 30,
+      "at": "2026-10-12T14:47:22Z",
+      "actor": "lead-c",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.plan",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Three-artifact design review READY after six Sol xhigh passes (F1-F21 fixed). Owner: structure confirmed; Cloudflare Workers Paid plan (U50); test locally and on Cloudflare. Plan: three PRs, M2 board model and M3 central in parallel, then M4 replication. Implementation started on two Sol 6.1 xhigh Sidekicks, local commits only; the Lead verifies each slice from the Sidekicks' reports.",
+        "tags": [
+          "decision"
+        ],
+        "links": []
+      },
+      "note": "Plan and staffing decision.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 31,
+      "at": "2026-10-12T14:47:23Z",
+      "actor": "lead-c",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m2"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-m2",
+        "model": "sol-6.1-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "M2 Sidekick on feat/board-model.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 32,
+      "at": "2026-10-12T14:47:24Z",
+      "actor": "lead-c",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-m3",
+        "model": "sol-6.1-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "M3 Sidekick on feat/replication-protocol; sidekick-proto2's assignment ends replaced.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 33,
+      "at": "2026-10-12T14:47:25Z",
+      "actor": "lead-c",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.oq-picks",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner picks needed: G4 (who builds the lease registry and admin endpoint), G20 (where the admin credential lives), G14 (which projects a machine replicates), G1 (does the upgrade keep history).",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m2"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m3"
+            }
+          }
+        ]
+      },
+      "note": "Owner items listed in lead-c's checkpoint.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 34,
+      "at": "2026-10-12T14:47:26Z",
+      "actor": "lead-c",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.oq-staging",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner action needed for the M3.6 deploy only: a Cloudflare staging account and a deploy token.",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workstream",
+              "id": "$ws.m3"
+            }
+          }
+        ]
+      },
+      "note": "Still unanswered: on 2026-10-13 the M3 report keeps staging outside its authority and the deploy waiting on owner credentials.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer'); the M3 Sidekick's report on feat/replication-protocol"
+    },
+    {
+      "seq": 35,
+      "at": "2026-10-12T21:40:56Z",
+      "actor": "sidekick-m3",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.m36-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "text": "M3.6 local at b69b4a7f: Worker shell and real workerd restart proof. Native scoped tests 106/0. Fault-enabled lifecycle harness: 3 shared groups, 4 physical-restart groups and 1 G18 observation (native deadline elapsed; after restart fence 1, prefix (1,1), no rows). Default release Worker smoke passed; the bundle guard rejects the fault artifact. Deployed M3.6 waits on Lead authority and credentials; M3.5 waits on M2.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "b69b4a7f312f930d39ada0625b1d42752190b6a2"
+          }
+        ]
+      },
+      "note": "The Sidekick's SHA signal to the Lead.",
+      "source": "the M3 Sidekick's report on feat/replication-protocol"
+    },
+    {
+      "seq": 36,
+      "at": "2026-10-12T21:41:25Z",
+      "actor": "lead-c",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.m36-accepted",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m3"
+        },
+        "text": "Accepted M3.6 local (b69b4a7f). M3 pauses: M3.5 waits on M2; the deploy waits on the owner's credentials.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.m36-handback"
+            }
+          }
+        ]
+      },
+      "note": "Lead's acceptance push, quoted in the M3 report.",
+      "source": "the M3 Sidekick's report on feat/replication-protocol"
+    },
+    {
+      "seq": 37,
+      "at": "2026-10-13T05:18:18Z",
+      "actor": "lead-c",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m2"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-m2b",
+        "model": "sol-6.1-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "Both earlier M2 Codex sessions were ended by the provider's filter; a fresh session continues M2.4 from a handoff packet.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 38,
+      "at": "2026-10-13T08:59:00Z",
+      "actor": "sidekick-m2b",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.m24-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m2"
+        },
+        "text": "M2.4 at 7773336c: per-project operations admitted through MCP and CLI (348 files). Receipts 1,325 passed / 0 failed; check and clippy green; 18 standing-rule decisions logged for review.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "7773336c2052f566121c71bbfe00fc121524560b"
+          }
+        ]
+      },
+      "note": "Time placed after the commit (08:58:29).",
+      "source": "the M2 Sidekick's report on feat/board-model",
+      "approxTime": true
+    },
+    {
+      "seq": 39,
+      "at": "2026-10-13T09:01:09Z",
+      "actor": "lead-c",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.m24-accepted",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.m2"
+        },
+        "text": "M2.4 accepted at 7773336c. Lead's independent rerun: storage lib 40/0 plus five MCP targets 8/0. All 18 standing-rule decisions reviewed and accepted. Corrections for the first M2.5 commit: rename the unanswered write result, name the page-cursor key's home, clean the scratch target. Open stand-ins: the local lease authority and local fleet until M3/M4, the stand-in notifier until P3.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.m24-handback"
+            }
+          }
+        ]
+      },
+      "note": "Settles the M2.4 handback.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    },
+    {
+      "seq": 40,
+      "at": "2026-10-13T12:06:31Z",
+      "actor": "lead-c",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.u51-u59",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decisions U51-U59 (2026-10-13): owner words are relayed by agents for now, and a first lead may name itself (U51); this lane builds the lease registry and admin endpoint (U53, settles G4); the upgrade keeps all history as a separate one-time script (U54, settles G1); a machine replicates the projects it leases (U56, settles G14); admin is the owner's Google sign-in through Cloudflare Access with no stored admin secret (U57, settles G20); central stays on Cloudflare behind Access (U58); public and private repos split (U59). Lead decision 4e03567d: handback settlement uses the lead at the decision's feed position.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.oq-picks"
+            }
+          }
+        ]
+      },
+      "note": "Settles the picks question. The staging account and deploy token stay open.",
+      "source": "board thread 'board-design' (coordination root of the board state layer, board 'Board state layer')"
+    }
+  ],
+  "questions": [
+    {
+      "ask": "where did it stop",
+      "asOf": 28,
+      "via": "view_lead_load (lead-a, lead-b, lead-c), view_owner, view_card (lead-c, project), role_list",
+      "expect": {
+        "state": "Seat just passed to lead-c; two protocol handbacks made to earlier leads are still pending and now owed by lead-c.",
+        "lead": "lead-c",
+        "leadHistory": [
+          {
+            "holder": "lead-a",
+            "end": "stoodDown",
+            "endedAt": 20
+          },
+          {
+            "holder": "lead-b",
+            "end": "stoodDown",
+            "endedAt": 28
+          },
+          {
+            "holder": "lead-c",
+            "end": null,
+            "endedAt": null
+          }
+        ],
+        "pending": [
+          {
+            "kind": "handback",
+            "ref": 18,
+            "text": "protocol types at e1230950 (handed to lead-a)"
+          },
+          {
+            "kind": "handback",
+            "ref": 26,
+            "text": "frame and renewal work (handed to lead-b)"
+          },
+          {
+            "kind": "ownerQuestion",
+            "ref": 23,
+            "text": "G10 ADR home, G11 metadata, stale worktrees"
+          }
+        ],
+        "settledHandbacks": [
+          {
+            "ref": 9,
+            "settledBy": 11,
+            "settledByLead": "lead-a"
+          }
+        ],
+        "ownerWaiting": [
+          {
+            "ref": 23,
+            "blocks": [
+              "$ws.m2",
+              "$ws.m3"
+            ]
+          }
+        ],
+        "owed": {
+          "lead-c": [
+            {
+              "obligation": "assess",
+              "ref": 18
+            },
+            {
+              "obligation": "assess",
+              "ref": 26
+            }
+          ],
+          "lead-b": [],
+          "lead-a": []
+        },
+        "card": {
+          "actor": "lead-c",
+          "subject": "project",
+          "pendingHandbacks": [
+            18,
+            26
+          ],
+          "pendingDecisions": [
+            23
+          ],
+          "nextObligation": {
+            "obligation": "assess",
+            "ref": 18
+          }
+        }
+      }
+    },
+    {
+      "ask": "what was decided",
+      "via": "work_trail_show with selection decisions (the decision register, newest first)",
+      "expect": [
+        {
+          "decision_ref": 40,
+          "text": "Owner U51-U59; settles G1, G4, G14, G20; settlement uses the lead at the decision's position",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 39,
+          "text": "M2.4 accepted at 7773336c"
+        },
+        {
+          "decision_ref": 36,
+          "text": "M3.6 local accepted at b69b4a7f; M3 pauses"
+        },
+        {
+          "decision_ref": 30,
+          "text": "Design READY; three PRs, M2 and M3 in parallel then M4; two Sol Sidekicks"
+        },
+        {
+          "decision_ref": 29,
+          "text": "Owner U45-U49 recorded; protocol types accepted",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 24,
+          "text": "Owner U44 task and workstream defaults",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 21,
+          "text": "Owner U40-U43: workstreams not milestones; decision register; work trail; task shape",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 16,
+          "text": "Owner: project leases; writes refused after expiry, against the Lead's recommendation",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 11,
+          "text": "M1 closed on the Opus side; review chain to ready"
+        },
+        {
+          "decision_ref": 3,
+          "text": "Owner board structure (later superseded in part by U40-U44)",
+          "actingFor": "owner"
+        }
+      ]
+    },
+    {
+      "ask": "where did it stop",
+      "via": "project_show, view_work, view_lead_load (lead-c), view_owner, role_list",
+      "expect": {
+        "state": "Open project led by lead-c: M1 shipped; M2 and M3 in progress with every handback assessed; one owner item open.",
+        "projectClosed": false,
+        "lead": "lead-c",
+        "workstreams": [
+          {
+            "ref": "$ws.m1",
+            "state": "closed:done",
+            "implementer": "sidekick-m1",
+            "verifier": "reviewer-opus",
+            "tasks": [
+              {
+                "ref": "$task.m1",
+                "status": "done"
+              }
+            ]
+          },
+          {
+            "ref": "$ws.m2",
+            "state": "open",
+            "implementer": "sidekick-m2b",
+            "verifier": null,
+            "tasks": []
+          },
+          {
+            "ref": "$ws.m3",
+            "state": "open",
+            "implementer": "sidekick-m3",
+            "verifier": null,
+            "tasks": []
+          }
+        ],
+        "readyQueue": [],
+        "blocked": [],
+        "pending": [
+          {
+            "kind": "ownerQuestion",
+            "ref": 34,
+            "text": "Cloudflare staging account and deploy token for the M3.6 deploy"
+          }
+        ],
+        "pendingHandbacks": [],
+        "settledHandbacks": [
+          {
+            "ref": 9,
+            "settledBy": 11,
+            "settledByLead": "lead-a"
+          },
+          {
+            "ref": 18,
+            "settledBy": 29,
+            "settledByLead": "lead-c"
+          },
+          {
+            "ref": 26,
+            "settledBy": 29,
+            "settledByLead": "lead-c"
+          },
+          {
+            "ref": 35,
+            "settledBy": 36,
+            "settledByLead": "lead-c"
+          },
+          {
+            "ref": 38,
+            "settledBy": 39,
+            "settledByLead": "lead-c"
+          }
+        ],
+        "settledOwnerQuestions": [
+          {
+            "ref": 14,
+            "settledBy": 16
+          },
+          {
+            "ref": 22,
+            "settledBy": 24
+          },
+          {
+            "ref": 23,
+            "settledBy": 29
+          },
+          {
+            "ref": 33,
+            "settledBy": 40
+          }
+        ],
+        "ownerWaiting": [
+          {
+            "ref": 34,
+            "blocks": [
+              "$ws.m3"
+            ]
+          }
+        ],
+        "owed": [],
+        "card": {
+          "actor": "lead-c",
+          "subject": "project",
+          "pendingHandbacks": [],
+          "pendingDecisions": [
+            34
+          ],
+          "nextObligation": null
+        }
+      }
+    },
+    {
+      "ask": "what proves it",
+      "via": "fact_list, work_trail_show (handback and decision rows with their links)",
+      "expect": [
+        {
+          "evidence_ref": 12,
+          "kind": "commit",
+          "what": "#136 merged as 5b29c0fb"
+        },
+        {
+          "evidence_ref": 9,
+          "kind": "test",
+          "what": "M1 gates on c5e2f053; workspace nextest 3267/3269 with two pre-existing failures"
+        },
+        {
+          "evidence_ref": 11,
+          "kind": "review",
+          "what": "Opus xhigh review chain to ready; affected packages 1350/1350 at 3a6fad92"
+        },
+        {
+          "evidence_ref": 35,
+          "kind": "test",
+          "what": "M3.6 native 106/0 and real workerd restart harness at b69b4a7f"
+        },
+        {
+          "evidence_ref": 38,
+          "kind": "test",
+          "what": "M2.4 receipts 1,325/0 at 7773336c"
+        },
+        {
+          "evidence_ref": 39,
+          "kind": "review",
+          "what": "Lead's independent rerun 40/0 and 8/0 for M2.4"
+        }
+      ]
+    }
+  ],
+  "probes": [
+    {
+      "after": 20,
+      "actor": "lead-a",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.probe-stale-lead",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "probe: a stood-down lead writes before re-reading",
+        "tags": [],
+        "links": []
+      },
+      "expect": {
+        "decision": "rejected",
+        "reason": "standDownUnacknowledged"
+      },
+      "note": "Synthetic, not in the history (lead-a never wrote again). RL-4: a stood-down holder's writes are refused until it acknowledges the current state."
+    },
+    {
+      "after": 28,
+      "actor": "lead-c",
+      "op": "role_replace_lead",
+      "args": {
+        "newHolder": "@lead-b",
+        "ownerGrant": "$grant.lead-b",
+        "reason": "probe: reuse the first grant",
+        "expectedAssignmentRevision": "$current"
+      },
+      "expect": {
+        "decision": "rejected"
+      },
+      "note": "Synthetic. The first grant was already used by the first replacement; a grant is single-use (PD1: unique owner_grant on role assignments). The exact refusal kind is the implementation's."
+    }
+  ]
+}

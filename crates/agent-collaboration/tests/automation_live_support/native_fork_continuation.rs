@@ -13,6 +13,7 @@ pub async fn exercise() -> ProofResult<()> {
     let source = proof.start_thread("Luna fork source").await?;
     let token = format!("FORK_CONTEXT_{}", OperationId::generate().as_str());
     let receipt = proof.client.send_agent_message(SessionMessageSendParams {
+        item_id: None,
         target: source.clone(), generation_guard: Some(proof.generation.clone()),
         message: MessageContent::Agent { sender: source.clone(), text: format!("Remember this context token: {token}. Output exactly {token}. Do not call tools or spawn agents.").try_into()? },
         mode: MessageDelivery::Auto,

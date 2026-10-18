@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT board AS \"board!: String\", project AS \"project!: String\", position_epoch AS \"position_epoch!: String\", position_commit AS \"position_commit!: String\", installation AS \"installation!: String\", reported_at AS \"reported_at!: String\" FROM archive_reports WHERE board = ? ORDER BY project",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "board!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "position_epoch!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position_commit!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "installation!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "reported_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "9b41fa3a69d5d2fcff1d92b0aae5158d378857e6273bf8a636e41124e4eda452"
+}

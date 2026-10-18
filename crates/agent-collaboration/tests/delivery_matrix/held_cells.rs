@@ -4,7 +4,7 @@ use super::{
     matrix_marker,
 };
 use codex_native_integration::NativeOperation;
-use collaboration_client::board::{Identity, MessageId, SubscriptionScope};
+use collaboration_client::board::{Identity, SubscriptionScope, ThreadId};
 use collaboration_client::protocol::{
     PushRecordShowParams, RouterAccess, SessionRef, ThreadSubscriptionPresence,
     ThreadSubscriptionsRequest,
@@ -305,7 +305,7 @@ async fn load_codex_target(
 async fn wait_for_held_subscription_roots(
     proof: &mut ProofContext,
     target: &SessionRef,
-    roots: &[MessageId],
+    roots: &[ThreadId],
 ) -> ProofResult<()> {
     if roots.len() != 2 || roots.first() == roots.last() {
         return Err("S5 requires two distinct subscription roots".into());
@@ -317,7 +317,7 @@ async fn wait_for_held_subscription_roots(
         observation.tick().await;
         let page = proof
             .client
-            .board_thread_subscriptions(ThreadSubscriptionsRequest {
+            .thread_subscriptions(ThreadSubscriptionsRequest {
                 actor: reader.clone(),
             })
             .await?;
@@ -389,7 +389,7 @@ fn assert_held_two_root_batch(
     let has_marker = |marker: &str| {
         show.activity_ranges.iter().any(|range| {
             range
-                .messages
+                .posts
                 .iter()
                 .any(|message| message.text.as_str() == marker)
         })

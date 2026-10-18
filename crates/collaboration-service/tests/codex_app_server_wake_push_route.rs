@@ -59,19 +59,22 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
         "delivery":"auto",
         "generationGuard":null
     }))?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 5_000;
     let wake = automation
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: collaboration_protocol::OperationId::generate(),
             message: saved_message,
             timing: TimingRule::After { seconds: 1 },
             expiry: ExpiryRule::None,
-            now_ms: 1000,
+            now_ms: anchor_ms,
         })
         .await?;
     let fire = match automation
         .evaluate_wakeup::<collaboration_protocol::SavedMessage>(
             &wake.definition.wakeup_id,
-            5000,
+            anchor_ms + 5000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?

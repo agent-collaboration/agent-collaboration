@@ -3,8 +3,8 @@ use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejec
 use crate::ServiceIdentity;
 use crate::push_record_delivery::{PushDeliveryFailure, store_first_and_deliver};
 use crate::push_record_resolver::{
-    ActivityReadError, ReferenceError, caller_is_local, can_read, delivery_result,
-    expand_activity_ranges, link_for, make_notice_list, resolve_reference,
+    ActivityReadError, ReferenceError, caller_is_local, can_read, expand_activity_ranges, link_for,
+    make_notice_list, resolve_reference,
 };
 use automation_storage::{
     AutomationStore, DirectMessageHistoryQuery, PushInboxQuery, StorageError,
@@ -83,7 +83,14 @@ impl<'service> MessageOperations<'service> {
             }
         };
         let target = request.target.clone();
-        let push_id = next_push_id()?;
+        // Mint once at admission; every store/delivery retry uses this identity.
+        let push_id = request
+            .item_id
+            .unwrap_or_else(collaboration_protocol::MailItemId::generate)
+            .try_into()
+            .map_err(|_| {
+                MessageFailure::discovery(MessageFailureKind::InvalidField, "Invalid item identity")
+            })?;
         let draft = PushRecordDraft {
             push_id,
             kind: PushKind::DirectMessage,
@@ -101,17 +108,9 @@ impl<'service> MessageOperations<'service> {
             created_at: chrono::Utc::now(),
         };
         let target_identity = self.target_identity(&target);
-        let record =
-            store_first_and_deliver(draft, request.mode, request.generation_guard, identity)
-                .await
-                .map_err(|failure| self.delivery_failure(failure))?;
-        delivery_result(&record, target_identity, identity).map_err(|_| {
-            MessageFailure::new(
-                MessageFailureKind::Unavailable,
-                MessageFailureStage::Inspect,
-                "Stored push could not be rendered",
-            )
-        })
+        store_first_and_deliver(draft, target_identity, identity)
+            .await
+            .map_err(|failure| self.delivery_failure(failure))
     }
 
     /// Replies to one retained direct message, addressed by push id or Router link.
@@ -196,22 +195,16 @@ impl<'service> MessageOperations<'service> {
             created_at: chrono::Utc::now(),
         };
         let target_identity = self.target_identity(&origin);
-        let record = store_first_and_deliver(draft, MessageDelivery::Auto, None, identity)
+        let result = store_first_and_deliver(draft, target_identity, identity)
             .await
             .map_err(|failure| self.delivery_failure(failure))?;
-        let Some(receipt) = record.last_outcome.clone() else {
-            return Err(MessageFailure::discovery(
-                MessageFailureKind::OutcomeUnknown,
-                "Reply was stored but its delivery result is unavailable",
-            ));
-        };
         Ok(SessionMessageReplyResult {
-            target: origin,
-            target_identity,
-            push_id: record.push_id.clone(),
-            link: link_for(&record, identity),
-            delivery_state: record.delivery_state,
-            receipt,
+            target: result.target,
+            target_identity: result.target_identity,
+            push_id: result.push_id,
+            link: result.link,
+            delivery_state: result.delivery_state,
+            receipt: result.receipt,
         })
     }
 
@@ -402,6 +395,27 @@ impl<'service> MessageOperations<'service> {
 
     fn delivery_failure(&self, failure: PushDeliveryFailure) -> MessageFailure {
         match failure {
+            PushDeliveryFailure::MailRefused(reason) => {
+                use collaboration_mail_protocol::MailRefusal;
+                match reason {
+                    MailRefusal::ItemConflict { existing } => {
+                        let mut failure = MessageFailure::discovery(
+                            MessageFailureKind::ItemConflict,
+                            "Item identity belongs to different content",
+                        );
+                        failure.existing = Some(existing);
+                        failure
+                    }
+                    MailRefusal::MailboxFull {} => MessageFailure::discovery(
+                        MessageFailureKind::MailboxFull,
+                        "Local message inbox is full",
+                    ),
+                    _ => MessageFailure::discovery(
+                        MessageFailureKind::Unavailable,
+                        "Local mail refused",
+                    ),
+                }
+            }
             PushDeliveryFailure::StoreUnavailable => MessageFailure::discovery(
                 MessageFailureKind::Unavailable,
                 "Push storage is unavailable",
@@ -452,11 +466,16 @@ pub struct MessageFailure {
     pub kind: MessageFailureKind,
     pub stage: MessageFailureStage,
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub existing: Option<collaboration_protocol::MailDigest>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum MessageFailureKind {
+    InvalidShape,
+    ItemConflict,
+    MailboxFull,
     /// A request field is invalid.
     InvalidField,
     /// A named session belongs to another Router.
@@ -491,6 +510,7 @@ impl MessageFailure {
             kind,
             stage,
             message: message.into(),
+            existing: None,
         }
     }
 
@@ -510,8 +530,12 @@ impl MessageFailure {
 impl CollaborationRejection for MessageFailure {
     fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
         match self.kind {
-            MessageFailureKind::InvalidField => Some(CollaborationRejectionReason::InvalidShape),
-            MessageFailureKind::WrongService
+            MessageFailureKind::InvalidShape | MessageFailureKind::InvalidField => {
+                Some(CollaborationRejectionReason::InvalidShape)
+            }
+            MessageFailureKind::ItemConflict
+            | MessageFailureKind::MailboxFull
+            | MessageFailureKind::WrongService
             | MessageFailureKind::ForeignMachine
             | MessageFailureKind::Unavailable
             | MessageFailureKind::NotFound
@@ -524,9 +548,11 @@ impl CollaborationRejection for MessageFailure {
 
     fn published_rejection(&self) -> PublishedRejection {
         let code = match self.kind {
-            MessageFailureKind::InvalidField | MessageFailureKind::WrongService => {
-                PublishedRejection::INVALID_PARAMS
-            }
+            MessageFailureKind::ItemConflict
+            | MessageFailureKind::MailboxFull
+            | MessageFailureKind::InvalidShape
+            | MessageFailureKind::InvalidField
+            | MessageFailureKind::WrongService => PublishedRejection::INVALID_PARAMS,
             MessageFailureKind::ForeignMachine
             | MessageFailureKind::Unavailable
             | MessageFailureKind::NotFound

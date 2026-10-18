@@ -16,6 +16,22 @@ use std::io::{self, Read, Write};
 
 pub(super) fn run_message_send(args: MessageSendArguments) -> i32 {
     let machine = args.json;
+    let item_id = match args
+        .item_id
+        .clone()
+        .map(collaboration_client::protocol::MailItemId::try_from)
+        .transpose()
+    {
+        Ok(id) => id.unwrap_or_else(collaboration_client::protocol::MailItemId::generate),
+        Err(_) => {
+            return report_message_failure(
+                "invalidShape",
+                "--item-id must be a canonical UUIDv7",
+                2,
+                machine,
+            );
+        }
+    };
     let prepared = prepare_message_send(&args);
     let (directory, prepared) = match prepared {
         Ok(value) => value,
@@ -23,6 +39,9 @@ pub(super) fn run_message_send(args: MessageSendArguments) -> i32 {
             return report_message_failure("invalidField", &message, 2, machine);
         }
     };
+    if writeln!(io::stderr(), "itemId: {}", item_id.as_str()).is_err() {
+        return 5;
+    }
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -48,6 +67,7 @@ pub(super) fn run_message_send(args: MessageSendArguments) -> i32 {
                 )))
             })?;
         let request = MessageSendRequest {
+            item_id: Some(item_id),
             target: saved.target,
             message: saved
                 .content

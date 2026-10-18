@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO legacy_cursor_key(singleton, key_bytes) VALUES (1, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "1908bdc12225d61950ed31d09b292997bfca7b5b4851273ae7f686f05e96a116"
+}

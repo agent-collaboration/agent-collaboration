@@ -22,6 +22,8 @@ use std::{
 use tokio::sync::mpsc;
 use tokio_tungstenite::{WebSocketStream, accept_async, tungstenite::Message};
 
+// U66 / MS-10: two real timer firings are separated by at least five minutes.
+const REPEAT_INTERVAL_SECONDS: u32 = 300;
 const WAKE_BODY: &str = "Review the recurring report";
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 const SESSION_ID: &str = "fixture-recurring-target";
@@ -110,9 +112,12 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         codex_home: root.path().to_owned(),
     };
 
-    let anchor = chrono::Utc::now();
+    let anchor =
+        chrono::Utc::now() - chrono::Duration::seconds(i64::from(REPEAT_INTERVAL_SECONDS) - 1);
     let expiry = anchor
-        .checked_add_signed(chrono::Duration::seconds(6))
+        .checked_add_signed(chrono::Duration::seconds(
+            i64::from(REPEAT_INTERVAL_SECONDS) * 2 + 3,
+        ))
         .expect("wake expiry is in range");
     let message: SavedMessage = serde_json::from_value(json!({
         "target": target,
@@ -129,9 +134,13 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
-            timing: TimingRule::Interval { seconds: 2 },
+            timing: TimingRule::Interval {
+                seconds: REPEAT_INTERVAL_SECONDS,
+            },
             expiry: ExpiryRule::At { at: expiry },
             now_ms: anchor.timestamp_millis(),
         })
@@ -269,9 +278,12 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
 async fn next_native_queue_delivery(
     receiver: &mut mpsc::Receiver<NativeQueueObservation>,
 ) -> TestResult<NativeQueueObservation> {
-    tokio::time::timeout(Duration::from_secs(8), receiver.recv())
-        .await?
-        .ok_or_else(|| "native server ended before both recurring deliveries arrived".into())
+    tokio::time::timeout(
+        Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8),
+        receiver.recv(),
+    )
+    .await?
+    .ok_or_else(|| "native server ended before both recurring deliveries arrived".into())
 }
 
 async fn load_and_validate_stored_wake_push(
@@ -335,7 +347,11 @@ async fn serve_two_queue_deliveries(
     observations: mpsc::Sender<NativeQueueObservation>,
 ) -> TestResult<()> {
     for delivery_number in 1..=2 {
-        let (stream, _) = tokio::time::timeout(Duration::from_secs(8), listener.accept()).await??;
+        let (stream, _) = tokio::time::timeout(
+            Duration::from_secs(u64::from(REPEAT_INTERVAL_SECONDS) + 8),
+            listener.accept(),
+        )
+        .await??;
         let mut socket = accept_async(stream).await?;
         let initialize = next_json_frame(&mut socket).await?;
         send_json_frame(&mut socket, json!({"id":initialize.get("id"),"result":{}})).await?;

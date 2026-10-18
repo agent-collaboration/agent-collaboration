@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_directory(project_id, board_id, title) VALUES (?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET title = excluded.title",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "4f1c498e0281164b176efc5f4278853108efeb76187267f0e4b628823dbed141"
+}

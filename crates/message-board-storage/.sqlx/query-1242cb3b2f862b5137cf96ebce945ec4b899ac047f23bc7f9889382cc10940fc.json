@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT key_bytes AS \"key_bytes!: Vec<u8>\" FROM legacy_cursor_key WHERE singleton = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_bytes!: Vec<u8>",
+        "type_info": {
+          "name": "BLOB"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "1242cb3b2f862b5137cf96ebce945ec4b899ac047f23bc7f9889382cc10940fc"
+}

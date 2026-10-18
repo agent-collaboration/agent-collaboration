@@ -20,7 +20,7 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(0)))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     while runtime.observations.lock().await.try_recv().is_ok() {}
     let mut observer = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
@@ -30,10 +30,7 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
     .unwrap();
     sqlx::query("CREATE TRIGGER fail_held_cleanup BEFORE UPDATE OF delivery_state ON router_pushes WHEN OLD.delivery_state='held' AND NEW.delivery_state='rejected' BEGIN SELECT RAISE(FAIL, 'injected cleanup write failure'); END").execute(&mut observer).await.unwrap();
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -55,7 +52,7 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
         matches!(acknowledged, Ok(Ok(()))),
         "cleanup write retry blocked a queued reconcile command"
     );
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     // A command acknowledges before the failed cleanup has been repaired.
     // The marker remains pending, and the next regular pass retries it.
     assert_eq!(
@@ -91,7 +88,7 @@ async fn delayed_batch_cleanup_never_supersedes_a_newer_held_push() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(0)))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     while runtime.observations.lock().await.try_recv().is_ok() {}
     let mut observer = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
@@ -207,10 +204,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
         .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(0)))
         .await;
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -290,10 +284,7 @@ async fn ended_subscription_rejects_its_held_push_with_end_reason() {
     let held_push_id = hold_next_push(&runtime).await;
 
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -302,6 +293,25 @@ async fn ended_subscription_rejects_its_held_push_with_end_reason() {
         )
         .await
         .unwrap();
+    let ended = fixture
+        .store
+        .lock()
+        .await
+        .get_thread_subscription_record(
+            &fixture.reader,
+            &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        ended.state(),
+        message_board::SubscriptionState::Ended {
+            reason: message_board::EndReason::Cancelled,
+        },
+        "cancellation revokes unselected notice obligations"
+    );
     runtime.reconcile(&fixture.reader).await;
     runtime
         .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1)))
@@ -346,7 +356,7 @@ fn service_identity(fixture: &OwnerFixture) -> crate::ServiceIdentity {
         )
         .unwrap()
         .with_automation_store(std::sync::Arc::clone(&fixture.push_store))
-        .with_board_store(std::sync::Arc::clone(&fixture.store))
+        .with_project_admission(fixture.admission.clone())
 }
 
 async fn show_record(

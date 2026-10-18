@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_workspaces(workspace_id, name) VALUES (?, ?) ON CONFLICT(workspace_id) DO UPDATE SET name = excluded.name",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "cc7bec87af26bfa08885bd7d1c8ad46a7e418e0832ab8322e6f938d2eae2748e"
+}

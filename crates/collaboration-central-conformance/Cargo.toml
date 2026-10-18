@@ -1,0 +1,51 @@
+[package]
+name = "collaboration-central-conformance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = ["client"]
+client = ["dep:reqwest", "dep:reqwest-websocket", "dep:tokio", "dep:futures-util", "dep:sha2", "dep:chrono", "dep:uuid", "dep:serde_json", "dep:ring", "dep:base64", "dep:axum"]
+
+[dependencies]
+fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
+message-board = { version = "0.1.93", path = "../message-board" }
+collaboration-central-core = { version = "0.1.93", path = "../collaboration-central-core", features = ["conformance"] }
+collaboration-replication-protocol = { version = "0.1.93", path = "../collaboration-replication-protocol" }
+serde.workspace = true
+chrono = { version = "0.4.45", features = ["serde"], optional = true }
+futures-util = { workspace = true, optional = true }
+reqwest = { workspace = true, features = ["json"], optional = true }
+reqwest-websocket = { version = "=0.5.1", optional = true }
+serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+uuid = { workspace = true, optional = true }
+ring = { version = "=0.17.14", optional = true }
+base64 = { version = "0.22.1", optional = true }
+axum = { workspace = true, optional = true }
+
+[dev-dependencies]
+collaboration-central-local = { version = "0.1.93", path = "../collaboration-central-local", features = ["conformance"] }
+tempfile = "3.27.0"
+
+[[example]]
+name = "native_smoke"
+required-features = ["client"]
+
+[[example]]
+name = "workerd_conformance"
+required-features = ["client"]
+
+[[example]]
+name = "workerd_lifecycle"
+required-features = ["client"]
+
+[[example]]
+name = "staging_driver"
+required-features = ["client"]

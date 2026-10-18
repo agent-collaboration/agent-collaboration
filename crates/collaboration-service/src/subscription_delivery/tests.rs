@@ -1,15 +1,21 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+mod activity_scope_proofs;
 mod control_view_proofs;
 mod direct_message_proofs;
 mod f6_held_record_proofs;
 mod flight_proofs;
 mod lifecycle_proofs;
-mod owner_fixture;
+mod local_mail_proofs;
+mod owner_activity_proofs;
+pub(in crate::service_identity::subscription_delivery) mod owner_fixture;
 mod push_store_proofs;
 mod queued_proofs;
 mod restore_corruption_proofs;
 mod stall_diagnosis;
+pub(in crate::service_identity::subscription_delivery) mod startup_fixture;
+mod startup_retry_proofs;
 mod timing_proofs;
+mod transient_scan_proofs;
 mod wait_proofs;
 mod write_retry_proofs;
 use owner_fixture::*;

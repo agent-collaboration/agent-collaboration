@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO owner_grants(grant_id, project_id) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "37ded6a7f5e930a7ef1d91203bfcf8fec1f72b28fc33f166ea4c7afdeec6a19b"
+}

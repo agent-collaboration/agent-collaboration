@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO threads(thread_id) VALUES (?) ON CONFLICT(thread_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "5508d5e1d398d6c5240ae1a99f2339aebb362e0094bebab1f08733da596fda8e"
+}

@@ -438,6 +438,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     ));
     let message = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {
@@ -470,6 +471,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     );
     let queued = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {

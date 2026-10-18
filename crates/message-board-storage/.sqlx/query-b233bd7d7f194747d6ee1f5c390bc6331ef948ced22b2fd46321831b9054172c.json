@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT workstream_id AS \"workstream!: String\" FROM tasks WHERE task_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workstream!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "b233bd7d7f194747d6ee1f5c390bc6331ef948ced22b2fd46321831b9054172c"
+}

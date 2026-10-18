@@ -35,7 +35,7 @@ pub(crate) struct WakeDeliverySender {
 }
 
 pub(crate) fn build_wake_push_draft(
-    wake: &WakeRecord<SavedMessage>,
+    wake: &WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {

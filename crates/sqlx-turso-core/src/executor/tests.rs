@@ -76,6 +76,53 @@ async fn executes_multi_statement_batch() -> sqlx_core::Result<()> {
 }
 
 #[tokio::test]
+async fn parser_splits_original_batch_text_with_unicode_literals_comments_and_trigger_bodies()
+-> sqlx_core::Result<()> {
+    let mut connection = memory_connection().await?;
+    (&mut connection)
+        .execute(
+            "CREATE TABLE items(id INTEGER PRIMARY KEY, text TEXT); \
+         CREATE TABLE notes(text TEXT); \
+         CREATE TRIGGER note_insert AFTER INSERT ON items BEGIN \
+           INSERT INTO notes(text) VALUES('a;雪'); \
+           INSERT INTO notes(text) VALUES('it''s; valid'); \
+         END; /* not; a statement */ \
+         INSERT INTO items(id,text) VALUES(1,'escaped;☃'); -- final; comment",
+        )
+        .await?;
+    let texts: Vec<String> =
+        sqlx_core::query_scalar::query_scalar("SELECT text FROM notes ORDER BY rowid")
+            .fetch_all(&mut connection)
+            .await?;
+    assert_eq!(texts, vec!["a;雪", "it's; valid"]);
+    let text: String = sqlx_core::query_scalar::query_scalar("SELECT text FROM items WHERE id=1")
+        .fetch_one(&mut connection)
+        .await?;
+    assert_eq!(text, "escaped;☃");
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_later_batch_parse_error_preserves_its_executed_prefix() -> sqlx_core::Result<()> {
+    let mut connection = memory_connection().await?;
+    (&mut connection)
+        .execute("CREATE TABLE items(id INTEGER PRIMARY KEY)")
+        .await?;
+    let failure = (&mut connection)
+        .execute("INSERT INTO items(id) VALUES(1); definitely not SQL")
+        .await;
+    assert!(failure.is_err());
+    let count: i64 = sqlx_core::query_scalar::query_scalar("SELECT count(*) FROM items")
+        .fetch_one(&mut connection)
+        .await?;
+    assert_eq!(
+        count, 1,
+        "parsing a later statement must not prevalidate away an earlier committed effect"
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn rejects_arguments_for_multi_statement_sql() -> sqlx_core::Result<()> {
     // Arrange
     let mut connection = memory_connection().await?;

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO role_assignments(assignment_id, project_subject, workstream_subject, role, active, owner_grant) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "ff73e4af71159ffb0c4e16a333d872e9eb63201cc8155405d7897deddc4875dd"
+}

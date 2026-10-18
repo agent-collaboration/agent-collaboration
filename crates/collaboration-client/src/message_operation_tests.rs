@@ -37,6 +37,7 @@ fn published_delivery_failure(mut receipt: Value, kind: &str, effect: &str) -> V
 async fn wrong_service_is_rejected_before_endpoint_discovery_or_submission() {
     let (_api, client, mut calls) = connected_client().await;
     let request = MessageSendRequest {
+        item_id: None,
         target: SessionRef {
             endpoint: EndpointRef {
                 service_id: UuidIdentity::try_from(
@@ -229,6 +230,14 @@ async fn successful_push_response_link_must_match_its_push_id() {
     assert_protocol_inconsistency(error);
 
     peer.await.expect("join peer");
+}
+
+#[tokio::test]
+async fn successful_push_response_must_echo_the_supplied_mail_identity() {
+    let mut request = fixture_request(None);
+    request.item_id = Some(OTHER_PUSH_ID.to_owned().try_into().expect("mail identity"));
+    let response = push_result(&request.target, PUSH_ID, PUSH_ID);
+    assert_inconsistent_response(request, response).await;
 }
 
 #[tokio::test]

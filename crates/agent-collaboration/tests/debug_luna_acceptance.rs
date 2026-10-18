@@ -79,6 +79,7 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
     let receipt = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {
@@ -228,6 +229,7 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     let initial = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: alpha.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {

@@ -7,7 +7,7 @@ use sqlx_core::{
     },
 };
 
-use crate::{Turso, connection::TursoConnection, error::map_turso_error};
+use crate::{Turso, connection::TursoConnection};
 
 /// A SQLx transaction on a Turso connection
 pub type TursoTransaction<'c> = sqlx_core::transaction::Transaction<'c, Turso>;
@@ -27,10 +27,7 @@ impl TransactionManager for TursoTransactionManager {
         }
 
         let sql = statement.unwrap_or_else(|| begin_ansi_transaction_sql(conn.transaction_depth()));
-        conn.raw()
-            .execute(sql.as_str(), ())
-            .await
-            .map_err(map_turso_error)?;
+        conn.execute_raw_statement(sql.as_str()).await?;
         conn.increment_transaction_depth();
         Ok(())
     }
@@ -44,10 +41,7 @@ impl TransactionManager for TursoTransactionManager {
         }
 
         let sql = commit_ansi_transaction_sql(depth);
-        conn.raw()
-            .execute(sql.as_str(), ())
-            .await
-            .map_err(map_turso_error)?;
+        conn.execute_raw_statement(sql.as_str()).await?;
         conn.decrement_transaction_depth();
         Ok(())
     }
@@ -64,10 +58,7 @@ impl TransactionManager for TursoTransactionManager {
         // The rollback may restore an earlier schema whose cookie a later change reuses.
         // Forgetting before it starts also covers a rollback that fails or is dropped.
         conn.forget_cached_statements();
-        conn.raw()
-            .execute(sql.as_str(), ())
-            .await
-            .map_err(map_turso_error)?;
+        conn.execute_raw_statement(sql.as_str()).await?;
         conn.decrement_transaction_depth();
         Ok(())
     }

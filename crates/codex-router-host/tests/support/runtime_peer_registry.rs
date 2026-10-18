@@ -363,6 +363,7 @@ impl RegistryCase {
             .ok_or("private registry peer missing from public discovery")?;
         let sent = client
             .send_message(MessageSendRequest {
+                item_id: None,
                 target: target.clone(),
                 message: PublicMessageContent::HumanUser {
                     text: body.to_owned().try_into()?,

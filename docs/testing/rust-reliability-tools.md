@@ -51,10 +51,10 @@ SQLX_OFFLINE, which diagnostic builds explicitly preserve.
 Keep any discovered defect grounded in an existing contract. Diagnostic tools do
 not replace real database migration, process/socket/PTY or runtime acceptance tests.
 
-## Checked account queries
+## Checked queries by database engine
 
-The account query metadata is generated against an empty disposable database
-created from the account crate's native migrations:
+Stock SQLite query metadata is generated against separate disposable schemas for
+account, automation and provider-operation queries:
 
 ```sh
 scripts/tooling/bootstrap-tools.sh sqlx
@@ -62,8 +62,22 @@ python3 scripts/tooling/prepare-sqlx.py
 python3 scripts/tooling/prepare-sqlx.py --check
 ```
 
-The wrapper supplies its own database URL and removes its temporary schema database
-when finished. It never reads router or Codex home. Commit `.sqlx` changes with
-query/schema changes. Metadata checks do not replace real migration tests.
-Automation has a separate migration set; its first migration cutover does not
-add checked automation queries or combine the databases.
+Turso query metadata is generated through the native driver from the project,
+fleet and Router-local migration sets, plus the driver's own test schema:
+
+```sh
+python3 scripts/tooling/prepare-sqlx-turso.py
+python3 scripts/tooling/prepare-sqlx-turso.py --check
+```
+
+The wrappers supply their own database URLs and remove their temporary schema
+databases when finished. They never read Router or Codex home. Stock metadata
+lives in the root `.sqlx`; Turso metadata lives in each querying package's `.sqlx`.
+`message-board-storage` has only native Turso queries. When stock preparation
+passes a SQLite URL through its dependency graph, that package's build script
+uses its existing native cache. The separate Turso preparation still describes
+every native query online against a fresh native schema and checks the cache.
+Both full `--check` commands are required. Run metadata generation before dependent
+workspace builds, since stock generation replaces the shared root cache as it runs.
+Commit metadata changes with query/schema changes. Metadata checks do not replace
+real migration tests.

@@ -9,7 +9,7 @@ use collaboration_protocol::{
 use message_board::{SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, WhenIdle};
 
 #[tokio::test(start_paused = true)]
-async fn covering_wait_renews_only_covered_poll_subscription_timestamps() {
+async fn declared_renewal_before_covering_wait_changes_only_the_covered_membership() {
     let fixture = OwnerFixture::new().await;
     let uncovered_root = fixture.add_root().await;
     for root in [&fixture.root, &uncovered_root] {
@@ -20,15 +20,23 @@ async fn covering_wait_renews_only_covered_poll_subscription_timestamps() {
     let covered_scope = SubscriptionScope::thread(fixture.root.clone());
     let uncovered_scope = SubscriptionScope::thread(uncovered_root);
     let (covered_before, uncovered_before) = {
-        let mut store = fixture.store.lock().await;
+        let store = fixture.store.lock().await;
         (
             store
-                .get_thread_subscription_record(&fixture.reader, &covered_scope)
+                .get_thread_subscription_record(
+                    &fixture.reader,
+                    &covered_scope,
+                    fixture.clock.now(),
+                )
                 .await
                 .unwrap()
                 .unwrap(),
             store
-                .get_thread_subscription_record(&fixture.reader, &uncovered_scope)
+                .get_thread_subscription_record(
+                    &fixture.reader,
+                    &uncovered_scope,
+                    fixture.clock.now(),
+                )
                 .await
                 .unwrap()
                 .unwrap(),
@@ -36,13 +44,16 @@ async fn covering_wait_renews_only_covered_poll_subscription_timestamps() {
     };
     let runtime = fixture.runtime().await;
     fixture.clock.advance(3600).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     let renewal_time = fixture.clock.now();
     let non_covering = runtime
         .service
         .wait(
             fixture.reader.clone(),
-            SubscriptionWaitFilter::Roots(vec![message_board::MessageId::generate()]),
+            SubscriptionWaitFilter::Roots(vec![message_board::ThreadRef {
+                thread: message_board::ThreadId::generate(),
+                project: Some(fixture.project.clone()),
+            }]),
             0,
             usize::MAX,
         )
@@ -60,13 +71,22 @@ async fn covering_wait_renews_only_covered_poll_subscription_timestamps() {
             .store
             .lock()
             .await
-            .get_thread_subscription_record(&fixture.reader, scope)
+            .get_thread_subscription_record(&fixture.reader, scope, fixture.clock.now())
             .await
             .unwrap()
             .unwrap();
         assert_eq!(unchanged.renewed_at(), before.renewed_at());
         assert_eq!(unchanged.expires_at(), before.expires_at());
     }
+    fixture
+        .write_as(
+            fixture.reader.clone(),
+            message_board::BoardOperation::ThreadRenew {
+                scope: covered_scope.clone(),
+            },
+            renewal_time,
+        )
+        .await;
     let service = runtime.service.clone();
     let reader = fixture.reader.clone();
     let covered_root = fixture.root.clone();
@@ -74,7 +94,7 @@ async fn covering_wait_renews_only_covered_poll_subscription_timestamps() {
         service
             .wait(
                 reader,
-                SubscriptionWaitFilter::Roots(vec![covered_root]),
+                SubscriptionWaitFilter::Roots(vec![(covered_root).into()]),
                 60,
                 usize::MAX,
             )
@@ -85,15 +105,23 @@ async fn covering_wait_renews_only_covered_poll_subscription_timestamps() {
         .observe(|event| matches!(event, OwnerObservation::WaitQueued))
         .await;
     let (covered_after, uncovered_after) = {
-        let mut store = fixture.store.lock().await;
+        let store = fixture.store.lock().await;
         (
             store
-                .get_thread_subscription_record(&fixture.reader, &covered_scope)
+                .get_thread_subscription_record(
+                    &fixture.reader,
+                    &covered_scope,
+                    fixture.clock.now(),
+                )
                 .await
                 .unwrap()
                 .unwrap(),
             store
-                .get_thread_subscription_record(&fixture.reader, &uncovered_scope)
+                .get_thread_subscription_record(
+                    &fixture.reader,
+                    &uncovered_scope,
+                    fixture.clock.now(),
+                )
                 .await
                 .unwrap()
                 .unwrap(),
@@ -147,6 +175,7 @@ async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -209,6 +238,7 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -249,6 +279,7 @@ async fn acp_queue_still_unknown_settles_unknown_with_route_evidence() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()

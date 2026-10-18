@@ -14,16 +14,19 @@ async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {
         Duration::from_secs(3),
     );
 
+    let renewal_id = RequestId::generate();
+    let renewal = json!({"requestId":renewal_id,"resubmits":null,"observedEpoch":1,"scope":{"kind":"thread","thread":{"thread":ROOT_MESSAGE_ID}}}).to_string();
     let output = run_cli(
         fixture.directory(),
         &[
-            "board",
             "thread",
             "wait",
-            "--root-message-id",
+            "--thread-id",
             ROOT_MESSAGE_ID,
             "--actor",
             "self",
+            "--renewal",
+            &renewal,
             "--max-wait",
             "1s",
         ],
@@ -37,8 +40,8 @@ async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {
     let request = watched.calls.pop().ok_or("the CLI made no tool call")?;
 
     ensure(
-        request.get("tool").and_then(Value::as_str) == Some("board_thread_wait"),
-        "CLI did not call board_thread_wait",
+        request.get("tool").and_then(Value::as_str) == Some("thread_wait"),
+        "CLI did not call thread_wait",
     )?;
     ensure(
         request
@@ -63,7 +66,7 @@ async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {
     )?;
     ensure(
         request
-            .pointer("/arguments/filter/rootMessageIds/0")
+            .pointer("/arguments/filter/threads/0/thread")
             .and_then(Value::as_str)
             == Some(ROOT_MESSAGE_ID),
         "wait request used a different root filter",
@@ -98,8 +101,12 @@ async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {
         "CLI omitted the actor needed to inspect the uncertain wait",
     )?;
     ensure(
-        response["error"]["filter"]["rootMessageIds"][0] == ROOT_MESSAGE_ID,
+        response["error"]["filter"]["threads"][0]["thread"] == ROOT_MESSAGE_ID,
         "CLI omitted the filter needed to inspect the uncertain wait",
+    )?;
+    ensure(
+        response["error"]["renewals"][0]["requestId"] == json!(renewal_id),
+        "CLI lost the uncertain renewal key",
     )?;
     Ok(())
 }

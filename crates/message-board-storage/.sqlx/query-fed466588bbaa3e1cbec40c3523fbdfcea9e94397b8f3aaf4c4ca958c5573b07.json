@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT subtask_id AS \"subtask_id!: String\" FROM subtasks WHERE subtask_id > ? ORDER BY subtask_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subtask_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fed466588bbaa3e1cbec40c3523fbdfcea9e94397b8f3aaf4c4ca958c5573b07"
+}

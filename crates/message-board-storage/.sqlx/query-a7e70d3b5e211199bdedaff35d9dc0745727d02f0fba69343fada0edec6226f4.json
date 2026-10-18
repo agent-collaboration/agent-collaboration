@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT (EXISTS(SELECT 1 FROM read_marks WHERE reader = ?) OR EXISTS(SELECT 1 FROM project_watches WHERE reader = ? AND active = 1) OR EXISTS(SELECT 1 FROM thread_watches WHERE reader = ? AND active = 1)) AS \"present!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a7e70d3b5e211199bdedaff35d9dc0745727d02f0fba69343fada0edec6226f4"
+}

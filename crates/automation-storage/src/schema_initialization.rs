@@ -4,6 +4,8 @@ use sqlx::{Connection, SqliteConnection, migrate::MigrateError};
 
 const BASELINE_VERSION: i64 = 20_260_910_000_000;
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
+const PRE_WAKE_VERSION: i64 = 20_261_015_000_200;
+const WAKE_SLOT_VERSION: i64 = 20_261_016_000_100;
 
 pub(crate) async fn initialize(connection: &mut SqliteConnection) -> Result<(), StorageError> {
     let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
@@ -14,10 +16,7 @@ pub(crate) async fn initialize(connection: &mut SqliteConnection) -> Result<(), 
     .await?;
 
     if has_native_history {
-        MIGRATOR
-            .run_direct(None, &mut *transaction, false)
-            .await
-            .map_err(map_migrate_error)?;
+        apply_remaining(&mut transaction).await?;
     } else {
         let legacy_version: i64 = sqlx::query_scalar("PRAGMA user_version")
             .fetch_one(&mut *transaction)
@@ -27,10 +26,7 @@ pub(crate) async fn initialize(connection: &mut SqliteConnection) -> Result<(), 
                 if schema_validation::has_domain_objects(&mut transaction).await? {
                     return Err(StorageError::InvalidSchema);
                 }
-                MIGRATOR
-                    .run_direct(None, &mut *transaction, false)
-                    .await
-                    .map_err(map_migrate_error)?;
+                apply_remaining(&mut transaction).await?;
                 migration_test_checkpoint("baseline-registered");
             }
             1 => {
@@ -40,10 +36,7 @@ pub(crate) async fn initialize(connection: &mut SqliteConnection) -> Result<(), 
                     .await
                     .map_err(map_migrate_error)?;
                 migration_test_checkpoint("baseline-registered");
-                MIGRATOR
-                    .run_direct(None, &mut *transaction, false)
-                    .await
-                    .map_err(map_migrate_error)?;
+                apply_remaining(&mut transaction).await?;
             }
             other => return Err(StorageError::UnsupportedVersion(other)),
         }
@@ -54,6 +47,25 @@ pub(crate) async fn initialize(connection: &mut SqliteConnection) -> Result<(), 
     transaction.commit().await?;
     migration_test_checkpoint("outer-committed");
     Ok(())
+}
+
+async fn apply_remaining(connection: &mut SqliteConnection) -> Result<(), StorageError> {
+    MIGRATOR
+        .run_direct(Some(PRE_WAKE_VERSION), connection, false)
+        .await
+        .map_err(map_migrate_error)?;
+    let applied: bool =
+        sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM _sqlx_migrations WHERE version=?)")
+            .bind(WAKE_SLOT_VERSION)
+            .fetch_one(&mut *connection)
+            .await?;
+    if !applied {
+        crate::wake_slot_upgrade::apply(connection, chrono::Utc::now().timestamp_millis()).await?;
+    }
+    MIGRATOR
+        .run_direct(None, connection, false)
+        .await
+        .map_err(map_migrate_error)
 }
 
 #[cfg(not(test))]
@@ -298,7 +310,7 @@ mod tests {
                 .close()
                 .await?;
             let adopted = inspect_seed_and_history(&database.path).await?;
-            if adopted.0 != 1 || adopted.1 != 79 || adopted.2 != 1 || adopted.3.len() != 4 {
+            if adopted.0 != 1 || adopted.1 != 79 || adopted.2 != 1 || adopted.3.len() != 10 {
                 return Err(
                     format!("{stage}: reopen did not adopt intact state: {adopted:?}").into(),
                 );
@@ -313,7 +325,7 @@ mod tests {
         create_seeded_legacy_v1(&database.path).await?;
         run_checkpoint_child(&database.path, "outer-committed").await?;
         let committed = inspect_seed_and_history(&database.path).await?;
-        if committed.0 != 1 || committed.1 != 79 || committed.2 != 1 || committed.3.len() != 4 {
+        if committed.0 != 1 || committed.1 != 79 || committed.2 != 1 || committed.3.len() != 10 {
             return Err(format!("postcommit exit lost native state: {committed:?}").into());
         }
         crate::AutomationStore::open(&database.path)

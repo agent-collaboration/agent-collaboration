@@ -39,6 +39,8 @@ async fn retried_wake_retains_both_receipts_in_attempt_and_event_history()
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::After { seconds: 1 },

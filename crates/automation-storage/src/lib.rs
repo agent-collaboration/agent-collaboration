@@ -17,6 +17,8 @@ mod schedule_repository;
 pub use schedule_repository::ScheduleCreate;
 mod run_inventory;
 mod schedule_evaluation;
+mod wake_limits;
+mod wake_slot_upgrade;
 mod wakeup_repository;
 pub use wakeup_repository::WakeCreate;
 mod local_operation_receipts;
@@ -35,10 +37,16 @@ mod wakeup_worker_inventory;
 pub use delivery_preparation::DeliveryPreparation;
 mod delivery_inspection;
 pub use delivery_inspection::DeliveryRecord;
+mod board_intent_progress;
 mod direct_message_recovery;
 mod push_records;
+mod subscription_delivery_progress;
 pub use push_records::{
     DirectMessageHistoryQuery, MAX_PUSH_LIST_LIMIT, MAX_PUSH_PRUNE_BATCH, PushInboxQuery,
+};
+pub use subscription_delivery_progress::{
+    SubscriptionDeliveryProgress, SubscriptionDeliveryProgressProps, SubscriptionRootProgress,
+    SubscriptionWindowProgress, SubscriptionWindowSelection,
 };
 mod wakeup_observation;
 pub use wakeup_observation::WakeTransition;
@@ -109,3 +117,11 @@ pub use automation_event_history::{
 mod schedule_export;
 mod schedule_import;
 pub use schedule_import::ScheduleImport;
+
+mod mail_custody;
+mod mail_custody_records;
+pub use mail_custody::{LocalMailSnapshot, LocalMessageAdmission, LocalMessageRequest};
+
+mod push_retention;
+
+mod push_delivery_transitions;

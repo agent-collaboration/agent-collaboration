@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT epoch AS \"epoch!: i64\", position AS \"position!: i64\" FROM legacy_position_mapping WHERE project_id = ? AND old_position <= ? ORDER BY old_position DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "08765ea43e4f59c48a43be5dd92377fc8c3a4b36eb4dfe9933b060a0c2388992"
+}

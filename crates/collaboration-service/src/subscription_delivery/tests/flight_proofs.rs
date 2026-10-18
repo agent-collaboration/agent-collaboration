@@ -20,14 +20,14 @@ async fn resumed_reader_batches_held_roots_with_staggered_presence_checks() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::Held))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
 
     fixture.clock.advance(1).await;
     fixture.post(&second_root, "Second held root").await;
     runtime
         .observe(|event| matches!(event, OwnerObservation::Held))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture
         .post(&poll_root, "Poll activity stays pending")
         .await;
@@ -52,20 +52,24 @@ async fn resumed_reader_batches_held_roots_with_staggered_presence_checks() {
             activity
                 .ranges
                 .iter()
-                .filter(|range| &range.root_message_id == root)
+                .filter(|range| &range.thread_id == root)
                 .count(),
             1
         );
     }
     assert!(request.payload.line.as_str().contains(" · 2 threads · "));
     runtime.await_settled().await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     let poll = fixture
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &SubscriptionScope::thread(poll_root))
+        .get_thread_subscription_record(
+            &fixture.reader,
+            &SubscriptionScope::thread(poll_root),
+            fixture.clock.now(),
+        )
         .await
         .unwrap()
         .unwrap();
@@ -74,7 +78,7 @@ async fn resumed_reader_batches_held_roots_with_staggered_presence_checks() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn mode_change_during_flight_settles_original_push_and_polls_only_later_activity() {
+async fn mode_change_during_flight_settles_original_push_and_polls_released_backlog() {
     let fixture = OwnerFixture::new().await;
     let runtime = fixture.runtime().await;
     let original_post = fixture
@@ -94,7 +98,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_only_later_ac
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap()
@@ -105,7 +109,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_only_later_ac
     let later_post = fixture.post(&fixture.root, "Later poll activity").await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     runtime.await_settled().await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
 
     let settled_record = fixture
         .push_store
@@ -129,21 +133,21 @@ async fn mode_change_during_flight_settles_original_push_and_polls_only_later_ac
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
     assert_eq!(updated_subscription.policy().mode(), SubscriptionMode::Poll);
     assert_ne!(updated_subscription.generation(), original_generation);
     assert_eq!(updated_subscription.last_outcome(), None);
-    assert_eq!(updated_subscription.roots()[0].pending_count(), 1);
+    assert_eq!(updated_subscription.roots()[0].pending_count(), 2);
     assert!(runtime.requests.lock().await.try_recv().is_err());
 
     let result = runtime
         .service
         .wait(
             fixture.reader.clone(),
-            SubscriptionWaitFilter::Roots(vec![fixture.root.clone()]),
+            SubscriptionWaitFilter::Roots(vec![(fixture.root.clone()).into()]),
             60,
             usize::MAX,
         )
@@ -155,25 +159,22 @@ async fn mode_change_during_flight_settles_original_push_and_polls_only_later_ac
     };
     assert_ne!(push_id, original_request.payload.push_id);
     assert_eq!(batch.roots.len(), 1);
-    assert_eq!(batch.roots[0].message_count, 1);
-    assert_eq!(
-        batch.roots[0].from_sequence,
-        later_post.message.activity_sequence
+    assert_eq!(batch.roots[0].post_count, 2);
+    assert_eq!(batch.roots[0].from, original_post);
+    assert_eq!(batch.roots[0].through, later_post);
+    assert!(
+        batch.roots[0].through.epoch == original_post.epoch
+            && batch.roots[0].through.position > original_post.position
     );
-    assert_eq!(
-        batch.roots[0].through_sequence,
-        later_post.message.activity_sequence
-    );
-    assert!(batch.roots[0].from_sequence > original_post.message.activity_sequence);
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     let final_subscription = fixture
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -199,7 +200,7 @@ async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
         service
             .wait(
                 reader,
-                SubscriptionWaitFilter::Roots(vec![poll_root]),
+                SubscriptionWaitFilter::Roots(vec![(poll_root).into()]),
                 60,
                 usize::MAX,
             )
@@ -257,7 +258,7 @@ async fn twenty_root_limit_drains_remaining_due_roots_immediately() {
     assert!(
         !first_ranges
             .iter()
-            .any(|range| range.root_message_id == second_ranges[0].root_message_id)
+            .any(|range| range.thread_id == second_ranges[0].thread_id)
     );
     runtime.await_settled().await;
     runtime.close().await;
@@ -277,7 +278,7 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
         .await;
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "Original").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(120).await;
     let first = runtime.requests.lock().await.recv().await.unwrap();
     fixture.post(&fixture.root, "First residual").await;
@@ -302,10 +303,7 @@ async fn cancel_during_flight_settles_the_passed_range_and_prevents_later_pushes
     fixture.post(&fixture.root, "In flight").await;
     runtime.requests.lock().await.recv().await.unwrap();
     fixture
-        .store
-        .lock()
-        .await
-        .unsubscribe_thread_subscription(
+        .unsubscribe(
             message_board::ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -329,11 +327,11 @@ async fn board_settlement_failure_retries_without_redelivery() {
     let fixture = OwnerFixture::new().await;
     let mut observer = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("board.sqlite")),
+            .filename(fixture.directory.path().join("automation.sqlite")),
     )
     .await
     .unwrap();
-    sqlx::query("CREATE TRIGGER fail_owner_settle BEFORE INSERT ON thread_delivery_positions BEGIN SELECT RAISE(FAIL, 'injected settlement failure'); END").execute(&mut observer).await.unwrap();
+    sqlx::query("CREATE TRIGGER fail_owner_settle BEFORE UPDATE OF payload ON subscription_delivery_progress WHEN json_extract(OLD.payload, '$.roots[0].window.selected') IS NOT NULL AND json_extract(NEW.payload, '$.roots[0].window') IS NULL BEGIN SELECT RAISE(FAIL, 'injected settlement failure'); END").execute(&mut observer).await.unwrap();
     let runtime = fixture.runtime().await;
     fixture
         .post(&fixture.root, "Accepted before recording")
@@ -355,7 +353,7 @@ async fn board_settlement_failure_retries_without_redelivery() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     observer.close().await.unwrap();
     runtime.close().await;
@@ -371,12 +369,17 @@ async fn resolved_held_subscription_drains_then_ends_resolved() {
         .observe(|event| matches!(event, OwnerObservation::Held))
         .await;
     fixture
-        .store
-        .lock()
-        .await
-        .resolve_thread(
+        .resolve(
             message_board::ThreadResolveRequest {
-                root_message_id: fixture.root.clone(),
+                request_id: message_board::RequestId::generate(),
+                protocol_version: message_board::ProtocolVersion::CURRENT,
+                observed_epoch: None,
+                resubmits: None,
+                reason: message_board::ThreadResolutionReason::try_from(
+                    "delivery proof resolved".to_owned(),
+                )
+                .unwrap(),
+                thread: (fixture.root.clone()).into(),
                 actor: human("board-owner"),
                 acting_for: None,
             },
@@ -384,7 +387,7 @@ async fn resolved_held_subscription_drains_then_ends_resolved() {
         )
         .await
         .unwrap();
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Running;
     fixture.clock.advance(30).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -400,6 +403,7 @@ async fn resolved_held_subscription_drains_then_ends_resolved() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -422,14 +426,14 @@ async fn restart_mid_quiet_preserves_the_original_arrival_deadline() {
         .await;
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "Before restart").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(60).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     runtime.close().await;
     reopen_board(&fixture).await;
     let runtime = fixture.runtime().await;
     fixture.clock.advance(59).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(1).await;
     runtime.requests.lock().await.recv().await.unwrap();
@@ -451,7 +455,7 @@ async fn restart_after_cap_delivers_immediately_with_downtime_arrivals_included(
         .await;
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "Before downtime").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     runtime.close().await;
     for _ in 0..7 {
         fixture.clock.advance(90).await;
@@ -466,10 +470,14 @@ async fn restart_after_cap_delivers_immediately_with_downtime_arrivals_included(
 }
 
 async fn reopen_board(fixture: &OwnerFixture) {
-    let reopened =
-        message_board_storage::BoardStore::open(&fixture.directory.path().join("board.sqlite"))
-            .await
-            .unwrap();
-    let old = std::mem::replace(&mut *fixture.store.lock().await, reopened);
-    old.close().await.unwrap();
+    let reopened = automation_storage::AutomationStore::open(
+        &fixture.directory.path().join("automation.sqlite"),
+    )
+    .await
+    .unwrap();
+    let previous = std::mem::replace(&mut *fixture.push_store.lock().await, reopened);
+    previous.close().await.unwrap();
+    let registry = std::sync::Arc::new(crate::ProjectStoreRegistry::new(fixture.directory.path()));
+    *fixture.store.lock().await =
+        crate::SubscriptionWindowStore::new(registry, fixture.push_store.clone());
 }

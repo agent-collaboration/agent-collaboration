@@ -97,4 +97,8 @@ cargo test -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-features
 | No read-only opens; `?mode=ro` is rejected | Tested |
 | No `VACUUM`: the engine keeps it behind an experimental flag this driver does not set | Source |
 | Each statement step does its file IO (`pread`, `pwrite`, `fsync`) synchronously inside `poll`, on the runtime worker that polls it; opening a store does too | Source |
-| A statement waiting on a lock busy-polls its task until `busy_timeout` (about 0.5 s CPU per 2 s wait, measured) | Measured |
+
+Lock waits use a Tokio timer with a five-second default budget. The driver disables the native
+binding's busy spin; batches resume only the busy statement. The permanent contention and
+pool-return tests and upstream removal check are described in
+[UW-1](../../docs/upstream-workarounds/uw-1-turso-busy-wait-spin.md).

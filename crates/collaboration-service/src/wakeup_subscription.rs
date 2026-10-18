@@ -172,8 +172,8 @@ impl WakeSubscriptionState {
                     }
                 }
                 "paused" => WakeChange::Paused,
-                "cancelled" => WakeChange::Cancelled,
-                "expired" => WakeChange::Expired,
+                "cancelled" | "replaced" => WakeChange::Cancelled,
+                "expired" | "upgradeDuplicate" | "upgradeLimit" => WakeChange::Expired,
                 "finishedWithoutFiring" => WakeChange::FinishedWithoutFiring,
                 "created" | "resumed" | "finished" | "coalesced" => continue,
                 _ => return Err(io::Error::other("unknown wake transition")),

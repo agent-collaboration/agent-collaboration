@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE notify_intents SET state = ?, recipient = ?, assignment_revision = ? WHERE intent_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "ea11d9e3dc559512d7c857d18d43d75aa1d4f2484f51c48026c07f2724e13518"
+}

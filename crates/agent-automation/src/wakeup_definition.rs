@@ -46,9 +46,10 @@ pub struct FirstFire {
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WakeDefinition<TMessage> {
+pub struct WakeDefinition<TMessage, TCreator> {
     pub wakeup_id: WakeupId,
     pub change_id: ChangeId,
+    pub created_by: TCreator,
     pub message: TMessage,
     pub timing: TimingRule,
     pub anchor_at_ms: i64,
@@ -57,8 +58,8 @@ pub struct WakeDefinition<TMessage> {
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct WakeRecord<TMessage> {
-    pub definition: WakeDefinition<TMessage>,
+pub struct WakeRecord<TMessage, TCreator> {
+    pub definition: WakeDefinition<TMessage, TCreator>,
     pub state: WakeState,
     pub next_due_at_ms: Option<i64>,
     pub first_fire: Option<FirstFire>,

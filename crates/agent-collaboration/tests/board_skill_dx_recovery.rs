@@ -20,11 +20,14 @@ async fn luna_recovers_from_combined_board_argument_diagnostic() -> ProofResult<
     let setup_actor = Identity::Human {
         human_id: HumanId::try_from("dx-recovery-fixture".to_owned())?,
     };
-    let project_id = ProjectId::generate();
+    let workspace_id = WorkspaceId::generate();
     proof
         .client
-        .board_project_create(ProjectCreateRequest {
-            project_id: project_id.clone(),
+        .workspace_create(WorkspaceCreateRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            resubmits: None,
+            workspace_id: workspace_id.clone(),
             name: ResourceName::try_from(PROJECT_NAME.to_owned())?,
             description: Description::try_from(
                 "Existing project for CLI diagnostic recovery".to_owned(),
@@ -35,8 +38,11 @@ async fn luna_recovers_from_combined_board_argument_diagnostic() -> ProofResult<
         .await?;
     proof
         .client
-        .board_repository_attach(RepositoryAttachRequest {
-            project_id,
+        .repository_attach(RepositoryAttachRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            resubmits: None,
+            workspace_id,
             repository: RepositoryRef::Origin {
                 normalized_origin: NormalizedOrigin::try_from(REPOSITORY_ORIGIN.to_owned())?,
             },
@@ -67,6 +73,7 @@ async fn luna_recovers_from_combined_board_argument_diagnostic() -> ProofResult<
     proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: agent.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {

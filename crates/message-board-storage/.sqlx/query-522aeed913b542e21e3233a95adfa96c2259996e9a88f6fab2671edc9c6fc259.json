@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT redacted AS \"redacted!: bool\" FROM work_trail_rows WHERE row_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "redacted!: bool",
+        "type_info": {
+          "name": "BOOLEAN"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "522aeed913b542e21e3233a95adfa96c2259996e9a88f6fab2671edc9c6fc259"
+}

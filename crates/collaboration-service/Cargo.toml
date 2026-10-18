@@ -7,9 +7,12 @@ publish.workspace = true
 [lints]
 workspace = true
 [dependencies]
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
+petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
+fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
 automation-storage = { path = "../automation-storage", version = "0.1.16" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 base64.workspace = true
@@ -34,6 +37,9 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+tracing-subscriber.workspace = true
+proptest.workspace = true
+sqlx-turso = { path = "../sqlx-turso", version = "0.1.93" }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 tempfile = "3.27.0"
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }

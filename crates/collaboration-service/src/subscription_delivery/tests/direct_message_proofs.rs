@@ -138,10 +138,10 @@ async fn unavailable_board_holds_dm_and_rechecks_presence_at_thirty_seconds() {
         .await
         .unwrap();
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(29);
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance_without_tokio_time(1);
     assert_eq!(request(&runtime).await.mode, MessageDelivery::Queue);
@@ -496,4 +496,84 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
         assert_eq!(route.effects.load(Ordering::SeqCst), 0);
         restored.shutdown().await;
     }
+}
+
+#[tokio::test]
+async fn board_notification_wakeable_hold_recovers_one_exact_push_when_running() {
+    let fixture = OwnerFixture::new().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    let intent = message_board::NotifyIntentId::generate();
+    let origin = collaboration_protocol::RouterOriginRef::BoardIntent {
+        project: fixture.project.clone(),
+        intent: intent.clone(),
+    }
+    .canonical_string()
+    .unwrap();
+    let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).unwrap();
+    fixture
+        .push_store
+        .lock()
+        .await
+        .insert_push_record(PushRecordDraft {
+            push_id: push_id.clone(),
+            kind: PushKind::BoardNotification,
+            origin: PushOrigin::Router(PushKind::BoardNotification),
+            origin_router_ref: Some(origin.clone()),
+            target: target_session(&fixture.reader).unwrap(),
+            mode: None,
+            guard: None,
+            reply_to_push_id: None,
+            header_facts: PushHeaderFacts::BoardNotification {
+                project: fixture.project.clone(),
+                intent,
+                cause: message_board::PostId::generate().into(),
+                summary: collaboration_protocol::MessageText::try_from(
+                    "board notification".to_owned(),
+                )
+                .unwrap(),
+            },
+            body: None,
+            activity: None,
+            created_at: fixture.clock.now(),
+        })
+        .await
+        .unwrap();
+    let runtime = fixture.runtime_without_board().await;
+    bounded_observe(&runtime, |event| {
+        matches!(event, OwnerObservation::DirectMessageHeld)
+    })
+    .await;
+    let held = record(&fixture, &push_id).await;
+    assert_eq!(held.delivery_state, PushDeliveryState::Held);
+    assert_eq!(held.origin_router_ref.as_deref(), Some(origin.as_str()));
+    assert!(runtime.requests.lock().await.try_recv().is_err());
+    runtime.close().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    let restored = fixture.runtime_without_board().await;
+    let submitted = request(&restored).await;
+    assert_eq!(submitted.payload.push_id, push_id);
+    assert_eq!(submitted.mode, MessageDelivery::Auto);
+    assert!(matches!(
+        submitted.precondition,
+        DeliveryPrecondition::Unpinned
+    ));
+    assert_eq!(submitted.payload.load_policy, LoadPolicy::LoadedOnly);
+    restored.completions.send(DeliveryOutcome::Started).unwrap();
+    bounded_observe(&restored, |event| {
+        matches!(event, OwnerObservation::DirectMessageSettled)
+    })
+    .await;
+    assert_eq!(
+        record(&fixture, &push_id).await.delivery_state,
+        PushDeliveryState::Delivered
+    );
+    assert_eq!(
+        record(&fixture, &push_id)
+            .await
+            .origin_router_ref
+            .as_deref(),
+        Some(origin.as_str())
+    );
+    assert!(restored.requests.lock().await.try_recv().is_err());
+    restored.close().await;
 }

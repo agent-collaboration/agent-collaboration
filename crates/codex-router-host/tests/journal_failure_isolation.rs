@@ -1,16 +1,18 @@
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::{CollaborationClient, JournalStatus};
 use collaboration_protocol::EndpointAvailability;
-use std::os::unix::fs::DirBuilderExt;
+use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]
 async fn journal_open_failure_does_not_disable_the_api_and_native_publication() {
     // Arrange: an owner-private fixture path deliberately cannot be opened as SQLite.
-    let root = std::env::temp_dir().join(format!("journal-isolation-{}", std::process::id()));
-    std::fs::DirBuilder::new()
-        .mode(0o700)
-        .create(&root)
+    let directory = tempfile::Builder::new()
+        .prefix("journal-isolation-")
+        .tempdir()
         .unwrap_or_else(|error| panic!("directory: {error}"));
+    let root = directory.path().to_path_buf();
+    std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
+        .unwrap_or_else(|error| panic!("directory permissions: {error}"));
     let blocked_database = root.join("session-registry.sqlite");
     std::fs::create_dir(&blocked_database)
         .unwrap_or_else(|error| panic!("blocked database: {error}"));
@@ -53,19 +55,6 @@ async fn journal_open_failure_does_not_disable_the_api_and_native_publication() 
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown: {error}"));
-    std::fs::remove_file(root.join("service-identity.json"))
-        .unwrap_or_else(|error| panic!("identity cleanup: {error}"));
-    std::fs::remove_dir(blocked_database)
-        .unwrap_or_else(|error| panic!("database directory cleanup: {error}"));
-    std::fs::remove_file(root.join("project-board.sqlite"))
-        .unwrap_or_else(|error| panic!("board database cleanup: {error}"));
-    std::fs::remove_file(root.join("automation.sqlite"))
-        .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
-    std::fs::remove_file(root.join("provider-operations.sqlite"))
-        .unwrap_or_else(|error| panic!("provider database cleanup: {error}"));
-    std::fs::remove_file(root.join("interaction.sqlite"))
-        .unwrap_or_else(|error| panic!("interaction database cleanup: {error}"));
-    std::fs::remove_dir(root).unwrap_or_else(|error| panic!("directory cleanup: {error}"));
     // Assert: this proves listener/publication independence, not a running Codex backend.
     assert!(matches!(status, JournalStatus::Unavailable));
     assert!(listener_present);

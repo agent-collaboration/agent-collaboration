@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_feed(position, entry) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "8a1303671a9a535893b6780516cc4f56f4de28e72af5ad01f04afa37f948843b"
+}

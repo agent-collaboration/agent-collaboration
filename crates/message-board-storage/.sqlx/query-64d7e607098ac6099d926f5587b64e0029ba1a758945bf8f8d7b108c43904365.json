@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT\nCASE WHEN json_type(payload,'$.kind')='text' THEN json_extract(payload,'$.kind') END AS \"kind?: String\",\nCASE WHEN json_type(payload,'$.record.rowId')='text' THEN json_extract(payload,'$.record.rowId') END AS \"id?: String\",\nCASE WHEN json_type(payload,'$.record.envelope.id')='text' THEN json_extract(payload,'$.record.envelope.id') END AS \"envelope_id?: String\",\nCASE WHEN json_type(payload,'$.record.envelope.scope.project')='text' THEN json_extract(payload,'$.record.envelope.scope.project') END AS \"project?: String\",\nCASE WHEN json_type(payload,'$.record.projectId')='text' THEN json_extract(payload,'$.record.projectId') END AS \"body_project?: String\",\nCASE WHEN json_type(payload,'$.record.subject')='object' THEN json_extract(payload,'$.record.subject') END AS \"subject?: String\"\nFROM record_identities WHERE kind='workTrailRow' AND id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "envelope_id?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "project?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "body_project?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "subject?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "64d7e607098ac6099d926f5587b64e0029ba1a758945bf8f8d7b108c43904365"
+}

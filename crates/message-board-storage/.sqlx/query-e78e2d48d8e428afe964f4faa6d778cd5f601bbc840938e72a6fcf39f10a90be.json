@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT board_id AS \"board_id!: String\" FROM fleet_boards WHERE workspace_id = ? AND name = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "board_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "e78e2d48d8e428afe964f4faa6d778cd5f601bbc840938e72a6fcf39f10a90be"
+}

@@ -6,7 +6,7 @@ use collaboration_protocol::{
 };
 
 pub(crate) fn snapshot(
-    record: WakeRecord<SavedMessage>,
+    record: WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     service_id: &UuidIdentity,
     observed_at_ms: i64,
 ) -> Result<WakeSnapshot, ()> {
@@ -43,6 +43,7 @@ pub(crate) fn snapshot(
         definition: WakeDefinition {
             wakeup_id: definition.wakeup_id,
             change_id: definition.change_id,
+            created_by: definition.created_by,
             message: definition.message,
             timing: serde_json::from_value(
                 serde_json::to_value(definition.timing).map_err(|_| ())?,

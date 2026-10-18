@@ -143,6 +143,6 @@ fn request(operation_id: OperationId) -> TestResult<WakeSendRequest> {
         "operationId":operation_id,
         "message":{"target":{"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"fixture"},
             "content":{"kind":"humanUser","text":"Reminder"},"delivery":"auto","generationGuard":null},
-        "timing":{"kind":"after","seconds":600},"expiry":{"kind":"none"}
+        "timing":{"kind":"after","seconds":600},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}
     }))?)
 }

@@ -261,6 +261,7 @@ async fn send_agent_probe(input: MessageProbeInput<'_>) -> Result<DeliveryReceip
         CollaborationClient::connect(&input.proof.service_directory, "busy-proof", "1").await?;
     client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: input.target.clone(),
             generation_guard: Some(input.proof.generation.clone()),
             message: MessageContent::Agent {

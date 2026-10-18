@@ -79,7 +79,7 @@ impl SubscriptionPushStore {
         let message_count = batch
             .roots
             .iter()
-            .try_fold(0_u64, |count, root| count.checked_add(root.message_count))
+            .try_fold(0_u64, |count, root| count.checked_add(root.post_count))
             .ok_or_else(BoardError::board_unavailable)?;
         let header_facts = PushHeaderFacts::SubscriptionActivity {
             root_count,
@@ -92,9 +92,10 @@ impl SubscriptionPushStore {
                 .roots
                 .iter()
                 .map(|root| PushActivityRange {
-                    root_message_id: root.root_id.clone(),
-                    from_activity_sequence: root.from_sequence,
-                    through_activity_sequence: root.through_sequence,
+                    thread_id: root.thread_id.clone(),
+                    project_id: root.project_id.clone(),
+                    from: root.from,
+                    through: root.through,
                 })
                 .collect(),
             held: batch.held,
@@ -115,6 +116,41 @@ impl SubscriptionPushStore {
         self.store_prepared(draft, load_policy).await
     }
 
+    pub(super) async fn board_notification(
+        &self,
+        target: &SessionRef,
+        project: &message_board::ProjectId,
+        intent: &message_board::NotifyIntent,
+    ) -> Result<PreparedPush, BoardError> {
+        let origin = RouterOriginRef::BoardIntent {
+            project: project.clone(),
+            intent: intent.intent_id.clone(),
+        };
+        let draft = self.draft(
+            target,
+            PushKind::BoardNotification,
+            origin,
+            PushHeaderFacts::BoardNotification {
+                project: project.clone(),
+                intent: intent.intent_id.clone(),
+                cause: intent.cause.clone(),
+                summary: MessageText::try_from(
+                    match intent.cause.kind {
+                        message_board::RecordKind::Post => "New thread post",
+                        message_board::RecordKind::RoleAssignment => "Role assignment changed",
+                        message_board::RecordKind::Move => "Project move recorded",
+                        _ => "New board activity",
+                    }
+                    .to_owned(),
+                )
+                .map_err(|_| BoardError::board_unavailable())?,
+            },
+            None,
+            None,
+        )?;
+        self.store_prepared(draft, LoadPolicy::LoadedOnly).await
+    }
+
     pub(super) async fn expiry(
         &self,
         target: &SessionRef,
@@ -123,8 +159,8 @@ impl SubscriptionPushStore {
     ) -> Result<PreparedPush, BoardError> {
         let (kind, id) = scope.kind_and_id();
         let argument = match scope {
-            SubscriptionScope::Thread { .. } => "--root-message-id",
-            SubscriptionScope::Topic { .. } => "--topic-id",
+            SubscriptionScope::Thread { .. } => "--thread-id",
+            SubscriptionScope::Project { .. } => "--project-id",
         };
         let draft = self.draft(
             target,
@@ -138,7 +174,7 @@ impl SubscriptionPushStore {
                 scope: format!("{kind} {id}"),
             },
             Some(format!(
-                "Renew with: agent-collaboration board thread subscribe {argument} {id}"
+                "Renew with: agent-collaboration thread subscribe {argument} {id}"
             )),
             None,
         )?;

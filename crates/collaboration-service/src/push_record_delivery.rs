@@ -1,12 +1,10 @@
 //! Store-first direct-message delivery through Layer 0's PreparedPush path.
 use crate::ServiceIdentity;
 use automation_storage::StorageError;
-use collaboration_protocol::{
-    CodexGeneration, MessageDelivery, PushId, PushRecord, PushRecordDraft,
-    PushRecordValidationError,
-};
+use collaboration_protocol::{PushId, PushRecordDraft, PushRecordValidationError};
 
 pub(crate) enum PushDeliveryFailure {
+    MailRefused(collaboration_mail_protocol::MailRefusal),
     StoreUnavailable,
     DeliveryUnavailable,
     InvalidRecord(PushRecordValidationError),
@@ -16,40 +14,72 @@ pub(crate) enum PushDeliveryFailure {
 
 pub(crate) async fn store_first_and_deliver(
     draft: PushRecordDraft,
-    mode: MessageDelivery,
-    generation_guard: Option<CodexGeneration>,
+    target_identity: String,
     identity: &ServiceIdentity,
-) -> Result<PushRecord, PushDeliveryFailure> {
+) -> Result<collaboration_protocol::PushMessageSendResult, PushDeliveryFailure> {
     let Some(store) = identity.automation.as_ref() else {
         return Err(PushDeliveryFailure::StoreUnavailable);
     };
-    let Some(service) = identity.subscription_delivery.as_ref() else {
-        return Err(PushDeliveryFailure::DeliveryUnavailable);
-    };
-    let mut draft = draft;
-    draft.mode = Some(mode);
-    draft.guard = generation_guard;
     let target = draft.target.clone();
     let push_id = draft.push_id.clone();
+    let item_id: collaboration_protocol::MailItemId = push_id
+        .clone()
+        .try_into()
+        .map_err(|_| PushDeliveryFailure::StoreFailed)?;
     draft
         .clone()
         .into_pending()
         .map_err(PushDeliveryFailure::InvalidRecord)?;
-    store
+    let request = automation_storage::LocalMessageRequest {
+        draft,
+        target_identity,
+    };
+    let Some(service) = identity.subscription_delivery.as_ref() else {
+        let known = store
+            .lock()
+            .await
+            .replay_local_message(&request)
+            .await
+            .map_err(storage_failure)?;
+        return match known {
+            Some(automation_storage::LocalMessageAdmission::Replayed(result)) => Ok(*result),
+            Some(automation_storage::LocalMessageAdmission::Pending(id)) => {
+                Err(PushDeliveryFailure::DeliveryUnknown(id))
+            }
+            None => Err(PushDeliveryFailure::DeliveryUnavailable),
+        };
+    };
+    let admission = store
         .lock()
         .await
-        .insert_push_record(draft)
+        .prepare_local_message(&request)
         .await
-        .map_err(|error| match error {
-            StorageError::InvalidRecord => {
-                PushDeliveryFailure::InvalidRecord(PushRecordValidationError::DirectMessageTooLarge)
-            }
-            _ => PushDeliveryFailure::StoreFailed,
-        })?;
+        .map_err(storage_failure)?;
+    if let automation_storage::LocalMessageAdmission::Replayed(result) = admission {
+        return Ok(*result);
+    }
     service
         .deliver_direct_message(target, push_id.clone())
         .await
-        .map_err(|_| PushDeliveryFailure::DeliveryUnknown(push_id))
+        .map_err(|_| PushDeliveryFailure::DeliveryUnknown(push_id.clone()))?;
+    store
+        .lock()
+        .await
+        .read_local_mail(&item_id)
+        .await
+        .map_err(|_| PushDeliveryFailure::DeliveryUnknown(push_id.clone()))?
+        .and_then(|mail| mail.result)
+        .ok_or(PushDeliveryFailure::DeliveryUnknown(push_id))
+}
+
+fn storage_failure(error: StorageError) -> PushDeliveryFailure {
+    match error {
+        StorageError::MailRefused(reason) => PushDeliveryFailure::MailRefused(reason),
+        StorageError::InvalidRecord => {
+            PushDeliveryFailure::InvalidRecord(PushRecordValidationError::DirectMessageTooLarge)
+        }
+        _ => PushDeliveryFailure::StoreFailed,
+    }
 }
 
 #[cfg(test)]
@@ -124,6 +154,7 @@ mod tests {
         let sent = crate::CollaborationApplication::new(identity.clone())
             .messages()
             .message_send(SessionMessageSendParams {
+                item_id: None,
                 target: target.clone(),
                 message: MessageContent::HumanUser {
                     text: "stored before delivery"
@@ -181,5 +212,131 @@ mod tests {
                 "Push was stored; delivery outcome is unknown. Inspect {expected_link} before retrying."
             )))
         );
+    }
+    #[tokio::test]
+    async fn recorded_local_result_replays_without_a_delivery_owner_and_unknown_work_is_not_admitted()
+     {
+        use collaboration_protocol::{
+            DeliveryOutcome, DeliveryReceipt, MailItemId, PushHeaderFacts, PushKind, PushOrigin,
+            PushRecordDraft,
+        };
+        let directory = tempfile::tempdir().expect("owned mail fixture");
+        let automation = automation_store(directory.path()).await;
+        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+            .expect("identity")
+            .with_automation_store(automation.clone());
+        let target = session(&identity.service_id);
+        let id = MailItemId::generate();
+        let draft = PushRecordDraft {
+            push_id: id.clone().try_into().expect("push ID"),
+            kind: PushKind::DirectMessage,
+            origin: PushOrigin::OwnerUnverified,
+            origin_router_ref: None,
+            target: target.clone(),
+            mode: Some(MessageDelivery::Auto),
+            guard: None,
+            reply_to_push_id: None,
+            header_facts: PushHeaderFacts::DirectMessage {
+                sender_display_name: None,
+            },
+            body: Some("retained answer".into()),
+            activity: None,
+            created_at: chrono::Utc::now(),
+        };
+        let push_id = draft.push_id.clone();
+        automation
+            .lock()
+            .await
+            .prepare_local_message(&automation_storage::LocalMessageRequest {
+                draft,
+                target_identity: "frozen target".into(),
+            })
+            .await
+            .expect("admission");
+        automation
+            .lock()
+            .await
+            .mark_push_attempted(&push_id)
+            .await
+            .expect("attempt");
+        automation
+            .lock()
+            .await
+            .settle_push_record(
+                &push_id,
+                DeliveryReceipt {
+                    outcome: DeliveryOutcome::PeerMessageWritten,
+                    reachability: None,
+                    client: None,
+                },
+                chrono::Utc::now(),
+            )
+            .await
+            .expect("terminal outcome");
+        let original = automation
+            .lock()
+            .await
+            .read_local_mail(&id)
+            .await
+            .expect("mail read")
+            .expect("mail row")
+            .result
+            .expect("saved result");
+        let app = crate::CollaborationApplication::new(identity);
+        let mut input = SessionMessageSendParams {
+            item_id: Some(id.clone()),
+            target,
+            message: MessageContent::HumanUser {
+                text: "retained answer".to_owned().try_into().expect("text"),
+            },
+            mode: MessageDelivery::Auto,
+            generation_guard: None,
+        };
+        let replay = app.messages().message_send(input.clone()).await;
+        assert!(
+            replay.is_ok(),
+            "recorded answer depended on unavailable native delivery: {replay:?}"
+        );
+        assert_eq!(
+            serde_json::to_value(replay.expect("replay")).expect("JSON"),
+            serde_json::to_value(original).expect("JSON")
+        );
+        input.message = MessageContent::HumanUser {
+            text: "different content".to_owned().try_into().expect("text"),
+        };
+        assert_eq!(
+            app.messages()
+                .message_send(input.clone())
+                .await
+                .expect_err("conflict")
+                .kind,
+            crate::collaboration_application::MessageFailureKind::ItemConflict
+        );
+        let fresh = MailItemId::generate();
+        input.item_id = Some(fresh.clone());
+        assert_eq!(
+            app.messages()
+                .message_send(input)
+                .await
+                .expect_err("no delivery")
+                .kind,
+            crate::collaboration_application::MessageFailureKind::Unavailable
+        );
+        assert!(
+            automation
+                .lock()
+                .await
+                .read_local_mail(&fresh)
+                .await
+                .expect("mail read")
+                .is_none()
+        );
+        drop(app);
+        Arc::try_unwrap(automation)
+            .unwrap_or_else(|_| panic!("mail store retained"))
+            .into_inner()
+            .close()
+            .await
+            .expect("close");
     }
 }

@@ -22,14 +22,8 @@ SQLX_PREPARATION_TARGETS: t.Final[tuple[SqlxPreparationTarget, ...]] = (
         "account-schema.sqlite",
     ),
     (
-        "message-board-storage",
-        ("crates/message-board-storage/migrations",),
-        "message-board-schema.sqlite",
-    ),
-    (
         "collaboration-service",
         (
-            "crates/message-board-storage/migrations",
             "crates/collaboration-service/migrations",
             "crates/automation-storage/migrations",
             "crates/collaboration-service/interaction-migrations",

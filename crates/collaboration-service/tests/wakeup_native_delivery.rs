@@ -107,15 +107,18 @@ async fn exercise_delivery(
     let message: SavedMessage = serde_json::from_value(
         json!({"target":target,"content":{"kind":"agent","sender":target,"text":"A durable finding"},"delivery":"queue","generationGuard":null}),
     )?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 5_000;
     let wake = store
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::After { seconds: 1 },
             expiry: ExpiryRule::None,
-            now_ms: 0,
+            now_ms: anchor_ms,
         })
         .await?;
     let (fire, delivery_id) = match store
@@ -123,7 +126,7 @@ async fn exercise_delivery(
         .await
         .evaluate_wakeup::<SavedMessage>(
             &wake.definition.wakeup_id,
-            5_000,
+            anchor_ms + 5_000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?

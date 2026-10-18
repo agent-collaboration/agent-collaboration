@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT record_id AS \"record_id!: String\" FROM read_marks WHERE reader = ? AND scope = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "34799826db43977a7e7ed72571ea550d59c282e040d99315ec9fa02139bdbf29"
+}
