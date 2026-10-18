@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE fleet_checkpoint SET last_position = ? WHERE singleton = 1",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "41aaa989cbc87b72351923bfdf595aef757c58932d0026d880ef80623f073533"
+}

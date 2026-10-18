@@ -4,8 +4,8 @@ use super::*;
 impl ReaderDeliveryOwner {
     pub(super) async fn hand_to_waiter(
         &mut self,
-        due: &[MessageId],
-        facts: &HashMap<MessageId, RootSubscriptionFacts>,
+        due: &[ThreadId],
+        facts: &HashMap<ThreadId, RootSubscriptionFacts>,
     ) -> Result<bool, BoardError> {
         for index in 0..self.waiters.len() {
             let Some(waiter) = self.waiters.get(index) else {
@@ -19,7 +19,10 @@ impl ReaderDeliveryOwner {
                     .get(*root)
                     .is_some_and(|facts| facts.mode == SubscriptionMode::Poll)
             }) {
-                if filter.matches(root, self.board_store()?).await? {
+                if facts
+                    .get(root)
+                    .is_some_and(|facts| filter.matches(root, &facts.project))
+                {
                     roots.push(root.clone());
                 }
             }

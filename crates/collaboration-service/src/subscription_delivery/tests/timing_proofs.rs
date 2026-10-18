@@ -17,13 +17,13 @@ async fn quiet_period_restarts_from_the_second_arrival() {
         .await;
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "First").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(Some(deadline)) if *deadline == fixture.clock.monotonic_now() + std::time::Duration::from_secs(120))).await;
     fixture.clock.advance(60).await;
     fixture.post(&fixture.root, "Second").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(119).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(1).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -46,14 +46,14 @@ async fn repeated_ninety_second_arrivals_are_passed_at_the_ten_minute_cap() {
         .await;
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "Opening").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     for _ in 0..6 {
         fixture.clock.advance(90).await;
         fixture.post(&fixture.root, "Continuing").await;
-        runtime.synchronize(&fixture.reader).await;
+        runtime.owner_barrier(&fixture.reader).await;
     }
     fixture.clock.advance(59).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(1).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -74,10 +74,10 @@ async fn activity_in_one_root_never_delays_another_root() {
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "First root").await;
     fixture.post(&other, "Other root").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(60).await;
     fixture.post(&other, "Other extended").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(60).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
     let record = fixture
@@ -88,12 +88,9 @@ async fn activity_in_one_root_never_delays_another_root() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(
-        record.activity.unwrap().ranges[0].root_message_id,
-        fixture.root
-    );
+    assert_eq!(record.activity.unwrap().ranges[0].thread_id, fixture.root);
     runtime.await_settled().await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(60).await;
     runtime.requests.lock().await.recv().await.unwrap();
@@ -125,6 +122,7 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
             .get_thread_subscription_record(
                 &fixture.reader,
                 &message_board::SubscriptionScope::thread(fixture.root.clone()),
+                fixture.clock.now(),
             )
             .await
             .unwrap()
@@ -134,7 +132,7 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
             fixture.clock.now() + chrono::Duration::seconds(i64::try_from(delay).unwrap())
         );
         fixture.clock.advance(delay - 1).await;
-        runtime.synchronize(&fixture.reader).await;
+        runtime.owner_barrier(&fixture.reader).await;
         assert!(runtime.requests.lock().await.try_recv().is_err());
         fixture.clock.advance(1).await;
     }

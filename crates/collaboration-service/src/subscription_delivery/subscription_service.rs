@@ -1,16 +1,25 @@
+#[path = "intent_delivery.rs"]
+mod intent_delivery;
+#[cfg(test)]
+#[path = "tests/startup_recovery_regressions.rs"]
+mod startup_recovery_regressions;
+#[path = "subscription_startup_recovery.rs"]
+mod subscription_startup_recovery;
+use super::ReaderSubscriptionSnapshot;
+use super::reader_scan_scope::ReaderScanScope;
 use super::{
     BoardAvailability, SubscriptionClock,
-    reader_delivery_owner::{ReaderDeliveryCommand, ReaderDeliveryOwner, ReaderDeliveryOwnerProps},
+    reader_delivery_owner::{
+        ReaderDeliveryCommand, ReaderDeliveryOwner, ReaderDeliveryOwnerProps,
+        ReaderReconcilePurpose,
+    },
     subscription_push::{SubscriptionPushStore, SubscriptionPushStoreProps},
     subscription_wait::SubscriptionWaitFilter,
 };
 use crate::{MachineIdentity, SessionMessageDelivery, TargetPresenceProbe};
 use collaboration_protocol::{PushId, PushRecord, SessionRef};
-use message_board::{BoardError, Identity};
-use std::{
-    collections::{HashMap, HashSet},
-    sync::Arc,
-};
+use message_board::{BoardError, Identity, ProjectId};
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
@@ -37,6 +46,8 @@ pub(super) enum OwnerObservation {
     Held,
     RetryScheduled,
     WaitQueued,
+    ReconcileRequested,
+    ActivityLagged,
     Sleeping(Option<tokio::time::Instant>),
     DirectMessageQueued,
     DirectMessageHeld,
@@ -52,16 +63,28 @@ struct ServiceInner {
     clock: Arc<dyn SubscriptionClock>,
     owners: Mutex<HashMap<Identity, mpsc::Sender<ReaderDeliveryCommand>>>,
     start_gate: Mutex<bool>,
+    intent_work: Mutex<HashMap<message_board::ProjectId, intent_delivery::IntentWorkState>>,
     shutdown: CancellationToken,
     tasks: TaskTracker,
     #[cfg(test)]
     observations: tokio::sync::broadcast::Sender<OwnerObservation>,
+    /// Kept apart from owner observations, whose order existing proofs assert.
+    #[cfg(test)]
+    reconcile_queued: tokio::sync::Notify,
+    #[cfg(test)]
+    startup_passes: tokio::sync::broadcast::Sender<Vec<ProjectId>>,
+}
+
+#[derive(Clone)]
+enum ServiceHandleLifetime {
+    Owner(Arc<()>),
+    Background,
 }
 
 #[derive(Clone)]
 pub struct SubscriptionDeliveryService {
     inner: Arc<ServiceInner>,
-    lifetime: Arc<()>,
+    lifetime: ServiceHandleLifetime,
 }
 
 impl SubscriptionDeliveryService {
@@ -84,7 +107,7 @@ impl SubscriptionDeliveryService {
             observations: observations.clone(),
         }));
         Self {
-            lifetime: Arc::new(()),
+            lifetime: ServiceHandleLifetime::Owner(Arc::new(())),
             inner: Arc::new(ServiceInner {
                 board_availability: props.board_availability,
                 push,
@@ -92,10 +115,15 @@ impl SubscriptionDeliveryService {
                 clock: props.clock,
                 owners: Mutex::new(HashMap::new()),
                 start_gate: Mutex::new(false),
+                intent_work: Mutex::new(HashMap::new()),
                 shutdown,
                 tasks: TaskTracker::new(),
                 #[cfg(test)]
                 observations,
+                #[cfg(test)]
+                reconcile_queued: tokio::sync::Notify::new(),
+                #[cfg(test)]
+                startup_passes: tokio::sync::broadcast::channel(32).0,
             }),
         }
     }
@@ -108,15 +136,20 @@ impl SubscriptionDeliveryService {
         if *started {
             return Ok(());
         }
-        let records = match &self.inner.board_availability {
+        let (restored, probe_store) = match &self.inner.board_availability {
             BoardAvailability::Available(store) => {
-                store
-                    .lock()
-                    .await
+                let mut store = store.lock().await;
+                let restored = store
                     .restore_active_and_draining(self.inner.clock.now())
-                    .await?
+                    .await?;
+                // Windows contain only shared storage handles. Deferred native reads must
+                // not hold the service's window-store gate across another pool timeout.
+                (restored, Some(store.clone()))
             }
-            BoardAvailability::Unavailable => Vec::new(),
+            BoardAvailability::Unavailable => (
+                super::subscription_windows::SubscriptionStartupRestoration::default(),
+                None,
+            ),
         };
         let dm_targets = match self.inner.push.restore_direct_messages().await {
             Ok(targets) => targets,
@@ -130,37 +163,74 @@ impl SubscriptionDeliveryService {
             }
         };
         *started = true;
-        let mut readers = records
-            .iter()
-            .map(|record| record.reader().clone())
-            .collect::<HashSet<_>>();
+        self.ensure_restored_owners(restored.records).await?;
         for target in dm_targets {
-            readers.insert(reader_for_target(&target)?);
+            self.ensure_owner(reader_for_target(&target)?).await?;
         }
-        for reader in readers {
-            self.ensure_owner(reader).await?;
+        if let Some(store) = probe_store {
+            self.defer_startup_discovery(store, restored.retry_projects);
         }
         Ok(())
     }
 
     pub async fn reconcile_reader(&self, reader: Identity) -> Result<(), BoardError> {
+        self.reconcile_scope(reader, ReaderScanScope::All)
+            .await
+            .map(|_| ())
+    }
+    pub(crate) async fn reconcile_project(
+        &self,
+        reader: Identity,
+        project: ProjectId,
+    ) -> Result<(), BoardError> {
+        self.reconcile_scope(reader, ReaderScanScope::project(project))
+            .await
+            .map(|_| ())
+    }
+    pub(crate) async fn reader_subscriptions(
+        &self,
+        reader: Identity,
+    ) -> Result<ReaderSubscriptionSnapshot, BoardError> {
+        self.reconcile_scope(reader, ReaderScanScope::All).await
+    }
+    async fn reconcile_scope(
+        &self,
+        reader: Identity,
+        scope: ReaderScanScope,
+    ) -> Result<ReaderSubscriptionSnapshot, BoardError> {
         self.inner.board_availability.require_store()?;
         self.require_started().await?;
+        self.reconcile_owned_scope(reader, scope, ReaderReconcilePurpose::Refresh)
+            .await
+    }
+    async fn reconcile_owned_scope(
+        &self,
+        reader: Identity,
+        scope: ReaderScanScope,
+        purpose: ReaderReconcilePurpose,
+    ) -> Result<ReaderSubscriptionSnapshot, BoardError> {
         loop {
             let (reply, response) = oneshot::channel();
-            let sender = self.ensure_owner(reader.clone()).await?;
-            if sender
-                .send(ReaderDeliveryCommand::Reconcile(reply))
-                .await
-                .is_err()
-            {
-                self.require_started().await?;
-                continue;
+            self.submit_reader_command(
+                reader.clone(),
+                scope.clone(),
+                ReaderDeliveryCommand::Reconcile {
+                    scope: scope.clone(),
+                    purpose,
+                    reply,
+                },
+            )
+            .await?;
+            #[cfg(test)]
+            self.inner.reconcile_queued.notify_one();
+            match response.await {
+                Ok(outcome) => return outcome,
+                // The owner closed before its pass answered; a replacement owner rescans.
+                Err(_) if self.inner.shutdown.is_cancelled() => {
+                    return Err(BoardError::board_unavailable());
+                }
+                Err(_) => {}
             }
-            if response.await.is_ok() {
-                return Ok(());
-            }
-            self.require_started().await?;
         }
     }
 
@@ -216,6 +286,9 @@ impl SubscriptionDeliveryService {
             ));
         }
         filter.validate()?;
+        let filter = filter
+            .resolve(self.inner.board_availability.require_store()?)
+            .await?;
         let deadline = self
             .inner
             .clock
@@ -266,45 +339,86 @@ impl SubscriptionDeliveryService {
         &self,
         reader: Identity,
     ) -> Result<mpsc::Sender<ReaderDeliveryCommand>, BoardError> {
-        if self.inner.shutdown.is_cancelled() {
-            return Err(BoardError::board_unavailable());
-        }
-        // Keep the map gate through spawn: no Reader can acquire two selection owners.
-        let mut owners = self.inner.owners.lock().await;
-        if let Some(sender) = owners.get(&reader).filter(|sender| !sender.is_closed()) {
-            return Ok(sender.clone());
-        }
-        let activity = match &self.inner.board_availability {
-            BoardAvailability::Available(store) => Some(store.lock().await.subscribe_activity()),
-            BoardAvailability::Unavailable => None,
-        };
-        let (sender, commands) = mpsc::channel(64);
-        let owner = ReaderDeliveryOwner::new(ReaderDeliveryOwnerProps {
-            reader: reader.clone(),
-            board_availability: self.inner.board_availability.clone(),
-            push: self.inner.push.clone(),
-            presence: self.inner.presence.clone(),
-            clock: self.inner.clock.clone(),
-            shutdown: self.inner.shutdown.clone(),
-            commands,
-            activity,
-            #[cfg(test)]
-            observations: self.inner.observations.clone(),
-        });
-        owners.insert(reader.clone(), sender.clone());
-        let inner = self.inner.clone();
-        let owner_sender = sender.clone();
-        self.inner.tasks.spawn(async move {
-            owner.run().await;
-            let mut owners = inner.owners.lock().await;
-            if owners
-                .get(&reader)
-                .is_some_and(|current| current.same_channel(&owner_sender))
-            {
-                owners.remove(&reader);
+        self.ensure_owner_input(reader, ReaderScanScope::All, None)
+            .await
+    }
+    async fn submit_reader_command(
+        &self,
+        reader: Identity,
+        scope: ReaderScanScope,
+        command: ReaderDeliveryCommand,
+    ) -> Result<(), BoardError> {
+        self.ensure_owner_input(reader, scope, Some(command))
+            .await
+            .map(|_| ())
+    }
+    async fn ensure_owner_input(
+        &self,
+        reader: Identity,
+        scope: ReaderScanScope,
+        mut command: Option<ReaderDeliveryCommand>,
+    ) -> Result<mpsc::Sender<ReaderDeliveryCommand>, BoardError> {
+        loop {
+            if self.inner.shutdown.is_cancelled() {
+                return Err(BoardError::board_unavailable());
             }
-        });
-        Ok(sender)
+            // Keep the map gate through spawn: no Reader can acquire two selection owners.
+            let mut owners = self.inner.owners.lock().await;
+            if let Some(sender) = owners
+                .get(&reader)
+                .filter(|sender| !sender.is_closed())
+                .cloned()
+            {
+                drop(owners);
+                if let Some(input) = command.take()
+                    && let Err(error) = sender.send(input).await
+                {
+                    command = Some(error.0);
+                    continue;
+                }
+                return Ok(sender);
+            }
+            let activity = match &self.inner.board_availability {
+                BoardAvailability::Available(store) => {
+                    Some(store.lock().await.subscribe_activity())
+                }
+                BoardAvailability::Unavailable => None,
+            };
+            let (sender, commands) = mpsc::channel(64);
+            if let Some(input) = command.take() {
+                sender
+                    .send(input)
+                    .await
+                    .map_err(|_| BoardError::board_unavailable())?;
+            }
+            let owner = ReaderDeliveryOwner::new(ReaderDeliveryOwnerProps {
+                reader: reader.clone(),
+                initial_scope: scope.clone(),
+                board_availability: self.inner.board_availability.clone(),
+                push: self.inner.push.clone(),
+                presence: self.inner.presence.clone(),
+                clock: self.inner.clock.clone(),
+                shutdown: self.inner.shutdown.clone(),
+                commands,
+                activity,
+                #[cfg(test)]
+                observations: self.inner.observations.clone(),
+            });
+            owners.insert(reader.clone(), sender.clone());
+            let inner = self.inner.clone();
+            let owner_sender = sender.clone();
+            self.inner.tasks.spawn(async move {
+                owner.run().await;
+                let mut owners = inner.owners.lock().await;
+                if owners
+                    .get(&reader)
+                    .is_some_and(|current| current.same_channel(&owner_sender))
+                {
+                    owners.remove(&reader);
+                }
+            });
+            return Ok(sender);
+        }
     }
 
     #[cfg(test)]
@@ -327,20 +441,38 @@ impl SubscriptionDeliveryService {
     }
 
     #[cfg(test)]
-    pub(super) async fn request_reconcile(&self, reader: Identity) {
-        let (reply, _response) = oneshot::channel();
+    pub(super) async fn request_reconcile_receipt(
+        &self,
+        reader: Identity,
+    ) -> oneshot::Receiver<Result<ReaderSubscriptionSnapshot, BoardError>> {
+        let (reply, response) = oneshot::channel();
         self.ensure_owner(reader)
             .await
             .expect("active owner")
-            .send(ReaderDeliveryCommand::Reconcile(reply))
+            .send(ReaderDeliveryCommand::Reconcile {
+                scope: ReaderScanScope::All,
+                purpose: ReaderReconcilePurpose::Refresh,
+                reply,
+            })
             .await
             .expect("owner command");
+        response
+    }
+    /// Resolves once a `reconcile_reader` call has queued its command with an owner.
+    #[cfg(test)]
+    pub(super) async fn reconcile_queued(&self) {
+        self.inner.reconcile_queued.notified().await;
+    }
+    #[cfg(test)]
+    pub(super) async fn request_reconcile(&self, reader: Identity) {
+        drop(self.request_reconcile_receipt(reader).await);
     }
 }
 
 impl Drop for SubscriptionDeliveryService {
     fn drop(&mut self) {
-        if Arc::strong_count(&self.lifetime) == 1 {
+        if matches!(&self.lifetime,ServiceHandleLifetime::Owner(lifetime) if Arc::strong_count(lifetime) == 1)
+        {
             self.cancel();
         }
     }
@@ -376,67 +508,5 @@ fn recovery_connection_failed(error: &automation_storage::StorageError) -> bool 
 }
 
 #[cfg(test)]
-mod reconcile_retry_proofs {
-    use super::*;
-    use collaboration_protocol::{EndpointId, EndpointRef, SessionId, UuidIdentity};
-
-    #[tokio::test]
-    async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_replacement()
-    -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let directory = tempfile::tempdir()?;
-        let board =
-            message_board_storage::BoardStore::open(&directory.path().join("board.sqlite")).await?;
-        let automation =
-            automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-                .await?;
-        let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
-        let target = SessionRef {
-            endpoint: EndpointRef {
-                service_id: service_id.clone(),
-                endpoint_id: EndpointId::try_from("codex-local".to_owned())?,
-            },
-            session_id: SessionId::try_from("closing-reader".to_owned())?,
-        };
-        let reader = reader_for_target(&target)?;
-        let routes = Arc::new(crate::SessionDeliveryRouter::new(Vec::new()));
-        let service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Available(Arc::new(Mutex::new(board))),
-            push_store: Arc::new(Mutex::new(automation)),
-            delivery: routes.clone(),
-            presence: routes,
-            machine_identity: MachineIdentity::new(service_id, Some("closing-owner-proof"))?,
-            clock: Arc::new(super::super::SystemSubscriptionClock),
-        });
-        service.start().await?;
-        let mut observations = service.observe_owners();
-        // The existing command channel is the race seam: acceptance precedes the
-        // stale owner's close, while the response is never acknowledged.
-        let (stale_sender, mut stale_receiver) = mpsc::channel(1);
-        service
-            .inner
-            .owners
-            .lock()
-            .await
-            .insert(reader.clone(), stale_sender);
-        let reconciler = service.clone();
-        let reconcile = tokio::spawn(async move { reconciler.reconcile_reader(reader).await });
-        let accepted =
-            tokio::time::timeout(std::time::Duration::from_secs(5), stale_receiver.recv())
-                .await?
-                .ok_or("stale owner received no command")?;
-        let ReaderDeliveryCommand::Reconcile(reply) = accepted else {
-            return Err("expected a reconcile command".into());
-        };
-        stale_receiver.close();
-        drop(reply);
-        drop(stale_receiver);
-        tokio::time::timeout(std::time::Duration::from_secs(5), reconcile).await???;
-        let started =
-            tokio::time::timeout(std::time::Duration::from_secs(5), observations.recv()).await??;
-        if !matches!(started, OwnerObservation::Started) {
-            return Err("replacement owner did not start".into());
-        }
-        service.shutdown().await;
-        Ok(())
-    }
-}
+#[path = "tests/reconcile_retry_proofs.rs"]
+mod reconcile_retry_proofs;

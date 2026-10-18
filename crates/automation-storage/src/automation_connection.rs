@@ -7,6 +7,12 @@ use std::{path::Path, time::Duration};
 
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
+    #[error("mail refused: {0:?}")]
+    MailRefused(collaboration_mail_protocol::MailRefusal),
+    #[error("invalid stored Local mail field: {field}")]
+    InvalidMail { field: &'static str },
+    #[error("wake request refused: {0:?}")]
+    WakeRefused(collaboration_protocol::WakeRefusal),
     #[error("automation storage unavailable")]
     Database(#[from] sqlx::Error),
     #[error("automation database has unsupported schema version {0}")]

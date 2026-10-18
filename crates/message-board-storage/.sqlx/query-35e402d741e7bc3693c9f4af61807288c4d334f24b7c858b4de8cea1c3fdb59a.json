@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT f.record_kind AS \"kind!: String\", f.record_id AS \"id!: String\", f.position AS \"position!: i64\", f.epoch AS \"epoch!: i64\", json_extract(f.entry, '$.routerTime') AS \"time!: String\" FROM json_each(?) k CROSS JOIN project_feed f ON f.position = (SELECT MIN(first.position) FROM project_feed first WHERE first.record_kind = json_extract(k.value, '$[0]') AND first.record_id = json_extract(k.value, '$[1]')) ORDER BY f.record_kind, f.record_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "time!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "35e402d741e7bc3693c9f4af61807288c4d334f24b7c858b4de8cea1c3fdb59a"
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT epoch AS \"epoch!: i64\", holder AS \"holder!: String\", start_position AS \"start_position!: i64\", ended AS \"ended: String\" FROM writer_epochs WHERE epoch > ? AND epoch <= ? ORDER BY epoch LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "holder!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "start_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "ended: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "ce8dfb0512853e33aa2f09247b8a7ef3741ca621f458708b39357911e34b4f4b"
+}

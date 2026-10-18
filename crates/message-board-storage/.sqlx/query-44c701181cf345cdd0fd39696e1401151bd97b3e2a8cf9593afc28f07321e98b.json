@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE record_identities SET payload = ? WHERE kind = ? AND id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "44c701181cf345cdd0fd39696e1401151bd97b3e2a8cf9593afc28f07321e98b"
+}

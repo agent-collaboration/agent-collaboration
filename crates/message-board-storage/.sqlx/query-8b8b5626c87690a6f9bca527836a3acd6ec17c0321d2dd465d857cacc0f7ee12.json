@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT position AS \"position!: i64\", entry AS \"entry!: String\" FROM fleet_feed WHERE position > ? AND position <= ? ORDER BY position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "entry!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "8b8b5626c87690a6f9bca527836a3acd6ec17c0321d2dd465d857cacc0f7ee12"
+}

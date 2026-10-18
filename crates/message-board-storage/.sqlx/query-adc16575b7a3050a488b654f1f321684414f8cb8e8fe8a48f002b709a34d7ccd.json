@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE subtasks SET place = ?, checked = ? WHERE subtask_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "adc16575b7a3050a488b654f1f321684414f8cb8e8fe8a48f002b709a34d7ccd"
+}

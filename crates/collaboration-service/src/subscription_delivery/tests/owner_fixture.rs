@@ -1,119 +1,139 @@
+#[path = "owner_clock.rs"]
+mod owner_clock;
+pub use owner_clock::{RuntimeTimerClock, TestClock};
 #[path = "scripted_delivery.rs"]
 mod scripted_delivery;
 use super::super::*;
 use crate::{
     AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    SessionMessageDelivery, TargetPresence, TargetPresenceProbe,
+    FleetClient, LocalLeaseAuthority, ProjectAdmission, ProjectAdmissionProps,
+    ProjectStoreRegistry, SessionMessageDelivery, TargetPresence, TargetPresenceProbe,
 };
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, SessionRef};
 use message_board::*;
-use message_board_storage::BoardStore;
 use scripted_delivery::{PreparedRecordingRoute, ScriptedDelivery};
+use serde_json::json;
 use std::sync::{Arc, Mutex as StdMutex};
 use tempfile::TempDir;
 use tokio::sync::{Mutex, mpsc, oneshot};
-use tokio::time::Instant;
 
 pub struct OwnerFixture {
     pub directory: TempDir,
-    pub store: Arc<Mutex<BoardStore>>,
+    pub store: Arc<Mutex<SubscriptionWindowStore>>,
+    pub admission: Arc<ProjectAdmission>,
+    pub registry: Arc<ProjectStoreRegistry>,
     pub push_store: Arc<Mutex<automation_storage::AutomationStore>>,
     pub reader: Identity,
-    pub topic: TopicId,
-    pub root: MessageId,
+    pub project: ProjectId,
+    pub discussion_subject: ThreadSubject,
+    pub root: ThreadId,
     pub clock: Arc<TestClock>,
     pub presence: Arc<ScriptedPresence>,
 }
-
 impl OwnerFixture {
     pub async fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
-        let mut store = BoardStore::open(&directory.path().join("board.sqlite"))
-            .await
-            .unwrap();
-        let push_store =
+        let registry = Arc::new(ProjectStoreRegistry::new(directory.path()));
+        let admission = Arc::new(
+            ProjectAdmission::new(ProjectAdmissionProps {
+                registry: registry.clone(),
+                fleet: Arc::new(
+                    FleetClient::open_local_stand_in(directory.path())
+                        .await
+                        .unwrap(),
+                ),
+                leases: Arc::new(LocalLeaseAuthority::default()),
+                identity: crate::MachineIdentity::new(
+                    collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
+                    Some("Owner-test-machine"),
+                )
+                .unwrap(),
+            })
+            .unwrap(),
+        );
+        let push_store = Arc::new(Mutex::new(
             automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
                 .await
-                .unwrap();
-        let clock = Arc::new(TestClock::new(
-            DateTime::from_timestamp_millis(Utc::now().timestamp_millis()).unwrap(),
+                .unwrap(),
         ));
-        let owner = human("board-owner");
-        let project_id = ProjectId::generate();
-        let board_id = BoardId::generate();
-        let topic = TopicId::generate();
-        store
-            .create_project(ProjectCreateRequest {
-                project_id: project_id.clone(),
-                name: name("Owner project"),
-                description: description(),
-                actor: owner.clone(),
-                acting_for: None,
-            })
-            .await
-            .unwrap();
-        store
-            .create_board(BoardCreateRequest {
-                board_id: board_id.clone(),
-                project_id,
-                name: name("Owner board"),
-                description: description(),
-                actor: owner.clone(),
-                acting_for: None,
-            })
-            .await
-            .unwrap();
-        store
-            .create_topic(TopicCreateRequest {
-                topic_id: topic.clone(),
-                board_id,
-                name: name("Owner topic"),
-                description: description(),
-                actor: owner.clone(),
-                acting_for: None,
-            })
-            .await
-            .unwrap();
-        let root = post_message(
-            &mut store,
-            Placement::Topic {
-                topic_id: topic.clone(),
-            },
-            owner,
-            "Root",
-            clock.now(),
-        )
-        .await
-        .message
-        .message_id;
-        let reader = reader_identity();
-        store
-            .join_thread(
-                ThreadJoinRequest {
-                    mode: None,
-                    when_idle: None,
-                    root_message_id: root.clone(),
-                    actor: reader.clone(),
-                    role: ParticipantRole::Participant,
-                    watch: true,
-                    replace: None,
-                    note: None,
-                },
-                clock.now(),
-            )
+        let clock = Arc::new(TestClock::new(Utc::now()));
+        let workspace = WorkspaceId::generate();
+        let board = BoardId::generate();
+        let project = ProjectId::generate();
+        let application = crate::CollaborationApplication::new(
+            crate::ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+                .unwrap()
+                .with_project_admission(admission.clone()),
+        );
+        let header = || {
+            json!({"requestId":RequestId::generate(),"protocolVersion":1,
+            "resubmits":null,"actingFor":null,"actor":human("board-owner")})
+        };
+        let mut request = header();
+        request["workspaceId"] = json!(workspace);
+        request["name"] = json!("Owner workspace");
+        request["description"] = json!("");
+        assert_accepted(
+            &application
+                .board()
+                .workspace_create(serde_json::from_value(request).unwrap())
+                .await
+                .unwrap(),
+        );
+        let mut request = header();
+        request["workspaceId"] = json!(workspace);
+        request["boardId"] = json!(board);
+        request["name"] = json!("Owner board");
+        request["description"] = json!("");
+        request["kind"] = json!({"kind":"area"});
+        assert_accepted(
+            &application
+                .board()
+                .board_create(serde_json::from_value(request).unwrap())
+                .await
+                .unwrap(),
+        );
+        let mut request = header();
+        request["boardId"] = json!(board);
+        request["projectId"] = json!(project);
+        request["title"] = json!("Owner project");
+        assert_accepted(
+            &admission
+                .create_project(&serde_json::from_value(request).unwrap())
+                .await
+                .unwrap(),
+        );
+        let discussion_subject = crate::test_subject_workstream::create(&registry, &project)
             .await
             .unwrap();
         let fixture = Self {
+            discussion_subject,
+            store: Arc::new(Mutex::new(
+                admission.subscription_window_store(push_store.clone()),
+            )),
             directory,
-            store: Arc::new(Mutex::new(store)),
-            push_store: Arc::new(Mutex::new(push_store)),
-            reader,
-            topic,
-            root,
+            admission,
+            registry,
+            push_store,
+            reader: reader_identity(),
+            project,
+            root: ThreadId::generate(),
             clock,
             presence: Arc::new(ScriptedPresence(StdMutex::new(TargetPresence::Running))),
         };
+        fixture
+            .create_root(&fixture.root, human("board-owner"))
+            .await;
+        fixture
+            .join(
+                &fixture.root,
+                fixture.reader.clone(),
+                ParticipantRole::Participant,
+                true,
+                None,
+            )
+            .await;
         fixture
             .policy(
                 &fixture.root,
@@ -125,121 +145,226 @@ impl OwnerFixture {
             .await;
         fixture
     }
-
+    pub async fn write_as(
+        &self,
+        actor: Identity,
+        operation: BoardOperation,
+        now: DateTime<Utc>,
+    ) -> WriteReply {
+        let request = ProjectRequest {
+            request_id: RequestId::generate(),
+            project_id: self.project.clone(),
+            actor,
+            acting_for: None,
+            observed_epoch: Some(EpochNumber::try_from(1_u64).unwrap()),
+            resubmits: None,
+            protocol_version: ProtocolVersion::CURRENT,
+            operation,
+        };
+        let reply = self.admission.submit_at(&request, now).await.unwrap();
+        assert_accepted(&reply);
+        reply
+    }
+    pub async fn create_root(&self, root: &ThreadId, actor: Identity) {
+        self.write_as(
+            actor,
+            BoardOperation::ThreadCreate {
+                post_id: PostId::try_from(root.as_str().to_owned()).unwrap(),
+                about: self.discussion_subject.clone(),
+                text: PostText::try_from("Root".to_owned()).unwrap(),
+                references: Vec::new(),
+                participation: Some(ParticipantRole::Orchestrator),
+                watch: false,
+                addressees: Vec::new(),
+            },
+            self.clock.now(),
+        )
+        .await;
+    }
+    pub async fn join(
+        &self,
+        root: &ThreadId,
+        actor: Identity,
+        role: ParticipantRole,
+        watch: bool,
+        replace: Option<Identity>,
+    ) {
+        self.write_as(
+            actor,
+            BoardOperation::ThreadJoin {
+                thread_id: root.clone(),
+                role,
+                watch,
+                mode: None,
+                when_idle: None,
+                replace,
+                note: None,
+            },
+            self.clock.now(),
+        )
+        .await;
+    }
+    pub async fn subscribe(
+        &self,
+        request: ThreadSubscriptionSubscribeRequest,
+        now: DateTime<Utc>,
+    ) -> Result<(), BoardError> {
+        self.write_as(
+            request.reader,
+            BoardOperation::ThreadSubscribe {
+                scope: request.scope,
+                policy: request.policy,
+            },
+            now,
+        )
+        .await;
+        self.store
+            .lock()
+            .await
+            .rescan_missing_subscription_windows(&self.reader, now)
+            .await
+            .unwrap();
+        Ok(())
+    }
+    pub async fn unsubscribe(
+        &self,
+        request: ThreadSubscriptionUnsubscribeRequest,
+        now: DateTime<Utc>,
+    ) -> Result<(), BoardError> {
+        self.write_as(
+            request.reader,
+            BoardOperation::ThreadUnsubscribe {
+                scope: request.scope,
+            },
+            now,
+        )
+        .await;
+        Ok(())
+    }
+    pub async fn join_request(
+        &self,
+        request: ThreadJoinRequest,
+        now: DateTime<Utc>,
+    ) -> Result<(), BoardError> {
+        self.write_as(
+            request.actor,
+            BoardOperation::ThreadJoin {
+                thread_id: request.thread.thread,
+                role: request.role,
+                watch: request.watch,
+                mode: request.mode,
+                when_idle: request.when_idle,
+                replace: request.replace,
+                note: request.note,
+            },
+            now,
+        )
+        .await;
+        Ok(())
+    }
+    pub async fn resolve(
+        &self,
+        request: ThreadResolveRequest,
+        now: DateTime<Utc>,
+    ) -> Result<(), BoardError> {
+        self.write_as(
+            request.actor,
+            BoardOperation::ThreadResolve {
+                thread_id: request.thread.thread,
+                reason: request.reason,
+            },
+            now,
+        )
+        .await;
+        Ok(())
+    }
     pub async fn policy(
         &self,
-        root: &MessageId,
+        root: &ThreadId,
         mode: SubscriptionMode,
         idle: WhenIdle,
         quiet: u64,
         cap: u64,
     ) {
-        self.store
-            .lock()
-            .await
-            .subscribe_thread_subscription(
-                ThreadSubscriptionSubscribeRequest {
-                    reader: self.reader.clone(),
-                    scope: SubscriptionScope::thread(root.clone()),
-                    policy: SubscriptionPolicyPatch {
-                        mode: Some(mode),
-                        when_idle: Some(idle),
-                        timing: SubscriptionTimingPatch {
-                            quiet_seconds: Some(quiet),
-                            cap_seconds: Some(cap),
-                        },
-                        lifetime_seconds: None,
+        self.subscribe(
+            ThreadSubscriptionSubscribeRequest {
+                reader: self.reader.clone(),
+                scope: SubscriptionScope::thread(root.clone()),
+                policy: SubscriptionPolicyPatch {
+                    mode: Some(mode),
+                    when_idle: Some(idle),
+                    timing: SubscriptionTimingPatch {
+                        quiet_seconds: Some(quiet),
+                        cap_seconds: Some(cap),
                     },
+                    lifetime_seconds: None,
                 },
-                self.clock.now(),
-            )
-            .await
-            .unwrap();
-    }
-
-    pub async fn post(&self, root: &MessageId, body: &str) -> MessagePostResult {
-        self.post_at(root, body, self.clock.now()).await
-    }
-    pub async fn post_at(
-        &self,
-        root: &MessageId,
-        body: &str,
-        now: DateTime<Utc>,
-    ) -> MessagePostResult {
-        post_message(
-            &mut *self.store.lock().await,
-            Placement::Thread {
-                root_message_id: root.clone(),
             },
-            human("writer"),
-            body,
-            now,
-        )
-        .await
-    }
-
-    pub async fn add_root(&self) -> MessageId {
-        let mut store = self.store.lock().await;
-        let root = post_message(
-            &mut store,
-            Placement::Topic {
-                topic_id: self.topic.clone(),
-            },
-            human(&format!("root-author-{}", MessageId::generate().as_str())),
-            "Other root",
             self.clock.now(),
         )
         .await
-        .message
-        .message_id;
-        store
-            .join_thread(
-                ThreadJoinRequest {
-                    mode: None,
-                    when_idle: None,
-                    root_message_id: root.clone(),
-                    actor: self.reader.clone(),
-                    role: ParticipantRole::Participant,
-                    watch: true,
-                    replace: None,
-                    note: None,
+        .unwrap();
+    }
+    pub async fn post(&self, root: &ThreadId, body: &str) -> FeedCursor {
+        self.post_at(root, body, self.clock.now()).await
+    }
+    pub async fn post_at(&self, root: &ThreadId, body: &str, now: DateTime<Utc>) -> FeedCursor {
+        let post = PostId::generate();
+        let reply = self
+            .write_as(
+                human("writer"),
+                BoardOperation::ThreadPost {
+                    post_id: post,
+                    thread_id: root.clone(),
+                    text: PostText::try_from(body.to_owned()).unwrap(),
+                    references: Vec::new(),
+                    addressees: Vec::new(),
                 },
-                self.clock.now(),
+                now,
             )
-            .await
-            .unwrap();
-        drop(store);
+            .await;
+        let RequestResult::Decided(RequestDecision::Accepted { positions, .. }) = reply.result
+        else {
+            panic!("post accepted")
+        };
+        let Some(RecordPosition::Project(position)) = positions.first() else {
+            panic!("post position")
+        };
+        *position
+    }
+    pub async fn add_root(&self) -> ThreadId {
+        let root = ThreadId::generate();
+        // Independent authors populate the delivery fixture without violating the post cooldown.
+        self.create_root(&root, human(&format!("root-author-{}", root.as_str())))
+            .await;
+        self.join(
+            &root,
+            self.reader.clone(),
+            ParticipantRole::Participant,
+            true,
+            None,
+        )
+        .await;
         self.policy(&root, SubscriptionMode::Deliver, WhenIdle::Hold, 0, 0)
             .await;
         root
     }
-
     pub async fn runtime(&self) -> OwnerRuntime {
         self.runtime_with_clock(self.clock.clone()).await
     }
     pub async fn runtime_with_clock(&self, clock: Arc<dyn SubscriptionClock>) -> OwnerRuntime {
-        self.runtime_with_route(
+        self.runtime_with_availability(
             clock,
             collaboration_protocol::SessionReachability::CodexAppServer,
+            BoardAvailability::Available(self.store.clone()),
         )
         .await
     }
     pub async fn queued_runtime(&self) -> OwnerRuntime {
-        self.runtime_with_route(
+        self.runtime_with_availability(
             self.clock.clone(),
             collaboration_protocol::SessionReachability::ProviderAcp,
-        )
-        .await
-    }
-    async fn runtime_with_route(
-        &self,
-        clock: Arc<dyn SubscriptionClock>,
-        reachability: collaboration_protocol::SessionReachability,
-    ) -> OwnerRuntime {
-        self.runtime_with_availability(
-            clock,
-            reachability,
-            BoardAvailability::Available(Arc::clone(&self.store)),
+            BoardAvailability::Available(self.store.clone()),
         )
         .await
     }
@@ -272,7 +397,7 @@ impl OwnerFixture {
         let router = Arc::new(crate::SessionDeliveryRouter::new(vec![route]));
         let service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability,
-            push_store: Arc::clone(&self.push_store),
+            push_store: self.push_store.clone(),
             delivery: router,
             presence: self.presence.clone(),
             clock,
@@ -292,19 +417,28 @@ impl OwnerFixture {
             reconciliations: Mutex::new(reconciliation_receiver),
         }
     }
-
     pub async fn unread_count(&self) -> usize {
-        self.store
-            .lock()
-            .await
-            .fetch_inbox(InboxFetchRequest {
-                scope: InboxScope::Topic {
-                    topic_id: self.topic.clone(),
-                },
-                reader: self.reader.clone(),
-                read_mode: InboxReadMode::Unread,
-                page: PageRequest::default(),
-            })
+        let application = crate::CollaborationApplication::new(
+            crate::ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+                .unwrap()
+                .with_project_admission(self.admission.clone()),
+        );
+        application
+            .board()
+            .inbox_fetch(
+                InboxFetchRequest::new(InboxFetchRequestProps {
+                    protocol_version: ProtocolVersion::CURRENT,
+                    acting_for: None,
+                    reader: self.reader.clone(),
+                    scope: InboxScope::Project {
+                        project_id: self.project.clone(),
+                    },
+                    read_mode: InboxReadMode::Unread,
+                    initializations: Vec::new(),
+                    page: PageRequest::default(),
+                })
+                .unwrap(),
+            )
             .await
             .unwrap()
             .page
@@ -312,7 +446,15 @@ impl OwnerFixture {
             .len()
     }
 }
-
+fn assert_accepted(reply: &WriteReply) {
+    assert!(
+        matches!(
+            reply.result,
+            RequestResult::Decided(RequestDecision::Accepted { .. })
+        ),
+        "{reply:?}"
+    );
+}
 pub struct OwnerRuntime {
     pub service: SubscriptionDeliveryService,
     pub requests: Mutex<mpsc::UnboundedReceiver<crate::layer_zero::DeliveryRequest>>,
@@ -350,7 +492,15 @@ impl OwnerRuntime {
             }
         }
     }
-    pub async fn synchronize(&self, reader: &Identity) {
+    pub async fn wait_for_activity(
+        &self,
+        reader: &Identity,
+        checkpoint: impl Fn(&super::super::subscription_service::OwnerObservation) -> bool,
+    ) {
+        self.observe(checkpoint).await;
+        self.owner_barrier(reader).await;
+    }
+    pub async fn owner_barrier(&self, reader: &Identity) {
         self.service.synchronize_reader(reader.clone()).await;
     }
     pub async fn reconcile(&self, reader: &Identity) {
@@ -361,80 +511,11 @@ impl OwnerRuntime {
     }
 }
 
-pub struct ElapsedClock {
-    pub wall_start: DateTime<Utc>,
-    pub monotonic_start: Instant,
-}
-impl SubscriptionClock for ElapsedClock {
-    fn now(&self) -> DateTime<Utc> {
-        self.wall_start
-            + chrono::Duration::from_std(Instant::now().duration_since(self.monotonic_start))
-                .unwrap()
-    }
-    fn monotonic_now(&self) -> Instant {
-        Instant::now()
-    }
-}
-
 pub struct ScriptedPresence(pub StdMutex<TargetPresence>);
 impl TargetPresenceProbe for ScriptedPresence {
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
         let presence = self.0.lock().unwrap().clone();
         Box::pin(async move { Ok(presence) })
-    }
-}
-
-pub struct TestClock {
-    wall: StdMutex<DateTime<Utc>>,
-    monotonic: StdMutex<Instant>,
-    advanced: tokio::sync::Notify,
-}
-impl TestClock {
-    pub fn new(now: DateTime<Utc>) -> Self {
-        Self {
-            wall: StdMutex::new(now),
-            monotonic: StdMutex::new(Instant::now()),
-            advanced: tokio::sync::Notify::new(),
-        }
-    }
-    fn advance_wall_and_monotonic(&self, seconds: u64) {
-        *self.wall.lock().unwrap() += chrono::Duration::seconds(i64::try_from(seconds).unwrap());
-        *self.monotonic.lock().unwrap() += std::time::Duration::from_secs(seconds);
-    }
-
-    pub async fn advance(&self, seconds: u64) {
-        self.advance_wall_and_monotonic(seconds);
-        tokio::time::advance(std::time::Duration::from_secs(seconds)).await;
-        self.advanced.notify_waiters();
-    }
-
-    pub fn advance_without_tokio_time(&self, seconds: u64) {
-        self.advance_wall_and_monotonic(seconds);
-        self.advanced.notify_waiters();
-    }
-}
-impl SubscriptionClock for TestClock {
-    fn now(&self) -> DateTime<Utc> {
-        *self.wall.lock().unwrap()
-    }
-    fn monotonic_now(&self) -> Instant {
-        *self.monotonic.lock().unwrap()
-    }
-    fn sleep_until(
-        &self,
-        deadline: Instant,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
-        Box::pin(async move {
-            loop {
-                let advanced = self.advanced.notified();
-                tokio::pin!(advanced);
-                advanced.as_mut().enable();
-                if self.monotonic_now() >= deadline {
-                    return;
-                }
-                advanced.await;
-            }
-        })
     }
 }
 
@@ -454,32 +535,4 @@ pub fn human(value: &str) -> Identity {
     Identity::Human {
         human_id: HumanId::try_from(value.to_owned()).unwrap(),
     }
-}
-fn name(value: &str) -> ResourceName {
-    ResourceName::try_from(value.to_owned()).unwrap()
-}
-fn description() -> Description {
-    Description::try_from("Owner integration proof".to_owned()).unwrap()
-}
-async fn post_message(
-    store: &mut BoardStore,
-    placement: Placement,
-    actor: Identity,
-    body: &str,
-    now: DateTime<Utc>,
-) -> MessagePostResult {
-    store
-        .post_message(
-            MessagePostRequest {
-                message_id: MessageId::generate(),
-                placement,
-                actor,
-                acting_for: None,
-                text: MessageText::try_from(body.to_owned()).unwrap(),
-                references: MessageReferences::try_from(Vec::new()).unwrap(),
-            },
-            now,
-        )
-        .await
-        .unwrap()
 }

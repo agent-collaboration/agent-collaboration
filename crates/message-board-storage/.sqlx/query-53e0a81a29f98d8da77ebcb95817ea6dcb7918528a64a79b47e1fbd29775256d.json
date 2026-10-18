@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT MAX(f.position) AS \"position?: i64\", MIN(f.epoch) AS \"minimum_epoch?: i64\", MAX(f.epoch) AS \"maximum_epoch?: i64\" FROM posts p CROSS JOIN project_feed f INDEXED BY feed_by_record ON f.record_kind = 'post' AND f.record_id = p.post_id WHERE p.thread_id = ? AND p.post_id != ? AND f.position <= ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "minimum_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "maximum_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "53e0a81a29f98d8da77ebcb95817ea6dcb7918528a64a79b47e1fbd29775256d"
+}

@@ -20,7 +20,18 @@ from pathlib import Path
 TursoPreparationTarget = tuple[str, tuple[str, ...]]
 TURSO_PREPARATION_TARGETS: t.Final[tuple[TursoPreparationTarget, ...]] = (
     ("sqlx-turso", ("crates/sqlx-turso/tests/migrations",)),
+    (
+        "message-board-storage",
+        (
+            "crates/message-board-storage/project_migrations",
+            "crates/message-board-storage/fleet_migrations",
+            "crates/message-board-storage/fleet_cache_migrations",
+            "crates/message-board-storage/fleet_outbox_migrations",
+            "crates/message-board-storage/legacy_cursor_migrations",
+        ),
+    ),
 )
+SCHEMA_SEED_PACKAGE: t.Final[str] = "sqlx-turso"
 SCHEMA_SEED_EXAMPLE: t.Final[str] = "seed_native_schema"
 
 
@@ -95,7 +106,7 @@ def preparation_commands(
                 "run",
                 "--locked",
                 "--package",
-                package_name,
+                SCHEMA_SEED_PACKAGE,
                 "--example",
                 SCHEMA_SEED_EXAMPLE,
                 "--",

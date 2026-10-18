@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO project_feed(position, epoch, record_kind, record_id, request_id, entry) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "b1fc1406ad41a4efbaa161564d34876e49d1d87803450ac473e68cf9af65faf8"
+}

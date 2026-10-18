@@ -36,6 +36,9 @@ enum WakeCommand {
         /// Block until the first firing is recorded; native acceptance remains separate.
         #[arg(long)]
         wait_until_first_fire: bool,
+        /// Replace the occupying wake if you are its creator, target session or owner.
+        #[arg(long)]
+        replace: bool,
     },
     /// Stop future firings and discard undispatched reminders; does not recall native input.
     Pause(LifecycleArguments),
@@ -92,6 +95,7 @@ struct PendingWakeSend {
     message: PreparedMessage,
     timing: TimingRequest,
     expiry: ExpiryRequest,
+    replace: bool,
 }
 struct WakeInvocation {
     directory: PathBuf,
@@ -161,6 +165,21 @@ pub fn run_wakeup_command(arguments: Vec<OsString>) -> i32 {
                 client
                     .send_wakeup(WakeSendRequest {
                         operation_id: request.operation_id,
+                        requested_by: match &message.content {
+                            collaboration_client::protocol::MessageContent::Agent {
+                                sender,
+                                ..
+                            } => {
+                                collaboration_client::protocol::WakeCreator::Session(sender.clone())
+                            }
+                            collaboration_client::protocol::MessageContent::HumanUser {
+                                ..
+                            } => collaboration_client::protocol::WakeCreator::Owner {},
+                            collaboration_client::protocol::MessageContent::Router { .. } => {
+                                collaboration_client::protocol::WakeCreator::Router {}
+                            }
+                        },
+                        replace: request.replace,
                         message,
                         timing: request.timing,
                         expiry: request.expiry,
@@ -308,6 +327,7 @@ fn prepare(command: WakeCommand) -> Result<WakeInvocation, String> {
             timing,
             operation_id,
             wait_until_first_fire,
+            replace,
         } => {
             let (directory, saved) = prepare_message(&message)?;
             let (timing, expiry) = timing.prepare()?;
@@ -328,6 +348,7 @@ fn prepare(command: WakeCommand) -> Result<WakeInvocation, String> {
                     message: saved,
                     timing,
                     expiry,
+                    replace,
                 })),
             })
         }

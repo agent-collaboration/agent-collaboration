@@ -48,6 +48,9 @@ pub(crate) struct SendArguments {
 
 #[derive(Args)]
 pub(crate) struct MessageSendArguments {
+    /// Stable UUIDv7 for replay. Omission mints and prints one before dispatch.
+    #[arg(long)]
+    pub(crate) item_id: Option<String>,
     #[command(flatten)]
     pub(crate) target: crate::session_target_arguments::SessionTargetArguments,
     /// Test-only sender identity override; normal callers use their harness identity.

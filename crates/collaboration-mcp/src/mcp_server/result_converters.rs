@@ -133,14 +133,16 @@ fn receipt_error<TReceipt: serde::Serialize>(
 pub(super) fn thread_wait_outcome_unknown(
     actor: &message_board::Identity,
     filter: &collaboration_protocol::ThreadSubscriptionWaitFilter,
+    renewals: &[collaboration_protocol::SubscriptionRenewalEntry],
 ) -> CallToolResult {
     structured_tool_error(serde_json::json!({
         "kind": "outcomeUnknown",
         "stage": "response",
         "effect": "unknown",
-        "message": "The wait result was lost; activity may have been handed off. Inspect the Reader's subscriptions and unread inbox (run board thread subscriptions, then board inbox fetch) before waiting again.",
+        "message": "The wait result was lost; activity may have been handed off. Inspect the Reader's subscriptions and unread inbox (run thread subscriptions, then inbox fetch) before waiting again.",
         "actor": actor,
         "filter": filter,
+        "renewals": renewals,
     }))
 }
 

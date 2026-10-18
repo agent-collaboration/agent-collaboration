@@ -119,3 +119,9 @@
   does not change the proxy or the harness connections.
 - Every other server uses axum, HTTP clients use reqwest, and MCP uses rmcp
   mounted on axum.
+
+## Upstream Workarounds
+
+- Log each fix we carry for an upstream library's defect in
+  `docs/upstream-workarounds/`, with its evidence, how to recreate it, and the
+  check that says it can be removed.

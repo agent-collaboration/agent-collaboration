@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO task_links(from_task, link_kind, to_task) VALUES (?, ?, ?) ON CONFLICT(from_task, link_kind, to_task) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "d41faab03e59889fcfcf093e2fc062471cec1a067d76f57576af95259e7b2c07"
+}

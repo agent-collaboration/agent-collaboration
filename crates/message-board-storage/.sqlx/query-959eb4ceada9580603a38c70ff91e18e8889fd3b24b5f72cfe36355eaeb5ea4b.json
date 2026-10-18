@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT DISTINCT s.subject_kind AS \"subject_kind!: String\", s.subject_id AS \"subject_id!: String\" FROM json_each(?) k CROSS JOIN thread_subjects s ON s.thread_id = CAST(k.value AS TEXT) WHERE s.subject_id IS NOT NULL ORDER BY s.subject_kind, s.subject_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subject_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "959eb4ceada9580603a38c70ff91e18e8889fd3b24b5f72cfe36355eaeb5ea4b"
+}

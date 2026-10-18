@@ -41,6 +41,8 @@ impl agent_automation::DurableMessage for SavedMessage {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WakeSendRequest {
     pub operation_id: OperationId,
+    pub requested_by: crate::WakeCreator,
+    pub replace: bool,
     pub message: SavedMessage,
     pub timing: TimingRequest,
     pub expiry: ExpiryRequest,
@@ -70,6 +72,7 @@ pub enum WakeState {
 pub struct WakeDefinition {
     pub wakeup_id: WakeupId,
     pub change_id: ChangeId,
+    pub created_by: crate::WakeCreator,
     pub message: SavedMessage,
     pub timing: TimingRequest,
     pub anchor_at: ObservationTimestamp,

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT (SELECT a.acknowledgement_id FROM stand_down_acknowledgements a JOIN record_identities r ON r.kind = 'standDownAcknowledgement' AND r.id = a.acknowledgement_id WHERE a.assignment_id = CAST(json_extract(k.value, '$[0]') AS TEXT) AND a.through_epoch = CAST(json_extract(k.value, '$[1]') AS INTEGER) AND json_extract(r.payload, '$.record.envelope.actor.actor.identity.kind') = 'human' AND json_extract(r.payload, '$.record.envelope.actor.actor.identity.humanId') = ? ORDER BY a.through_position DESC, a.acknowledgement_id DESC LIMIT 1) AS \"id: String\" FROM json_each(?) k",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7651b6553b8bdbd6b5be3c3a576a30457b2d54416ff0ee016e3801956979bd2f"
+}

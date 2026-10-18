@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM router_pushes WHERE push_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "2908a1eabab5ce989396adf0de15f875047a97d133299260121b9a442ed7da4b"
+}

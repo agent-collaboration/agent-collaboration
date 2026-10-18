@@ -45,17 +45,51 @@ async fn stored_push(fixture: &OwnerFixture, push_id: &PushId) -> PushRecord {
         .unwrap()
 }
 
+#[tokio::test]
+async fn shared_progress_store_failure_is_not_contained_as_a_project_failure() {
+    let fixture = OwnerFixture::new().await;
+    let mut observer = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(fixture.directory.path().join("automation.sqlite")),
+    )
+    .await
+    .unwrap();
+    sqlx::query("ALTER TABLE subscription_delivery_progress RENAME TO unavailable_progress")
+        .execute(&mut observer)
+        .await
+        .unwrap();
+    assert!(
+        fixture
+            .store
+            .lock()
+            .await
+            .restore_active_and_draining(fixture.clock.now())
+            .await
+            .is_err(),
+        "shared automation failure must still fail subscription startup"
+    );
+    let project = fixture
+        .registry
+        .existing_project(&fixture.project)
+        .await
+        .unwrap()
+        .unwrap();
+    project.snapshot().await.unwrap().finish().await.unwrap();
+    observer.close().await.unwrap();
+}
+
 #[tokio::test(start_paused = true)]
 async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_delivers() {
     let fixture = OwnerFixture::new().await;
     let corrupt_reader = human("corrupt-reader");
     fixture
-        .store
-        .lock()
-        .await
-        .join_thread(
+        .join_request(
             ThreadJoinRequest {
-                root_message_id: fixture.root.clone(),
+                request_id: message_board::RequestId::generate(),
+                protocol_version: message_board::ProtocolVersion::CURRENT,
+                observed_epoch: None,
+                resubmits: None,
+                thread: (fixture.root.clone()).into(),
                 actor: corrupt_reader.clone(),
                 role: ParticipantRole::Participant,
                 watch: true,
@@ -69,10 +103,7 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
         .await
         .unwrap();
     fixture
-        .store
-        .lock()
-        .await
-        .subscribe_thread_subscription(
+        .subscribe(
             ThreadSubscriptionSubscribeRequest {
                 reader: corrupt_reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
@@ -85,22 +116,59 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
         )
         .await
         .unwrap();
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("board.sqlite")),
-    )
-    .await
-    .unwrap();
+    let native = fixture
+        .registry
+        .existing_project(&fixture.project)
+        .await
+        .unwrap()
+        .unwrap();
+    let mut read = native.snapshot().await.unwrap();
+    let membership = read
+        .membership(
+            &corrupt_reader,
+            &SubscriptionScope::thread(fixture.root.clone()),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+    read.finish().await.unwrap();
+    let membership_id = membership.envelope.id.as_str();
+    use sqlx::ConnectOptions;
+    let mut observer = sqlx_turso::TursoConnectOptions::new()
+        .filename(native.path())
+        .connect()
+        .await
+        .unwrap();
+    sqlx::query("PRAGMA capture_data_changes_conn('full')")
+        .execute(&mut observer)
+        .await
+        .unwrap();
     fixture
         .post(&fixture.root, "Healthy reader pending at restart")
         .await;
-    sqlx::query("UPDATE thread_subscriptions SET mode='corrupt-mode' WHERE reader_key IN (SELECT identity_key FROM board_identities WHERE human_id='corrupt-reader')")
-        .execute(&mut observer).await.unwrap();
+    let payload: String = sqlx::query_scalar(
+        "SELECT payload FROM record_identities WHERE kind = 'subscriptionMembership' AND id = ?",
+    )
+    .bind(membership_id)
+    .fetch_one(&mut observer)
+    .await
+    .unwrap();
+    let mut encoded: serde_json::Value = serde_json::from_str(&payload).unwrap();
+    encoded["record"]["policy"]["mode"] = serde_json::json!("corrupt-mode");
+    let corrupt_payload = serde_json::to_string(&encoded).unwrap();
+    sqlx::query(
+        "UPDATE record_identities SET payload = ? WHERE kind = 'subscriptionMembership' AND id = ?",
+    )
+    .bind(&corrupt_payload)
+    .bind(membership_id)
+    .execute(&mut observer)
+    .await
+    .unwrap();
     let runtime = fixture.runtime().await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
     assert!(request.payload.line.as_str().contains("1 message"));
     runtime.await_settled().await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     assert!(
         fixture
@@ -109,7 +177,8 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
             .await
             .get_thread_subscription_record(
                 &fixture.reader,
-                &SubscriptionScope::thread(fixture.root.clone())
+                &SubscriptionScope::thread(fixture.root.clone()),
+                fixture.clock.now()
             )
             .await
             .unwrap()
@@ -124,16 +193,29 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
         .get_thread_subscription_record(
             &corrupt_reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap_err();
     assert_eq!(corrupt.kind, BoardFailureKind::InvalidRecord);
-    assert!(corrupt.message.contains("'mode'"));
-    let stored_mode: String = sqlx::query_scalar("SELECT mode FROM thread_subscriptions WHERE reader_key IN (SELECT identity_key FROM board_identities WHERE human_id='corrupt-reader')")
-        .fetch_one(&mut observer).await.unwrap();
+    assert!(
+        corrupt
+            .message
+            .contains("subscriptionMembership.policy.mode")
+    );
+    assert!(
+        matches!(&corrupt.details, message_board::BoardErrorDetails::FieldConstraint { field,.. } if field=="subscriptionMembership.policy.mode")
+    );
+    let stored_payload: String = sqlx::query_scalar(
+        "SELECT payload FROM record_identities WHERE kind = 'subscriptionMembership' AND id = ?",
+    )
+    .bind(membership_id)
+    .fetch_one(&mut observer)
+    .await
+    .unwrap();
     assert_eq!(
-        stored_mode, "corrupt-mode",
-        "corrupt row must not be silently repaired"
+        stored_payload, corrupt_payload,
+        "corrupt native payload must not be silently repaired"
     );
     observer.close().await.unwrap();
     runtime.close().await;

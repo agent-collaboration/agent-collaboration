@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"count!: i64\", COALESCE(SUM(CASE WHEN e.holder = ? AND e.start_position >= 0 AND f.position > e.start_position AND f.position <= COALESCE((SELECT next.start_position FROM writer_epochs next WHERE next.epoch > e.epoch ORDER BY next.epoch LIMIT 1), ?) THEN 0 ELSE 1 END), 0) AS \"invalid!: i64\" FROM project_feed f LEFT JOIN writer_epochs e ON e.epoch = f.epoch WHERE f.position > ? AND f.position <= ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "invalid!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "3c480ac80acc3549d4db52f1d2b207ada89d7da1c4b3ad83c731c77d43181796"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities WHERE kind = 'move' AND json_extract(payload, '$.record.moveName') = ? AND json_extract(payload, '$.record.requester.actor.identity.kind') = 'session' AND json_extract(payload, '$.record.requester.actor.identity.session.endpoint.serviceId') = ? AND json_extract(payload, '$.record.requester.actor.identity.session.endpoint.endpointId') = ? AND json_extract(payload, '$.record.requester.actor.identity.session.sessionId') = ? AND json_extract(payload, '$.record.outcome.kind') = 'rejected' ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "040f4ecb12c77bf31b14daf13ec372ef7816ba8ae82779499c3cdbfe226a9034"
+}

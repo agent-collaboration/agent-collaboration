@@ -125,6 +125,15 @@ fn validate_push_reference(reference: &str) -> Result<(), String> {
 
 fn report_message_failure(kind: &str, message: &str, exit_code: i32, machine: bool) -> i32 {
     if machine {
+        if kind == "invalidShape" {
+            let error = serde_json::json!({"kind":kind,"message":message,"effect":"none"});
+            let _ = writeln!(
+                io::stdout(),
+                "{}",
+                serde_json::json!({"kind":"error","error":error})
+            );
+            return exit_code;
+        }
         return crate::endpoint_commands::report_failure(kind, message, exit_code, true);
     }
     let next_step = match kind {

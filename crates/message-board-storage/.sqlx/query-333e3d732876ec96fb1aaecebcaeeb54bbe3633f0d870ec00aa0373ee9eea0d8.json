@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT membership_id AS \"membership_id!: String\" FROM thread_subscriptions WHERE reader = ? LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "membership_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "333e3d732876ec96fb1aaecebcaeeb54bbe3633f0d870ec00aa0373ee9eea0d8"
+}

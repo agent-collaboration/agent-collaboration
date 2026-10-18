@@ -1,4 +1,4 @@
-use crate::{BoardId, ProjectId, TopicId};
+use crate::{BoardId, ProjectId, WorkspaceId};
 use schemars::{JsonSchema, Schema, SchemaGenerator, json_schema};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -53,60 +53,95 @@ bounded_text!(
     false,
     false
 );
-bounded_text!(MessageText, "text", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
+bounded_text!(PostText, "text", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
 bounded_text!(SearchQuery, "query", 1, MAX_NAME_BYTES, true, false);
+bounded_text!(TaskTitle, "title", 1, MAX_NAME_BYTES, true, true);
+bounded_text!(TrailText, "text", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
+bounded_text!(DropReason, "reason", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
+bounded_text!(TrailTag, "tag", 1, MAX_NAME_BYTES, true, true);
+bounded_text!(MarkdownText, "text", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
+bounded_text!(MachineLabel, "machineLabel", 1, MAX_NAME_BYTES, true, true);
+bounded_text!(StatusName, "status", 1, MAX_NAME_BYTES, true, true);
+bounded_text!(MoveName, "move", 1, MAX_NAME_BYTES, true, true);
 
 #[cfg(test)]
 mod tests {
-    use super::MessageText;
+    use super::PostText;
 
     #[test]
     fn board_message_text_allows_layout_whitespace_and_rejects_other_c0_controls() {
-        assert!(MessageText::try_from("line one\n\tline two".to_owned()).is_ok());
+        assert!(PostText::try_from("line one\n\tline two".to_owned()).is_ok());
         for control in ['\0', '\u{0008}', '\u{000b}', '\u{001f}'] {
-            assert!(MessageText::try_from(format!("before{control}after")).is_err());
+            assert!(PostText::try_from(format!("before{control}after")).is_err());
         }
-        assert!(MessageText::try_from("before\u{007f}after".to_owned()).is_ok());
+        assert!(PostText::try_from("before\u{007f}after".to_owned()).is_ok());
     }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum BoardState {
-    Active,
+    Open,
+    Closed,
+    Archiving,
     Archived,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
+pub enum WorkspaceState {
+    Active,
+    Archiving,
+    Archived,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum BoardKind {
+    Initiative { goal: String, done_when: String },
+    Area {},
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
 pub enum ThreadState {
-    Unresolved,
+    Open,
     Resolved,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Project {
-    pub project_id: ProjectId,
+pub struct Workspace {
+    pub envelope: crate::RecordEnvelope,
+    pub workspace_id: WorkspaceId,
     pub name: ResourceName,
     pub description: Description,
+    pub state: WorkspaceState,
+    pub repositories: Vec<crate::RepositoryRef>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Board {
+    pub envelope: crate::RecordEnvelope,
     pub board_id: BoardId,
-    pub project_id: ProjectId,
+    pub workspace_id: WorkspaceId,
     pub name: ResourceName,
     pub description: Description,
+    pub kind: BoardKind,
     pub state: BoardState,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Topic {
-    pub topic_id: TopicId,
-    pub board_id: BoardId,
-    pub name: ResourceName,
-    pub description: Description,
+pub struct ProjectDirectoryEntry {
+    pub envelope: crate::RecordEnvelope,
+    pub id: ProjectId,
+    pub board: BoardId,
+    pub title: ResourceName,
 }

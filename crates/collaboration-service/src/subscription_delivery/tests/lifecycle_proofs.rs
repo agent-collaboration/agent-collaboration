@@ -12,14 +12,14 @@ async fn hold_keeps_all_arrivals_pending_and_delivers_one_record_on_running() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::Held))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.post(&fixture.root, "Second held").await;
     fixture.post(&fixture.root, "Third held").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance(29).await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(1).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -92,6 +92,7 @@ async fn unreachable_wake_is_held_with_visible_reason() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -120,7 +121,11 @@ async fn drop_then_push_leaves_both_messages_unread() {
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     fixture.post(&fixture.root, "Skipped").await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime
+        .wait_for_activity(&fixture.reader, |event| {
+            matches!(event, OwnerObservation::DueRoots(1))
+        })
+        .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.post(&fixture.root, "Pushed").await;
@@ -149,7 +154,7 @@ async fn drop_then_push_leaves_both_messages_unread() {
 async fn expiry_without_activity_sends_one_stored_renew_command() {
     let fixture = OwnerFixture::new().await;
     let runtime = fixture.runtime().await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(24 * 60 * 60).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
     assert!(
@@ -176,7 +181,7 @@ async fn expiry_without_activity_sends_one_stored_renew_command() {
         record
             .body
             .unwrap()
-            .contains("board thread subscribe --root-message-id")
+            .contains("thread subscribe --thread-id")
     );
     runtime
         .completions
@@ -192,6 +197,7 @@ async fn expiry_without_activity_sends_one_stored_renew_command() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -214,7 +220,7 @@ async fn unknown_outcome_advances_delivered_and_preserves_evidence() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     let stored = fixture
         .push_store
@@ -235,6 +241,7 @@ async fn unknown_outcome_advances_delivered_and_preserves_evidence() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -246,3 +253,4 @@ async fn unknown_outcome_advances_delivered_and_preserves_evidence() {
     assert_eq!(fixture.unread_count().await, 1);
     runtime.close().await;
 }
+use super::super::SubscriptionClock;

@@ -17,6 +17,7 @@ use std::sync::Arc;
 use either::Either;
 use sqlx_core::{HashMap, column::Column, error::Error, ext::ustr::UStr, logger::QueryLogger};
 
+use crate::busy_wait::BusyWait;
 use crate::{TursoColumn, TursoQueryResult, TursoRow, TursoValue, error::map_turso_error};
 
 pub(super) enum RowStreamState {
@@ -31,6 +32,7 @@ pub(super) struct RunningQuery {
     pub(super) columns: Arc<[TursoColumn]>,
     pub(super) column_names: Arc<HashMap<UStr, usize>>,
     pub(super) logger: QueryLogger,
+    pub(super) busy_wait: BusyWait,
 }
 
 impl Drop for RunningQuery {
@@ -55,7 +57,7 @@ impl RowStreamState {
             return Ok(None);
         };
 
-        let Some(row) = query.rows.next().await.map_err(map_turso_error)? else {
+        let Some(row) = query.busy_wait.next_row(&mut query.rows).await? else {
             // Dropping the query as the stream finishes resets the statement and logs it.
             let rows_affected = query.statement.n_change();
             query.logger.increase_rows_affected(rows_affected);

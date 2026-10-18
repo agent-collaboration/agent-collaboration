@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS _registry_leases (project TEXT PRIMARY KEY, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS _registry_machines (installation TEXT PRIMARY KEY, credential_hash TEXT NOT NULL UNIQUE, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS _registry_epoch_floor (project TEXT PRIMARY KEY, epoch TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS _registry_history (project TEXT NOT NULL, epoch TEXT NOT NULL, installation TEXT NOT NULL, cutoff TEXT, PRIMARY KEY(project,epoch));
+CREATE TABLE IF NOT EXISTS _registry_transfers (transfer_id TEXT PRIMARY KEY, project TEXT NOT NULL, active INTEGER NOT NULL CHECK(active IN(0,1)), record TEXT NOT NULL);
+CREATE UNIQUE INDEX IF NOT EXISTS _registry_one_active_transfer ON _registry_transfers(project) WHERE active=1;
+CREATE TABLE IF NOT EXISTS _registry_renewal_attempts (attempt TEXT PRIMARY KEY, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS _registry_previews (token TEXT PRIMARY KEY, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS _central_continuations (call_id TEXT PRIMARY KEY, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS _registry_reservations (project TEXT PRIMARY KEY, record TEXT NOT NULL);

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT reference AS \"reference!: String\" FROM fleet_repositories WHERE workspace_id = ? ORDER BY reference",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reference!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9d9ea176960f07bbd72491dc7f731ece2a36b794f040b67c8f6bb754e15e0397"
+}

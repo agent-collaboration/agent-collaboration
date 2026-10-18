@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT EXISTS(SELECT 1 FROM thread_watches WHERE reader = ? AND active = 1) OR EXISTS(SELECT 1 FROM project_watches WHERE reader = ? AND active = 1) AS \"active!: bool\", (SELECT active FROM thread_watches WHERE reader = ? AND active != 0 LIMIT 1) AS \"thread_active: i64\", (SELECT active FROM project_watches WHERE reader = ? AND active != 0 LIMIT 1) AS \"project_active: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "thread_active: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "project_active: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "304ceef7d469d3fd216bde63ff2c0c21b258ee95a660f1f1f5e16bd1c313cc0a"
+}

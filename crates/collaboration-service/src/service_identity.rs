@@ -6,7 +6,8 @@ pub mod subscription_delivery;
 
 #[derive(Clone)]
 pub struct ServiceIdentity {
-    pub(crate) board: Option<std::sync::Arc<tokio::sync::Mutex<message_board_storage::BoardStore>>>,
+    pub(crate) project_replication: std::sync::Arc<dyn crate::ProjectReplicationPosition>,
+    pub(crate) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
     pub(crate) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
     pub(crate) subscription_presence: Option<std::sync::Arc<dyn crate::TargetPresenceProbe>>,
     pub(crate) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
@@ -37,6 +38,13 @@ pub struct ServiceIdentity {
         Option<std::sync::Arc<dyn crate::ProviderConversationBackend>>,
 }
 impl ServiceIdentity {
+    pub fn with_project_replication(
+        mut self,
+        replication: std::sync::Arc<dyn crate::ProjectReplicationPosition>,
+    ) -> Self {
+        self.project_replication = replication;
+        self
+    }
     pub fn with_machine_identity(
         mut self,
         machine_identity: crate::MachineIdentity,
@@ -48,11 +56,11 @@ impl ServiceIdentity {
         Ok(self)
     }
 
-    pub fn with_board_store(
+    pub fn with_project_admission(
         mut self,
-        store: std::sync::Arc<tokio::sync::Mutex<message_board_storage::BoardStore>>,
+        admission: std::sync::Arc<crate::ProjectAdmission>,
     ) -> Self {
-        self.board = Some(store);
+        self.project_admission = Some(admission);
         self
     }
     pub fn with_subscription_delivery_service(
@@ -267,6 +275,7 @@ impl ServiceIdentity {
         let machine_identity = crate::MachineIdentity::new(service_id.clone(), None)
             .map_err(|error| error.to_string())?;
         Ok(Self {
+            project_replication: std::sync::Arc::new(crate::UnacknowledgedProjectReplication),
             configuration: crate::AutomationConfigurationHandle::default(),
             configuration_backend: None,
             service_id: service_id.clone(),
@@ -286,7 +295,7 @@ impl ServiceIdentity {
             claude_code_sessions: None,
             codex_conversation_recorder: None,
             provider_conversations: None,
-            board: None,
+            project_admission: None,
             subscription_delivery: None,
             subscription_presence: None,
             subscription_clock: std::sync::Arc::new(crate::SystemSubscriptionClock),

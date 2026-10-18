@@ -5,10 +5,8 @@ use crate::api_test_harness::{
 };
 use collaboration_service::CollaborationApplication;
 use message_board::{
-    Description, Identity, PageRequest, ProjectCreateRequest, ProjectId, ProjectListRequest,
-    ResourceName,
+    BoardId, Identity, PageRequest, ProjectId, ProjectListRequest, RequestId, WorkspaceId,
 };
-use message_board_storage::BoardStore;
 use reqwest::header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
@@ -23,17 +21,68 @@ fn private_directory() -> tempfile::TempDir {
     directory
 }
 
-async fn board_store(directory: &std::path::Path) -> Arc<Mutex<BoardStore>> {
-    let board = BoardStore::open(&directory.join("board.sqlite"))
-        .await
-        .expect("board store");
-    Arc::new(Mutex::new(board))
+async fn project_admission(
+    directory: &std::path::Path,
+) -> (
+    Arc<collaboration_service::ProjectAdmission>,
+    Arc<collaboration_service::ProjectStoreRegistry>,
+) {
+    let registry = Arc::new(collaboration_service::ProjectStoreRegistry::new(directory));
+    let admission = Arc::new(
+        collaboration_service::ProjectAdmission::new(
+            collaboration_service::ProjectAdmissionProps {
+                registry: registry.clone(),
+                fleet: Arc::new(
+                    collaboration_service::FleetClient::open_local_stand_in(directory)
+                        .await
+                        .expect("fleet"),
+                ),
+                leases: Arc::new(collaboration_service::LocalLeaseAuthority::default()),
+                identity: collaboration_service::MachineIdentity::new(
+                    collaboration_protocol::UuidIdentity::try_from(TEST_SERVICE_ID.to_owned())
+                        .expect("service"),
+                    Some("API proof"),
+                )
+                .expect("machine"),
+            },
+        )
+        .expect("admission"),
+    );
+    (admission, registry)
 }
-
 async fn board_application(directory: &std::path::Path) -> CollaborationApplication {
-    CollaborationApplication::new(test_identity().with_board_store(board_store(directory).await))
+    CollaborationApplication::new(
+        test_identity().with_project_admission(project_admission(directory).await.0),
+    )
 }
-
+async fn board_scope(api: &ServedApi) -> BoardId {
+    let workspace = WorkspaceId::generate();
+    let board = BoardId::generate();
+    let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"resubmits":null,"actingFor":null,"actor":owner()});
+    let mut request = header();
+    request["workspaceId"] = json!(workspace);
+    request["name"] = json!("API workspace");
+    request["description"] = json!("");
+    let reply = api.call_tool("workspace_create", request).await;
+    assert_eq!(
+        structured(&reply)["result"]["decision"]["kind"],
+        "accepted",
+        "{reply:?}"
+    );
+    let mut request = header();
+    request["workspaceId"] = json!(workspace);
+    request["boardId"] = json!(board);
+    request["name"] = json!("API board");
+    request["description"] = json!("");
+    request["kind"] = json!({"kind":"area"});
+    let reply = api.call_tool("board_create", request).await;
+    assert_eq!(
+        structured(&reply)["result"]["decision"]["kind"],
+        "accepted",
+        "{reply:?}"
+    );
+    board
+}
 async fn automation_store(
     directory: &std::path::Path,
 ) -> Arc<Mutex<automation_storage::AutomationStore>> {
@@ -50,25 +99,17 @@ async fn wake_application(directory: &std::path::Path) -> CollaborationApplicati
     )
 }
 
-fn project_create_arguments(name: &str) -> Value {
-    serde_json::to_value(ProjectCreateRequest {
-        project_id: ProjectId::generate(),
-        name: ResourceName::try_from(name.to_owned()).expect("name"),
-        description: Description::try_from(String::new()).expect("description"),
-        actor: owner(),
-        acting_for: None,
-    })
-    .expect("project request")
+fn project_create_arguments(name: &str, board: &BoardId, project: ProjectId) -> Value {
+    json!({"requestId":RequestId::generate(),"protocolVersion":1,"resubmits":null,"actingFor":null,
+        "projectId":project,"boardId":board,"title":name,"actor":owner()})
 }
-
-fn project_list_arguments() -> Value {
+fn project_list_arguments(board: &BoardId) -> Value {
     serde_json::to_value(ProjectListRequest {
-        repository: None,
+        board_id: board.clone(),
         page: PageRequest::default(),
     })
     .expect("list request")
 }
-
 fn owner() -> Identity {
     serde_json::from_value(json!({"kind":"human","humanId":"api-test-owner"})).expect("owner")
 }
@@ -93,7 +134,7 @@ fn wake_send_arguments() -> Value {
             "generationGuard": null
         },
         "timing": {"kind": "after", "seconds": 600},
-        "expiry": {"kind": "none"}
+        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
     })
 }
 
@@ -104,15 +145,16 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
     let config = api_config(board_application(directory.path()).await, directory.path());
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
-    let create = project_create_arguments("API listeners");
+    let board = board_scope(&tcp).await;
+    let create = project_create_arguments("API listeners", &board, ProjectId::generate());
     let project_id = create["projectId"].clone();
-    let created = tcp.call_tool("board_project_create", create).await;
+    let created = tcp.call_tool("project_create", create).await;
     assert_eq!(created.is_error, Some(false), "{created:?}");
-    let list = project_list_arguments();
+    let list = project_list_arguments(&board);
 
     // Act
-    let over_tcp = tcp.call_tool("board_project_list", list.clone()).await;
-    let over_unix = unix.call_tool("board_project_list", list).await;
+    let over_tcp = tcp.call_tool("project_list", list.clone()).await;
+    let over_unix = unix.call_tool("project_list", list).await;
     let tcp_tools = tcp
         .client()
         .await
@@ -129,7 +171,7 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
     // Assert
     assert_eq!(structured(&over_tcp), structured(&over_unix));
     assert_eq!(
-        structured(&over_tcp)["page"]["records"][0]["projectId"],
+        structured(&over_tcp)["page"]["records"][0]["id"],
         project_id
     );
     assert_eq!(tcp_tools, unix_tools, "both listeners offer the same tools");
@@ -221,19 +263,28 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
     // Arrange: the board store is held, so an admitted project create waits on it. The board
     // tools do not watch their cancellation themselves.
     let directory = private_directory();
-    let board = board_store(directory.path()).await;
+    let (admission, registry) = project_admission(directory.path()).await;
     let config = api_config(
-        CollaborationApplication::new(test_identity().with_board_store(Arc::clone(&board))),
+        CollaborationApplication::new(test_identity().with_project_admission(admission)),
         directory.path(),
     );
     let tcp = ServedApi::tcp(&config).await;
     let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
-    let held = board.lock().await;
+    let board = board_scope(&tcp).await;
+    let project = ProjectId::generate();
+    let store = registry
+        .open_project(&project)
+        .await
+        .expect("native project");
+    let held = store.lock_writer().await;
 
     for (api, name) in [(&tcp, "Abandoned over TCP"), (&unix, "Abandoned over Unix")] {
         // Act: the create is admitted and waits on the store, then its client goes away.
-        api.abandon_tool_call("board_project_create", project_create_arguments(name))
-            .await;
+        api.abandon_tool_call(
+            "project_create",
+            project_create_arguments(name, &board, project.clone()),
+        )
+        .await;
 
         // Assert: the call ended while the store was still held.
         api.await_active_calls(0, Duration::from_secs(5)).await;
@@ -242,7 +293,7 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
 
     // Assert: releasing the store runs neither abandoned create.
     let listed = tcp
-        .call_tool("board_project_list", project_list_arguments())
+        .call_tool("project_list", project_list_arguments(&board))
         .await;
     assert_eq!(structured(&listed)["page"]["records"], json!([]));
     tcp.stop().await;

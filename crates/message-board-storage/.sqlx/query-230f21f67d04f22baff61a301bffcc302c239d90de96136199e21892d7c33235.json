@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT r.kind AS \"kind!: String\", r.id AS \"id!: String\", r.payload AS \"payload!: String\", CASE WHEN r.kind = 'workTrailRow' THEN t.redacted END AS \"redacted: bool\" FROM json_each(?) k CROSS JOIN record_identities r ON r.kind = json_extract(k.value, '$[0]') AND r.id = json_extract(k.value, '$[1]') LEFT JOIN work_trail_rows t ON t.row_id = r.id ORDER BY r.kind, r.id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "redacted: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "230f21f67d04f22baff61a301bffcc302c239d90de96136199e21892d7c33235"
+}

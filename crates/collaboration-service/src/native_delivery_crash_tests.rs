@@ -370,15 +370,18 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         "target":{"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"fixture-thread"},
         "content":{"kind":"humanUser","text":"fixture work"},"delivery":if generic_queue {"queue"} else {"auto"},"generationGuard":null
     }))?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 1000;
     let wake = store
         .lock()
         .await
         .create_wakeup(&automation_storage::WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: saved,
             timing: agent_automation::TimingRule::After { seconds: 1 },
             expiry: agent_automation::ExpiryRule::None,
-            now_ms: 0,
+            now_ms: anchor_ms,
         })
         .await?;
     let automation_storage::WakeEvaluation::Fired {
@@ -386,7 +389,11 @@ async fn native_delivery_crash_child() -> TestResult<()> {
     } = store
         .lock()
         .await
-        .evaluate_wakeup::<SavedMessage>(&wake.definition.wakeup_id, 1000, build_wake_push_draft)
+        .evaluate_wakeup::<SavedMessage>(
+            &wake.definition.wakeup_id,
+            anchor_ms + 1000,
+            build_wake_push_draft,
+        )
         .await?
     else {
         return Err("fixture firing missing".into());

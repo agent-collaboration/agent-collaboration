@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE wakeup_definitions SET next_due_at_ms=CASE WHEN next_due_at_ms>=expires_at_ms THEN NULL ELSE next_due_at_ms END WHERE wakeup_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": []
+  },
+  "hash": "71308791b93ee151969909b698ad5374f1c908a0f39dbb7aedb7f695e2902514"
+}

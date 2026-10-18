@@ -19,6 +19,7 @@ from scripts.verification.interaction_readback import (
     require_advertised_settings,
 )
 from scripts.verification.owned_runtime import save_record
+from scripts.verification.readonly_codex_home import register_guard_identifiers
 from scripts.verification.typed_observations import (
     EndpointInventory,
     HostManifest,
@@ -127,6 +128,7 @@ def rpc_call(plan: JourneyPlan, name: str, arguments: JsonObject) -> JsonObject:
 
 
 def call_once(plan: JourneyPlan, name: str, arguments: JsonObject) -> JsonObject:
+    register_guard_identifiers(plan.evidence.parent, arguments)
     save_record(
         plan.evidence / f"{name}-intent.json",
         {
@@ -144,6 +146,7 @@ def call_once(plan: JourneyPlan, name: str, arguments: JsonObject) -> JsonObject
         )
         raise
     save_record(plan.evidence / f"{name}-result.json", result)
+    register_guard_identifiers(plan.evidence.parent, result)
     return result
 
 
@@ -284,6 +287,7 @@ def inspect_created_session(plan: JourneyPlan) -> None:
         snapshot.target.model_dump(mode="json", exclude_unset=True)
     )
     save_record(plan.evidence / "target-binding.json", target)
+    register_guard_identifiers(plan.evidence.parent, operation)
     inspected = rpc_call(plan, "provider_session_inspect", {"target": target})
     save_record(plan.evidence / "session-inspect.json", inspected)
     record = provider_record(inspected)

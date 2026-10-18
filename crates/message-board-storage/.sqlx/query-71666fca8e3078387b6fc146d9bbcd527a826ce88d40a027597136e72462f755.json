@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT project_id AS \"project_id!: String\" FROM fleet_directory WHERE board_id = ? AND title = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "71666fca8e3078387b6fc146d9bbcd527a826ce88d40a027597136e72462f755"
+}

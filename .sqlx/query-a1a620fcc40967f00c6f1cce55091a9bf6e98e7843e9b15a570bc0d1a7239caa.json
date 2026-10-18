@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT p.intent_id AS \"intent_id!: String\", p.state_epoch AS \"state_epoch!: i64\", p.state_position AS \"state_position!: i64\" FROM json_each(?) k CROSS JOIN board_intent_progress p ON p.project_id = ? AND p.intent_id = CAST(json_extract(k.value, '$[0]') AS TEXT) AND p.state_epoch = CAST(json_extract(k.value, '$[1].epoch') AS INTEGER) AND p.state_position = CAST(json_extract(k.value, '$[1].position') AS INTEGER) ORDER BY p.intent_id, p.state_epoch, p.state_position",
+  "describe": {
+    "columns": [
+      {
+        "name": "intent_id!: String",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "board_intent_progress",
+            "name": "intent_id"
+          }
+        }
+      },
+      {
+        "name": "state_epoch!: i64",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "board_intent_progress",
+            "name": "state_epoch"
+          }
+        }
+      },
+      {
+        "name": "state_position!: i64",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "board_intent_progress",
+            "name": "state_position"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      null,
+      null
+    ]
+  },
+  "hash": "a1a620fcc40967f00c6f1cce55091a9bf6e98e7843e9b15a570bc0d1a7239caa"
+}

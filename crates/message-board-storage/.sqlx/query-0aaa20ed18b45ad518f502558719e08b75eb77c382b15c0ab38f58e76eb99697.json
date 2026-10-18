@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities WHERE kind = 'fact' AND json_extract(payload, '$.record.kind.kind') = 'lifecycle' AND json_extract(payload, '$.record.kind.fact.kind') = 'projectCreated' AND id > ? ORDER BY id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0aaa20ed18b45ad518f502558719e08b75eb77c382b15c0ab38f58e76eb99697"
+}

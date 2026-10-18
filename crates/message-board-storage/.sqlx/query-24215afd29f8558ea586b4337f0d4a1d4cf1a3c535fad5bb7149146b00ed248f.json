@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO project_state(project_id) VALUES (?) ON CONFLICT(project_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "24215afd29f8558ea586b4337f0d4a1d4cf1a3c535fad5bb7149146b00ed248f"
+}

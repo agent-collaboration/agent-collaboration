@@ -1,4 +1,8 @@
 //! Public communication contracts without process, storage or transport ownership.
+mod wake_authority;
+pub use wake_authority::{WakeCreator, WakeRefusal};
+mod mail_boundary_conversions;
+pub use mail_boundary_conversions::MailBoundaryConversionError;
 mod thread_subscription_contract;
 mod thread_subscription_wait;
 pub use thread_subscription_contract::{
@@ -7,8 +11,9 @@ pub use thread_subscription_contract::{
     ThreadUnsubscribeRequest,
 };
 pub use thread_subscription_wait::{
-    InvalidSubscriptionWait, MAX_SUBSCRIPTION_WAIT_SECONDS, SubscriptionWaitBatch,
-    ThreadSubscriptionWaitFilter, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
+    InvalidSubscriptionWait, MAX_SUBSCRIPTION_WAIT_SECONDS, SubscriptionRenewalEntry,
+    SubscriptionRenewalOutcome, SubscriptionWaitBatch, ThreadSubscriptionWaitFilter,
+    ThreadSubscriptionWaitOutcome, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
 };
 mod cli_output_contract;
 pub use cli_output_contract::{
@@ -305,3 +310,6 @@ pub use automation_configuration_contract::{
     AutomationConfiguration, AutomationConfigureRequest, AutomationStatus, ConfigurationFailure,
     ConfigurationFailureKind, ConfigurationFileState, ConfigurationNextAction,
 };
+
+// The facade preserves mail identity through every local message boundary.
+pub use collaboration_mail_protocol::{MailDigest, MailItemId};

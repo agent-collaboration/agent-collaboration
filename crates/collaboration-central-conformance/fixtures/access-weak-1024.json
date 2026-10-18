@@ -1,0 +1,11 @@
+{
+  "key": {
+    "kid": "access-weak-test-key",
+    "kty": "RSA",
+    "n": "8pI_vRgYXA7uk0hoBqtMgChncDExdVohVdKBWP2BxGH1VvcI9nsYTQx2ycKlU20F1Xp5_hNtZkvcoiFZOCKS7l4BJ8SHw4UDpoOSaPNE5958YBAYViuKg4mN-TN8Nv2cNIDu6gYZQw7w5mOSyRnB86b5gZSpg2cQ_WbcR55DRHE",
+    "e": "AQAB",
+    "alg": "RS256",
+    "use": "sig"
+  },
+  "assertion": "eyJhbGciOiJSUzI1NiIsImtpZCI6ImFjY2Vzcy13ZWFrLXRlc3Qta2V5IiwidHlwIjoiSldUIn0.eyJpc3MiOiJodHRwczovL2NvbmZvcm1hbmNlLXRlc3QuY2xvdWRmbGFyZWFjY2Vzcy5jb20iLCJhdWQiOlsidGVzdC1hZG1pbi1hdWQiXSwiZXhwIjo0MTAyNDQ0ODAwLCJuYmYiOjAsInR5cGUiOiJhcHAiLCJzdWIiOiJ3ZWFrLXRlc3Qtb3duZXIiLCJlbWFpbCI6Im93bmVyQGV4YW1wbGUudGVzdCJ9.CuQW2rWvvlTJfSV6ZcPniD7ju8XpLn0-66aaGcB-KrVtoAGwep08Oj_KSL-qUYfN-54NKQRlUI3rlJnPL4wJO0jY-vzcpB2mVDZxodDZEeHWhSXthIE1HQHJYyq9opdgl5fS5fwdUTvnVC7n9zNAlE9JVuuTwiYMtDNDMuVhIO4"
+}

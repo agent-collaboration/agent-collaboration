@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT record_id AS \"record_id!: String\" FROM fleet_definitions WHERE workspace_id = ? AND name = ? AND version = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "00ced813c9c69b2ea7b3f3111b8acebeae5b092b5dbc1c22dac05b06758296cc"
+}

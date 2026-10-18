@@ -98,4 +98,6 @@ pub use debug_endpoint_selection::{
 };
 
 mod debug_profile_projection;
-pub use debug_profile_projection::{DebugCodexProfile, DebugProfileError};
+pub use debug_profile_projection::{
+    DebugCodexProfile, DebugProfileError, project_debug_profile_endpoint,
+};

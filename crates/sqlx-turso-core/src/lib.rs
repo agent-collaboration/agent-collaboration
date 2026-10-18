@@ -8,6 +8,7 @@
 #![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 mod arguments;
+mod busy_wait;
 mod column;
 mod connect_options;
 mod connection;

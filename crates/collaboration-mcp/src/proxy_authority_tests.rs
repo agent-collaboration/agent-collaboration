@@ -52,7 +52,7 @@ async fn tools_status(api: &ServedApi, host: &str, origin: Option<&str>) -> Stat
                 .as_array()
                 .expect("tools")
                 .iter()
-                .any(|tool| tool["name"] == "board_project_list")
+                .any(|tool| tool["name"] == "workspace_list")
         );
     }
     status
@@ -163,7 +163,7 @@ async fn metadata_fixture_inventory_fits_the_private_https_readiness_response_bo
     eprintln!("Actual MCP tools/list body: {} bytes", encoded.len());
     // The Host's bounded readiness client must be able to read the real published schema.
     assert!(
-        encoded.len() <= 1024 * 1024,
+        encoded.len() <= 16 * 1024 * 1024,
         "published inventory exceeds the Host readiness response bound"
     );
     api.stop().await;

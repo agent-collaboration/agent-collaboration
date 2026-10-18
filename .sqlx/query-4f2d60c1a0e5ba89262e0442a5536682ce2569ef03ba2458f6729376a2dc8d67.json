@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO board_intent_progress(project_id, intent_id, state_epoch, state_position) VALUES (?, ?, ?, ?) ON CONFLICT(project_id, intent_id, state_epoch, state_position) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "4f2d60c1a0e5ba89262e0442a5536682ce2569ef03ba2458f6729376a2dc8d67"
+}

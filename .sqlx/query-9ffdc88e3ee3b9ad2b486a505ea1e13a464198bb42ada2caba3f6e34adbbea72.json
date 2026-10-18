@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT DISTINCT target_service_id,target_endpoint_id,target_session_id FROM router_pushes WHERE kind IN (?,?) AND delivery_state IN ('pending','held') ORDER BY target_service_id,target_endpoint_id,target_session_id",
+  "describe": {
+    "columns": [
+      {
+        "name": "target_service_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "router_pushes",
+            "name": "target_service_id"
+          }
+        }
+      },
+      {
+        "name": "target_endpoint_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "router_pushes",
+            "name": "target_endpoint_id"
+          }
+        }
+      },
+      {
+        "name": "target_session_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "router_pushes",
+            "name": "target_session_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "9ffdc88e3ee3b9ad2b486a505ea1e13a464198bb42ada2caba3f6e34adbbea72"
+}

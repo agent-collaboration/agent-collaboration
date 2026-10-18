@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO archive_reports(board, project, position_epoch, position_commit, installation, reported_at) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "596468887c5491761d36f462a59fc62f15ea6cff5714c59f4c0eb82434d7a548"
+}

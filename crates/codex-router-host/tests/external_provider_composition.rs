@@ -175,6 +175,7 @@ sys.stdin.read()
 
     let receipt = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target,
             message: PublicMessageContent::HumanUser {
                 text: MessageText::try_from("routed provider message".to_owned()).expect("message"),

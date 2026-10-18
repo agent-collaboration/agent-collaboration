@@ -4,8 +4,8 @@ use super::board_preparation::{
     self, ActorInput, CommandContext, PreparedBoardCommand, placeholder_identity,
 };
 use super::board_thread_subscription_preparation::parse_subscription_duration;
-use super::board_value_parsing::{command_context, parse_uuid_v7};
-use collaboration_client::board::{MessageId, TopicId};
+use super::board_value_parsing::{command_context, parse_thread_ref, parse_uuid_v7};
+use collaboration_client::board::{ProjectId, ThreadRef};
 use collaboration_client::protocol::{
     MAX_SUBSCRIPTION_WAIT_SECONDS, ThreadSubscriptionWaitFilter, ThreadSubscriptionWaitRequest,
 };
@@ -24,30 +24,33 @@ pub(super) fn prepare(
         return Err("Thread Wait requires --json".into());
     }
     let actor = board_preparation::parse_actor_input(&arguments.actor)?;
-    let root_message_ids = arguments
-        .root_message_id
+    let thread_ids = arguments
+        .thread_id
         .into_iter()
-        .map(|value| parse_uuid_v7::<MessageId>(value, "--root-message-id"))
+        .map(parse_thread_ref)
         .collect::<Result<Vec<_>, _>>()?;
-    let filter = match (root_message_ids.is_empty(), arguments.topic_id) {
+    let filter = match (thread_ids.is_empty(), arguments.project_id) {
         (false, None) => {
-            let mut unique_roots = Vec::with_capacity(root_message_ids.len());
-            for root_message_id in root_message_ids {
-                if unique_roots.contains(&root_message_id) {
-                    return Err("--root-message-id values must be unique".into());
+            let mut unique_roots = Vec::with_capacity(thread_ids.len());
+            for thread_id in thread_ids {
+                if unique_roots
+                    .iter()
+                    .any(|existing: &ThreadRef| existing.thread == thread_id.thread)
+                {
+                    return Err("--thread-id values must be unique".into());
                 }
-                unique_roots.push(root_message_id);
+                unique_roots.push(thread_id);
             }
             ThreadSubscriptionWaitFilter::Roots {
-                root_message_ids: unique_roots,
+                threads: unique_roots,
             }
         }
-        (true, Some(topic)) => ThreadSubscriptionWaitFilter::Topic {
-            topic_id: parse_uuid_v7::<TopicId>(topic, "--topic-id")?,
+        (true, Some(project)) => ThreadSubscriptionWaitFilter::Project {
+            project_id: parse_uuid_v7::<ProjectId>(project, "--project-id")?,
         },
         (true, None) => ThreadSubscriptionWaitFilter::All {},
         (false, Some(_)) => {
-            return Err("Choose repeated --root-message-id values or one --topic-id".into());
+            return Err("Choose repeated --thread-id values or one --project-id".into());
         }
     };
     let max_wait_seconds = parse_subscription_duration(&arguments.max_wait, "--max-wait", true)?;
@@ -55,6 +58,20 @@ pub(super) fn prepare(
         return Err("--max-wait must be at most 1500 seconds; for example --max-wait 10m".into());
     }
     let request = ThreadSubscriptionWaitRequest {
+        protocol_version: collaboration_client::board::ProtocolVersion::CURRENT,
+        acting_for: arguments
+            .acting_for
+            .as_deref()
+            .map(super::board_value_parsing::parse_acting_for)
+            .transpose()?,
+        renewals: arguments
+            .renewals
+            .into_iter()
+            .map(|value| {
+                serde_json::from_str(&value)
+                    .map_err(|_| "--renewal must be typed SubscriptionRenewalEntry JSON".to_owned())
+            })
+            .collect::<Result<Vec<_>, _>>()?,
         actor: match &actor {
             ActorInput::Explicit(identity) => identity.clone(),
             ActorInput::Self_ => placeholder_identity()?,

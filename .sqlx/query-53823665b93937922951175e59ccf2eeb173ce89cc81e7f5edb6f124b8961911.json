@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT intent_id FROM board_intent_progress WHERE project_id = ? AND intent_id = ? AND state_epoch = ? AND state_position = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "intent_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "board_intent_progress",
+            "name": "intent_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "53823665b93937922951175e59ccf2eeb173ce89cc81e7f5edb6f124b8961911"
+}

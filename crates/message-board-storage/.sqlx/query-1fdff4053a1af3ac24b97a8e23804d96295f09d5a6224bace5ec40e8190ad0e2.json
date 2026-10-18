@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM subtasks WHERE subtask_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "1fdff4053a1af3ac24b97a8e23804d96295f09d5a6224bace5ec40e8190ad0e2"
+}

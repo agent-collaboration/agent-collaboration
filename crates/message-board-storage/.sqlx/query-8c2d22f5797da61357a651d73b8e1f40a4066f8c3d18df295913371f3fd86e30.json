@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "WITH filter AS (SELECT ? AS subject, ? AS tags, ? AS include_redacted, ? AS decisions_only)\nSELECT f.position AS \"position!: i64\", f.epoch AS \"epoch!: i64\", f.record_id AS \"id!: String\", json_extract(f.entry, '$.routerTime') AS \"router_time!: String\"\nFROM project_feed f CROSS JOIN filter i\nJOIN work_trail_rows current ON current.row_id = f.record_id\nWHERE f.record_kind = 'workTrailRow' AND f.position > ? AND f.position <= ?\n AND (i.include_redacted = 1 OR current.redacted = 0)\n AND (i.subject IS NULL OR json_extract(f.entry, '$.content.record.record.subject.kind') = json_extract(i.subject, '$.kind')\n  AND json_extract(f.entry, '$.content.record.record.subject.subject') IS json_extract(i.subject, '$.subject'))\n AND (i.decisions_only = 0 OR EXISTS(SELECT 1 FROM work_trail_tags t WHERE t.tag = 'decision' AND t.row_id = f.record_id))\n AND NOT EXISTS(SELECT 1 FROM json_each(i.tags) requested WHERE NOT EXISTS(SELECT 1 FROM work_trail_tags t WHERE t.tag = CAST(requested.value AS TEXT) AND t.row_id = f.record_id))\nORDER BY f.position ASC LIMIT ?\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "router_time!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8c2d22f5797da61357a651d73b8e1f40a4066f8c3d18df295913371f3fd86e30"
+}

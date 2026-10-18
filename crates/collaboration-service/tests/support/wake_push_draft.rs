@@ -5,7 +5,7 @@ use collaboration_protocol::{
 };
 
 pub(super) fn build_test_wake_push_draft(
-    wake: &WakeRecord<SavedMessage>,
+    wake: &WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {

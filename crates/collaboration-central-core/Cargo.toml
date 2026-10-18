@@ -1,0 +1,29 @@
+[package]
+name = "collaboration-central-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+conformance = []
+
+[dependencies]
+collaboration-replication-protocol = { version = "0.1.93", path = "../collaboration-replication-protocol" }
+fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
+message-board = { version = "0.1.93", path = "../message-board" }
+chrono = { version = "0.4.45", default-features = false, features = ["serde", "alloc"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+turso_parser = "=0.8.1"
+base64 = "0.22.1"
+
+[dev-dependencies]
+rusqlite.workspace = true
+proptest.workspace = true
+

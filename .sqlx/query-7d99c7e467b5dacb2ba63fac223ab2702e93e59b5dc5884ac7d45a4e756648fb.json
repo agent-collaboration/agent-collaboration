@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO mail_items(item_id,digest,direction,item_json,status_json,status_version,payload_bytes,projection_json,result_json,submit_attempted_at,created_at,terminal_at) VALUES (?,?,'local',?,?,0,?,?,NULL,NULL,?,NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "7d99c7e467b5dacb2ba63fac223ab2702e93e59b5dc5884ac7d45a4e756648fb"
+}

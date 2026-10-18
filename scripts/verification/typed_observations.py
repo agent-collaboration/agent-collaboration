@@ -170,7 +170,7 @@ class PublicOption(EvidenceView):
     effect: str
     scope: str
     optionId: str
-    persistentTarget: JsonObject | None = None
+    persistentTarget: str | None = None
 
 
 class PublicInteraction(EvidenceView):
@@ -205,7 +205,7 @@ class SettingsValue(EvidenceView):
 
 class SettingsOption(EvidenceView):
     id: str
-    category: str | None
+    category: str | None = None
     currentValue: SettingsValue
     choices: list[SettingsChoice]
 

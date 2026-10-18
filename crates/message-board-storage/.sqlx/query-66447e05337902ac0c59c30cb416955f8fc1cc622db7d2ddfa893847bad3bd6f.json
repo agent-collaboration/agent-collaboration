@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO legacy_cursor_scope_keys(scope) VALUES (?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "66447e05337902ac0c59c30cb416955f8fc1cc622db7d2ddfa893847bad3bd6f"
+}

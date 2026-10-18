@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT assignment_id AS \"assignment_id!: String\" FROM role_assignments INDEXED BY active_workstream_roles WHERE workstream_subject = ? AND active = 1 ORDER BY assignment_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "assignment_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "587c120e77fc73537e52b4c037a17ba834b70a06b216eb196af966fd7aa60de5"
+}

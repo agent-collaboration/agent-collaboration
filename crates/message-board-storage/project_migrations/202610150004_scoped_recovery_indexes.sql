@@ -1,0 +1,5 @@
+CREATE INDEX context_scope_facts ON record_identities(json_array(json_extract(payload, '$.record.kind.fact.session.endpoint.serviceId'), json_extract(payload, '$.record.kind.fact.session.endpoint.endpointId'), json_extract(payload, '$.record.kind.fact.session.sessionId')), id) WHERE kind = 'fact' AND json_extract(payload, '$.record.kind.kind') = 'scopeAcknowledgement';
+CREATE INDEX creation_fact_by_request ON record_identities(json_extract(payload, '$.record.kind.fact.creatingRequest'), id) WHERE kind = 'fact' AND json_extract(payload, '$.record.kind.kind') = 'lifecycle' AND json_extract(payload, '$.record.kind.fact.kind') = 'projectCreated';
+CREATE INDEX creation_fact_page ON record_identities(id) WHERE kind = 'fact' AND json_extract(payload, '$.record.kind.kind') = 'lifecycle' AND json_extract(payload, '$.record.kind.fact.kind') = 'projectCreated';
+CREATE INDEX accepted_request_page ON request_ledger(request_id) WHERE json_extract(decision, '$.kind') = 'accepted';
+CREATE INDEX rejected_creation_request ON request_ledger(request_id) WHERE json_extract(decision, '$.kind') = 'voided' AND json_extract(decision, '$.cause.kind') = 'projectRejected';

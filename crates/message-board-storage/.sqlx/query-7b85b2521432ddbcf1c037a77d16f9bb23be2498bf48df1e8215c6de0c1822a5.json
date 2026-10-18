@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM record_identities WHERE kind = 'roleAssignment' AND json_extract(payload, '$.record.subject.kind') = 'project' AND json_extract(payload, '$.record.subject.subject') = ? AND json_extract(payload, '$.record.role') = 'lead' ORDER BY json_extract(payload, '$.record.envelope.position.position.position') DESC, id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7b85b2521432ddbcf1c037a77d16f9bb23be2498bf48df1e8215c6de0c1822a5"
+}

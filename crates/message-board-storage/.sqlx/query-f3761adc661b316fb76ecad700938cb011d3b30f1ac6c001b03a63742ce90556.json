@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", payload AS \"payload!: String\" FROM record_identities WHERE kind = ? ORDER BY id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "f3761adc661b316fb76ecad700938cb011d3b30f1ac6c001b03a63742ce90556"
+}

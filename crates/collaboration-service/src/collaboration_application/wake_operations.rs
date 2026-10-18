@@ -87,6 +87,8 @@ impl<'service> WakeOperations<'service> {
             .await
             .create_wakeup(&WakeCreate {
                 operation_id: request.operation_id,
+                requested_by: request.requested_by,
+                replace: request.replace,
                 message: request.message,
                 timing,
                 expiry,
@@ -550,6 +552,7 @@ pub(crate) fn wake_failure(
         WakeFailureReason::OperationConflict=>(WakeFailureStage::Admission,WakeNextAction::InspectOperation,"Operation identity belongs to a different request; inspect it before submitting new work.".into()),
         WakeFailureReason::LifecycleConflict=>(WakeFailureStage::Validation,WakeNextAction::InspectWakeup,"This wake cannot perform that lifecycle transition. Inspect its state; cancelled or expired reminders are not implicitly recreated.".into()),
         WakeFailureReason::Overloaded=>(WakeFailureStage::Admission,WakeNextAction::RetryLater,"Request capacity exceeded; no wake mutation was dispatched.".into()),
+        WakeFailureReason::Refused(reason)=>(WakeFailureStage::Admission,WakeNextAction::CorrectRequest,format!("Wake refused: {reason:?}")),
         _ if matches!(mutation,LocalMutationState::Unknown|LocalMutationState::Committed)=>(WakeFailureStage::Storage,WakeNextAction::InspectOperation,"Local mutation may exist; inspect or replay the same operation identity. Do not create a new identity blindly.".into()),
         _=>(WakeFailureStage::Storage,WakeNextAction::RetryLater,"Automation storage is unavailable or inconsistent; no new native submission was dispatched.".into()),
     };
@@ -573,6 +576,7 @@ pub(crate) fn invalid_field(field: &str, constraint: &str) -> WakeFailureReason 
 
 fn storage_reason(error: StorageError) -> WakeFailureReason {
     match error {
+        StorageError::WakeRefused(reason) => WakeFailureReason::Refused(reason),
         StorageError::WakeNotFound => WakeFailureReason::ResourceNotFound,
         StorageError::OperationConflict => WakeFailureReason::OperationConflict,
         StorageError::Database(_) => WakeFailureReason::AutomationUnavailable,
@@ -645,6 +649,7 @@ impl CollaborationRejection for WakeFailure {
             WakeFailureReason::AutomationUnavailable
             | WakeFailureReason::ResourceNotFound
             | WakeFailureReason::InvalidRecord
+            | WakeFailureReason::Refused(_)
             | WakeFailureReason::LifecycleConflict => None,
         }
     }

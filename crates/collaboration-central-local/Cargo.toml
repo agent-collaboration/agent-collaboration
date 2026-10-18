@@ -1,0 +1,33 @@
+[package]
+name = "collaboration-central-local"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+conformance = ["dep:collaboration-central-conformance", "collaboration-central-core/conformance"]
+
+[dependencies]
+fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
+collaboration-central-conformance = { version = "0.1.93", path = "../collaboration-central-conformance", optional = true, default-features = false }
+collaboration-central-core = { version = "0.1.93", path = "../collaboration-central-core" }
+collaboration-replication-protocol = { version = "0.1.93", path = "../collaboration-replication-protocol" }
+axum = { workspace = true, features = ["ws", "json"] }
+chrono = { version = "0.4.45", features = ["serde"] }
+clap.workspace = true
+futures-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+turso_core = "=0.8.1"
+uuid.workspace = true
+base64 = "0.22.1"
+ring = "=0.17.14"
+reqwest = { workspace = true, features = ["json"] }

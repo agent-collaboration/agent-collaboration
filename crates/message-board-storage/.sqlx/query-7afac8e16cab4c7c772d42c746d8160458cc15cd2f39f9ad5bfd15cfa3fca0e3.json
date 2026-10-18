@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE feed_checkpoint SET last_position = ? WHERE singleton = 1",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7afac8e16cab4c7c772d42c746d8160458cc15cd2f39f9ad5bfd15cfa3fca0e3"
+}

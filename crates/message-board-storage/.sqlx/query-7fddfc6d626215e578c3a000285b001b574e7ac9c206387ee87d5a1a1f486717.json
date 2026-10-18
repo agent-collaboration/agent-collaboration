@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"row_count!: i64\" FROM thread_participants WHERE reader = ? AND thread_id = ? AND joined_epoch = ? AND joined_position = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7fddfc6d626215e578c3a000285b001b574e7ac9c206387ee87d5a1a1f486717"
+}

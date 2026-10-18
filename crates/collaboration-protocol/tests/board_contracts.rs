@@ -30,7 +30,7 @@ fn tool_schema_validator<TWire: schemars::JsonSchema>()
 fn board_requests_and_results_match_their_tool_types() -> Result<(), Box<dyn std::error::Error>> {
     let project_id = "01890f2e-7b4c-7cc0-98c4-000000000001";
     let request = json!({"projectId": project_id});
-    let result = json!({"project": {"projectId": project_id, "name": "Router", "description": "Coordination"}});
+    let result = json!({"project":{"id":project_id,"board":"01890f2e-7b4c-7cc0-98c4-000000000002","title":"Router","envelope":{"id":project_id,"scope":{"workspace":"01890f2e-7b4c-7cc0-98c4-000000000003","board":"01890f2e-7b4c-7cc0-98c4-000000000002","project":null},"actor":{"actor":{"kind":"declared","identity":{"kind":"human","humanId":"owner"}},"installation":"00000000-0000-4000-8000-000000000001","machine":"schema proof"},"request":null,"position":{"kind":"fleet","position":1},"routerTime":"2026-10-12T00:00:00Z"}}});
     ensure(
         tool_schema_validator::<message_board::ProjectShowRequest>()?.is_valid(&request),
         "valid board request",
@@ -44,24 +44,24 @@ fn board_requests_and_results_match_their_tool_types() -> Result<(), Box<dyn std
 
 #[test]
 fn board_variants_and_nested_records_fail_closed() -> Result<(), Box<dyn std::error::Error>> {
-    let validator = tool_schema_validator::<message_board::MessageListRequest>()?;
-    let topic_id = "01890f2e-7b4c-7cc0-98c4-000000000002";
+    let validator = tool_schema_validator::<message_board::PostListRequest>()?;
+    let project_id = "01890f2e-7b4c-7cc0-98c4-000000000002";
     let valid = json!({
-        "scope": {"kind": "topic", "topicId": topic_id},
+        "scope": {"kind": "project", "projectId": project_id},
         "selection": {"kind": "latest"},
         "page": {"limit": 50, "cursor": null}
     });
-    ensure(validator.is_valid(&valid), "valid message-list request")?;
+    ensure(validator.is_valid(&valid), "valid post-list request")?;
 
     let mut bad_variant = valid.clone();
-    bad_variant["scope"]["kind"] = json!("topicAlias");
+    bad_variant["scope"]["kind"] = json!("projectAlias");
     ensure(
         !validator.is_valid(&bad_variant),
         "unknown scope kind rejected",
     )?;
 
     let mut extra_variant_field = valid.clone();
-    extra_variant_field["scope"]["boardId"] = json!(topic_id);
+    extra_variant_field["scope"]["boardId"] = json!(project_id);
     ensure(
         !validator.is_valid(&extra_variant_field),
         "extra scope field rejected",
@@ -84,24 +84,24 @@ fn thread_wait_contract_uses_subscription_filters_and_bodyless_results()
     let response_validator =
         tool_schema_validator::<collaboration_protocol::ThreadSubscriptionWaitResult>()?;
     let root_id = "01900000-0000-7000-8000-000000000021";
-    let topic_id = "01900000-0000-7000-8000-000000000022";
+    let project_id = "01900000-0000-7000-8000-000000000022";
     let valid_request = json!({
         "actor":{"kind":"human","humanId":"reader"},
-        "filter":{"kind":"roots","rootMessageIds":[root_id]},
-        "maxWaitSeconds":540
+        "filter":{"kind":"roots","threads":[{"thread":root_id}]},
+        "protocolVersion":1,"actingFor":null,"renewals":[],"maxWaitSeconds":540
     });
     ensure(
         request_validator.is_valid(&valid_request),
         "valid subscription wait request",
     )?;
     let mut unknown_filter = valid_request.clone();
-    unknown_filter["filter"]["kind"] = json!("topics");
+    unknown_filter["filter"]["kind"] = json!("projects");
     ensure(
         !request_validator.is_valid(&unknown_filter),
         "unknown subscription wait filter rejected",
     )?;
     let mut mixed_filter = valid_request.clone();
-    mixed_filter["filter"]["topicId"] = json!(topic_id);
+    mixed_filter["filter"]["projectId"] = json!(project_id);
     ensure(
         !request_validator.is_valid(&mixed_filter),
         "extra filter fields rejected",
@@ -114,42 +114,42 @@ fn thread_wait_contract_uses_subscription_filters_and_bodyless_results()
     )?;
 
     let root_range = json!({
-        "rootId":root_id,
-        "topicId":topic_id,
-        "fromSequence":1,
-        "throughSequence":2,
-        "messageCount":2
+        "threadId":root_id,
+        "projectId":project_id,
+        "from":{"epoch":1,"position":1},
+        "through":{"epoch":1,"position":2},
+        "postCount":2
     });
-    let timeout_response = json!({"batch":null});
+    let timeout_response = json!({"renewals":[],"outcome":{"kind":"timedOut"}});
     ensure(
         response_validator.is_valid(&timeout_response),
         "empty wait result accepted",
     )?;
-    let notice_response = json!({"batch":{
+    let notice_response = json!({"renewals":[],"outcome":{"kind":"batch","batch":{
         "kind":"notice",
         "pushId":"01900000-0000-7000-8000-000000000023",
         "line":"thread subscription notice",
         "held":false,
         "draining":false,
         "roots":[root_range]
-    }});
+    }}});
     ensure(
         response_validator.is_valid(&notice_response),
         "session notice response accepted",
     )?;
-    let ranges_response = json!({"batch":{
+    let ranges_response = json!({"renewals":[],"outcome":{"kind":"batch","batch":{
         "kind":"ranges",
         "held":true,
         "heldSince":"2026-10-01T00:00:00Z",
         "draining":false,
         "roots":[root_range]
-    }});
+    }}});
     ensure(
         response_validator.is_valid(&ranges_response),
         "human range response accepted",
     )?;
     let mut body_bearing_notice = notice_response;
-    body_bearing_notice["batch"]["roots"][0]["text"] = json!("message body");
+    body_bearing_notice["outcome"]["batch"]["roots"][0]["text"] = json!("message body");
     ensure(
         !response_validator.is_valid(&body_bearing_notice),
         "wait result rejects message bodies",

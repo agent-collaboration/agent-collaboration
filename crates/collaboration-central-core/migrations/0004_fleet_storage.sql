@@ -1,0 +1,13 @@
+CREATE TABLE IF NOT EXISTS fleet_records (kind TEXT NOT NULL, id TEXT NOT NULL, workspace TEXT NOT NULL, payload TEXT NOT NULL, import_digest TEXT, PRIMARY KEY(kind,id));
+CREATE TABLE IF NOT EXISTS fleet_workspaces (workspace_id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE);
+CREATE TABLE IF NOT EXISTS fleet_boards (board_id TEXT PRIMARY KEY, workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id), name TEXT NOT NULL, UNIQUE(workspace_id,name));
+CREATE TABLE IF NOT EXISTS fleet_directory (project_id TEXT PRIMARY KEY, board_id TEXT NOT NULL REFERENCES fleet_boards(board_id), title TEXT NOT NULL, UNIQUE(board_id,title));
+CREATE TABLE IF NOT EXISTS fleet_definitions (workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id), name TEXT NOT NULL, version TEXT NOT NULL, record_id TEXT NOT NULL, PRIMARY KEY(workspace_id,name,version));
+CREATE TABLE IF NOT EXISTS fleet_repositories (workspace_id TEXT NOT NULL REFERENCES fleet_workspaces(workspace_id), reference TEXT NOT NULL, PRIMARY KEY(workspace_id,reference));
+CREATE TABLE IF NOT EXISTS fleet_archive_reports (board_id TEXT NOT NULL REFERENCES fleet_boards(board_id), project_id TEXT NOT NULL REFERENCES fleet_directory(project_id), PRIMARY KEY(board_id,project_id));
+CREATE TABLE IF NOT EXISTS fleet_request_ledger (request_id TEXT PRIMARY KEY, canonical_hash TEXT NOT NULL, payload TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS fleet_checkpoint (singleton INTEGER PRIMARY KEY, last_position INTEGER NOT NULL);
+INSERT OR IGNORE INTO fleet_checkpoint(singleton,last_position) VALUES(1,0);
+CREATE TABLE IF NOT EXISTS fleet_feed (position INTEGER PRIMARY KEY, entry TEXT NOT NULL, as_of TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS directory_status (project TEXT PRIMARY KEY, record TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS directory_lease (project TEXT PRIMARY KEY, record TEXT NOT NULL);

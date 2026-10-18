@@ -1,16 +1,17 @@
 use super::board_cli_runner::{result, run_board_cli, run_rejected_board_cli};
 use crate::proof_context::{ProofContext, ProofResult};
-use collaboration_client::board::MessageId;
+use collaboration_client::board::PostId;
 use serde_json::{Value, json};
 
 pub(super) struct FilteredSearchProof<'a> {
     pub reader: &'a str,
-    pub selected_project_id: &'a str,
+    pub selected_workspace_id: &'a str,
     pub selected_board_id: &'a str,
-    pub selected_topic_id: &'a str,
+    pub selected_project_id: &'a str,
+    pub selected_subject: &'a str,
     pub selected_message_id: &'a str,
     pub watched_root_id: &'a str,
-    pub watched_project_id: &'a str,
+    pub watched_workspace_id: &'a str,
     pub thread_text: &'a str,
 }
 
@@ -18,35 +19,36 @@ pub(super) async fn exercise(
     proof: &mut ProofContext,
     context: FilteredSearchProof<'_>,
 ) -> ProofResult<()> {
+    let cooldown_text = proof.workspace.join("cooldown-refused-root.md");
+    std::fs::write(&cooldown_text, "must use a thread during cooldown")?;
     let cooldown = run_rejected_board_cli(
         &proof.service_directory,
-        "topLevelMessageCooldown",
+        "postCooldown",
         [
-            "message",
-            "post",
-            "--message-id",
-            MessageId::generate().as_str(),
-            "--placement",
-            "topic",
-            "--topic-id",
-            context.selected_topic_id,
+            "thread",
+            "create",
+            "--post-id",
+            PostId::generate().as_str(),
+            "--project-id",
+            context.selected_project_id,
+            "--about",
+            context.selected_subject,
+            "--role",
+            "orchestrator",
+            "--no-watch",
             "--actor",
             context.reader,
-            "--text",
-            "must use a thread during cooldown",
+            "--text-file",
+            cooldown_text.to_str().ok_or("cooldown text path")?,
         ],
     )
     .await?;
     if !cooldown
-        .pointer("/error/message")
-        .and_then(Value::as_str)
-        .is_some_and(|message| message.contains("existing unresolved thread"))
-        || !cooldown
-            .pointer("/error/details/retryAfterSeconds")
-            .and_then(Value::as_u64)
-            .is_some_and(|seconds| (1..=60).contains(&seconds))
+        .pointer("/result/record/result/decision/reasons/0/retryAfterSeconds")
+        .and_then(Value::as_u64)
+        .is_some_and(|seconds| (1..=60).contains(&seconds))
     {
-        return Err("live cooldown response omitted bounded wait or thread guidance".into());
+        return Err("live cooldown reply omitted its bounded remaining time".into());
     }
     let discovery = run_board_cli(
         &proof.service_directory,
@@ -55,11 +57,11 @@ pub(super) async fn exercise(
             "--query",
             "cross",
             "--scope",
-            "project",
-            "--project-id",
-            context.selected_project_id,
+            "workspace",
+            "--workspace-id",
+            context.selected_workspace_id,
             "--kind",
-            "topic",
+            "project",
         ],
     )
     .await?;
@@ -67,8 +69,8 @@ pub(super) async fn exercise(
         .as_array()
         .is_some_and(|records| {
             records.iter().any(|record| {
-                record.pointer("/topic/topicId").and_then(Value::as_str)
-                    == Some(context.selected_topic_id)
+                record.pointer("/project/id").and_then(Value::as_str)
+                    == Some(context.selected_project_id)
             })
         })
     {
@@ -80,9 +82,9 @@ pub(super) async fn exercise(
             "inbox",
             "fetch",
             "--scope",
-            "topic",
-            "--topic-id",
-            context.selected_topic_id,
+            "project",
+            "--project-id",
+            context.selected_project_id,
             "--read-mode",
             "latest",
             "--reader",
@@ -94,11 +96,10 @@ pub(super) async fn exercise(
         .as_array()
         .ok_or("latest records missing")?;
     if !records.iter().any(|record| {
-        record.pointer("/message/messageId").and_then(Value::as_str)
-            == Some(context.selected_message_id)
+        record.pointer("/post/postId").and_then(Value::as_str) == Some(context.selected_message_id)
     }) || !records.iter().any(|record| {
         record
-            .pointer("/message/placement/rootMessageId")
+            .pointer("/post/placement/threadId")
             .and_then(Value::as_str)
             == Some(context.watched_root_id)
     }) {
@@ -127,10 +128,10 @@ pub(super) async fn exercise(
         .is_some_and(|records| {
             records.iter().any(|record| {
                 record.get("kind").and_then(Value::as_str) == Some("threadStateChanged")
-                    && record.get("rootMessageId").and_then(Value::as_str)
+                    && record.get("threadId").and_then(Value::as_str)
                         == Some(context.watched_root_id)
-                    && record.get("projectId").and_then(Value::as_str)
-                        == Some(context.watched_project_id)
+                    && record.get("workspaceId").and_then(Value::as_str)
+                        == Some(context.watched_workspace_id)
             })
         })
     {
@@ -141,13 +142,13 @@ pub(super) async fn exercise(
     let search = run_board_cli(
         &proof.service_directory,
         [
-            "message",
+            "post",
             "search",
             "--query",
             context.thread_text,
             "--scope",
             "thread",
-            "--root-message-id",
+            "--thread-id",
             context.watched_root_id,
             "--kind",
             "thread",
@@ -158,7 +159,7 @@ pub(super) async fn exercise(
         .as_array()
         .is_some_and(|records| {
             records.iter().any(|record| {
-                record.pointer("/message/text").and_then(Value::as_str) == Some(context.thread_text)
+                record.pointer("/post/text").and_then(Value::as_str) == Some(context.thread_text)
             })
         })
     {
@@ -167,14 +168,14 @@ pub(super) async fn exercise(
     let strict_search = run_board_cli(
         &proof.service_directory,
         [
-            "message",
+            "post",
             "search",
             "--query",
             context.thread_text,
             "--scope",
-            "topic",
-            "--topic-id",
-            context.selected_topic_id,
+            "project",
+            "--project-id",
+            context.selected_project_id,
         ],
     )
     .await?;

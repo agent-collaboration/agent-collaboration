@@ -2,14 +2,20 @@
 mod reader_delivery_actions;
 #[path = "reader_direct_messages.rs"]
 mod reader_direct_messages;
+#[path = "reader_membership_refresh.rs"]
+mod reader_membership_refresh;
 #[path = "reader_wait_handoff.rs"]
 mod reader_wait_handoff;
+use super::SubscriptionWindowStore;
+use super::reader_scan_scope::ReaderScanScope;
 #[cfg(test)]
 use super::subscription_service::OwnerObservation;
+use super::subscription_windows::{ProjectSubscriptionRecord, ReaderSubscriptionSnapshot};
 use super::{
     BoardAvailability, SubscriptionClock,
     subscription_facts::{
-        PRESENCE_INTERVAL, RootSubscriptionFacts, delivery_retry_delay, root_facts, wall_deadline,
+        PRESENCE_INTERVAL, RootSubscriptionFacts, STORAGE_RETRY_INTERVAL, delivery_retry_delay,
+        root_facts, wall_deadline,
     },
     subscription_push::{SubscriptionPushStore, target_session},
     subscription_wait::{PollWaiter, SubscriptionWaitFilter, SubscriptionWaitResult},
@@ -17,11 +23,10 @@ use super::{
 use crate::{LoadPolicy, TargetPresence, TargetPresenceProbe};
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, PushId, PushRecord};
 use message_board::{
-    BoardError, EndReason, Identity, MessageId, SubscriptionBatch, SubscriptionBatchSettlement,
-    SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, SubscriptionState,
+    BoardError, EndReason, Identity, ProjectId, SubscriptionBatch, SubscriptionBatchSettlement,
+    SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, ThreadId,
     ThreadSubscriptionRecord, WhenIdle,
 };
-use message_board_storage::BoardStore;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
@@ -32,11 +37,24 @@ use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 type DirectMessageReply = oneshot::Sender<Result<PushRecord, BoardError>>;
+/// Answered by the owner's next pass: after its native window scan, or with the error
+/// that ended the pass before that scan could complete.
+type ReconcileReply = oneshot::Sender<Result<ReaderSubscriptionSnapshot, BoardError>>;
+
+#[derive(Clone, Copy)]
+pub(super) enum ReaderReconcilePurpose {
+    Refresh,
+    Restore,
+}
 
 pub(super) enum ReaderDeliveryCommand {
     #[cfg(test)]
     Barrier(oneshot::Sender<()>),
-    Reconcile(oneshot::Sender<()>),
+    Reconcile {
+        scope: ReaderScanScope,
+        purpose: ReaderReconcilePurpose,
+        reply: ReconcileReply,
+    },
     DmQueued {
         push_id: PushId,
         reply: DirectMessageReply,
@@ -51,13 +69,14 @@ pub(super) enum ReaderDeliveryCommand {
 
 pub(super) struct ReaderDeliveryOwnerProps {
     pub reader: Identity,
+    pub initial_scope: ReaderScanScope,
     pub board_availability: BoardAvailability,
     pub push: Arc<SubscriptionPushStore>,
     pub presence: Arc<dyn TargetPresenceProbe>,
     pub clock: Arc<dyn SubscriptionClock>,
     pub shutdown: CancellationToken,
     pub commands: mpsc::Receiver<ReaderDeliveryCommand>,
-    pub activity: Option<broadcast::Receiver<()>>,
+    pub activity: Option<broadcast::Receiver<ProjectId>>,
     #[cfg(test)]
     pub observations: broadcast::Sender<OwnerObservation>,
 }
@@ -82,12 +101,17 @@ pub(super) struct ReaderDeliveryOwner {
     clock: Arc<dyn SubscriptionClock>,
     shutdown: CancellationToken,
     commands: mpsc::Receiver<ReaderDeliveryCommand>,
-    activity: Option<broadcast::Receiver<()>>,
+    activity: Option<broadcast::Receiver<ProjectId>>,
     waiters: VecDeque<PollWaiter>,
-    checked_presence: HashMap<MessageId, Instant>,
-    prior_records: Vec<ThreadSubscriptionRecord>,
+    checked_presence: HashMap<ThreadId, Instant>,
+    prior_records: ReaderSubscriptionSnapshot,
+    pending_scope: Option<ReaderScanScope>,
+    pending_restoration: Option<ReaderScanScope>,
+    pass_projects: Vec<ProjectId>,
+    pending_waiters: VecDeque<PollWaiter>,
     pending_held_cleanup: PendingHeldPushCleanup,
     rescan: bool,
+    reconcile_replies: Vec<ReconcileReply>,
     dm_checked_presence: HashMap<PushId, Instant>,
     dm_replies: HashMap<PushId, Vec<DirectMessageReply>>,
     #[cfg(test)]
@@ -100,6 +124,7 @@ impl ReaderDeliveryOwner {
     pub(super) fn new(props: ReaderDeliveryOwnerProps) -> Self {
         let ReaderDeliveryOwnerProps {
             reader,
+            initial_scope,
             board_availability,
             push,
             presence,
@@ -121,9 +146,14 @@ impl ReaderDeliveryOwner {
             activity,
             waiters: VecDeque::new(),
             checked_presence: HashMap::new(),
-            prior_records: Vec::new(),
+            prior_records: ReaderSubscriptionSnapshot::default(),
+            pending_scope: Some(initial_scope),
+            pending_restoration: None,
+            pass_projects: Vec::new(),
+            pending_waiters: VecDeque::new(),
             pending_held_cleanup: PendingHeldPushCleanup::default(),
             rescan: true,
+            reconcile_replies: Vec::new(),
             dm_checked_presence: HashMap::new(),
             dm_replies: HashMap::new(),
             #[cfg(test)]
@@ -146,56 +176,35 @@ impl ReaderDeliveryOwner {
                 Ok(pending) => pending,
                 Err(error) => {
                     tracing::warn!(%error, "direct-message reload or delivery failed");
+                    self.answer_reconcile_requests(&Err(error));
                     if !self.wait_for_input(Some(self.retry_deadline())).await {
                         break;
                     }
                     continue;
                 }
             };
-            if self.rescan {
-                let result = match &self.board_availability {
-                    BoardAvailability::Available(store) => {
-                        store
-                            .lock()
-                            .await
-                            .rescan_missing_subscription_windows(&self.reader, self.clock.now())
-                            .await
-                    }
-                    BoardAvailability::Unavailable => Ok(0),
-                };
-                if result.is_err() {
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
-                        break;
-                    }
-                    continue;
-                }
-                self.rescan = false;
-            }
-            let now = self.clock.now();
-            let result = match &self.board_availability {
-                BoardAvailability::Available(store) => {
-                    store
-                        .lock()
-                        .await
-                        .list_reader_subscriptions(&self.reader, now)
-                        .await
-                }
-                BoardAvailability::Unavailable => Ok(Vec::new()),
-            };
-            let records = match result {
+            let current = match self.refresh_subscription_records().await {
                 Ok(records) => records,
                 Err(error) => {
-                    tracing::warn!(%error, "subscription reload failed");
+                    self.answer_reconcile_requests(&Err(error));
                     if !self.wait_for_input(Some(self.retry_deadline())).await {
                         break;
                     }
                     continue;
                 }
             };
+            let records: Vec<_> = current
+                .records
+                .iter()
+                .map(|row| row.record.clone())
+                .collect();
+            self.answer_reconcile_requests(&Ok(current.clone()));
+            self.activate_pending_waiters(&current.records);
+            let now = self.clock.now();
             #[cfg(test)]
             self.observe(OwnerObservation::RowsLoaded(records.len()));
             self.expiry_notices(&records).await;
-            self.prior_records = records.clone();
+            self.prior_records = current;
             if records.is_empty()
                 && self.waiters.is_empty()
                 && !pending_dms
@@ -209,7 +218,7 @@ impl ReaderDeliveryOwner {
             if self.complete_drains(&records).await {
                 continue;
             }
-            let facts = root_facts(&records);
+            let facts = root_facts(&self.prior_records.records);
             #[cfg(test)]
             self.observe(OwnerObservation::SelectingDueRoots);
             let due_result = match &self.board_availability {
@@ -217,7 +226,7 @@ impl ReaderDeliveryOwner {
                     store
                         .lock()
                         .await
-                        .due_subscription_roots(&self.reader, now)
+                        .due_project_subscription_roots(&self.reader, now, &self.pass_projects)
                         .await
                 }
                 BoardAvailability::Unavailable => Ok(Vec::new()),
@@ -292,7 +301,7 @@ impl ReaderDeliveryOwner {
     async fn next_deadline(
         &self,
         records: &[ThreadSubscriptionRecord],
-        facts: &HashMap<MessageId, RootSubscriptionFacts>,
+        facts: &HashMap<ThreadId, RootSubscriptionFacts>,
     ) -> Option<Instant> {
         let now = self.clock.now();
         let monotonic = self.clock.monotonic_now();
@@ -324,11 +333,7 @@ impl ReaderDeliveryOwner {
             if facts.mode == SubscriptionMode::Poll {
                 let mut covered = false;
                 for waiter in &self.waiters {
-                    covered |= waiter
-                        .filter
-                        .matches(root, self.board_store().ok()?)
-                        .await
-                        .unwrap_or(false);
+                    covered |= waiter.filter.matches(root, &facts.project);
                 }
                 if !covered {
                     continue;
@@ -389,7 +394,18 @@ impl ReaderDeliveryOwner {
             activity = async { match self.activity.as_mut() {
                 Some(activity) => activity.recv().await,
                 None => std::future::pending().await,
-            } } => { if matches!(activity, Err(broadcast::error::RecvError::Lagged(_))) { self.rescan = true; } !matches!(activity, Err(broadcast::error::RecvError::Closed)) },
+            } } => {
+                match activity {
+                    Ok(project) => self.request_scan(ReaderScanScope::project(project)),
+                    Err(broadcast::error::RecvError::Lagged(_)) => {
+                        self.request_scan(ReaderScanScope::All);
+                        #[cfg(test)]
+                        self.observe(OwnerObservation::ActivityLagged);
+                    },
+                    Err(broadcast::error::RecvError::Closed) => return false,
+                }
+                true
+            },
             () = timer => true,
         }
     }
@@ -398,9 +414,22 @@ impl ReaderDeliveryOwner {
         match command {
             #[cfg(test)]
             ReaderDeliveryCommand::Barrier(reply) => self.barriers.push(reply),
-            ReaderDeliveryCommand::Reconcile(reply) => {
-                self.rescan = true;
-                let _ = reply.send(());
+            ReaderDeliveryCommand::Reconcile {
+                scope,
+                purpose,
+                reply,
+            } => {
+                if matches!(purpose, ReaderReconcilePurpose::Restore) {
+                    match &mut self.pending_restoration {
+                        Some(pending) => pending.merge(scope.clone()),
+                        None => self.pending_restoration = Some(scope.clone()),
+                    }
+                }
+                // Acceptance is not reconciliation: the reply waits for the scan it requested.
+                self.request_scan(scope);
+                self.reconcile_replies.push(reply);
+                #[cfg(test)]
+                self.observe(OwnerObservation::ReconcileRequested);
             }
             ReaderDeliveryCommand::DmQueued { push_id, reply } => {
                 self.dm_checked_presence.remove(&push_id);
@@ -411,52 +440,44 @@ impl ReaderDeliveryOwner {
                 deadline,
                 maximum_root_notice_bytes,
                 reply,
-            } => match self.renew_wait(&filter).await {
-                Ok(()) => {
-                    self.waiters.push_back(PollWaiter {
-                        filter,
-                        deadline,
-                        maximum_root_notice_bytes,
-                        reply,
-                    });
-                    #[cfg(test)]
-                    self.observe(OwnerObservation::WaitQueued);
-                }
-                Err(error) => {
-                    let _ = reply.send(Err(error));
-                }
-            },
+            } => {
+                self.request_scan(ReaderScanScope::All);
+                self.pending_waiters.push_back(PollWaiter {
+                    filter,
+                    deadline,
+                    maximum_root_notice_bytes,
+                    reply,
+                });
+            }
         }
     }
 
-    async fn renew_wait(&self, filter: &SubscriptionWaitFilter) -> Result<(), BoardError> {
-        let records = self
-            .board_store()?
-            .lock()
-            .await
-            .list_reader_subscriptions(&self.reader, self.clock.now())
-            .await?;
-        let scopes = filter
-            .covered_poll_scopes(&records, self.board_store()?)
-            .await?;
-        for scope in scopes {
-            self.board_store()?
-                .lock()
-                .await
-                .renew_thread_subscription(&self.reader, &scope, self.clock.now())
-                .await?;
-        }
+    fn validate_poll_wait(
+        &self,
+        filter: &SubscriptionWaitFilter,
+        records: &[ProjectSubscriptionRecord],
+    ) -> Result<(), BoardError> {
+        filter.covered_poll_scopes(records)?;
         Ok(())
     }
 
-    fn board_store(&self) -> Result<&Arc<Mutex<BoardStore>>, BoardError> {
+    fn answer_reconcile_requests(
+        &mut self,
+        outcome: &Result<ReaderSubscriptionSnapshot, BoardError>,
+    ) {
+        for reply in self.reconcile_replies.drain(..) {
+            let _ = reply.send(outcome.clone());
+        }
+    }
+
+    fn board_store(&self) -> Result<&Arc<Mutex<SubscriptionWindowStore>>, BoardError> {
         self.board_availability.require_store()
     }
 
     fn retry_deadline(&self) -> Instant {
         self.clock
             .monotonic_now()
-            .checked_add(Duration::from_secs(1))
+            .checked_add(STORAGE_RETRY_INTERVAL)
             .unwrap_or_else(|| self.clock.monotonic_now())
     }
     #[cfg(test)]

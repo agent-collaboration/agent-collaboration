@@ -9,6 +9,10 @@ use std::borrow::Cow;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RouterOriginRef {
+    BoardIntent {
+        project: message_board::ProjectId,
+        intent: message_board::NotifyIntentId,
+    },
     Wake {
         wakeup_id: WakeupId,
         occurrence_id: OccurrenceId,
@@ -125,6 +129,10 @@ impl JsonSchema for InteractionPresentationId {
     deny_unknown_fields
 )]
 enum RouterOriginRefWire {
+    BoardIntent {
+        project: message_board::ProjectId,
+        intent: message_board::NotifyIntentId,
+    },
     Wake {
         wakeup_id: WakeupId,
         occurrence_id: OccurrenceId,
@@ -152,6 +160,7 @@ impl RouterOriginRef {
     #[must_use]
     pub const fn supports_kind(&self, kind: PushKind) -> bool {
         match self {
+            Self::BoardIntent { .. } => matches!(kind, PushKind::BoardNotification),
             Self::Wake { .. } => matches!(kind, PushKind::Wake),
             Self::ScheduleRun { .. } => matches!(kind, PushKind::ScheduleRun),
             Self::Interaction { .. } => {
@@ -179,6 +188,10 @@ impl RouterOriginRef {
 
     fn to_wire(&self) -> RouterOriginRefWire {
         match self {
+            Self::BoardIntent { project, intent } => RouterOriginRefWire::BoardIntent {
+                project: project.clone(),
+                intent: intent.clone(),
+            },
             Self::Wake {
                 wakeup_id,
                 occurrence_id,
@@ -220,6 +233,9 @@ impl RouterOriginRef {
 
     fn from_wire(wire: RouterOriginRefWire) -> Self {
         match wire {
+            RouterOriginRefWire::BoardIntent { project, intent } => {
+                Self::BoardIntent { project, intent }
+            }
             RouterOriginRefWire::Wake {
                 wakeup_id,
                 occurrence_id,
@@ -304,10 +320,14 @@ mod tests {
         .expect("target session");
         let scope: SubscriptionScope = serde_json::from_value(json!({
             "kind": "thread",
-            "rootMessageId": "018f47d2-24d5-7a68-b9ec-6f759c394591"
+            "threadId": "018f47d2-24d5-7a68-b9ec-6f759c394591"
         }))
         .expect("subscription scope");
         let references = [
+            RouterOriginRef::BoardIntent {
+                project: message_board::ProjectId::generate(),
+                intent: message_board::NotifyIntentId::generate(),
+            },
             RouterOriginRef::Wake {
                 wakeup_id: WakeupId::generate(),
                 occurrence_id: OccurrenceId::generate(),

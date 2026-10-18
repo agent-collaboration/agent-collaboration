@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"row_count!: i64\" FROM role_assignments WHERE assignment_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f30e8778f10866bc9017eb44df7ffb7872d844fd74e9f48b00d4847e079a0675"
+}

@@ -10,6 +10,16 @@ const CURRENT_TARGET_DEFINITION_SOURCE: &str = concat!(
     include_str!("../migrations/20260928000000_latest_agent_sender.sql"),
     "\n",
     include_str!("../migrations/20260930000000_router_pushes.sql"),
+    "\n",
+    include_str!("../migrations/20261012000100_subscription_delivery_progress.sql"),
+    "\n",
+    include_str!("../migrations/20261015000200_intent_state_consumption.sql"),
+    "\n",
+    include_str!("../migrations/20261015000100_board_intent_scan_cursors.sql"),
+    "\n",
+    include_str!("../migrations/20261016000100_wake_target_slot.sql"),
+    "\n",
+    include_str!("../migrations/20261016000200_local_mail_custody.sql"),
 );
 const ROUTER_PUSH_TABLE: &str = "router_pushes";
 
@@ -19,10 +29,20 @@ struct TableSpec {
     foreign_keys: &'static str,
 }
 
-const TABLE_SPECS: [TableSpec; 11] = [
+const TABLE_SPECS: [TableSpec; 15] = [
     TableSpec {
         name: "automation_events",
         columns: "event_sequence,INTEGER,0,<NULL>,1;event_id,TEXT,1,<NULL>,0;subject_kind,TEXT,1,<NULL>,0;subject_id,TEXT,1,<NULL>,0;event_kind,TEXT,1,<NULL>,0;event_body_json,TEXT,1,<NULL>,0;recorded_at_ms,INTEGER,1,<NULL>,0",
+        foreign_keys: "",
+    },
+    TableSpec {
+        name: "board_intent_progress",
+        columns: "project_id,TEXT,1,<NULL>,1;intent_id,TEXT,1,<NULL>,2;state_epoch,INTEGER,1,<NULL>,3;state_position,INTEGER,1,<NULL>,4",
+        foreign_keys: "",
+    },
+    TableSpec {
+        name: "board_intent_scan_cursors",
+        columns: "project_id,TEXT,1,<NULL>,1;epoch,INTEGER,1,<NULL>,0;position,INTEGER,1,<NULL>,0",
         foreign_keys: "",
     },
     TableSpec {
@@ -36,6 +56,11 @@ const TABLE_SPECS: [TableSpec; 11] = [
         foreign_keys: "0,0,instruction_documents,instruction_id,instruction_id,NO ACTION,NO ACTION,NONE",
     },
     TableSpec {
+        name: "mail_items",
+        columns: "item_id,TEXT,1,<NULL>,1;digest,TEXT,1,<NULL>,0;direction,TEXT,1,<NULL>,0;item_json,TEXT,0,<NULL>,0;status_json,TEXT,1,<NULL>,0;status_version,INTEGER,1,<NULL>,0;payload_bytes,INTEGER,1,<NULL>,0;projection_json,TEXT,0,<NULL>,0;result_json,TEXT,0,<NULL>,0;submit_attempted_at,TEXT,0,<NULL>,0;created_at,TEXT,1,<NULL>,0;terminal_at,TEXT,0,<NULL>,0",
+        foreign_keys: "",
+    },
+    TableSpec {
         name: "mailbox_deliveries",
         columns: "delivery_id,TEXT,0,<NULL>,1;wakeup_id,TEXT,1,<NULL>,0;occurrence_id,TEXT,1,<NULL>,0;due_at_ms,INTEGER,1,<NULL>,0;fired_at_ms,INTEGER,1,<NULL>,0;target_json,TEXT,1,<NULL>,0;message_json,TEXT,1,<NULL>,0;delivery_mode,TEXT,1,<NULL>,0;generation_guard_json,TEXT,0,<NULL>,0;delivery_status,TEXT,1,<NULL>,0;eligible_at_ms,INTEGER,1,<NULL>,0;expires_at_ms,INTEGER,0,<NULL>,0;latest_attempt_json,TEXT,0,<NULL>,0;accepted_receipt_json,TEXT,0,<NULL>,0;created_at_ms,INTEGER,1,<NULL>,0",
         foreign_keys: "0,0,wakeup_definitions,wakeup_id,wakeup_id,NO ACTION,NO ACTION,NONE",
@@ -47,7 +72,7 @@ const TABLE_SPECS: [TableSpec; 11] = [
     },
     TableSpec {
         name: "router_pushes",
-        columns: "push_id,TEXT,1,<NULL>,1;kind,TEXT,1,<NULL>,0;origin_kind,TEXT,1,<NULL>,0;origin_service_id,TEXT,0,<NULL>,0;origin_endpoint_id,TEXT,0,<NULL>,0;origin_session_id,TEXT,0,<NULL>,0;origin_router_ref,TEXT,0,<NULL>,0;target_service_id,TEXT,1,<NULL>,0;target_endpoint_id,TEXT,1,<NULL>,0;target_session_id,TEXT,1,<NULL>,0;dm_delivery_mode,TEXT,0,<NULL>,0;dm_generation_guard_json,TEXT,0,<NULL>,0;reply_to_push_id,TEXT,0,<NULL>,0;header_facts_json,TEXT,1,<NULL>,0;body,TEXT,0,<NULL>,0;ranges_json,TEXT,0,<NULL>,0;delivery_state,TEXT,1,<NULL>,0;last_outcome_json,TEXT,0,<NULL>,0;created_at,TEXT,1,<NULL>,0;settled_at,TEXT,0,<NULL>,0;read_at,TEXT,0,<NULL>,0",
+        columns: "push_id,TEXT,1,<NULL>,1;kind,TEXT,1,<NULL>,0;origin_kind,TEXT,1,<NULL>,0;origin_service_id,TEXT,0,<NULL>,0;origin_endpoint_id,TEXT,0,<NULL>,0;origin_session_id,TEXT,0,<NULL>,0;origin_router_ref,TEXT,0,<NULL>,0;target_service_id,TEXT,1,<NULL>,0;target_endpoint_id,TEXT,1,<NULL>,0;target_session_id,TEXT,1,<NULL>,0;dm_delivery_mode,TEXT,0,<NULL>,0;dm_generation_guard_json,TEXT,0,<NULL>,0;reply_to_push_id,TEXT,0,<NULL>,0;header_facts_json,TEXT,1,<NULL>,0;body,TEXT,0,<NULL>,0;ranges_json,TEXT,0,<NULL>,0;delivery_state,TEXT,1,<NULL>,0;last_outcome_json,TEXT,0,<NULL>,0;created_at,TEXT,1,<NULL>,0;settled_at,TEXT,0,<NULL>,0;read_at,TEXT,0,<NULL>,0;retention,TEXT,1,'creationAge',0",
         foreign_keys: "0,0,router_pushes,reply_to_push_id,push_id,NO ACTION,SET NULL,NONE",
     },
     TableSpec {
@@ -59,6 +84,11 @@ const TABLE_SPECS: [TableSpec; 11] = [
         name: "schedule_timing_state",
         columns: "schedule_id,TEXT,0,<NULL>,1;applied_change_id,TEXT,1,<NULL>,0;anchor_at_ms,INTEGER,1,<NULL>,0;evaluated_through_ms,INTEGER,1,<NULL>,0;next_due_at_ms,INTEGER,0,<NULL>,0",
         foreign_keys: "0,0,schedule_definitions,schedule_id,schedule_id,NO ACTION,NO ACTION,NONE",
+    },
+    TableSpec {
+        name: "subscription_delivery_progress",
+        columns: "project_id,TEXT,1,<NULL>,1;membership_id,TEXT,1,<NULL>,2;activated_epoch,INTEGER,1,<NULL>,3;activated_position,INTEGER,1,<NULL>,4;payload,TEXT,1,<NULL>,0",
+        foreign_keys: "",
     },
     TableSpec {
         name: "thread_bindings",
@@ -77,27 +107,34 @@ const TABLE_SPECS: [TableSpec; 11] = [
     },
 ];
 
-const INDEX_SPECS: [&str; 26] = [
+const INDEX_SPECS: [&str; 33] = [
     "automation_events,event_cleanup,0,c,0,recorded_at_ms:0:BINARY:1,event_sequence:0:BINARY:1",
     "automation_events,event_history,0,c,0,subject_kind:0:BINARY:1,subject_id:0:BINARY:1,event_sequence:0:BINARY:1",
     "automation_events,_,1,u,0,event_id:0:BINARY:1",
+    "board_intent_progress,_,1,pk,0,project_id:0:BINARY:1,intent_id:0:BINARY:1,state_epoch:0:BINARY:1,state_position:0:BINARY:1",
+    "board_intent_scan_cursors,_,1,pk,0,project_id:0:BINARY:1",
     "instruction_documents,_,1,pk,0,instruction_id:0:BINARY:1",
     "instruction_revisions,_,1,u,0,instruction_id:0:BINARY:1,revision_id:0:BINARY:1",
     "instruction_revisions,_,1,pk,0,revision_id:0:BINARY:1",
+    "mail_items,mail_items_terminal,0,c,0,terminal_at:0:BINARY:1,item_id:0:BINARY:1",
+    "mail_items,_,1,pk,0,item_id:0:BINARY:1",
     "mailbox_deliveries,delivery_eligibility,0,c,0,delivery_status:0:BINARY:1,eligible_at_ms:0:BINARY:1",
     "mailbox_deliveries,_,1,u,0,wakeup_id:0:BINARY:1,delivery_id:0:BINARY:1",
     "mailbox_deliveries,_,1,u,0,occurrence_id:0:BINARY:1",
     "mailbox_deliveries,_,1,pk,0,delivery_id:0:BINARY:1",
     "operation_receipts,_,1,pk,0,operation_id:0:BINARY:1",
+    "router_pushes,router_pushes_mail_retention,0,c,0,retention:0:BINARY:1,settled_at:0:BINARY:1,push_id:0:BINARY:1",
     "router_pushes,router_pushes_created,0,c,0,created_at:0:BINARY:1",
     "router_pushes,router_pushes_origin_ref,1,c,0,origin_kind:0:BINARY:1,origin_router_ref:0:BINARY:1",
     "router_pushes,router_pushes_target_state,0,c,0,target_service_id:0:BINARY:1,target_endpoint_id:0:BINARY:1,target_session_id:0:BINARY:1,delivery_state:0:BINARY:1,created_at:0:BINARY:1",
     "router_pushes,_,1,pk,0,push_id:0:BINARY:1",
     "schedule_definitions,_,1,pk,0,schedule_id:0:BINARY:1",
     "schedule_timing_state,_,1,pk,0,schedule_id:0:BINARY:1",
+    "subscription_delivery_progress,_,1,pk,0,project_id:0:BINARY:1,membership_id:0:BINARY:1,activated_epoch:0:BINARY:1,activated_position:0:BINARY:1",
     "thread_bindings,_,1,u,0,schedule_id:0:BINARY:1,thread_binding_id:0:BINARY:1",
     "thread_bindings,_,1,u,0,service_id:0:BINARY:1,endpoint_id:0:BINARY:1,thread_id:0:BINARY:1",
     "thread_bindings,_,1,pk,0,thread_binding_id:0:BINARY:1",
+    "wakeup_definitions,wakeup_occupying_target,1,c,1,<EXPRESSION>:0:BINARY:1,<EXPRESSION>:0:BINARY:1,<EXPRESSION>:0:BINARY:1",
     "wakeup_definitions,_,1,u,0,pending_delivery_id:0:BINARY:1",
     "wakeup_definitions,_,1,pk,0,wakeup_id:0:BINARY:1",
     "workflow_runs,run_history,0,c,0,schedule_id:0:BINARY:1,due_at_ms:0:BINARY:1,run_id:0:BINARY:1",
@@ -134,10 +171,17 @@ async fn validate_schema(
     legacy: bool,
 ) -> Result<(), StorageError> {
     validate_object_inventory(transaction, legacy).await?;
-    for table in TABLE_SPECS
-        .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
-    {
+    for table in TABLE_SPECS.iter().filter(|table| {
+        !legacy
+            || !matches!(
+                table.name,
+                ROUTER_PUSH_TABLE
+                    | "mail_items"
+                    | "subscription_delivery_progress"
+                    | "board_intent_progress"
+                    | "board_intent_scan_cursors"
+            )
+    }) {
         validate_columns(transaction, table, legacy).await?;
         validate_foreign_keys(transaction, table).await?;
     }
@@ -168,7 +212,17 @@ async fn validate_object_inventory(
     }
     let expected_tables: Vec<&str> = TABLE_SPECS
         .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
+        .filter(|table| {
+            !legacy
+                || !matches!(
+                    table.name,
+                    ROUTER_PUSH_TABLE
+                        | "mail_items"
+                        | "subscription_delivery_progress"
+                        | "board_intent_progress"
+                        | "board_intent_scan_cursors"
+                )
+        })
         .map(|table| table.name)
         .collect();
     let expected_indexes = if legacy {
@@ -184,11 +238,14 @@ async fn validate_object_inventory(
             "delivery_eligibility",
             "event_cleanup",
             "event_history",
+            "mail_items_terminal",
             "router_pushes_created",
+            "router_pushes_mail_retention",
             "router_pushes_origin_ref",
             "router_pushes_target_state",
             "run_admission_lookup",
             "run_history",
+            "wakeup_occupying_target",
         ]
     };
     if actual_tables != expected_tables || actual_named_indexes != expected_indexes {
@@ -273,10 +330,17 @@ async fn validate_indexes(
     legacy: bool,
 ) -> Result<(), StorageError> {
     let mut actual = Vec::new();
-    for table in TABLE_SPECS
-        .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
-    {
+    for table in TABLE_SPECS.iter().filter(|table| {
+        !legacy
+            || !matches!(
+                table.name,
+                ROUTER_PUSH_TABLE
+                    | "mail_items"
+                    | "subscription_delivery_progress"
+                    | "board_intent_progress"
+                    | "board_intent_scan_cursors"
+            )
+    }) {
         let indexes = sqlx::query(
             "SELECT name,\"unique\",origin,partial FROM pragma_index_list(?1) ORDER BY seq",
         )
@@ -296,7 +360,9 @@ async fn validate_indexes(
             .map(|column| {
                 format!(
                     "{}:{}:{}:{}",
-                    column.get::<String, _>("name"),
+                    column
+                        .get::<Option<String>, _>("name")
+                        .unwrap_or_else(|| "<EXPRESSION>".into()),
                     column.get::<i64, _>("desc"),
                     column.get::<String, _>("coll"),
                     column.get::<i64, _>("key")
@@ -317,7 +383,15 @@ async fn validate_indexes(
     actual.sort();
     let mut expected = INDEX_SPECS
         .iter()
-        .filter(|index| !legacy || !index.starts_with("router_pushes,"))
+        .filter(|index| {
+            !legacy
+                || (!index.starts_with("mail_items,")
+                    && !index.starts_with("router_pushes,")
+                    && !index.starts_with("subscription_delivery_progress,")
+                    && !index.starts_with("board_intent_progress,")
+                    && !index.starts_with("board_intent_scan_cursors,")
+                    && !index.starts_with("wakeup_definitions,wakeup_occupying_target,"))
+        })
         .copied()
         .collect::<Vec<_>>();
     expected.sort();
@@ -331,10 +405,17 @@ async fn validate_known_definitions(
     transaction: &mut Transaction<'_, Sqlite>,
     legacy: bool,
 ) -> Result<(), StorageError> {
-    for table in TABLE_SPECS
-        .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
-    {
+    for table in TABLE_SPECS.iter().filter(|table| {
+        !legacy
+            || !matches!(
+                table.name,
+                ROUTER_PUSH_TABLE
+                    | "mail_items"
+                    | "subscription_delivery_progress"
+                    | "board_intent_progress"
+                    | "board_intent_scan_cursors"
+            )
+    }) {
         let sql: String =
             sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='table' AND name=?1")
                 .bind(table.name)
@@ -348,7 +429,15 @@ async fn validate_known_definitions(
     }
     for index in INDEX_SPECS
         .iter()
-        .filter(|index| !legacy || !index.starts_with("router_pushes,"))
+        .filter(|index| {
+            !legacy
+                || (!index.starts_with("mail_items,")
+                    && !index.starts_with("router_pushes,")
+                    && !index.starts_with("subscription_delivery_progress,")
+                    && !index.starts_with("board_intent_progress,")
+                    && !index.starts_with("board_intent_scan_cursors,")
+                    && !index.starts_with("wakeup_definitions,wakeup_occupying_target,"))
+        })
         .filter_map(|index| {
             let mut fields = index.split(',');
             fields.next();
@@ -385,13 +474,36 @@ fn expected_definition_tokens(
     } else {
         false
     };
-    tokens
+    let mut definition = tokens
         .split(|token| token == ";")
         .find(|statement| {
             definition_prefix_matches(statement, object_type, object_name, index_is_unique)
         })
         .map(<[String]>::to_vec)
-        .ok_or(StorageError::InvalidSchema)
+        .ok_or(StorageError::InvalidSchema)?;
+    // SQLite rewrites CREATE TABLE when this migration adds the retention
+    // column. Derive that expected definition from the migration itself.
+    if object_type == "table" && object_name == ROUTER_PUSH_TABLE && !legacy {
+        for statement in tokens.split(|token| token == ";").filter(|statement| {
+            statement.get(..5).is_some_and(|prefix| {
+                prefix.iter().map(String::as_str).eq([
+                    "alter",
+                    "table",
+                    ROUTER_PUSH_TABLE,
+                    "add",
+                    "column",
+                ])
+            })
+        }) {
+            let close = definition
+                .iter()
+                .rposition(|token| token == ")")
+                .ok_or(StorageError::InvalidSchema)?;
+            let added = std::iter::once(",".to_owned()).chain(statement.iter().skip(5).cloned());
+            definition.splice(close..close, added);
+        }
+    }
+    Ok(definition)
 }
 
 fn index_is_declared_unique(index_name: &str) -> Result<bool, StorageError> {

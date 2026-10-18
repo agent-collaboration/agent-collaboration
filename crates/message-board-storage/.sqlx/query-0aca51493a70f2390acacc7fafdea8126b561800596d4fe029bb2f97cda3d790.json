@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE role_assignments SET active = ? WHERE assignment_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "0aca51493a70f2390acacc7fafdea8126b561800596d4fe029bb2f97cda3d790"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name = '_sqlx_migrations') AS \"exists!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "exists!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "53e5f071dabf8f9552ce5e771c75894db725b85bbc1becf08ee04d18171425ec"
+}

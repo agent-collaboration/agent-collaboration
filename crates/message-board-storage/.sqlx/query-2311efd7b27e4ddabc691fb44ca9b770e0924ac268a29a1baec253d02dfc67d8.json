@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO legacy_position_mapping(old_position, project_id, epoch, position) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "2311efd7b27e4ddabc691fb44ca9b770e0924ac268a29a1baec253d02dfc67d8"
+}

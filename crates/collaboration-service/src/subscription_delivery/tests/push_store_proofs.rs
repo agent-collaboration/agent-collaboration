@@ -170,6 +170,13 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
 
     for body in ["First batch", "Second batch"] {
         fixture.post(&fixture.root, body).await;
+        fixture
+            .store
+            .lock()
+            .await
+            .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+            .await
+            .unwrap();
         let (batch, settlement) = fixture
             .store
             .lock()
@@ -271,7 +278,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -331,7 +338,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -372,7 +379,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope)
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
         .await
         .unwrap()
         .unwrap();
@@ -456,7 +463,7 @@ async fn failed_wait_attempt_mark_releases_selection_and_returns_explicit_error(
         result.is_err(),
         "a failed attempted-state write must be reported to the waiter"
     );
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     let board = fixture
         .store
@@ -465,6 +472,7 @@ async fn failed_wait_attempt_mark_releases_selection_and_returns_explicit_error(
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -531,6 +539,7 @@ async fn accepted_push_record_settlement_retries_before_board_settlement_without
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
+            fixture.clock.now(),
         )
         .await
         .unwrap()
@@ -545,7 +554,7 @@ async fn accepted_push_record_settlement_retries_before_board_settlement_without
     runtime
         .observe(|event| matches!(event, OwnerObservation::Settled))
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     let stored = fixture
         .push_store
         .lock()
@@ -574,7 +583,11 @@ async fn failed_record_insert_releases_selection_and_never_calls_layer_zero() {
     fixture
         .post(&fixture.root, "Never pushed without a record")
         .await;
-    runtime.synchronize(&fixture.reader).await;
+    runtime
+        .wait_for_activity(&fixture.reader, |event| {
+            matches!(event, OwnerObservation::Selected)
+        })
+        .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM router_pushes")
         .fetch_one(&mut observer)

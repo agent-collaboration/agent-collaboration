@@ -98,15 +98,13 @@ class PrepareSqlxTests(unittest.TestCase):
         ]
         self.assertEqual(
             ["--ignore-missing" in command for command, _ in migration_calls],
-            [False, False, False, False, True, True, True],
+            [False, False, False, True, True],
         )
         self.assertEqual(
             [command[command.index("--source") + 1] for command, _ in migration_calls],
             [
                 "crates/automation-storage/migrations",
                 "crates/codex-router-state/migrations",
-                "crates/message-board-storage/migrations",
-                "crates/message-board-storage/migrations",
                 "crates/collaboration-service/migrations",
                 "crates/automation-storage/migrations",
                 "crates/collaboration-service/interaction-migrations",
@@ -114,7 +112,7 @@ class PrepareSqlxTests(unittest.TestCase):
         )
         self.assertEqual(
             [command[command.index("--package") + 1] for command, _ in prepare_calls],
-            ["automation-storage", "codex-router-state", "message-board-storage", "collaboration-service"],
+            ["automation-storage", "codex-router-state", "collaboration-service"],
         )
         self.assertEqual(
             [
@@ -124,7 +122,6 @@ class PrepareSqlxTests(unittest.TestCase):
             [
                 "automation-schema.sqlite",
                 "account-schema.sqlite",
-                "message-board-schema.sqlite",
                 "provider-operation-schema.sqlite",
             ],
         )
@@ -142,7 +139,6 @@ class PrepareSqlxTests(unittest.TestCase):
                 "query-automation-storage.json",
                 "query-codex-router-state.json",
                 "query-collaboration-service.json",
-                "query-message-board-storage.json",
             ],
         )
         self.assertEqual(
@@ -154,7 +150,7 @@ class PrepareSqlxTests(unittest.TestCase):
 
         result, _ = self.run_workflow(
             check_metadata=False,
-            prepare_failure_package="message-board-storage",
+            prepare_failure_package="collaboration-service",
         )
 
         self.assertEqual(result, 7)
@@ -195,7 +191,7 @@ class PrepareSqlxTests(unittest.TestCase):
             for command, _ in calls
             if command[:4] == ["cargo", "sqlx", "prepare", "--workspace"]
         ]
-        self.assertEqual(len(prepare_calls), 4)
+        self.assertEqual(len(prepare_calls), 3)
         self.assertTrue(all("--check" in command for command in prepare_calls))
         self.assertEqual(existing_metadata.read_text(), "existing")
 

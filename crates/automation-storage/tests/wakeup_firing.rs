@@ -51,7 +51,7 @@ fn saved_message() -> Result<SavedMessage, serde_json::Error> {
 }
 
 fn wake_push_draft(
-    wake: &WakeRecord<SavedMessage>,
+    wake: &WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {
@@ -102,6 +102,7 @@ fn router_origin_for_fire(fire: &FirstFire) -> RouterOriginRef {
     }
 }
 
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn firing_persists_one_obligation_and_coalesces_until_delivery_resolves()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -113,13 +114,15 @@ async fn firing_persists_one_obligation_and_coalesces_until_delivery_resolves()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
                 text: "Check job".into(),
             },
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::None,
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 7200 },
             now_ms: 0,
         })
         .await?;
@@ -127,7 +130,7 @@ async fn firing_persists_one_obligation_and_coalesces_until_delivery_resolves()
     let fired = store
         .evaluate_wakeup::<Message>(
             &wake.definition.wakeup_id,
-            180000,
+            900000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?;
@@ -140,7 +143,7 @@ async fn firing_persists_one_obligation_and_coalesces_until_delivery_resolves()
     let coalesced = store
         .evaluate_wakeup::<Message>(
             &wake.definition.wakeup_id,
-            240000,
+            1200000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?;
@@ -194,6 +197,8 @@ async fn wake_push_and_mailbox_commit_atomically_and_recover_the_same_push_after
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: saved_message()?,
             timing: TimingRule::After { seconds: 1 },
@@ -250,6 +255,8 @@ async fn failed_wake_push_insert_rolls_back_mailbox_and_firing_state()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: saved_message()?,
             timing: TimingRule::After { seconds: 1 },
@@ -304,6 +311,7 @@ async fn failed_wake_push_insert_rolls_back_mailbox_and_firing_state()
     Ok(())
 }
 
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn a_later_firing_of_the_same_wake_definition_gets_a_new_push()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -311,15 +319,17 @@ async fn a_later_firing_of_the_same_wake_definition_gets_a_new_push()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: saved_message()?,
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::None,
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 7200 },
             now_ms: 0,
         })
         .await?;
     let (first_fire, first_delivery_id) = match store
-        .evaluate_wakeup::<SavedMessage>(&wake.definition.wakeup_id, 180_000, wake_push_draft)
+        .evaluate_wakeup::<SavedMessage>(&wake.definition.wakeup_id, 900000, wake_push_draft)
         .await?
     {
         WakeEvaluation::Fired {
@@ -340,7 +350,7 @@ async fn a_later_firing_of_the_same_wake_definition_gets_a_new_push()
     observer.close().await?;
 
     let (second_fire, second_delivery_id) = match store
-        .evaluate_wakeup::<SavedMessage>(&wake.definition.wakeup_id, 240_000, wake_push_draft)
+        .evaluate_wakeup::<SavedMessage>(&wake.definition.wakeup_id, 1200000, wake_push_draft)
         .await?
     {
         WakeEvaluation::Fired {

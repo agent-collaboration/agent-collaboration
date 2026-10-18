@@ -5,13 +5,40 @@ use collaboration_service::collaboration_application::{MessageFailure, MessageFa
 
 #[tool_router(router = message_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "message_send", description = "Submits one agent-authored or explicit human message with exact auto, queue, or steer semantics. Agent sender identity is reported by the request's client, not authenticated. The result includes the stored push id, link, target and delivery receipt; accepted input or a peer write does not prove completion or an agent reply. Router-authored content is not a public caller input, and uncertain dispatch is never replayed automatically.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<PushMessageSendResult>>())]
+    #[tool(name = "message_send", description = "Submits one agent-authored or explicit human message with exact auto, queue, or steer semantics. Agent sender identity is reported by the request's client, not authenticated. Supply itemId for safe same-content replay; different content under that ID is itemConflict. If omitted, the Router mints and returns an ID, and retrying an omitted-ID call after a lost local answer may duplicate. The result includes the stored push id (the itemId), link, target and recorded delivery receipt; accepted input or a peer write does not prove completion or an agent reply. Router-authored content is not a public caller input, and uncertain dispatch is never replayed automatically.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<PushMessageSendResult>>())]
     pub(super) async fn message_send(
         &self,
-        Parameters(request): Parameters<MessageSendRequest>,
+        Parameters(arguments): Parameters<UndecodedMessageSend>,
     ) -> CallToolResult {
+        let arguments = serde_json::Value::Object(arguments.0);
+        let request = match <MessageSendRequest as serde::Deserialize>::deserialize(&arguments) {
+            Ok(request) => request,
+            Err(error) => {
+                // Preserve existing refusals for other fields; only the newly
+                // specified identity error has the MS-2 invalidShape contract.
+                let malformed_id = arguments.get("itemId").is_some_and(|id| {
+                    <Option<collaboration_protocol::MailItemId> as serde::Deserialize>::deserialize(
+                        id,
+                    )
+                    .is_err()
+                });
+                if !malformed_id {
+                    return validation_failure(&error.to_string());
+                }
+                let refusal = MessageFailure {
+                    kind: MessageFailureKind::InvalidShape,
+                    stage: collaboration_service::collaboration_application::MessageFailureStage::Discovery,
+                    message: "itemId must be a canonical UUIDv7 when supplied".into(), existing: None,
+                };
+                return operation_failure_result(&rejection_failure(
+                    &refusal,
+                    OperationEffect::None,
+                ));
+            }
+        };
         let target = request.target.clone();
         let params = SessionMessageSendParams {
+            item_id: request.item_id,
             target: request.target,
             message: request.message.into(),
             mode: request.delivery,
@@ -100,7 +127,10 @@ pub(super) fn message_failure_result(
 /// Whether the message was refused before anything was stored or sent.
 fn rejected_before_submission(rejection: &MessageFailure) -> bool {
     match rejection.kind {
-        MessageFailureKind::InvalidField
+        MessageFailureKind::ItemConflict
+        | MessageFailureKind::MailboxFull
+        | MessageFailureKind::InvalidShape
+        | MessageFailureKind::InvalidField
         | MessageFailureKind::WrongService
         | MessageFailureKind::Unavailable
         | MessageFailureKind::NotFound
@@ -108,5 +138,25 @@ fn rejected_before_submission(rejection: &MessageFailure) -> bool {
         | MessageFailureKind::NotDirectMessage
         | MessageFailureKind::OwnerReplyUnsupported => true,
         MessageFailureKind::ForeignMachine | MessageFailureKind::OutcomeUnknown => false,
+    }
+}
+
+// Match the existing undecoded-board boundary pattern without moving ID
+// validation into a second wire type. The published schema stays the typed request.
+#[derive(serde::Deserialize)]
+#[serde(transparent)]
+pub(super) struct UndecodedMessageSend(serde_json::Map<String, serde_json::Value>);
+impl schemars::JsonSchema for UndecodedMessageSend {
+    fn inline_schema() -> bool {
+        <MessageSendRequest as schemars::JsonSchema>::inline_schema()
+    }
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        <MessageSendRequest as schemars::JsonSchema>::schema_name()
+    }
+    fn schema_id() -> std::borrow::Cow<'static, str> {
+        <MessageSendRequest as schemars::JsonSchema>::schema_id()
+    }
+    fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        <MessageSendRequest as schemars::JsonSchema>::json_schema(generator)
     }
 }

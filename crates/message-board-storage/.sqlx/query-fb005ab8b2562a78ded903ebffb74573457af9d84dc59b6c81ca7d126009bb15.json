@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT request_id AS \"request_id!: String\" FROM request_ledger WHERE json_extract(decision, '$.kind') = 'accepted' AND request_id > ? ORDER BY request_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fb005ab8b2562a78ded903ebffb74573457af9d84dc59b6c81ca7d126009bb15"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT entry AS \"entry!: String\" FROM fleet_feed WHERE position = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entry!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "86e638f5f1cac40d01de11629520986a56759160faadb84f5f2efd41cdf89938"
+}

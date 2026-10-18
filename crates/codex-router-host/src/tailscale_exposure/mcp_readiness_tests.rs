@@ -207,7 +207,7 @@ async fn advance_held_reply(seconds: u64) {
 
 fn tools_response() -> serde_json::Value {
     json!({"jsonrpc":"2.0","id":1,"result":{"tools":[
-        {"name":"endpoints_list"},{"name":"board_project_list"}
+        {"name":"endpoints_list"},{"name":"workspace_list"}
     ]}})
 }
 

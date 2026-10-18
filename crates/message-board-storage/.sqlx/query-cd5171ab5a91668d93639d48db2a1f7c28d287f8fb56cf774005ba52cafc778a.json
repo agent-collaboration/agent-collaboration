@@ -1,0 +1,68 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT f.position AS \"position!: i64\", f.epoch AS \"epoch!: i64\", f.record_id AS \"record_id!: String\", json_extract(f.entry, '$.routerTime') AS \"time!: String\", p.thread_id AS \"thread_id!: String\", json_quote(json_extract(f.entry, '$.content.record.record.placement')) AS \"placement!: String\", json_quote(json_extract(f.entry, '$.content.record.record.actor')) AS \"actor!: String\" FROM project_feed f INDEXED BY feed_by_kind_position LEFT JOIN posts p ON p.post_id = f.record_id WHERE f.record_kind = 'post' AND f.position > ? AND f.position <= ? AND (? IS NULL OR p.thread_id = ? OR p.post_id IS NULL) ORDER BY f.position LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "time!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "placement!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "actor!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cd5171ab5a91668d93639d48db2a1f7c28d287f8fb56cf774005ba52cafc778a"
+}

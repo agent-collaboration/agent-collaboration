@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MessageSendRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_id: Option<collaboration_protocol::MailItemId>,
     pub target: SessionRef,
     pub message: PublicMessageContent,
     #[serde(default)]
@@ -60,10 +62,12 @@ impl MessageReplyError {
                 operation_failure_from_client_error(*error, OperationEffect::None),
                 None,
             ),
-            Self::Submission { caller, source } => (
-                operation_failure_from_client_error(*source, OperationEffect::Unknown),
-                Some(caller),
-            ),
+            Self::Submission { caller, source } => {
+                let failure =
+                    operation_failure_from_client_error(*source, OperationEffect::Unknown);
+                let affected = (failure.effect != OperationEffect::None).then_some(caller);
+                (failure, affected)
+            }
         }
     }
 }
@@ -76,10 +80,12 @@ impl MessageSendError {
                 operation_failure_from_client_error(*error, OperationEffect::None),
                 None,
             ),
-            Self::Submission { target, source } => (
-                operation_failure_from_client_error(*source, OperationEffect::Unknown),
-                Some(target),
-            ),
+            Self::Submission { target, source } => {
+                let failure =
+                    operation_failure_from_client_error(*source, OperationEffect::Unknown);
+                let affected = (failure.effect != OperationEffect::None).then_some(target);
+                (failure, affected)
+            }
         }
     }
 }
@@ -130,6 +136,7 @@ impl CollaborationClient {
         }
         let target = request.target.clone();
         let params = SessionMessageSendParams {
+            item_id: request.item_id,
             target: request.target,
             message: request.message.into(),
             mode: request.delivery,
@@ -234,6 +241,7 @@ fn is_reply_pre_dispatch_rejection(error: &ClientError) -> bool {
                     | "notDirectMessage"
                     | "ownerReplyUnsupported"
                     | "invalidField"
+                    | "mailboxFull"
             )
         ),
         ClientError::Rejected { data: None, .. } => false,

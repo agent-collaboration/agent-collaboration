@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT reader AS \"reader!: String\" FROM project_watches WHERE active = 1 ORDER BY reader",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reader!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "91f24e956cc6a565628f26b1d0731ad2d8702474076af78b0bdf4a95875ca81e"
+}

@@ -1,4 +1,4 @@
-use crate::{ActivitySequence, Identity};
+use crate::{FeedCursor, Identity};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -79,9 +79,9 @@ pub struct Participant {
     pub identity: Identity,
     pub role: ParticipantRole,
     pub note: Option<ParticipantNote>,
-    pub joined_at_activity: ActivitySequence,
-    pub last_seen_activity: ActivitySequence,
-    pub closed_at_activity: Option<ActivitySequence>,
+    pub joined_at_position: FeedCursor,
+    pub last_seen_position: FeedCursor,
+    pub closed_at_position: Option<FeedCursor>,
     pub closed_reason: Option<ParticipantClosedReason>,
     pub replaced_by: Option<Identity>,
 }
@@ -91,9 +91,9 @@ pub struct ParticipantProps {
     pub identity: Identity,
     pub role: ParticipantRole,
     pub note: Option<ParticipantNote>,
-    pub joined_at_activity: ActivitySequence,
-    pub last_seen_activity: ActivitySequence,
-    pub closed_at_activity: Option<ActivitySequence>,
+    pub joined_at_position: FeedCursor,
+    pub last_seen_position: FeedCursor,
+    pub closed_at_position: Option<FeedCursor>,
     pub closed_reason: Option<ParticipantClosedReason>,
     pub replaced_by: Option<Identity>,
 }
@@ -104,9 +104,9 @@ struct ParticipantWire {
     identity: Identity,
     role: ParticipantRole,
     note: Option<ParticipantNote>,
-    joined_at_activity: ActivitySequence,
-    last_seen_activity: ActivitySequence,
-    closed_at_activity: Option<ActivitySequence>,
+    joined_at_position: FeedCursor,
+    last_seen_position: FeedCursor,
+    closed_at_position: Option<FeedCursor>,
     closed_reason: Option<ParticipantClosedReason>,
     replaced_by: Option<Identity>,
 }
@@ -118,9 +118,9 @@ impl<'de> Deserialize<'de> for Participant {
             identity: wire.identity,
             role: wire.role,
             note: wire.note,
-            joined_at_activity: wire.joined_at_activity,
-            last_seen_activity: wire.last_seen_activity,
-            closed_at_activity: wire.closed_at_activity,
+            joined_at_position: wire.joined_at_position,
+            last_seen_position: wire.last_seen_position,
+            closed_at_position: wire.closed_at_position,
             closed_reason: wire.closed_reason,
             replaced_by: wire.replaced_by,
         })
@@ -130,23 +130,25 @@ impl<'de> Deserialize<'de> for Participant {
 
 impl Participant {
     pub fn new(props: ParticipantProps) -> Result<Self, InvalidParticipantState> {
-        if props.last_seen_activity < props.joined_at_activity {
+        if props.last_seen_position.position < props.joined_at_position.position
+            || props.last_seen_position.epoch < props.joined_at_position.epoch
+        {
             return Err(InvalidParticipantState);
         }
         match (
-            props.closed_at_activity,
+            props.closed_at_position,
             props.closed_reason,
             props.replaced_by.as_ref(),
         ) {
             (None, None, None) => {}
             (Some(closed), Some(ParticipantClosedReason::Left), None)
             | (Some(closed), Some(ParticipantClosedReason::Resolved), None)
-                if closed == props.last_seen_activity => {}
+                if closed == props.last_seen_position => {}
             (Some(closed), Some(ParticipantClosedReason::Replaced), Some(replacement))
                 if matches!(
                     props.role,
                     ParticipantRole::Orchestrator | ParticipantRole::Implementer
-                ) && closed == props.last_seen_activity
+                ) && closed == props.last_seen_position
                     && *replacement != props.identity => {}
             _ => return Err(InvalidParticipantState),
         }
@@ -154,9 +156,9 @@ impl Participant {
             identity: props.identity,
             role: props.role,
             note: props.note,
-            joined_at_activity: props.joined_at_activity,
-            last_seen_activity: props.last_seen_activity,
-            closed_at_activity: props.closed_at_activity,
+            joined_at_position: props.joined_at_position,
+            last_seen_position: props.last_seen_position,
+            closed_at_position: props.closed_at_position,
             closed_reason: props.closed_reason,
             replaced_by: props.replaced_by,
         })
@@ -164,7 +166,7 @@ impl Participant {
 
     #[must_use]
     pub fn is_open(&self) -> bool {
-        self.closed_at_activity.is_none()
+        self.closed_at_position.is_none()
     }
 }
 
@@ -172,12 +174,12 @@ impl Participant {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OrchestratorHolder {
     pub identity: Identity,
-    pub last_seen_activity: ActivitySequence,
+    pub last_seen_position: FeedCursor,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ImplementerHolder {
     pub identity: Identity,
-    pub last_seen_activity: ActivitySequence,
+    pub last_seen_position: FeedCursor,
 }

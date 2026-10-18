@@ -12,10 +12,22 @@ chrono.workspace = true
 hmac.workspace = true
 sha2.workspace = true
 message-board = { path = "../message-board", version = "0.1.20" }
+fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
+collaboration-replication-protocol = { path = "../collaboration-replication-protocol", version = "0.1.93" }
 sqlx = { workspace = true, features = ["macros", "migrate", "sqlite"] }
+sqlx-turso.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+turso_parser.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
+fleet-admission = { path = "../fleet-admission", version = "0.1.93", features = ["test-support"] }
+
+[build-dependencies]
+thiserror.workspace = true
+turso_parser.workspace = true

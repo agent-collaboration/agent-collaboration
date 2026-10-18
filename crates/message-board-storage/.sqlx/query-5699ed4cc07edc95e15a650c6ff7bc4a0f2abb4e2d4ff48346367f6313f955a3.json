@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM fleet_repositories WHERE workspace_id = ? AND reference = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "5699ed4cc07edc95e15a650c6ff7bc4a0f2abb4e2d4ff48346367f6313f955a3"
+}

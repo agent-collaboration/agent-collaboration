@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT DISTINCT t.row_id AS \"row_id!: String\", json_object('rowId', json_extract(r.payload, '$.record.rowId'), 'id', json_extract(r.payload, '$.record.envelope.id'), 'project', json_extract(r.payload, '$.record.projectId'), 'scope', json_extract(r.payload, '$.record.envelope.scope.project'), 'position', json_extract(r.payload, '$.record.envelope.position'), 'actor', json_extract(r.payload, '$.record.envelope.actor.actor'), 'subject', json_extract(r.payload, '$.record.subject'), 'tags', json_extract(r.payload, '$.record.tags'), 'links', json_extract(r.payload, '$.record.links')) AS \"metadata!: String\",\n CASE WHEN ? = 1 THEN (SELECT json_object('role', json_extract(f.entry, '$.content.record.record.role'), 'subject', json_extract(f.entry, '$.content.record.record.subject'), 'holder', json_extract(f.entry, '$.content.record.record.holder.actor'), 'ended', json_extract(f.entry, '$.content.record.record.ended')) FROM project_feed f\n  WHERE f.record_kind = 'roleAssignment' AND f.record_id IN (SELECT assignment_id FROM role_assignments WHERE project_subject = ?)\n  AND f.position <= json_extract(r.payload, '$.record.envelope.position.position.position')\n  ORDER BY f.position DESC LIMIT 1) END AS \"authority: String\"\nFROM work_trail_tags t CROSS JOIN work_trail_rows current ON current.row_id = t.row_id\nCROSS JOIN record_identities r INDEXED BY sqlite_autoindex_record_identities_1 ON r.kind = 'workTrailRow' AND r.id = CAST(t.row_id AS TEXT)\nWHERE t.tag = 'decision' AND t.row_id > ? AND current.redacted = 0\nAND EXISTS (SELECT 1 FROM json_each(json_extract(r.payload, '$.record.links')) link CROSS JOIN json_each(?) candidate\n WHERE json_extract(link.value, '$.kind') = 'record' AND json_extract(link.value, '$.record.kind') = 'workTrailRow' AND json_extract(link.value, '$.record.id') = CAST(candidate.value AS TEXT))\nORDER BY t.row_id LIMIT 101\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "metadata!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "authority: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "3a3e6c302b0f28904953e6d6c014ef259bce4400bd2bd88966ce5315c4f52700"
+}

@@ -42,6 +42,7 @@ pub(super) async fn prepare_recipient() -> ProofResult<()> {
     let receipt = proof
         .client
         .send_human_input(SessionMessageSendParams {
+            item_id: None,
             target: recipient.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::HumanUser {
@@ -156,6 +157,7 @@ pub(super) async fn exercise_round_trip() -> ProofResult<()> {
     let initial_receipt = proof
         .client
         .send_human_input(SessionMessageSendParams {
+            item_id: None,
             target: sender.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::HumanUser {

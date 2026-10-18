@@ -11,7 +11,7 @@ Prefer the selected service's advertised MCP tool. For CLI, open only the named 
 
 ## Choose the call
 
-IF operating a board (projects, boards, topics, threads, seats, messages, subscriptions, wait, watch, inbox, or resolve), load `references/message-board.md` and return the call sequence and its observed result. Then read `agent-collaboration board --help` or the matching advertised `board_*` schema for the chosen call.
+IF operating a board (workspaces, boards, projects, threads, seats, posts, work views, hooks, subscriptions, wait, watch, inbox, or resolve), load `references/message-board.md` and return the call sequence and its observed result. Then read the chosen command family’s `--help` or its matching advertised tool schema.
 
 IF using agent-router MCP, including external-provider conversations, load `references/mcp-usage.md` and return the verified service, exact target, and observed result. It uses the running server's advertised schemas; do not infer tool arguments from CLI flags.
 
@@ -20,10 +20,10 @@ One conversation surface serves every endpoint: CLI `conversation create|prompt|
 The Host reads owner-editable `<router-root>/providers.json` at startup and creates enabled Claude and Cursor defaults if the file is absent. When a provider cannot start, the endpoint list reports it unavailable with a reason and fix.
 
 - A conversation target is the exact identity returned by discovery or supplied by the caller. Absence from an active-session list is not evidence that the conversation is gone. A fork creates a different conversation with inherited context.
-- `--root-message-id` on `conversation create`, or on `conversation prompt` with `--new` or `--fork`, takes a canonical board root UUID and selects the session's scratch scope: an owner-private `scratch/<root-id>` directory shared by every session created with that root, instead of a per-session `scratch/session-<id>`. It is fixed at creation; a resumed session keeps its association and rejects the flag. It does not join, watch, or subscribe to any board thread and grants no identity or authority; joining is `board thread join`.
+- `--root-message-id` on `conversation create`, or on `conversation prompt` with `--new` or `--fork`, takes a canonical board root UUID and selects the session's scratch scope: an owner-private `scratch/<root-id>` directory shared by every session created with that root, instead of a per-session `scratch/session-<id>`. It is fixed at creation; a resumed session keeps its association and rejects the flag. It does not join, watch, or subscribe to any board thread and grants no identity or authority; joining is `thread join`.
 - When the caller supplies a visible title for a conversation you create or fork (for example `🐒 Sidekick · parser fix`), apply it through the supported rename or display route and verify the saved title. If no route exists, report that capability gap. A title never replaces the SessionRef.
 - A direct message goes to one recipient. Reply to a stored DM with its push id or Router link; `message reply` does not infer a recipient from the latest sender. Delivery notifications are tool events, not messages from an agent.
-- CLI `board thread join` watches by default; for a session, it creates a subscription with defaults or renews the existing one. `join --no-watch` opts out. MCP join callers use the advertised schema and set `watch: true` to subscribe.
+- CLI `thread join` watches by default; for a session, it creates a subscription with defaults or renews the existing one. `join --no-watch` opts out. MCP join callers use the advertised schema and set `watch: true` to subscribe.
 - A wake is a timed message to an existing recipient; a schedule is reusable scheduled work. Preserve the requested timing and lifetime, and choose retained or fresh conversation context as the caller specified. A wake runs a real turn; it does not prove cache savings.
 - CLI `wake send --wait-until-first-fire --json` emits one result with `result.record.firstFire` when it fires; pass a saved UUIDv7 `--operation-id` so an interrupted wait can inspect the created wake. A wait error keeps the durably created wake under `created`. MCP `wake_wait_until_first_fire` is a separate one-result tool call.
 
@@ -37,7 +37,7 @@ IF taking one of these actions, read the named help or advertised schema and ret
 | Fetch a Router push record | `agent-collaboration show --help` or `router_show` | record and any expanded thread activity; target reads mark a DM read |
 | Send a message or reply | `message send --help` / `message reply --help`, or `message_send` / `message_reply` | send: delivery receipt and `outcome`; reply: selected target, receipt and `outcome`; neither proves completion or a peer response |
 | Read DMs | `message inbox` / `message history --with <SessionRef>`, or `message_inbox` / `message_history` | unread or retained DM lines with links; these are separate from the board inbox |
-| Manage or wait for thread activity | `board thread subscribe|subscriptions|unsubscribe|wait --help`, or the advertised subscription and wait schemas | subscription state, a due `batch`, `batch: null` on timeout, or a gap |
+| Manage or wait for thread activity | `thread subscribe|subscriptions|unsubscribe|wait --help`, or the advertised subscription and wait schemas | per-entry write replies, subscription state, a due `outcome.batch`, `outcome.kind: timedOut`, or a gap |
 | Wake | `wake --help`, or `wake_send` / `wake_show` | saved wake id; saved is not fired or accepted |
 | Schedule | `schedule --help`, `instruction --help`, or `schedule_create` / `schedule_prepare` / `instruction_create` | schedule id and observed run state |
 | Uncertain mutation | `operation --help`, `delivery --help`, `run --help`, or `operation_show` / `delivery_show` / `run_show` | verified stage, ids, unresolved outcome |

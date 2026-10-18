@@ -1,7 +1,6 @@
 //! Inline cleanup of replaced or ended held snapshots; no detached owner writes.
 use super::*;
 use collaboration_protocol::PushKind;
-use message_board::MessageShowRequest;
 
 pub(super) enum HeldPushCleanup {
     Superseded(PushId),
@@ -125,25 +124,20 @@ impl ReaderDeliveryOwner {
         if activity.ranges.is_empty() {
             return Ok(false);
         }
-        let mut board = self.board_store()?.lock().await;
+        let board = self.board_store()?.lock().await;
         for range in &activity.ranges {
-            let thread_scope = SubscriptionScope::thread(range.root_message_id.clone());
+            let thread_scope = SubscriptionScope::thread(range.thread_id.clone());
             let covering = match board
-                .get_thread_subscription_record(&self.reader, &thread_scope)
+                .get_thread_subscription_record(&self.reader, &thread_scope, self.clock.now())
                 .await?
             {
                 Some(record) => Some(record), // Thread overrides also shadow Topic scopes when ended.
                 None => {
-                    let root = board
-                        .show_message(MessageShowRequest {
-                            message_id: range.root_message_id.clone(),
-                        })
-                        .await?
-                        .0;
                     board
                         .get_thread_subscription_record(
                             &self.reader,
-                            &SubscriptionScope::topic(root.topic_id),
+                            &SubscriptionScope::project(range.project_id.clone()),
+                            self.clock.now(),
                         )
                         .await?
                 }

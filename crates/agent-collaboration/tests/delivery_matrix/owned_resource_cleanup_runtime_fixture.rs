@@ -1,4 +1,5 @@
 //! Real local Runtime/client/store fixture; the existing PeerFixture owns its own lifetime.
+use crate::owned_resource_cleanup::readback::CleanupReadback;
 use crate::{
     owned_resources::OwnedMatrixResources, peer_fixture::PeerFixture, proof_context::ProofResult,
 };
@@ -7,9 +8,9 @@ use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::{
     CollaborationClient,
     board::{
-        BoardCreateRequest, BoardId, Description, HumanId, Identity, MessageId, MessageReferences,
-        MessageText, ParticipantRole, ProjectCreateRequest, ProjectId, ResourceName,
-        SubscriptionScope, ThreadCreateRequest, ThreadJoinRequest, TopicCreateRequest, TopicId,
+        BoardCreateRequest, BoardId, HumanId, Identity, PostId, ProjectCreateRequest, ProjectId,
+        SubscriptionScope, ThreadCreateRequest, ThreadId, ThreadJoinRequest,
+        WorkspaceCreateRequest, WorkspaceId,
     },
     protocol::{
         AutomationConfigureRequest, DestinationPreparation, EndpointId, EndpointRef,
@@ -18,7 +19,6 @@ use collaboration_client::{
         WakeState, WakeupId,
     },
 };
-use message_board_storage::BoardStore;
 use serde_json::json;
 use sha2::{Digest as _, Sha256};
 use std::{
@@ -43,7 +43,7 @@ pub(super) struct OwnedClientResources {
 #[derive(Clone)]
 pub(super) struct ActorRootExpectation {
     pub(super) actor: Identity,
-    pub(super) root_message_id: MessageId,
+    pub(super) root_message_id: ThreadId,
 }
 #[derive(Clone, Default)]
 pub(super) struct ExpectedResources {
@@ -56,7 +56,7 @@ pub(super) struct ExpectedResources {
 pub(super) struct RuntimeCleanupFixture {
     pub(super) directory: PathBuf,
     pub(super) owned: Option<OwnedClientResources>,
-    pub(super) board: Option<BoardStore>,
+    pub(super) board: Option<CleanupReadback>,
     pub(super) automation: Option<AutomationStore>,
     pub(super) expected: ExpectedResources,
     runtime: Option<CollaborationRuntime>,
@@ -118,7 +118,7 @@ impl RuntimeCleanupFixture {
         };
         // Coupling: the frozen L2 draft's pub(super) constructor exposure must be integrated first.
         self.peer = Some(PeerFixture::start_in_registry(&self.registry, &endpoint).await?);
-        self.board = Some(BoardStore::open(&self.directory.join("project-board.sqlite")).await?);
+        self.board = Some(CleanupReadback::open(&self.directory).await?);
         self.automation =
             Some(AutomationStore::open(&self.directory.join("automation.sqlite")).await?);
         Ok(())
@@ -155,44 +155,45 @@ impl RuntimeCleanupFixture {
             .owned
             .as_mut()
             .ok_or("actual cleanup client was not retained")?;
-        let project_id = ProjectId::generate();
-        owned
-            .client
-            .board_project_create(ProjectCreateRequest {
-                project_id: project_id.clone(),
-                name: ResourceName::try_from("Runtime cleanup".to_owned())?,
-                description: Description::try_from(String::new())?,
-                actor: sender.clone(),
-                acting_for: None,
-            })
-            .await?;
+        let workspace_id = WorkspaceId::generate();
+        owned.client.workspace_create(serde_json::from_value::<WorkspaceCreateRequest>(json!({
+            "requestId":message_board::RequestId::generate(),"protocolVersion":1,"resubmits":null,
+            "workspaceId":workspace_id,"name":"Runtime cleanup","description":"",
+            "actor":sender,"actingFor":null,
+        }))?).await?;
         for root_index in 0..root_count {
-            // Actor+board cooldown remains real; cleanup-only roots use separate private boards.
+            // Keep main's separate-board ownership scenario on M2's workspace/project schema.
             let board_id = BoardId::generate();
-            owned
-                .client
-                .board_create(BoardCreateRequest {
-                    board_id: board_id.clone(),
-                    project_id: project_id.clone(),
-                    name: ResourceName::try_from(format!("Cleanup board {root_index}"))?,
-                    description: Description::try_from(String::new())?,
-                    actor: sender.clone(),
-                    acting_for: None,
-                })
-                .await?;
-            let topic_id = TopicId::generate();
-            owned
-                .client
-                .board_topic_create(TopicCreateRequest {
-                    topic_id: topic_id.clone(),
-                    board_id,
-                    name: ResourceName::try_from("Cleanup topic".to_owned())?,
-                    description: Description::try_from(String::new())?,
-                    actor: sender.clone(),
-                    acting_for: None,
-                })
-                .await?;
-            let root_message_id = MessageId::generate();
+            let project_id = ProjectId::generate();
+            owned.client.board_create(serde_json::from_value::<BoardCreateRequest>(json!({
+                "requestId":message_board::RequestId::generate(),"protocolVersion":1,"resubmits":null,
+                "boardId":board_id,"workspaceId":workspace_id,"kind":{"kind":"area"},
+                "name":format!("Cleanup board {root_index}"),"description":"",
+                "actor":sender,"actingFor":null,
+            }))?).await?;
+            owned.client.project_create(serde_json::from_value::<ProjectCreateRequest>(json!({
+                "requestId":message_board::RequestId::generate(),"protocolVersion":1,"resubmits":null,
+                "projectId":project_id,"boardId":board_id,"title":"Cleanup project",
+                "actor":sender,"actingFor":null,
+            }))?).await?;
+            let granted = owned.client.role_grant(serde_json::from_value(json!({
+                "requestId":message_board::RequestId::generate(),"protocolVersion":1,
+                "resubmits":null,"observedEpoch":null,"actor":sender,"actingFor":null,
+                "projectId":project_id,"operation":{"kind":"roleGrant",
+                "subject":{"kind":"project","subject":project_id},"role":"lead",
+                "holder":sender,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}
+            }))?).await?;
+            ensure(
+                matches!(
+                    granted.result,
+                    message_board::RequestResult::Decided(
+                        message_board::RequestDecision::Accepted { .. }
+                    )
+                ),
+                "fixture project role was not granted",
+            )?;
+            let root_post_id = PostId::generate();
+            let root_message_id: ThreadId = root_post_id.clone().into();
             owned
                 .resources
                 .register_actor_root(sender.clone(), root_message_id.clone())?;
@@ -200,22 +201,40 @@ impl RuntimeCleanupFixture {
                 actor: sender.clone(),
                 root_message_id: root_message_id.clone(),
             });
-            let created = owned
+            let created = owned.client.thread_create(serde_json::from_value::<ThreadCreateRequest>(json!({
+                "requestId":message_board::RequestId::generate(),"protocolVersion":1,"resubmits":null,
+                "observedEpoch":null,"postId":root_post_id,"projectId":project_id,
+                "about":message_board::ThreadSubject::Project { line: "Synthetic cleanup root".to_owned().try_into()? },"addressees":[],
+                "actor":sender,"actingFor":null,"text":"Synthetic cleanup root","references":[],
+                "role":"orchestrator","watch":true,
+            }))?).await?;
+            ensure(
+                matches!(
+                    created.result,
+                    message_board::RequestResult::Decided(
+                        message_board::RequestDecision::Accepted { .. }
+                    )
+                ),
+                "thread create did not accept actual root identity",
+            )?;
+            // M2 creates automatic memberships only for session actors; this fixture owns
+            // a human sender membership too, so install it explicitly before cleanup.
+            let subscribed = owned
                 .client
-                .board_thread_create(ThreadCreateRequest {
-                    message_id: root_message_id.clone(),
-                    topic_id,
-                    actor: sender.clone(),
-                    acting_for: None,
-                    text: MessageText::try_from("Synthetic cleanup root".to_owned())?,
-                    references: MessageReferences::try_from(Vec::new())?,
-                    role: Some(ParticipantRole::Orchestrator),
-                    watch: true,
-                })
+                .thread_subscribe(serde_json::from_value(json!({
+                    "requestId":message_board::RequestId::generate(),"protocolVersion":1,
+                    "resubmits":null,"observedEpoch":null,"actingFor":null,"actor":sender,
+                    "scope":{"kind":"thread","thread":{"thread":root_message_id}},"policy":{}
+                }))?)
                 .await?;
             ensure(
-                created.message.message_id == root_message_id,
-                "thread create changed actual root identity",
+                matches!(
+                    subscribed.result,
+                    message_board::RequestResult::Decided(
+                        message_board::RequestDecision::Accepted { .. }
+                    )
+                ),
+                "fixture sender subscription was not installed",
             )?;
             owned
                 .resources
@@ -224,19 +243,20 @@ impl RuntimeCleanupFixture {
                 actor: reader.clone(),
                 root_message_id: root_message_id.clone(),
             });
-            owned
-                .client
-                .board_thread_join(ThreadJoinRequest {
-                    mode: None,
-                    when_idle: None,
-                    root_message_id,
-                    actor: reader.clone(),
-                    role: ParticipantRole::Participant,
-                    watch: true,
-                    replace: None,
-                    note: None,
-                })
-                .await?;
+            let joined = owned.client.thread_join(serde_json::from_value::<ThreadJoinRequest>(json!({
+                "requestId":message_board::RequestId::generate(),"protocolVersion":1,"resubmits":null,
+                "observedEpoch":null,"thread":{"thread":root_message_id},"actor":reader,
+                "mode":null,"whenIdle":null,"role":"participant","watch":true,"replace":null,"note":null,
+            }))?).await?;
+            ensure(
+                matches!(
+                    joined.result,
+                    message_board::RequestResult::Decided(
+                        message_board::RequestDecision::Accepted { .. }
+                    )
+                ),
+                "thread join did not accept actual reader identity",
+            )?;
         }
         Ok(())
     }
@@ -257,7 +277,7 @@ impl RuntimeCleanupFixture {
             .resources
             .record_wake_submission(operation_id.clone())?;
         let request: WakeSendRequest = serde_json::from_value(json!({
-            "operationId":operation_id,"message":{"target":target,
+            "operationId":operation_id,"requestedBy":{"kind":"owner"},"replace":false,"message":{"target":target,
                 "content":{"kind":"humanUser","text":"Synthetic Runtime cleanup wake"},
                 "delivery":"auto","generationGuard":null},
             "timing":{"kind":"after","seconds":3600},"expiry":{"kind":"none"}
@@ -388,13 +408,18 @@ impl RuntimeCleanupFixture {
         let board = self
             .board
             .as_mut()
-            .ok_or("fixture-owned BoardStore missing")?;
+            .ok_or("fixture-owned cleanup readback missing")?;
         for actor in actors {
             let records = board
+                .windows
                 .list_reader_subscriptions(actor, chrono::Utc::now())
                 .await?;
-            for record in records {
-                let SubscriptionScope::Thread { root_message_id } = record.scope() else {
+            for record in records.records {
+                let record = record.record;
+                let SubscriptionScope::Thread {
+                    thread_id: root_message_id,
+                } = record.scope()
+                else {
                     return Err("actual helper unexpectedly installed non-thread scope".into());
                 };
                 if !self
@@ -468,7 +493,7 @@ impl RuntimeCleanupFixture {
         {
             issues.push(FixtureCleanupIssue {
                 stage: CleanupStage::BoardStore,
-                error: error.into(),
+                error,
             });
         }
         if let Some(automation) = self.automation.take()

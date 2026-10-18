@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT t.thread_id AS \"thread_id!: String\", COALESCE(w.start_epoch, p.start_epoch) AS \"start_epoch: i64\", COALESCE(w.start_position, p.start_position) AS \"start_position: i64\", COALESCE(w.active, p.active, 0) AS \"active!: i64\" FROM threads t LEFT JOIN thread_watches w ON w.reader = ? AND w.thread_id = t.thread_id LEFT JOIN project_watches p ON p.reader = ? WHERE t.thread_id > ? AND COALESCE(w.active, p.active, 0) != 0 ORDER BY t.thread_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "start_epoch: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "start_position: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "active!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "97e145613d4b9c25b0106f460d9edb664a9669e5fcf8c1282551dacf0655f68d"
+}

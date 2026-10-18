@@ -1,0 +1,92 @@
+{
+  "db_name": "Turso",
+  "query": "WITH inputs AS (SELECT ? AS reader, ? AS selected, ? AS unread, ? AS project, ? AS sweep)\nSELECT a.position AS \"position!: i64\", a.epoch AS \"epoch!: i64\", a.record_kind AS \"record_kind!: String\", a.record_id AS \"record_id!: String\", json_extract(a.entry, '$.routerTime') AS \"router_time!: String\",\n COALESCE(w.active, p.active, 0) AS \"watch_active!: i64\",\n COALESCE(w.start_epoch, p.start_epoch) AS \"watch_epoch: i64\", COALESCE(w.start_position, p.start_position) AS \"watch_position: i64\",\n m.through_epoch AS \"mark_epoch: i64\", m.through_position AS \"mark_position: i64\"\nFROM project_feed a INDEXED BY inbox_feed_by_position CROSS JOIN inputs i\nLEFT JOIN thread_watches w ON w.reader = i.reader AND w.thread_id = (CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END)\nLEFT JOIN project_watches p ON p.reader = i.reader AND (CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END) IS NOT NULL\nLEFT JOIN read_marks m ON m.reader = i.reader AND m.scope = CASE WHEN (CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END) IS NULL\n THEN json_object('kind', 'project', 'projectId', i.project) ELSE json_object('kind', 'thread', 'threadId', (CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END)) END\nWHERE a.record_kind IN ('post', 'thread') AND a.position > ? AND a.position <= ?\nAND (a.record_kind = 'post' OR (i.unread = 1 AND json_extract(a.entry, '$.content.record.record.state') !=\n (SELECT json_extract(previous.entry, '$.content.record.record.state') FROM project_feed previous\n  WHERE previous.record_kind = 'thread' AND previous.record_id = a.record_id AND previous.position < a.position ORDER BY previous.position DESC LIMIT 1)))\nAND ((CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END) IS NULL AND i.selected = 1 OR (CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END) IS NOT NULL AND COALESCE(w.active, p.active, 0) != 0)\nAND (i.unread = 0 OR (\n NOT (json_extract((CASE WHEN a.record_kind = 'thread' THEN json_extract(a.entry, '$.actor.actor.identity') ELSE json_extract(a.entry, '$.content.record.record.actor') END), '$.kind') IS json_extract(i.reader, '$.kind')\n  AND json_extract((CASE WHEN a.record_kind = 'thread' THEN json_extract(a.entry, '$.actor.actor.identity') ELSE json_extract(a.entry, '$.content.record.record.actor') END), '$.humanId') IS json_extract(i.reader, '$.humanId')\n  AND json_extract((CASE WHEN a.record_kind = 'thread' THEN json_extract(a.entry, '$.actor.actor.identity') ELSE json_extract(a.entry, '$.content.record.record.actor') END), '$.session.endpoint.serviceId') IS json_extract(i.reader, '$.session.endpoint.serviceId')\n  AND json_extract((CASE WHEN a.record_kind = 'thread' THEN json_extract(a.entry, '$.actor.actor.identity') ELSE json_extract(a.entry, '$.content.record.record.actor') END), '$.session.endpoint.endpointId') IS json_extract(i.reader, '$.session.endpoint.endpointId')\n  AND json_extract((CASE WHEN a.record_kind = 'thread' THEN json_extract(a.entry, '$.actor.actor.identity') ELSE json_extract(a.entry, '$.content.record.record.actor') END), '$.session.sessionId') IS json_extract(i.reader, '$.session.sessionId'))\n AND ((CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END) IS NULL AND m.through_epoch = a.epoch AND m.through_position < a.position\n  OR (CASE WHEN a.record_kind = 'thread' THEN a.record_id ELSE json_extract(a.entry, '$.content.record.record.placement.threadId') END) IS NOT NULL AND COALESCE(w.start_epoch, p.start_epoch) = a.epoch AND COALESCE(w.start_position, p.start_position) < a.position)\n AND (m.through_epoch IS NULL OR m.through_epoch != a.epoch OR m.through_position < a.position)))\nAND (i.sweep IS NULL OR (rtrim(json_extract(a.entry, '$.routerTime'), 'Z'), i.project, a.position)\n < (rtrim(json_extract(i.sweep, '$.routerTime'), 'Z'), json_extract(i.sweep, '$.projectId'), json_extract(i.sweep, '$.position')))\nORDER BY a.position DESC LIMIT ?\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "record_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "router_time!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "watch_active!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "watch_epoch: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "watch_position: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "mark_epoch: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "mark_position: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "d13873e6cf1cc9d92b870328753f93091c24627cdbac2b553de726e7ae6dd30f"
+}

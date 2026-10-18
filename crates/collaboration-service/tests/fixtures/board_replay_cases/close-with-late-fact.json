@@ -1,0 +1,1212 @@
+{
+  "case": "close-with-late-fact",
+  "summary": "The collaboration API follow-up that shipped as PR #139 and release v0.1.81. After #136 (the M1 cutover) merged on 2026-10-08, Sol's re-verification found F6 and F7, the M1 Sidekick fixed them on a follow-up branch, a re-verify found F8, and #139 went READY waiting on the owner. The owner granted merge authority on 2026-10-09; a pre-existing CI race was rerun rather than waived, #139 merged as c0e46087, v0.1.81 was tagged and the work closed. Facts arrived after the close: the release run's result, then a production observation that the auto-upgraded 0.1.81 CLI could not reach the production Host still running 0.1.63 (manifest v3 versus v2), then the post-restart verification once the owner restarted the Host. Chosen because a real close is followed by facts that matter to it, each causally anchored at the close.",
+  "sources": [
+    "PR #139 (merged 2026-10-09 as c0e46087) and PR #136",
+    "GitHub Actions run 37956235588 (attempt 1 failed, attempt 2 succeeded) and release run 37962862929",
+    "board thread 'board-design' (coordination root of the board state layer)"
+  ],
+  "actors": [
+    {
+      "alias": "lead",
+      "kind": "session",
+      "note": "board-design Lead (Claude Opus 5.5)"
+    },
+    {
+      "alias": "owner",
+      "kind": "human",
+      "note": "gave merge authority; restarted the production Host"
+    },
+    {
+      "alias": "sidekick-m1",
+      "kind": "session",
+      "note": "M1 Sidekick that fixed F6, F7 and F8"
+    },
+    {
+      "alias": "sidekick-sol",
+      "kind": "session",
+      "note": "Sol 6.1 high Sidekick that merged main, set the version and ran the final gates"
+    },
+    {
+      "alias": "reviewer-sol",
+      "kind": "session",
+      "note": "Sol xhigh reviewer (verifier)"
+    }
+  ],
+  "setup": [
+    {
+      "op": "workspace_create",
+      "args": {
+        "workspaceId": "$workspace",
+        "name": "codex-router",
+        "description": "Agent Router"
+      }
+    },
+    {
+      "op": "board_create",
+      "args": {
+        "boardId": "$board",
+        "workspaceId": "$workspace",
+        "name": "Board state layer",
+        "description": "Board design and its collaboration API work",
+        "kind": {
+          "kind": "area"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-10-08T11:30:00Z",
+      "actor": "lead",
+      "op": "project_create",
+      "args": {
+        "projectId": "$project",
+        "boardId": "$board",
+        "title": "Collaboration API follow-up: stream bounds (#139) and v0.1.81"
+      },
+      "note": "Follow-up to #136 (merged 11:26) for Sol's F6/F7; the board posts don't record when the follow-up was opened.",
+      "approxTime": true
+    },
+    {
+      "seq": 2,
+      "at": "2026-10-08T11:30:01Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "project",
+          "subject": "$project"
+        },
+        "role": "lead",
+        "holder": "@lead",
+        "model": "claude-opus-5.5",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "First lead names itself (U51).",
+      "approxTime": true
+    },
+    {
+      "seq": 3,
+      "at": "2026-10-08T11:30:02Z",
+      "actor": "lead",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.stream-bounds",
+        "name": "Sol M1 follow-up: stream bounds",
+        "goal": "Close Sol's F6 and F7 on the merged collaboration API: notification delivery bounded by the call deadline; resync markers with a null cursor."
+      },
+      "note": "One workstream carries the fix.",
+      "approxTime": true
+    },
+    {
+      "seq": 4,
+      "at": "2026-10-08T11:30:03Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-m1",
+        "model": "claude-opus-5.5",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "The M1 Sidekick fixes the follow-up.",
+      "approxTime": true
+    },
+    {
+      "seq": 5,
+      "at": "2026-10-08T11:30:04Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "role": "verifier",
+        "holder": "@reviewer-sol",
+        "model": "sol-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "Sol re-verifies.",
+      "approxTime": true
+    },
+    {
+      "seq": 6,
+      "at": "2026-10-08T11:30:05Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.f6",
+        "workstreamId": "$ws.stream-bounds",
+        "title": "F6: bound notification delivery by the call deadline",
+        "body": "Hold the admission slot only while the call runs.",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "Sol finding F6.",
+      "approxTime": true
+    },
+    {
+      "seq": 7,
+      "at": "2026-10-08T11:30:06Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.f7",
+        "workstreamId": "$ws.stream-bounds",
+        "title": "F7: stream resync markers with a null cursor",
+        "body": "",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "Sol finding F7.",
+      "approxTime": true
+    },
+    {
+      "seq": 8,
+      "at": "2026-10-08T11:30:07Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.ship",
+        "workstreamId": "$ws.stream-bounds",
+        "title": "Merge #139 and release",
+        "body": "Owner-gated merge, tag and release per AGENTS.md; production Router untouched.",
+        "blockedBy": [
+          {
+            "project": "$project",
+            "task": "$task.f6"
+          },
+          {
+            "project": "$project",
+            "task": "$task.f7"
+          }
+        ],
+        "relatedTo": []
+      },
+      "note": "Shipping waits on the fixes.",
+      "approxTime": true
+    },
+    {
+      "seq": 9,
+      "at": "2026-10-08T11:56:28Z",
+      "actor": "sidekick-m1",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.fix-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "F6 and F7 fixed on fix/collab-api-stream-bounds, version 0.1.71: notification delivery is bounded by the call deadline and the admission slot is held only while the call runs; resync markers stream with a null cursor. Draft PR #139 opened.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 139
+          }
+        ]
+      },
+      "note": "Placed at #139's creation time.",
+      "source": "PR #139",
+      "approxTime": true
+    },
+    {
+      "seq": 10,
+      "at": "2026-10-08T11:59:49Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.code-accepted",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "Lead read the #139 diff and accepted the F6/F7 code. Sol re-verification requested; a description Worker drafts the body; CI watch running.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.fix-handback"
+            }
+          }
+        ]
+      },
+      "note": "Settles the fix handback.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 11,
+      "at": "2026-10-08T12:15:00Z",
+      "actor": "reviewer-sol",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.reverify-1",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "Re-verify at 6426154d: F6 closed. F7 partly closed by a new finding, F8: the stale-epoch resync marker is dropped under a valid small byte budget, while main always returned it.",
+        "tags": [
+          "handback",
+          "review"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "6426154d5e49b7ac5ad08f7e36b03a243eecdd8d"
+          }
+        ]
+      },
+      "note": "Reported by the Lead at 12:16:29; the reviewer's own post is not on the board.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)",
+      "approxTime": true
+    },
+    {
+      "seq": 12,
+      "at": "2026-10-08T12:16:29Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.f8-accepted",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "F8 accepted. The implementer fixes it on the same branch with a red-then-green real-hub test, then Sol re-verifies. #139 stays draft.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.reverify-1"
+            }
+          }
+        ]
+      },
+      "note": "Settles the verifier's handback.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 13,
+      "at": "2026-10-08T12:16:30Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.f8",
+        "workstreamId": "$ws.stream-bounds",
+        "title": "F8: keep the stale-epoch resync marker under a small byte budget",
+        "body": "Found by Sol's re-verify; main always returned the marker.",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "New task for F8.",
+      "approxTime": true
+    },
+    {
+      "seq": 14,
+      "at": "2026-10-08T12:16:31Z",
+      "actor": "lead",
+      "op": "task_link",
+      "args": {
+        "link": {
+          "from": "$task.ship",
+          "kind": "blockedBy",
+          "to": {
+            "project": "$project",
+            "task": "$task.f8"
+          }
+        }
+      },
+      "note": "Shipping now also waits on F8 (TK-2: one link per operation).",
+      "approxTime": true
+    },
+    {
+      "seq": 15,
+      "at": "2026-10-08T12:38:00Z",
+      "actor": "sidekick-m1",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.f8-handback",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "F8 fixed at f91ecfa5 with a red-then-green real-hub test.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "f91ecfa5b616c99d30eb7adcdf5acdb6e874ab38"
+          }
+        ]
+      },
+      "note": "Reported in the Lead's READY post; time placed before it.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)",
+      "approxTime": true
+    },
+    {
+      "seq": 16,
+      "at": "2026-10-08T12:41:00Z",
+      "actor": "reviewer-sol",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.reverify-2",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "Re-verify ready: F6, F7 and F8 closed in source; no new findings.",
+        "tags": [
+          "handback",
+          "review"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "f91ecfa5b616c99d30eb7adcdf5acdb6e874ab38"
+          }
+        ]
+      },
+      "note": "Reported in the Lead's READY post; time placed before it.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)",
+      "approxTime": true
+    },
+    {
+      "seq": 17,
+      "at": "2026-10-08T12:42:46Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.ready",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "#139 marked READY at f91ecfa5: CI 5/5 green, Sol re-verify ready, body current, 0 comments or threads, mergeable and clean. Version 0.1.71. Awaits the owner's review; no merge or tag by the Lead.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.f8-handback"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.reverify-2"
+            }
+          },
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 139
+          }
+        ]
+      },
+      "note": "Settles both handbacks.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 18,
+      "at": "2026-10-08T12:42:47Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.f6",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "F6 closed in source.",
+      "approxTime": true
+    },
+    {
+      "seq": 19,
+      "at": "2026-10-08T12:42:48Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.f7",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "F7 closed in source.",
+      "approxTime": true
+    },
+    {
+      "seq": 20,
+      "at": "2026-10-08T12:42:49Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.f8",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "F8 closed in source.",
+      "approxTime": true
+    },
+    {
+      "seq": 21,
+      "at": "2026-10-08T12:42:50Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.oq-merge",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner review and merge needed for #139 (and #137, the Turso SQLx driver PR); the Lead does not merge or tag without the owner.",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          }
+        ]
+      },
+      "note": "Merge, tag and release are owner gates.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)",
+      "approxTime": true
+    },
+    {
+      "seq": 22,
+      "at": "2026-10-09T10:29:59Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-sol",
+        "model": "sol-6.1-high",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "main moved to 0.1.76 and #139 conflicted (Cargo only); a Sol 6.1 high Sidekick merged main and set the version. The M1 Sidekick's assignment ends replaced.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 23,
+      "at": "2026-10-09T13:51:40Z",
+      "actor": "lead",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.merge-authority",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner 2026-10-09: 'make sure they are ready and tested for all merges and then feel free to merge' (#137, #139). Plan: merge main, reserve 0.1.81, run the gates and an isolated debug-Host smoke at the final head (live F8 and hub-reset checks; Claude Code and Codex MCP connect), then CI, body refresh, final gates, merge, tag and release v0.1.81 per AGENTS.md. Production Router not touched.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.oq-merge"
+            }
+          }
+        ]
+      },
+      "note": "Relayed owner words; settles the owner question.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 24,
+      "at": "2026-10-09T16:18:00Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.ci-attempt-1",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "hosted-ci",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "unmet",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T16:18:00Z",
+          "anchor": null
+        }
+      },
+      "note": "Validate changes run 37956235588, attempt 1, failed at head 38adb40a: quota_floor_websocket_tests::saved_floor_refresh_reconnects_established_websocket_before_later_response_create.",
+      "source": "GitHub Actions run 37956235588"
+    },
+    {
+      "seq": 25,
+      "at": "2026-10-09T16:21:42Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.ci-disposition",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.stream-bounds"
+        },
+        "text": "CI failure disposition: the quota-floor WebSocket test failure is an intermittent, pre-existing race, not #139. Closing a socket with unread data sends a TCP reset that can discard the Close frame. Evidence: the same failure on main at 5b29c0fb (run 37770053382); it passes on four other main heads and on #137; #139 touches no proxy, CLI or quota file. Failed jobs rerun. Not waived: #139 merges only on a green run at its head. The proxy and quota owner decides whether a hard-floor reconnect may reset.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "fact",
+              "id": "$fact.ci-attempt-1"
+            }
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "5b29c0fbc43c2be5715b1cec1d96f270ac516aff"
+          }
+        ]
+      },
+      "note": "Recorded with the evidence that the failure is not this change's.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 26,
+      "at": "2026-10-09T16:45:57Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.ci-attempt-2",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "hosted-ci",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T16:45:57Z",
+          "anchor": null
+        }
+      },
+      "note": "Run 37956235588, attempt 2, succeeded at head 38adb40a (CI 5/5).",
+      "source": "GitHub Actions run 37956235588"
+    },
+    {
+      "seq": 27,
+      "at": "2026-10-09T16:57:31Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.merged-139",
+          "kind": {
+            "kind": "prFact",
+            "fact": {
+              "repository": "github.com/ShravanSunder/codex-router",
+              "number": 139,
+              "kind": {
+                "kind": "merged",
+                "mergeCommit": "c0e460871f085ba5928b07da9695f7480ba79080"
+              },
+              "recordedBy": "@lead"
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T16:57:31Z",
+          "anchor": null
+        }
+      },
+      "note": "#139 merged as c0e46087 (squash, pinned to head 38adb40a) under the owner's merge authority.",
+      "source": "PR #139"
+    },
+    {
+      "seq": 28,
+      "at": "2026-10-09T17:08:17Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.ship",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "Merged; tag v0.1.81 pushed.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 29,
+      "at": "2026-10-09T17:08:18Z",
+      "actor": "lead",
+      "op": "workstream_close",
+      "args": {
+        "workstreamId": "$ws.stream-bounds",
+        "reason": "done",
+        "note": "#139 merged as c0e46087",
+        "expectedRevision": "$current"
+      },
+      "note": "Workstream done.",
+      "approxTime": true
+    },
+    {
+      "seq": 30,
+      "at": "2026-10-09T17:08:19Z",
+      "actor": "lead",
+      "op": "project_close",
+      "args": {
+        "reason": "#139 merged as c0e46087 at head 38adb40a under the owner's merge authority; tag v0.1.81 pushed; release run 37962862929 in progress. Production Router not touched.",
+        "expectedRevision": "$current"
+      },
+      "note": "The close position is recorded (RC-11). From here only facts anchored at or before it are accepted, marked late.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)",
+      "approxTime": true
+    },
+    {
+      "seq": 31,
+      "at": "2026-10-09T17:31:08Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.release-0181",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "release",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T17:19:44Z",
+          "anchor": "$cursorOf:30"
+        }
+      },
+      "note": "Late fact (release check): release run 37962862929 passed its Apple Silicon build and Homebrew tap jobs; the formula's sha256 matches the asset digest. Producer time is the run's completion.",
+      "source": "GitHub Actions run 37962862929; board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 32,
+      "at": "2026-10-09T17:31:09Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.prod-compat-broken",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "production-cli-host-compat",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "unmet",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T17:31:00Z",
+          "anchor": "$cursorOf:30"
+        }
+      },
+      "note": "Late fact (production observation): Homebrew upgraded this machine to 0.1.81 at 17:25Z (not by the Lead); the production Host still runs 0.1.63, and the 0.1.81 CLI fails against it with 'Router service unavailable' / boardUnavailable because #136 (0.1.66) moved to manifest v3 and refuses v2. MCP calls still work.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 33,
+      "at": "2026-10-09T17:31:10Z",
+      "actor": "lead",
+      "op": "thread_create",
+      "args": {
+        "postId": "$post.ops-issue",
+        "about": {"kind":"project","subject":{"line":"Operational issue after v0.1.81"}},
+        "text": "Operational issue after v0.1.81: the production Host still runs 0.1.63 and the 0.1.81 CLI cannot reach it (manifest v3 versus v2). The fix is to restart the production Host on 0.1.81, which needs the owner's explicit words. Until then, agents use MCP tools instead of the CLI.",
+        "references": [],
+        "addressees": [
+          {
+            "kind": "actor",
+            "recipient": "@owner"
+          }
+        ],
+        "role": "orchestrator",
+        "watch": true
+      },
+      "note": "After the close a work-trail row (an owner-question) is refused, so the ask goes to a thread; posts stay open after a close. Fixture correction: the session lead is inferred to take the conversation orchestrator seat when opening its own operational thread, permitting its later resolution; this conversation role is not observed in the source and grants no board authority.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 34,
+      "at": "2026-10-09T18:08:06Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.prod-compat-restored",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "production-cli-host-compat",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T18:08:06Z",
+          "anchor": "$cursorOf:30"
+        }
+      },
+      "note": "Late fact (production observation): the owner restarted the production Host onto 0.1.81 (relayed by the chief of staff). The Lead verified service.json version 3 and that the CLI works again (whoami, and a post made through the CLI).",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 35,
+      "at": "2026-10-09T18:09:58Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.post-restart-health",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "post-restart-host-health",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T18:09:58Z",
+          "anchor": "$cursorOf:30"
+        }
+      },
+      "note": "Late fact: host status ready (router, app-server 0.160.0, Remote Control; phase steady); MCP tools/list 107 tools; 6 schedules and 50 wakes retained; CLI whoami 0.1.81/0.1.81. The live proxy has only indirect evidence (a thread kept producing turns through it).",
+      "source": "board thread 'board-design' (coordination root of the board state layer)"
+    },
+    {
+      "seq": 36,
+      "at": "2026-10-09T18:10:00Z",
+      "actor": "lead",
+      "op": "thread_resolve",
+      "args": {
+        "thread": {"thread": "$post.ops-issue"},
+        "reason": "The owner restarted the production Host onto 0.1.81; the CLI/Host mismatch is closed."
+      },
+      "note": "The operational thread is resolved; the work stays closed.",
+      "source": "board thread 'board-design' (coordination root of the board state layer)",
+      "approxTime": true
+    }
+  ],
+  "questions": [
+    {
+      "ask": "what was decided",
+      "via": "work_trail_show with selection decisions (the decision register, newest first)",
+      "expect": [
+        {
+          "decision_ref": 25,
+          "text": "CI failure is a pre-existing race; rerun, not waived"
+        },
+        {
+          "decision_ref": 23,
+          "text": "Owner merge authority for #137 and #139; plan to merge, tag and release v0.1.81",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 17,
+          "text": "#139 READY at f91ecfa5; awaits owner"
+        },
+        {
+          "decision_ref": 12,
+          "text": "F8 accepted; fix with a red-then-green real-hub test"
+        },
+        {
+          "decision_ref": 10,
+          "text": "F6/F7 code accepted; Sol re-verification requested"
+        }
+      ]
+    },
+    {
+      "ask": "where did it stop",
+      "via": "project_show, view_work, view_lead_load (lead), view_owner, fact_list, thread_show",
+      "expect": {
+        "state": "Closed at the project_close: #139 merged as c0e46087 and v0.1.81 tagged. Four facts arrived after the close, all marked late; production compatibility first failed, then was restored after the owner's Host restart.",
+        "projectClosed": true,
+        "closedBy": 30,
+        "lead": "lead",
+        "workstreams": [
+          {
+            "ref": "$ws.stream-bounds",
+            "state": "closed:done",
+            "implementer": "sidekick-sol",
+            "verifier": "reviewer-sol",
+            "tasks": [
+              {
+                "ref": "$task.f6",
+                "status": "done"
+              },
+              {
+                "ref": "$task.f7",
+                "status": "done"
+              },
+              {
+                "ref": "$task.f8",
+                "status": "done"
+              },
+              {
+                "ref": "$task.ship",
+                "status": "done"
+              }
+            ]
+          }
+        ],
+        "readyQueue": [],
+        "blocked": [],
+        "pending": [],
+        "pendingHandbacks": [],
+        "settledHandbacks": [
+          {
+            "ref": 9,
+            "settledBy": 10
+          },
+          {
+            "ref": 11,
+            "settledBy": 12
+          },
+          {
+            "ref": 15,
+            "settledBy": 17
+          },
+          {
+            "ref": 16,
+            "settledBy": 17
+          }
+        ],
+        "settledOwnerQuestions": [
+          {
+            "ref": 21,
+            "settledBy": 23
+          }
+        ],
+        "ownerWaiting": [],
+        "owed": [],
+        "lateFacts": [
+          31,
+          32,
+          34,
+          35
+        ],
+        "notLateFacts": [
+          24,
+          26,
+          27
+        ],
+        "lateFactsEmitNoIntents": true,
+        "thread": {
+          "ref": "$post.ops-issue",
+          "state": "resolved"
+        },
+        "card": {
+          "actor": "lead",
+          "subject": "project",
+          "pendingHandbacks": [],
+          "pendingDecisions": [],
+          "nextObligation": null
+        }
+      }
+    },
+    {
+      "ask": "what proves it",
+      "via": "fact_list, work_trail_show (handback and decision rows with their links)",
+      "expect": [
+        {
+          "evidence_ref": 16,
+          "kind": "review",
+          "what": "Sol re-verify ready: F6, F7, F8 closed at f91ecfa5"
+        },
+        {
+          "evidence_ref": 26,
+          "kind": "ci",
+          "what": "hosted CI met on rerun at head 38adb40a"
+        },
+        {
+          "evidence_ref": 27,
+          "kind": "commit",
+          "what": "#139 merged as c0e46087"
+        },
+        {
+          "evidence_ref": 31,
+          "kind": "release",
+          "what": "release run 37962862929 met; late",
+          "late": true
+        },
+        {
+          "evidence_ref": 34,
+          "kind": "production",
+          "what": "production CLI/Host compatibility restored after the owner's restart; late",
+          "late": true
+        },
+        {
+          "evidence_ref": 35,
+          "kind": "production",
+          "what": "post-restart Host health; late",
+          "late": true
+        }
+      ]
+    }
+  ],
+  "probes": [
+    {
+      "after": 36,
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.probe-no-anchor",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "production-cli-host-compat",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T18:12:00Z",
+          "anchor": null
+        }
+      },
+      "expect": {
+        "decision": "rejected",
+        "reason": "closed"
+      },
+      "note": "Synthetic. RC-11: after a close a fact without a causal anchor is refused; a producer time alone never qualifies it as late."
+    },
+    {
+      "after": 36,
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.probe-anchor-after-close",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "production-cli-host-compat",
+              "subject": {
+                "kind": "task",
+                "id": "$task.ship"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          ],
+          "producerTime": "2026-10-09T18:12:00Z",
+          "anchor": "$cursorOf:33"
+        }
+      },
+      "expect": {
+        "decision": "rejected",
+        "reason": "closed"
+      },
+      "note": "Synthetic. The anchor is the operational thread's position, which is after the close."
+    },
+    {
+      "after": 36,
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.probe-after-close",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "probe: an owner question after the close",
+        "tags": [
+          "owner-question"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "task",
+              "id": "$task.ship"
+            }
+          }
+        ]
+      },
+      "expect": {
+        "decision": "rejected",
+        "reason": "closed"
+      },
+      "note": "Synthetic. RC-11: work-trail rows are refused after the close; this is why the restart ask went to a thread."
+    }
+  ]
+}

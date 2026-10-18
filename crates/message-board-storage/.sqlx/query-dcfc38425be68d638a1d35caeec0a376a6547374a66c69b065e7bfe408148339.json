@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"row_count!: i64\" FROM thread_subjects WHERE thread_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "dcfc38425be68d638a1d35caeec0a376a6547374a66c69b065e7bfe408148339"
+}

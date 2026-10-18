@@ -66,7 +66,7 @@ def callback_prompt(tools: dict[str, str], command: str) -> str:
     return (
         "This is labelled test automation for typed Question and Approval callbacks. "
         f"First call the actual {tools['question_tool']} tool on its supported {tools['question_method']} route with exactly one single-select question: "
-        "Which verification marker should this test write? Offer exactly Blue and Green. "
+        "Which color should this test acknowledge in its final text? Offer exactly Blue and Green. The answer is only a text label; the marker command and its literal contents stay exactly as given below. "
         "Wait for the actual tool answer; do not merely ask in prose. "
         f"After receiving Blue, call {tools['execution_tool']} exactly once with this exact command: {command}\n"
         "The actual Session approver will select allow once for that private marker action. "

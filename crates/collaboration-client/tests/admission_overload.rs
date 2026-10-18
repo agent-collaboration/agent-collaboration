@@ -18,8 +18,11 @@ use collaboration_protocol::{
     WakeNextAction, WakeShowRequest,
 };
 use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::{
+    FleetClient, LocalLeaseAuthority, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
+    ProjectStoreRegistry,
+};
 use message_board::{BoardFailureKind, BoardNextAction};
-use message_board_storage::BoardStore;
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -43,11 +46,19 @@ impl SaturatedApi {
         let directory = tempfile::Builder::new()
             .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir_in("/tmp")?;
-        let board = BoardStore::open(&directory.path().join("board.sqlite")).await?;
+        let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            registry: Arc::new(ProjectStoreRegistry::new(directory.path())),
+            fleet: Arc::new(FleetClient::open_local_stand_in(directory.path()).await?),
+            leases: Arc::new(LocalLeaseAuthority::default()),
+            identity: MachineIdentity::new(
+                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())?,
+                Some("overload proof"),
+            )?,
+        })?);
         let automation = AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
         let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
             .map_err(std::io::Error::other)?
-            .with_board_store(Arc::new(Mutex::new(board)))
+            .with_project_admission(admission)
             .with_automation_store(Arc::new(Mutex::new(automation)));
         let served = Arc::new(
             ServedCollaborationApi::start_with(
@@ -126,7 +137,7 @@ fn wake_send_arguments() -> Value {
             "generationGuard": null
         },
         "timing": {"kind": "after", "seconds": 600},
-        "expiry": {"kind": "none"}
+        "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
     })
 }
 
@@ -139,8 +150,9 @@ async fn a_shed_board_call_is_a_typed_retryable_board_overload() {
     let api = SaturatedApi::start().await.expect("saturated API");
     let shed = api
         .client
-        .board_project_list(
-            from_json(json!({"repository": null, "page": {}})).expect("request JSON"),
+        .project_list(
+            from_json(json!({"boardId":message_board::BoardId::generate(), "page": {}}))
+                .expect("request JSON"),
         )
         .await;
     let Err(BoardClientError::Rejected(failure)) = shed else {
@@ -156,11 +168,11 @@ async fn a_shed_board_write_is_not_an_unknown_outcome() {
     let api = SaturatedApi::start().await.expect("saturated API");
     let shed = api
         .client
-        .board_project_create(
+        .project_create(
             from_json(json!({
                 "projectId": OperationId::generate(),
-                "name": "Shed",
-                "description": "",
+                "boardId":message_board::BoardId::generate(), "title": "Shed",
+                "requestId":message_board::RequestId::generate(), "protocolVersion":1,"resubmits":null,"actingFor":null,
                 "actor": {"kind": "human", "humanId": "owner"}
             }))
             .expect("request JSON"),

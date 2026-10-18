@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE fleet_outbox_requests SET state = ? WHERE request_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7742702d486c56e9dbdbb338dc20d5ab538e5c75f1e37a41a4746992dcc5855e"
+}

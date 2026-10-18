@@ -112,6 +112,8 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
     );
     let marker = format!("DELIVERY_RECOVERED_{}", OperationId::generate().as_str());
     let request = WakeSendRequest {
+        requested_by: collaboration_client::protocol::WakeCreator::Owner {},
+        replace: false,
         operation_id: OperationId::generate(),
         message: SavedMessage {
             target: target.clone(),

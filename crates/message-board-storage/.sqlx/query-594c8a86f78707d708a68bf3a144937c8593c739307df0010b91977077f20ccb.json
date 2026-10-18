@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\", json_quote(json_extract(payload, '$.record.kind.fact.guard')) AS \"guard!: String\", json_quote(json_extract(payload, '$.record.kind.fact.evaluator.actor.actor')) AS \"actor!: String\", json_quote(json_extract(payload, '$.record.envelope.position')) AS \"position!: String\" FROM record_identities WHERE kind = 'fact' AND json_extract(payload, '$.record.kind.kind') = 'evaluatorResult' AND json_extract(payload, '$.record.kind.fact.subject.kind') = 'project' AND json_extract(payload, '$.record.kind.fact.subject.id') = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "guard!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "actor!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "position!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "594c8a86f78707d708a68bf3a144937c8593c739307df0010b91977077f20ccb"
+}

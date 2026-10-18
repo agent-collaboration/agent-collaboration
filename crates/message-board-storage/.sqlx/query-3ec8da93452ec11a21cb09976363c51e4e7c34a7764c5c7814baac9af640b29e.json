@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE request_ledger SET decision = ? WHERE request_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "3ec8da93452ec11a21cb09976363c51e4e7c34a7764c5c7814baac9af640b29e"
+}

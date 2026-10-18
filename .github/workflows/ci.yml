@@ -153,6 +153,14 @@ jobs:
     name: Test Rust workspace
     runs-on: ubuntu-latest
     steps:
+      # The steps below build the workspace under several package selections and
+      # feature sets, which together outgrow the runner's free disk. Remove
+      # preinstalled SDKs this job never uses.
+      - name: Free runner disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift
+          df -h /
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -176,12 +184,15 @@ jobs:
           scripts/tooling/bootstrap-tools.sh ci
           echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
       # Compile every test binary once, then run the suites in parallel from
-      # the built artifacts so they don't contend for cargo's build lock.
+      # the built artifacts so they don't contend for cargo's build lock. Each
+      # build uses exactly its run step's package selection and features, so
+      # the run reuses these artifacts instead of relinking them.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros --no-run
+          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros --no-run
           cargo nextest run --profile ci --locked -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-features --no-run
           cargo nextest run --profile ci --locked -p sqlx-turso-core --no-run
+          df -h /
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
         background: true
@@ -202,14 +213,91 @@ jobs:
       - name: Test the Turso driver core with default features
         run: cargo nextest run --profile ci --locked -p sqlx-turso-core
 
+  central-core:
+    name: Central core boundary and wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: central-core
+          cache-on-failure: true
+      - name: Enforce the synchronous platform-free core
+        run: python3 scripts/tooling/check-central-core-boundary.py
+      - name: Check core and protocol on native and wasm
+        run: |
+          cargo check --locked -p collaboration-central-core -p collaboration-replication-protocol
+          cargo check --locked -p collaboration-central-core -p collaboration-replication-protocol --target wasm32-unknown-unknown
+          cargo clippy --locked -p collaboration-central-core -p collaboration-replication-protocol --target wasm32-unknown-unknown --lib -- -D warnings
+
+  central-cloudflare:
+    name: Central Worker build and local workerd conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy,rustfmt
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: central-cloudflare
+          workspaces: |
+            . -> target
+            crates/collaboration-central-cloudflare -> target
+          cache-on-failure: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install pinned local Worker tools
+        run: |
+          cargo install worker-build --version 0.8.7 --locked --root "$RUNNER_TEMP/central-worker-tools"
+          mkdir -p "$RUNNER_TEMP/central-node-tools"
+          pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact miniflare@5.20261012.0-beta
+          echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
+      - name: Check the standalone wasm shell and portable test contract
+        run: |
+          cargo fmt --manifest-path crates/collaboration-central-cloudflare/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path crates/collaboration-central-cloudflare/Cargo.toml --target wasm32-unknown-unknown --all-features -- -D warnings
+          cargo check --locked -p collaboration-central-conformance --no-default-features --target wasm32-unknown-unknown
+      - name: Prove default Access gating and absence of test controls
+        run: |
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --no-default-features
+          python3 scripts/tooling/check-central-worker-bundle.py production
+          cargo run --locked -p collaboration-central-conformance --example workerd_lifecycle -- default node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-default" 8957
+      - name: Prove Access, the shared suite and physical process restart locally
+        run: |
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
+          python3 scripts/tooling/check-central-worker-bundle.py faults
+          cargo run --locked -p collaboration-central-conformance --example workerd_lifecycle -- conformance node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-conformance" 8957
+      - name: Prove Fleet feed, notices, outbox loss and rejected-tail restart
+        run: |
+          for scenario in fleet-feed-restart notice-restart fleet-notices fleet-outbox-restart fleet-outbox-ack tail-restart; do
+            cargo run --locked -p collaboration-central-conformance --example workerd_lifecycle -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
+          done
+      - name: Build the deployment candidate without test features
+        run: |
+          worker-build crates/collaboration-central-cloudflare --no-opt -- --locked --no-default-features
+          python3 scripts/tooling/check-central-worker-bundle.py production
+
   validated:
     name: Validate Rust workspace
     if: always()
-    needs: [checks, lint, build, test]
+    needs: [checks, lint, build, test, central-core, central-cloudflare]
     runs-on: ubuntu-latest
     steps:
       - name: Require every validation job
         run: |
-          for result in "${{ needs.checks.result }}" "${{ needs.lint.result }}" "${{ needs.build.result }}" "${{ needs.test.result }}"; do
+          for result in "${{ needs.checks.result }}" "${{ needs.lint.result }}" "${{ needs.build.result }}" "${{ needs.test.result }}" "${{ needs.central-core.result }}" "${{ needs.central-cloudflare.result }}"; do
             test "${result}" = "success"
           done

@@ -35,9 +35,11 @@ sqlx-macros-core = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["fs"] }
 turso.workspace = true
+turso_parser.workspace = true
 url.workspace = true
 
 [dev-dependencies]
+nix = { workspace = true, features = ["time"] }
 serde_json.workspace = true
 tempfile = "3.27.0"
 tokio = { workspace = true, features = ["fs", "macros", "rt"] }

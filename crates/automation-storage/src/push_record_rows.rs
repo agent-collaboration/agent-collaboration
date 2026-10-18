@@ -12,6 +12,7 @@ use sqlx::FromRow;
 #[derive(FromRow)]
 pub(crate) struct PushRecordRow {
     pub push_id: String,
+    pub retention: String,
     pub kind: String,
     pub origin_kind: String,
     pub origin_service_id: Option<String>,
@@ -36,6 +37,7 @@ pub(crate) struct PushRecordRow {
 
 impl PushRecordRow {
     pub(crate) fn into_record(self) -> Result<PushRecord, StorageError> {
+        let retention: crate::push_retention::PushRetention = decode_json_enum(&self.retention)?;
         let kind = decode_json_enum(&self.kind)?;
         let origin = match self.origin_kind.as_str() {
             "session" => {
@@ -95,6 +97,7 @@ impl PushRecordRow {
             .transpose()
             .map_err(|_| StorageError::InvalidRecord)?;
         let delivery_state = decode_delivery_state(&self.delivery_state)?;
+        retention.validate_clock(delivery_state, self.settled_at.as_deref())?;
         let mode = self
             .dm_delivery_mode
             .as_deref()
@@ -192,7 +195,7 @@ pub(crate) fn serialize_timestamp(value: DateTime<Utc>) -> String {
     value.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
 }
 
-fn decode_delivery_state(value: &str) -> Result<PushDeliveryState, StorageError> {
+pub(crate) fn decode_delivery_state(value: &str) -> Result<PushDeliveryState, StorageError> {
     match value {
         "pending" => Ok(PushDeliveryState::Pending),
         "attempted" => Ok(PushDeliveryState::Attempted),
@@ -204,7 +207,7 @@ fn decode_delivery_state(value: &str) -> Result<PushDeliveryState, StorageError>
     }
 }
 
-fn decode_timestamp(value: String) -> Result<DateTime<Utc>, StorageError> {
+pub(crate) fn decode_timestamp(value: String) -> Result<DateTime<Utc>, StorageError> {
     if !value.ends_with('Z') {
         return Err(StorageError::InvalidRecord);
     }

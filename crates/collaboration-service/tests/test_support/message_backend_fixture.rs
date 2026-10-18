@@ -271,6 +271,7 @@ async fn exercise_message(
     let result = tokio::time::timeout(
         Duration::from_secs(3),
         client.send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {

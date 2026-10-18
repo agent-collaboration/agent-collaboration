@@ -43,6 +43,8 @@ async fn claimed_attempt(
 {
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: StoredMessage {
                 target: "target".into(),

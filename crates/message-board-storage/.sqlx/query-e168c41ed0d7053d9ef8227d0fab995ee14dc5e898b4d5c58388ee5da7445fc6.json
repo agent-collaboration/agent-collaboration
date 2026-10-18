@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT last_position AS \"last_position!: i64\", (SELECT COUNT(*) FROM fleet_checkpoint) AS \"count!: i64\" FROM fleet_checkpoint WHERE singleton = 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "last_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "e168c41ed0d7053d9ef8227d0fab995ee14dc5e898b4d5c58388ee5da7445fc6"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT json_extract(r.payload, '$.record.holder.actor') AS \"holder!: String\", json_quote(json_extract(r.payload, '$.record.ended')) AS \"ended!: String\" FROM role_assignments a CROSS JOIN record_identities r ON r.kind = a.kind AND r.id = a.assignment_id WHERE a.project_subject = ? AND a.role = 'lead' AND a.active = 1 LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "holder!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ended!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "3e2f0fd95e9e2a2088ada36f55842c1b66b1816231d4922df59aefb70a1dcff2"
+}

@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT f.position AS \"position!: i64\", f.entry AS \"entry!: String\" FROM json_each(?) k CROSS JOIN project_feed f ON f.position = k.value ORDER BY f.position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "entry!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b5a23951a27cb058aff370915920119ad018391fb446902db16b500d82c6ce17"
+}

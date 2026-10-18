@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"row_count!: i64\", MIN(epoch) AS \"minimum_epoch?: i64\", MAX(epoch) AS \"maximum_epoch?: i64\" FROM project_feed WHERE position > ? AND position <= ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "minimum_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "maximum_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "54eeadaa190682962efcf234fe7926a128322c1129a019abd6980d7b59a62830"
+}

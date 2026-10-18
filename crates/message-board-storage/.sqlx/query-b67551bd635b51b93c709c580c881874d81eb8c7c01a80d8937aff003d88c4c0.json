@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE thread_watches SET start_epoch = CASE WHEN active = 1 OR ? = 0 THEN start_epoch ELSE ? END, start_position = CASE WHEN active = 1 OR ? = 0 THEN start_position ELSE ? END, active = ? WHERE reader = ? AND thread_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "b67551bd635b51b93c709c580c881874d81eb8c7c01a80d8937aff003d88c4c0"
+}

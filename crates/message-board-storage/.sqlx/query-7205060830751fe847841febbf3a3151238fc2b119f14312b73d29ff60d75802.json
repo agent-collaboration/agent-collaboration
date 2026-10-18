@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_records(kind, id, workspace, payload) VALUES (?, ?, ?, ?) ON CONFLICT(kind, id) DO UPDATE SET payload = excluded.payload",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7205060830751fe847841febbf3a3151238fc2b119f14312b73d29ff60d75802"
+}

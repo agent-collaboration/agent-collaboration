@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_request_ledger(request_id, canonical_hash, payload) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "a2765deba939306a839b261037cbf08e77e3498ca316b964f53c874085feaceb"
+}

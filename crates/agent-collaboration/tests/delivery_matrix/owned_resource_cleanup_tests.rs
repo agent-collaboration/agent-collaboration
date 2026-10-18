@@ -55,7 +55,7 @@ async fn exercise_real_timer_cleanup(
     let wake_operation = OperationId::generate();
     owner.record_wake_submission(wake_operation.clone())?;
     let wake_request: WakeSendRequest = serde_json::from_value(json!({
-        "operationId": wake_operation,
+        "operationId": wake_operation,"requestedBy":{"kind":"owner"},"replace":false,
         "message": {
             "target": {
                 "endpoint": {
@@ -381,12 +381,14 @@ fn board_failure_projection_keeps_typed_rejection_separate_from_unknown_write() 
     use collaboration_client::{
         BoardClientError,
         board::{
-            BoardError, BoardFailureKind, BoardFailureStage, BoardNextAction, MessageId,
-            ResourceIdentity,
+            BoardError, BoardFailureKind, BoardFailureStage, BoardNextAction, ResourceIdentity,
+            ThreadId,
         },
     };
-    let root_message_id = MessageId::try_from("019f0000-0000-7000-8000-000000009014".to_owned())?;
-    let resource = ResourceIdentity::Thread { root_message_id };
+    let root_message_id = ThreadId::try_from("019f0000-0000-7000-8000-000000009014".to_owned())?;
+    let resource = ResourceIdentity::Thread {
+        thread_id: root_message_id,
+    };
     let rejected = super::project_board_failure(BoardClientError::Rejected(Box::new(
         BoardError::resource_not_found(resource.clone()),
     )));
@@ -460,7 +462,7 @@ fn wake_response_projection_keeps_retained_delivery_identity_and_disposition() -
     let expected_wakeup = WakeupId::try_from("019f0000-0000-7000-8000-000000009011".to_owned())?;
     let result: WakeMutationResult = serde_json::from_value(json!({
         "wakeup":{"definition":{"wakeupId":"019f0000-0000-7000-8000-000000009011",
-            "changeId":"019f0000-0000-7000-8000-000000009013",
+            "changeId":"019f0000-0000-7000-8000-000000009013","createdBy":{"kind":"owner"},
             "message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000401","endpointId":"codex-local"},"sessionId":"cleanup-fixture-only-target"},
                 "content":{"kind":"humanUser","text":"Synthetic retained-delivery boundary"},"delivery":"queue"},
             "timing":{"kind":"after","seconds":600},"anchorAt":"2026-10-15T00:00:00Z","expiresAt":null,"createdAt":"2026-10-15T00:00:00Z"},

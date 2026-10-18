@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT json_extract(request, '$.operation.project') AS \"project!: String\" FROM fleet_outbox_requests WHERE state = ? AND json_extract(request, '$.workspace') = ? AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "project!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "4ea508e7f128a236e51f4f2d76d89aee0101210adc6c9d1b811a723575163d6b"
+}

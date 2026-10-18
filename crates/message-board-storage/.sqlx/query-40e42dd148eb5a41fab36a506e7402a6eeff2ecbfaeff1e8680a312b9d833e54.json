@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO project_watches(reader, start_epoch, start_position, active) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "40e42dd148eb5a41fab36a506e7402a6eeff2ecbfaeff1e8680a312b9d833e54"
+}

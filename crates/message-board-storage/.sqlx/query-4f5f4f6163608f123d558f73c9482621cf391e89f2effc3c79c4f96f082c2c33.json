@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_records(kind, id, workspace, payload) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "4f5f4f6163608f123d558f73c9482621cf391e89f2effc3c79c4f96f082c2c33"
+}

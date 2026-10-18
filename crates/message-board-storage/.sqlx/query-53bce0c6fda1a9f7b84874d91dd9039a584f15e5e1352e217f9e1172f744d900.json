@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT payload AS \"payload!: String\", workspace AS \"workspace!: String\" FROM fleet_records WHERE kind = ? AND id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "workspace!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "53bce0c6fda1a9f7b84874d91dd9039a584f15e5e1352e217f9e1172f744d900"
+}

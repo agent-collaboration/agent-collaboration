@@ -414,8 +414,14 @@ async fn host_composes_discovery_and_retires_only_owned_communication_sockets() 
         .unwrap_or_else(|error| panic!("export cleanup: {error}"));
     std::fs::remove_dir(export_directory)
         .unwrap_or_else(|error| panic!("export directory cleanup: {error}"));
-    std::fs::remove_file(root.join("project-board.sqlite"))
-        .unwrap_or_else(|error| panic!("board database cleanup: {error}"));
+    for filename in ["fleet.sqlite", "fleet-cache.sqlite", "fleet-outbox.sqlite"] {
+        std::fs::remove_file(root.join(filename))
+            .unwrap_or_else(|error| panic!("{filename} cleanup: {error}"));
+        let wal = root.join(format!("{filename}-wal"));
+        if wal.exists() {
+            std::fs::remove_file(wal).unwrap_or_else(|error| panic!("native WAL cleanup: {error}"));
+        }
+    }
     std::fs::remove_file(root.join("automation.sqlite"))
         .unwrap_or_else(|error| panic!("automation database cleanup: {error}"));
     std::fs::remove_file(root.join("provider-operations.sqlite"))

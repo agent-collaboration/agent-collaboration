@@ -235,12 +235,14 @@ impl CollaborationClient {
         let value = self
             .delivery_receipt(
                 "message_send",
-                json!({
-                    "target": params.target,
-                    "message": message,
-                    "delivery": params.mode,
-                    "generationGuard": params.generation_guard,
-                }),
+                serde_json::to_value(crate::MessageSendRequest {
+                    item_id: params.item_id.clone(),
+                    target: params.target.clone(),
+                    message,
+                    delivery: params.mode,
+                    generation_guard: params.generation_guard.clone(),
+                })
+                .map_err(|_| ClientError::InvalidRequest("message request"))?,
             )
             .await?;
         let decoded =
@@ -260,7 +262,11 @@ impl CollaborationClient {
             receipt.push_id.clone(),
         )
         .to_string();
-        let consistent = receipt.target == params.target
+        let consistent = params
+            .item_id
+            .as_ref()
+            .is_none_or(|id| id.as_str() == receipt.push_id.as_str())
+            && receipt.target == params.target
             && receipt.link == expected_link
             && match (&delivery_receipt.reachability, &delivery_receipt.client) {
                 (None, None) => true,

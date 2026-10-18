@@ -7,7 +7,7 @@ use collaboration_protocol::{
 use serde_json::Value;
 
 pub(super) fn build_test_wake_push_draft<TMessage: DurableMessage>(
-    wake: &WakeRecord<TMessage>,
+    wake: &WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {

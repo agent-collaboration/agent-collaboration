@@ -1,6 +1,6 @@
 //! Opening the Turso engine connection that a [`TursoConnection`](crate::TursoConnection) wraps
 //!
-//! Opens `turso::Database` directly and applies `busy_timeout` and `foreign_keys` before
+//! Opens `turso::Database` directly and disables native busy spinning, then applies foreign keys before
 //! returning the connection.
 
 use std::{io, path::Path};
@@ -62,7 +62,7 @@ async fn apply_connection_settings(
     connection: &turso::Connection,
 ) -> Result<(), Error> {
     connection
-        .pragma_update("busy_timeout", options.get_busy_timeout().as_millis())
+        .pragma_update("busy_timeout", 0)
         .await
         .map_err(map_turso_error)?;
     let foreign_keys = if options.get_foreign_keys() {

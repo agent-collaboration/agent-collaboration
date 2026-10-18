@@ -1,7 +1,9 @@
 [workspace]
 resolver = "3"
+exclude = ["crates/collaboration-central-cloudflare"]
 members = [
     "crates/message-board",
+    "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",
     "crates/message-board-storage",
@@ -13,6 +15,11 @@ members = [
     "crates/collaboration-mcp",
     "crates/collaboration-service",
     "crates/collaboration-protocol",
+    "crates/collaboration-replication-protocol",
+    "crates/collaboration-central-core",
+    "crates/collaboration-central-local",
+    "crates/collaboration-central-conformance",
+    "crates/collaboration-mail-protocol",
     "crates/claude-code-peer-messaging",
     "crates/agent-collaboration",
     "crates/codex-router-auth",
@@ -118,6 +125,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "jso
 trybuild = "1.0.116"
 # Exact engine pin; default features would add mimalloc and FTS (Tantivy).
 turso = { version = "=0.8.1", default-features = false }
+turso_parser = "=0.8.1"
 unicode-width = "0.2.2"
 url = "2.5.8"
 zeroize = "1.9.0"

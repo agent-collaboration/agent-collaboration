@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO board_intent_scan_cursors(project_id, epoch, position) VALUES (?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET epoch = excluded.epoch, position = CASE WHEN excluded.epoch = board_intent_scan_cursors.epoch THEN max(board_intent_scan_cursors.position, excluded.position) ELSE excluded.position END WHERE excluded.epoch >= board_intent_scan_cursors.epoch",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "ccf273629b9942c1b2539f13d0910e85df00ecb7f54b9be790a11ffd38dee9d0"
+}

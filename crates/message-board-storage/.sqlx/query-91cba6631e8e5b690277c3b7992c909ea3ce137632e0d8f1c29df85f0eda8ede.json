@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO subtasks(subtask_id, task_id, place, checked) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "91cba6631e8e5b690277c3b7992c909ea3ce137632e0d8f1c29df85f0eda8ede"
+}

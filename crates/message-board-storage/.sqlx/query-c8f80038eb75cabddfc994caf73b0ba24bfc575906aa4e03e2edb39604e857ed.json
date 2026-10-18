@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "WITH same_reader AS (\n    SELECT reader, scope, membership_kind, membership_id, thread_id\n    FROM thread_subscriptions\n    WHERE reader = ? AND scope > ? ORDER BY scope LIMIT 101\n), later_readers AS (\n    SELECT reader, scope, membership_kind, membership_id, thread_id\n    FROM thread_subscriptions\n    WHERE reader > ? ORDER BY reader, scope LIMIT 101\n)\nSELECT reader AS \"reader!: String\", scope AS \"scope!: String\", membership_kind AS \"membership_kind!: String\", membership_id AS \"membership_id!: String\", thread_id AS \"thread_id: String\" FROM same_reader\nUNION ALL\nSELECT reader AS \"reader!: String\", scope AS \"scope!: String\", membership_kind AS \"membership_kind!: String\", membership_id AS \"membership_id!: String\", thread_id AS \"thread_id: String\" FROM later_readers\nORDER BY 1, 2 LIMIT 101\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "reader!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "scope!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "membership_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "membership_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "thread_id: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c8f80038eb75cabddfc994caf73b0ba24bfc575906aa4e03e2edb39604e857ed"
+}

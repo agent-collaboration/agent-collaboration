@@ -90,6 +90,7 @@ class PrepareSqlxTursoTests(unittest.TestCase):
         self.assertEqual(check_environment["SQLX_OFFLINE"], "false")
         self.assertEqual(check[check.index("--jobs") + 1], "1")
         self.assertIn("--all-features", check)
+
         self.assertIn("--all-targets", check)
 
     def test_write_mode_replaces_only_the_crate_metadata(self) -> None:
@@ -105,6 +106,29 @@ class PrepareSqlxTursoTests(unittest.TestCase):
             ["query-a.json", "query-b.json"],
         )
         self.assertEqual((self.stock_metadata / "query-stock.json").read_text(), "stock")
+
+    def test_board_queries_seed_through_the_driver_example_with_all_store_schemas(self) -> None:
+        sources = (
+            "crates/message-board-storage/project_migrations",
+            "crates/message-board-storage/fleet_migrations",
+            "crates/message-board-storage/fleet_cache_migrations",
+            "crates/message-board-storage/fleet_outbox_migrations",
+            "crates/message-board-storage/legacy_cursor_migrations",
+        )
+        commands = PREPARE_SQLX_TURSO.preparation_commands(
+            package_name="message-board-storage",
+            migration_sources=sources,
+            schema_database=self.repository_root / "schema.db",
+            staging_directory=self.repository_root / "metadata",
+        )
+        seed = commands[0][0]
+        check = commands[-1][0]
+        self.assertEqual(seed[seed.index("--package") + 1], "sqlx-turso")
+        self.assertEqual(tuple(seed[-len(sources):]), sources)
+        self.assertEqual(check[check.index("--package") + 1], "message-board-storage")
+        self.assertIn("--all-targets", check)
+        self.assertIn("--all-features", check)
+        self.assertIn(("message-board-storage", sources), PREPARE_SQLX_TURSO.TURSO_PREPARATION_TARGETS)
 
     def test_a_failed_step_leaves_committed_metadata_untouched(self) -> None:
         (self.metadata_directory / "query-original.json").write_text("original")

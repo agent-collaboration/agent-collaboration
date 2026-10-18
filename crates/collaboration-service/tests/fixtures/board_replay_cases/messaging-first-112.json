@@ -1,0 +1,1193 @@
+{
+  "case": "messaging-first-112",
+  "summary": "The Messaging milestone that shipped as PR #112 ('Messaging: thread subscriptions + Router push format', merged 2026-10-02 as dea647b5, released as v0.1.59). It began on 2026-09-29 as the thread-subscriptions design, after orchestrators missed Sidekick posts because board listens expired. The Lead designed it, an owner correction (relayed by the chief of staff) and a direct owner decision turned the push into a neutral locator, and two prerequisite PRs (#108 storage, #106 presence) merged first under two parallel Sidekicks. The owner then approved folding delivery and the Router push format into one PR, built by two Sidekicks (sidekick-push owning the PR, sidekick-subs the subscriptions lane) with an Opus xhigh reviewer as verifier. It stopped merged and released, with one open follow-up: the live S3/S5/S6 delivery-matrix cells were never verified and a post-release live check was owed.",
+  "sources": [
+    "PR #112 (body, commits, one PR comment; no GitHub reviews were filed)",
+    "PR #108 and PR #106 (merge commits)",
+    "git log of the #112 merge (dea647b5) and the docs commits 0b015c11 and 0a996e8b",
+    "GitHub Actions run 37003475071 (Validate changes) and the v0.1.59 release",
+    "Lead memory note: thread-subscriptions design (owner-set defaults, structural choices)",
+    "docs/specs/2026-09-28-thread-subscriptions/ and docs/specs/2026-09-30-router-push-format/",
+    "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)",
+    "board thread 'push-format-lane' (sidekick-push execution root)",
+    "board thread 'messaging-milestone' (sidekick-push milestone root)",
+    "board thread 'subs-lane' (sidekick-subs execution root)",
+    "board thread 'pr1-storage' (sidekick-storage execution root)"
+  ],
+  "actors": [
+    {
+      "alias": "lead",
+      "kind": "session",
+      "note": "codex-router Lead (Claude Opus); designed the work and led #112"
+    },
+    {
+      "alias": "owner",
+      "kind": "human",
+      "note": "repository owner; never writes directly, words are relayed (G3, U51)"
+    },
+    {
+      "alias": "chief-of-staff",
+      "kind": "session",
+      "note": "Codex session the owner named as the path to the Lead while AFK"
+    },
+    {
+      "alias": "sidekick-storage",
+      "kind": "session",
+      "note": "Luna xhigh Sidekick; PR1 #108 subscription storage"
+    },
+    {
+      "alias": "sidekick-presence",
+      "kind": "session",
+      "note": "Luna xhigh Sidekick; PR2 #106 target presence"
+    },
+    {
+      "alias": "sidekick-push",
+      "kind": "session",
+      "note": "Codex Sidekick; push format, then owner of the one #112 PR"
+    },
+    {
+      "alias": "sidekick-subs",
+      "kind": "session",
+      "note": "Codex Sidekick; #112 subscriptions lane (S2 + C2)"
+    },
+    {
+      "alias": "reviewer-opus",
+      "kind": "session",
+      "note": "Opus xhigh independent reviewer of #112 (verifier)"
+    }
+  ],
+  "setup": [
+    {
+      "op": "workspace_create",
+      "args": {
+        "workspaceId": "$workspace",
+        "name": "codex-router",
+        "description": "Agent Router"
+      }
+    },
+    {
+      "op": "board_create",
+      "args": {
+        "boardId": "$board",
+        "workspaceId": "$workspace",
+        "name": "codex-router",
+        "description": "Router delivery work",
+        "kind": {
+          "kind": "area"
+        }
+      }
+    }
+  ],
+  "events": [
+    {
+      "seq": 1,
+      "at": "2026-09-29T11:10:00Z",
+      "actor": "lead",
+      "op": "project_create",
+      "args": {
+        "projectId": "$project",
+        "boardId": "$board",
+        "title": "Messaging: thread subscriptions + Router push format"
+      },
+      "note": "The work began as the thread-subscriptions design root on 2026-09-29 and shipped as #112; the project uses the final PR title.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)",
+      "approxTime": true
+    },
+    {
+      "seq": 2,
+      "at": "2026-09-29T11:10:05Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "project",
+          "subject": "$project"
+        },
+        "role": "lead",
+        "holder": "@lead",
+        "model": "claude-opus",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "First lead names itself; no owner grant is needed (PD1 'The first lead', U51).",
+      "approxTime": true
+    },
+    {
+      "seq": 3,
+      "at": "2026-09-29T11:10:58Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.design",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Thread subscriptions replace `board thread listen` in a hard cutover. Design: a durable thread_subscriptions table with a backfill for open participants; a TargetPresence + LoadedOnly seam on the delivery routes; one ReaderDeliveryWorker per reader (quiet/cap timing, hold/wake/drop, restore on restart); subscribe, subscriptions, unsubscribe and wait replace listen. Owner-set defaults: auto-subscribe on join; deliver/poll/off and hold/wake/drop; 2 min quiet and 10 min cap per thread; 24 h lifetime, renewable; persisted. Lead's structural choices (authorship delegated by the owner): subscriptions never touch Acknowledged; an active subscription always implies a watch; durable per-root windows are written in the post transaction; window id and generation fence settlement. Why: orchestrators missed Sidekick posts because listens expired.",
+        "tags": [
+          "decision",
+          "design"
+        ],
+        "links": [
+          {
+            "kind": "repoPath",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "path": "docs/specs/2026-09-28-thread-subscriptions/program-design.md",
+            "commit": "0b015c114331bc3cb508a0c69eb09fa0552fb27c"
+          }
+        ]
+      },
+      "note": "Board checkpoint plus the Lead's memory note (owner-set defaults, structural choices). The design reviewer's round 1 (TS1-TS11) is folded into the PR2-early note below.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 4,
+      "at": "2026-09-29T11:34:03Z",
+      "actor": "lead",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.presence",
+        "name": "PR2 target presence",
+        "goal": "Report target presence and honour loaded-only delivery: TargetPresence and LoadPolicy on the delivery routes (plan section 5)."
+      },
+      "note": "Design review round 1 verified TS1, TS5 and TS7-TS11; PR2 depends only on the verified Program Design section 4, so it starts before PR1.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 5,
+      "at": "2026-09-29T11:34:04Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.presence"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-presence",
+        "model": "luna-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "PR2 Sidekick commissioned (Luna xhigh)."
+    },
+    {
+      "seq": 6,
+      "at": "2026-09-29T11:34:05Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.presence",
+        "workstreamId": "$ws.presence",
+        "title": "PR2: report target presence and honour loaded-only delivery",
+        "body": "Plan section 5; merged as #106.",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "PR2 task."
+    },
+    {
+      "seq": 7,
+      "at": "2026-09-29T11:35:10Z",
+      "actor": "lead",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.storage",
+        "name": "PR1 subscription storage",
+        "goal": "Durable subscription storage: tables with backfill, typed lifecycle and window APIs, monotonic Delivered and generation fencing."
+      },
+      "note": "PR1 starts once the storage residuals TS2/TS3/TS4/TS6 are verified.",
+      "source": "board thread 'pr1-storage' (sidekick-storage execution root)"
+    },
+    {
+      "seq": 8,
+      "at": "2026-09-29T11:35:11Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.storage"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-storage",
+        "model": "luna-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "PR1 Sidekick commissioned (Luna xhigh)."
+    },
+    {
+      "seq": 9,
+      "at": "2026-09-29T11:35:12Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.storage",
+        "workstreamId": "$ws.storage",
+        "title": "PR1: persist thread subscriptions",
+        "body": "Plan section 4; merged as #108.",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "PR1 task."
+    },
+    {
+      "seq": 10,
+      "at": "2026-09-29T13:54:05Z",
+      "actor": "chief-of-staff",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.owner-correction",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner correction: a thread-subscription push is a very succinct notice carrying the minimal thread and activity locator, not the message batch; the agent fetches the messages explicitly afterward. Revise Specification E8 and the Program Design's batch push: when Delivered advances, how the fetch cursor works, retry and duplicate behaviour, and proof that a notice cannot hide unread messages. No implementation until the design is aligned.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": []
+      },
+      "note": "Relayed owner words: the owner was AFK and named this session the path to the Lead.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 11,
+      "at": "2026-09-30T03:23:22Z",
+      "actor": "sidekick-storage",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.pr1-handback",
+        "subject": {
+          "kind": "task",
+          "subject": "$task.storage"
+        },
+        "text": "PR1 handback: implementation at 32116be6 on feat/thread-subscription-storage, clean and pushed; draft PR #108. Delivered: subscription tables with the R24 backfill; typed lifecycle and window APIs; explicit caller-supplied UTC times; bodyless pending-root notices capped at 20 roots; monotonic Delivered and generation/window settlement fencing; topic-watch materialization; leave-and-resolve draining. Local proof: fmt, workspace clippy and prepare-sqlx --check exit 0; focused board/storage tests 130/130; workspace 2,599 passed. Hosted CI run 36662032043 not green: two process-backed tests outside this diff failed.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 108
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "32116be66f023b9ece23c34bfe1350556c0cd0b7"
+          }
+        ]
+      },
+      "note": "Implementer hands PR1 back to the Lead; Opus review remediation passes followed before the merge.",
+      "source": "board thread 'pr1-storage' (sidekick-storage execution root)"
+    },
+    {
+      "seq": 12,
+      "at": "2026-09-30T06:32:20Z",
+      "actor": "lead",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.neutral-locator",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner decision (asked directly by the Lead): the subscription notice is a neutral locator. It supersedes the owner's earlier 'notice + title' answer and matches the relayed correction. One Router-authored line per due root, at most 20 roots and 2 KB per notice; each line carries only the Router's notice label, the root id, the activity range and the message count; a held notice adds 'held since <UTC>', a draining one 'thread resolved'. No bodies, summaries, titles, author names, fetch or ack instructions, or wording that claims owner authority. Delivered is the notified-through cursor per reader and root; Acknowledged moves only on explicit inbox acknowledge, so a notice cannot hide unread messages; a duplicate notice after a crash is harmless. `board thread wait` returns the same notice data.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.owner-correction"
+            }
+          }
+        ]
+      },
+      "note": "A changed decision is a new row linking the one it refines (WT-3).",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 13,
+      "at": "2026-09-30T14:02:55Z",
+      "actor": "lead",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.push",
+        "name": "Router push format",
+        "goal": "Compact one-line Router push format with stored, retrievable push records across every producer and delivery route."
+      },
+      "note": "Push-format lane opened; the owner later folded it and subscription delivery into one PR, #112 (see the one-PR decision).",
+      "source": "board thread 'push-format-lane' (sidekick-push execution root)"
+    },
+    {
+      "seq": 14,
+      "at": "2026-09-30T14:02:56Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.push"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-push",
+        "model": null,
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "Push-format Sidekick; it opened draft PR #112 for slice A at 15:33."
+    },
+    {
+      "seq": 15,
+      "at": "2026-09-30T14:02:57Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.push",
+        "workstreamId": "$ws.push",
+        "title": "Router push format: push line, stored push records and read surfaces, prepared pushes through every route",
+        "body": "Slices A, B and C0-C1e, plus the error-message slice E.",
+        "blockedBy": [],
+        "relatedTo": []
+      },
+      "note": "Push-format task."
+    },
+    {
+      "seq": 16,
+      "at": "2026-09-30T15:30:44Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.prereqs-accepted",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "PR1 #108 (storage) merged as e6155a4 (v0.1.53, released) and PR2 #106 (presence) merged as bd1c813 (0.1.54): accepted. The combined PR3+PR4 (delivery owner, neutral notice, listen cutover, matrix, release) is commissioned as one PR in slices, in one worktree, per the owner rule; the push-format slice C waits for it.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.pr1-handback"
+            }
+          },
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 108
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "e6155a433d5beb88249ef964295daa4f15e3e950"
+          },
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 106
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "bd1c81338ce569c0aa8fbf1b9b2c728a32d9e34a"
+          }
+        ]
+      },
+      "note": "Settles the PR1 handback (a later lead decision linking it). The PR3+PR4 commission to a third Sidekick, which handed over at 18:06, is recorded only in this text.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 17,
+      "at": "2026-09-30T15:30:50Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.storage",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "#108 merged.",
+      "approxTime": true
+    },
+    {
+      "seq": 18,
+      "at": "2026-09-30T15:30:51Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.presence",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "#106 merged.",
+      "approxTime": true
+    },
+    {
+      "seq": 19,
+      "at": "2026-09-30T15:30:52Z",
+      "actor": "lead",
+      "op": "workstream_close",
+      "args": {
+        "workstreamId": "$ws.storage",
+        "reason": "done",
+        "note": "#108 merged as e6155a4",
+        "expectedRevision": "$current"
+      },
+      "note": "PR1 lane finished; its Sidekick removed the worktree at 14:36.",
+      "approxTime": true
+    },
+    {
+      "seq": 20,
+      "at": "2026-09-30T15:30:53Z",
+      "actor": "lead",
+      "op": "workstream_close",
+      "args": {
+        "workstreamId": "$ws.presence",
+        "reason": "done",
+        "note": "#106 merged as bd1c813",
+        "expectedRevision": "$current"
+      },
+      "note": "PR2 lane finished.",
+      "approxTime": true
+    },
+    {
+      "seq": 21,
+      "at": "2026-09-30T18:06:21Z",
+      "actor": "lead",
+      "actingFor": "owner",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.one-pr",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "Owner-approved: Messaging is one PR (#112, 'Messaging: thread subscriptions + Router push format') and one release. Subscription notices are built directly as push records, with no interim per-root renderer; specs reconciled (subscriptions R9/R21, program design sections 5 and 6, push-format sequencing). #113 (compiled-Host test isolation) folds in as slice H and is closed. Plan DAG A -> B -> C1 -> S1 -> S2 -> C2 -> X, H before X. sidekick-push owns the PR; the PR3+PR4 Sidekick hands over its scaffolding and stops. One cargo build per worktree and one machine-wide full suite at a time. Reviews and gates unchanged: Lead assessment, then one Opus xhigh reviewer through corrections.",
+        "tags": [
+          "decision",
+          "owner"
+        ],
+        "links": [
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 112
+          }
+        ]
+      },
+      "note": "The PR comment on #112 records the same consolidation as an owner decision. The push-format workstream keeps its original name; the board has workstream_rename, omitted here to stay compact.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 22,
+      "at": "2026-09-30T18:06:35Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.subs-delivery",
+        "workstreamId": "$ws.push",
+        "title": "Subscription delivery owner, neutral notice and listen cutover",
+        "body": "Slices S1 and S2, then C2 DM holds and restore.",
+        "blockedBy": [
+          {
+            "project": "$project",
+            "task": "$task.storage"
+          },
+          {
+            "project": "$project",
+            "task": "$task.presence"
+          }
+        ],
+        "relatedTo": []
+      },
+      "note": "Delivery depends on both prerequisite PRs (both already done)."
+    },
+    {
+      "seq": 23,
+      "at": "2026-09-30T18:06:40Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.release",
+        "workstreamId": "$ws.push",
+        "title": "Delivery matrix, docs and release",
+        "body": "Slice X: acceptance matrix, collaboration docs, release notes and version.",
+        "blockedBy": [
+          {
+            "project": "$project",
+            "task": "$task.push"
+          },
+          {
+            "project": "$project",
+            "task": "$task.subs-delivery"
+          }
+        ],
+        "relatedTo": []
+      },
+      "note": "Release waits on both lanes."
+    },
+    {
+      "seq": 24,
+      "at": "2026-09-30T18:06:45Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.push"
+        },
+        "role": "verifier",
+        "holder": "@reviewer-opus",
+        "model": "claude-opus-xhigh",
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "The plan names one Opus xhigh reviewer through corrections. The reviewer's identity and its own posts are not on the board.",
+      "approxTime": true
+    },
+    {
+      "seq": 25,
+      "at": "2026-10-01T10:12:07Z",
+      "actor": "lead",
+      "op": "workstream_create",
+      "args": {
+        "workstreamId": "$ws.subs-lane",
+        "name": "#112 subscriptions lane (S2 + C2)",
+        "goal": "S2a integration, S2b CLI, S2c MCP, S2d listen deletion and handlers, then C2 DM holds and restore, in the shared #112 worktree."
+      },
+      "note": "A second Sidekick takes the subscription half of #112 in the same worktree, own-path commits only.",
+      "source": "board thread 'subs-lane' (sidekick-subs execution root)"
+    },
+    {
+      "seq": 26,
+      "at": "2026-10-01T10:12:08Z",
+      "actor": "lead",
+      "op": "role_grant",
+      "args": {
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.subs-lane"
+        },
+        "role": "implementer",
+        "holder": "@sidekick-subs",
+        "model": null,
+        "lineage": null,
+        "expectedRevision": "$current",
+        "ownerGrant": null
+      },
+      "note": "Subscriptions-lane Sidekick."
+    },
+    {
+      "seq": 27,
+      "at": "2026-10-01T10:12:09Z",
+      "actor": "lead",
+      "op": "task_move_workstream",
+      "args": {
+        "taskId": "$task.subs-delivery",
+        "workstreamId": "$ws.subs-lane",
+        "expectedRevision": "$current"
+      },
+      "note": "The task keeps its identity and blockers when it moves (TK-1)."
+    },
+    {
+      "seq": 28,
+      "at": "2026-10-01T10:57:08Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.dm-intent",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.subs-lane"
+        },
+        "text": "#112 C2 DM delivery intent. (1) DM-kind push records persist the caller's delivery intent: mode auto, queue or steer, plus an optional generation guard (service epoch and generation); non-DM records carry none; decoded through domain types, failing closed, no CHECK. The router_pushes migration is new in this PR, so it is amended in place and no released format changes. (2) At send time a steer or guarded DM to a target that is not running is rejected with a short typed reason and nothing is held. (3) On restore the owner delivers with the stored mode and pinned precondition; a steer or guarded record meeting not-running, a generation mismatch or a race settles rejected, never held; auto and queue follow the hold rules (LoadedOnly); a DM attempted without an outcome settles outcome_unknown and is never re-sent. (4) Tests: send-time rejections; auto/queue held then delivered across a restart; the restart-gap case; an unknown stored value fails closed; board unavailable while DMs still hold and deliver. Owner of C2: sidekick-subs.",
+        "tags": [
+          "decision"
+        ],
+        "links": []
+      },
+      "note": "Posted on the board because Lead-to-Codex Router sends were failing at the time.",
+      "source": "board thread 'ts-lead' (thread-subscriptions Lead root, codex-router board)"
+    },
+    {
+      "seq": 29,
+      "at": "2026-10-02T00:00:03Z",
+      "actor": "sidekick-push",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.ready-for-review",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.push"
+        },
+        "text": "#112 pushed and marked ready for review at head 4021f79a. Hosted Validate run 36943305133 in progress (format, dependency audit, lint and SQLx metadata passed). Local CI-profile nextest 3,107/3,108: only installed_cli_restarts_host_from_new_install_path failed on a bounded command deadline under workspace load and passed 1/1 alone; no bound or assertion changed. The PR body states that live matrix cells S3/S5/S6 are incomplete pending the owner's DEBUG credential reauthorization. Not merged.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 112
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "4021f79aea3256df902474f169b8f56c1f1e7a9d"
+          }
+        ]
+      },
+      "note": "Implementer hands the whole PR back for review.",
+      "source": "board thread 'subs-lane' (sidekick-subs execution root)"
+    },
+    {
+      "seq": 30,
+      "at": "2026-10-02T00:10:00Z",
+      "actor": "reviewer-opus",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.review-f",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.push"
+        },
+        "text": "Independent review of #112 at 4021f79a: corrections required. F1: a closed Claude Code peer rejects Auto DMs (NoRoute) instead of holding them. F2: a failed hold write or retry mark leaves the reader wedged until restart. F3: one corrupt subscription row, or a failed DM recovery query, stops valid readers from restoring. F4: a stored DM delivery error must return outcomeUnknown with the push link and a published error kind. F5: obsolete message header exports remain. F6: interrupted attempted pushes are not settled, and superseded or ended held subscription records are not terminalized.",
+        "tags": [
+          "handback",
+          "review"
+        ],
+        "links": [
+          {
+            "kind": "pullRequest",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "number": 112
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "4021f79aea3256df902474f169b8f56c1f1e7a9d"
+          }
+        ]
+      },
+      "note": "Reconstructed: the verdict reached the Lead off-board. Finding texts come from the implementers' red-first correction receipts; the time is placed before the first correction post (00:15).",
+      "source": "board thread 'subs-lane' (sidekick-subs execution root)",
+      "approxTime": true
+    },
+    {
+      "seq": 31,
+      "at": "2026-10-02T01:07:56Z",
+      "actor": "sidekick-subs",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.subs-receipt",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.subs-lane"
+        },
+        "text": "Subscription review correction receipt at 4e3fb79b. F2 (hold write and retry mark) and F3 (corrupt row, failed DM recovery query) each failed red before the repair and pass after it; the same reader delivers without a restart. Hermetic proof gaps closed: covering wait renews only covered poll subscriptions; a mode change during flight settles the original push; cap above 60 minutes and lifetime above 7 days report their allowed ranges; the Control subscriptions view reports pending, held and retry state over the real socket and SQLite. Owner suite 51/51.",
+        "tags": [
+          "handback"
+        ],
+        "links": [
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "4e3fb79bb2c20260242fd4e6d61003e1cc0e6466"
+          }
+        ]
+      },
+      "note": "Subscriptions-lane handback.",
+      "source": "board thread 'subs-lane' (sidekick-subs execution root)"
+    },
+    {
+      "seq": 32,
+      "at": "2026-10-02T01:09:00Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.lane-accepted",
+        "subject": {
+          "kind": "workstream",
+          "subject": "$ws.subs-lane"
+        },
+        "text": "Subscription lane accepted at 4e3fb79b: F2/F3 and all six hermetic proof gaps. Review F1-F6 accepted for correction. F1 settled: a Claude Code terminal rejects Queue with QueueUnsupported whether it is open or closed, and the CLI recommends resending with --delivery auto; only Auto DMs may be held and delivered once the peer is writable; Steer and guarded DMs stay rejected; other endpoints keep their Queue hold behaviour. F4-F6 go to sidekick-push.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.subs-receipt"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.review-f"
+            }
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "2343ec72668ad965d4b25ed3017ae144b78fd480"
+          }
+        ]
+      },
+      "note": "Relayed on the board by the lane Sidekick at 01:09:32; F1 is also recorded in the push-format program design (0a996e8b).",
+      "source": "board thread 'subs-lane' (sidekick-subs execution root)",
+      "approxTime": true
+    },
+    {
+      "seq": 33,
+      "at": "2026-10-02T12:05:29Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.ci-final",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "hosted-ci",
+              "subject": {
+                "kind": "task",
+                "id": "$task.release"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.release"
+            }
+          ],
+          "producerTime": "2026-10-02T12:05:29Z",
+          "anchor": null
+        }
+      },
+      "note": "Hosted Validate changes run 37003475071 succeeded on the final head 7f1fca31 (all jobs).",
+      "source": "GitHub Actions run 37003475071"
+    },
+    {
+      "seq": 34,
+      "at": "2026-10-02T13:50:31Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.merged-112",
+          "kind": {
+            "kind": "prFact",
+            "fact": {
+              "repository": "github.com/ShravanSunder/codex-router",
+              "number": 112,
+              "kind": {
+                "kind": "merged",
+                "mergeCommit": "dea647b545f4ed5c9cb22565856c196a3c36ac98"
+              },
+              "recordedBy": "@lead"
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.push"
+            },
+            {
+              "kind": "task",
+              "id": "$task.release"
+            }
+          ],
+          "producerTime": "2026-10-02T13:50:31Z",
+          "anchor": null
+        }
+      },
+      "note": "#112 merged into main as dea647b5 from head 7f1fca31.",
+      "source": "PR #112"
+    },
+    {
+      "seq": 35,
+      "at": "2026-10-02T13:51:00Z",
+      "actor": "lead",
+      "op": "work_trail_add",
+      "args": {
+        "rowId": "$row.merge-accepted",
+        "subject": {
+          "kind": "project"
+        },
+        "text": "#112 accepted and merged as dea647b5 (head 7f1fca31) under the owner's release authority, after the review corrections F1-F6 and the re-review's N1-N3 (the restart sweep settles only kinds without a recovery worker; malformed DM target rows are skipped; held-snapshot cleanup never supersedes a newer held push) and green hosted Validate run 37003475071. Local CI-profile nextest 3,143/3,144; the one known provider initialization flake passed alone. Live matrix cells S3/S5/S6 stay unverified: DEBUG credentials were reauthorized, but the isolated Host's RestartHost ran the CLI executable with --resume-run-directory ('unknown command'). A post-release live check follows. Version 0.1.59.",
+        "tags": [
+          "decision"
+        ],
+        "links": [
+          {
+            "kind": "record",
+            "record": {
+              "kind": "workTrailRow",
+              "id": "$row.ready-for-review"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "fact",
+              "id": "$fact.ci-final"
+            }
+          },
+          {
+            "kind": "record",
+            "record": {
+              "kind": "fact",
+              "id": "$fact.merged-112"
+            }
+          },
+          {
+            "kind": "commit",
+            "repository": "github.com/ShravanSunder/codex-router",
+            "sha": "dea647b545f4ed5c9cb22565856c196a3c36ac98"
+          }
+        ]
+      },
+      "note": "No Lead post records the merge itself; the PR body, the merge and the implementer's closing checkpoint ('per Lead direction, this execution thread is closing') carry it.",
+      "source": "PR #112; board thread 'subs-lane' (sidekick-subs execution root)",
+      "approxTime": true
+    },
+    {
+      "seq": 36,
+      "at": "2026-10-02T13:51:10Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.push",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "Push format shipped in #112.",
+      "approxTime": true
+    },
+    {
+      "seq": 37,
+      "at": "2026-10-02T13:51:11Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.subs-delivery",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "Subscription delivery shipped in #112.",
+      "approxTime": true
+    },
+    {
+      "seq": 38,
+      "at": "2026-10-02T13:51:12Z",
+      "actor": "lead",
+      "op": "task_set_status",
+      "args": {
+        "taskId": "$task.release",
+        "status": {
+          "kind": "done"
+        },
+        "expectedRevision": "$current"
+      },
+      "note": "Merged; release v0.1.59 follows.",
+      "approxTime": true
+    },
+    {
+      "seq": 39,
+      "at": "2026-10-02T13:51:20Z",
+      "actor": "lead",
+      "op": "task_create",
+      "args": {
+        "taskId": "$task.live-matrix",
+        "workstreamId": "$ws.push",
+        "title": "Post-release live S3/S5/S6 delivery check",
+        "body": "Run the live delivery-matrix cells S3, S5 and S6 that #112 could not verify before merge.",
+        "blockedBy": [],
+        "relatedTo": [
+          {
+            "project": "$project",
+            "task": "$task.release"
+          }
+        ]
+      },
+      "note": "The open follow-up named in the PR body and the closing checkpoint; no later record shows it done.",
+      "approxTime": true
+    },
+    {
+      "seq": 40,
+      "at": "2026-10-02T14:10:20Z",
+      "actor": "lead",
+      "op": "workstream_close",
+      "args": {
+        "workstreamId": "$ws.subs-lane",
+        "reason": "done",
+        "note": "Lane accepted at 4e3fb79b and shipped in #112",
+        "expectedRevision": "$current"
+      },
+      "note": "Closing checkpoint: the execution thread closes per Lead direction.",
+      "source": "board thread 'subs-lane' (sidekick-subs execution root)"
+    },
+    {
+      "seq": 41,
+      "at": "2026-10-02T14:15:13Z",
+      "actor": "lead",
+      "op": "fact_record",
+      "args": {
+        "fact": {
+          "factId": "$fact.release-0159",
+          "kind": {
+            "kind": "evaluatorResult",
+            "fact": {
+              "guard": "release",
+              "subject": {
+                "kind": "task",
+                "id": "$task.release"
+              },
+              "outcome": "met",
+              "evidence": [],
+              "evaluator": {
+                "actor": "@lead",
+                "engine": null,
+                "calibration": null
+              },
+              "executor": null
+            }
+          },
+          "links": [
+            {
+              "kind": "task",
+              "id": "$task.release"
+            }
+          ],
+          "producerTime": "2026-10-02T14:15:13Z",
+          "anchor": null
+        }
+      },
+      "note": "Release workflow for tag v0.1.59 succeeded; the GitHub release was published at 14:15:13.",
+      "source": "GitHub release v0.1.59"
+    }
+  ],
+  "questions": [
+    {
+      "ask": "what was decided",
+      "via": "work_trail_show with selection decisions (the decision register, newest first)",
+      "expect": [
+        {
+          "decision_ref": 35,
+          "text": "#112 accepted and merged as dea647b5; live S3/S5/S6 unverified, post-release check follows"
+        },
+        {
+          "decision_ref": 32,
+          "text": "Subscription lane accepted; review F1-F6 accepted; Claude Code Queue rejected open or closed, only Auto held"
+        },
+        {
+          "decision_ref": 28,
+          "text": "C2 DM delivery intent: persisted mode and guard, send-time rejection, restore rules, tests"
+        },
+        {
+          "decision_ref": 21,
+          "text": "Owner-approved: Messaging is one PR (#112) and one release; plan DAG; one Opus xhigh reviewer"
+        },
+        {
+          "decision_ref": 16,
+          "text": "PR1 #108 and PR2 #106 merged and accepted; PR3+PR4 commissioned as one PR"
+        },
+        {
+          "decision_ref": 12,
+          "text": "Owner decision: the subscription notice is a neutral locator (contract, cursors)",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 10,
+          "text": "Owner correction: succinct notice with a locator, not the message batch",
+          "actingFor": "owner"
+        },
+        {
+          "decision_ref": 3,
+          "text": "Design and owner-set defaults; why: listens expired and orchestrators missed posts"
+        }
+      ]
+    },
+    {
+      "ask": "where did it stop",
+      "via": "project_show, view_work, view_lead_load (lead), view_owner, view_card (lead, project)",
+      "expect": {
+        "state": "Open project: #112 merged (dea647b5) and released as v0.1.59; one follow-up task open.",
+        "projectClosed": false,
+        "lead": "lead",
+        "workstreams": [
+          {
+            "ref": "$ws.presence",
+            "state": "closed:done",
+            "implementer": "sidekick-presence",
+            "verifier": null,
+            "tasks": [
+              {
+                "ref": "$task.presence",
+                "status": "done"
+              }
+            ]
+          },
+          {
+            "ref": "$ws.storage",
+            "state": "closed:done",
+            "implementer": "sidekick-storage",
+            "verifier": null,
+            "tasks": [
+              {
+                "ref": "$task.storage",
+                "status": "done"
+              }
+            ]
+          },
+          {
+            "ref": "$ws.push",
+            "state": "open",
+            "implementer": "sidekick-push",
+            "verifier": "reviewer-opus",
+            "tasks": [
+              {
+                "ref": "$task.push",
+                "status": "done"
+              },
+              {
+                "ref": "$task.release",
+                "status": "done"
+              },
+              {
+                "ref": "$task.live-matrix",
+                "status": "todo"
+              }
+            ]
+          },
+          {
+            "ref": "$ws.subs-lane",
+            "state": "closed:done",
+            "implementer": "sidekick-subs",
+            "verifier": null,
+            "tasks": [
+              {
+                "ref": "$task.subs-delivery",
+                "status": "done"
+              }
+            ]
+          }
+        ],
+        "readyQueue": [
+          "$task.live-matrix"
+        ],
+        "blocked": [],
+        "pending": [
+          {
+            "kind": "openTask",
+            "ref": "$task.live-matrix",
+            "text": "post-release live S3/S5/S6 delivery check"
+          }
+        ],
+        "pendingHandbacks": [],
+        "settledHandbacks": [
+          {
+            "ref": 11,
+            "settledBy": 16
+          },
+          {
+            "ref": 29,
+            "settledBy": 35
+          },
+          {
+            "ref": 30,
+            "settledBy": 32
+          },
+          {
+            "ref": 31,
+            "settledBy": 32
+          }
+        ],
+        "ownerWaiting": [],
+        "owed": [],
+        "card": {
+          "actor": "lead",
+          "subject": "project",
+          "pendingHandbacks": [],
+          "pendingDecisions": [],
+          "nextObligation": null
+        }
+      }
+    },
+    {
+      "ask": "what proves it",
+      "via": "fact_list, work_trail_show (handback and decision rows with their links)",
+      "expect": [
+        {
+          "evidence_ref": 33,
+          "kind": "ci",
+          "what": "hosted Validate run 37003475071 met on head 7f1fca31"
+        },
+        {
+          "evidence_ref": 34,
+          "kind": "commit",
+          "what": "PR #112 merged as dea647b5"
+        },
+        {
+          "evidence_ref": 41,
+          "kind": "release",
+          "what": "v0.1.59 release published"
+        },
+        {
+          "evidence_ref": 31,
+          "kind": "test",
+          "what": "F2/F3 red-then-green tests; subscription owner suite 51/51 at 4e3fb79b"
+        },
+        {
+          "evidence_ref": 29,
+          "kind": "test",
+          "what": "local CI-profile nextest 3,107/3,108 at 4021f79a, one load-sensitive failure passing alone"
+        },
+        {
+          "evidence_ref": 30,
+          "kind": "review",
+          "what": "independent Opus review findings F1-F6, accepted at the lane decision"
+        },
+        {
+          "evidence_ref": 16,
+          "kind": "commit",
+          "what": "prerequisites merged: #108 as e6155a4 and #106 as bd1c813"
+        }
+      ]
+    }
+  ],
+  "probes": []
+}
