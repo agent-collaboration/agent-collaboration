@@ -62,7 +62,7 @@ fn host_mcp_bind_accepts_only_explicit_loopback_addresses() {
 fn host_mcp_bind_defaults_are_stable_for_normal_and_debug_modes() {
     assert_eq!(
         crate::host_command::default_mcp_bind(false),
-        std::net::SocketAddr::from(([127, 0, 0, 1], 8788))
+        std::net::SocketAddr::from(([127, 0, 0, 1], 19742))
     );
     assert_eq!(
         crate::host_command::default_mcp_bind(true),
