@@ -205,7 +205,7 @@ class SettingsValue(EvidenceView):
 
 class SettingsOption(EvidenceView):
     id: str
-    category: str | None
+    category: str | None = None
     currentValue: SettingsValue
     choices: list[SettingsChoice]
 
