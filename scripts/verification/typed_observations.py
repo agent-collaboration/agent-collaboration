@@ -170,7 +170,7 @@ class PublicOption(EvidenceView):
     effect: str
     scope: str
     optionId: str
-    persistentTarget: JsonObject | None = None
+    persistentTarget: str | None = None
 
 
 class PublicInteraction(EvidenceView):

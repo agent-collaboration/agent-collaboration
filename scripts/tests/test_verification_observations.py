@@ -34,6 +34,7 @@ from scripts.verification.typed_observations import (
     NativeExpectation,
     NativeThread,
     OperationView,
+    PublicOption,
     QuestionView,
     SettingsCatalog,
     observed_object,
@@ -128,6 +129,30 @@ class PortableProviderQualificationTests(unittest.TestCase):
         self.assertIn("exact-private-marker-command", prompt)
         self.assertNotIn("AskUserQuestion", prompt)
         self.assertNotIn("Bash", prompt)
+
+    def test_persistent_approval_option_preserves_disclosed_string(self) -> None:
+        option = PublicOption.model_validate(
+            {
+                "optionId": "allow-with-updates",
+                "effect": "allow",
+                "scope": "persistent",
+                "persistentTarget": "Provider permission settings",
+            }
+        )
+        self.assertEqual(option.persistentTarget, "Provider permission settings")
+        self.assertEqual(option.scope, "persistent")
+
+    def test_persistent_approval_target_rejects_wrong_wire_types(self) -> None:
+        for malformed in [{"target": "settings"}, ["settings"], 7, True]:
+            with self.subTest(malformed=malformed), self.assertRaises(ValueError):
+                _ = PublicOption.model_validate(
+                    {
+                        "optionId": "allow-with-updates",
+                        "effect": "allow",
+                        "scope": "persistent",
+                        "persistentTarget": malformed,
+                    }
+                )
 
 
 class ProcessOwnershipTests(unittest.TestCase):
