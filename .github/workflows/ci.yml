@@ -184,12 +184,15 @@ jobs:
           scripts/tooling/bootstrap-tools.sh ci
           echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
       # Compile every test binary once, then run the suites in parallel from
-      # the built artifacts so they don't contend for cargo's build lock.
+      # the built artifacts so they don't contend for cargo's build lock. Each
+      # build uses exactly its run step's package selection and features, so
+      # the run reuses these artifacts instead of relinking them.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros --no-run
+          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros --no-run
           cargo nextest run --profile ci --locked -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-features --no-run
           cargo nextest run --profile ci --locked -p sqlx-turso-core --no-run
+          df -h /
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
         background: true
