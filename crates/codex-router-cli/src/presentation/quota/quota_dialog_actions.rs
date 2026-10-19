@@ -170,10 +170,9 @@ pub(super) fn quota_dialog_actions(context: QuotaDialogActionContext) -> Vec<Any
     } else {
         vec![]
     };
-    let buttons = labels.into_iter().map(|(label, code)| {
+    labels.into_iter().map(|(label, code)| {
         let context = context.clone();
         element!(DialogAction(label: label.to_owned(),keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
             emphasis:if code==KeyCode::Enter {codex_router_tui::DialogActionEmphasis::Primary}else {codex_router_tui::DialogActionEmphasis::Secondary},handler: move |_| context.clone().dispatch(code))).into_any()
-    }).collect::<Vec<_>>();
-    buttons
+    }).collect::<Vec<_>>()
 }

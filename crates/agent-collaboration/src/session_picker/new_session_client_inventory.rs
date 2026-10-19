@@ -96,7 +96,7 @@ pub(super) async fn read_client_inventory(
             (expected, reply)
         }
         PickerSourceContext::DefaultHosted => {
-            crate::sessions::source_ssh_executor::inspect_local_clients(&context).await?
+            crate::sessions::source_ssh_executor::inspect_local_clients(context).await?
         }
         PickerSourceContext::LocalCodex => {
             return Err(SourceReadError::Rejected(

@@ -1,5 +1,8 @@
 use super::*;
-use crate::presentation::quota::{credit_usage_compact_summary,QuotaRowStatus,QuotaHeaderFacts,QuotaPoolCensus,QuotaFreshnessCensus};
+use crate::presentation::quota::{
+    QuotaFreshnessCensus, QuotaHeaderFacts, QuotaPoolCensus, QuotaRowStatus,
+    credit_usage_compact_summary,
+};
 
 pub(super) fn quota_status_view_model(
     report: &QuotaStatusReport,
@@ -14,7 +17,7 @@ pub(super) fn quota_status_view_model(
     QuotaStatusViewModel {
         width,
         route_line: quota_status_pool_summary(report),
-        header:quota_header_facts(report),
+        header: quota_header_facts(report),
         why_line: String::new(),
         pool_freshness_summary: quota_status_pool_freshness_summary(report),
         selection_projection_degraded: !report.selection_projection_source.is_authoritative(),
@@ -218,7 +221,9 @@ fn display_quota_row_status(report: &QuotaStatusReport, row: &QuotaStatusRow) ->
     if report.credential_store_availability.is_ready() {
         QuotaRowStatus::Account(quota_account_status(row))
     } else {
-        QuotaRowStatus::CredentialUnavailable {notice:report.credential_store_availability.status_label()}
+        QuotaRowStatus::CredentialUnavailable {
+            notice: report.credential_store_availability.status_label(),
+        }
     }
 }
 
@@ -251,10 +256,25 @@ fn weekly_floor_guard_summary(row: &QuotaStatusRow) -> String {
     }
 }
 
-fn quota_header_facts(report:&QuotaStatusReport)->QuotaHeaderFacts {
-    let mut pool=QuotaPoolCensus::default();let mut freshness=QuotaFreshnessCensus::default();let mut observed_clients=None;
-    for row in &report.rows {pool.observe(row.availability);freshness.observe(row.freshness);if let Some(count)=row.active_clients_value {observed_clients=Some(observed_clients.unwrap_or(0u32).saturating_add(count));}}
-    QuotaHeaderFacts {route_band:report.route_band.clone(),pool,freshness,observed_clients,credential_notice:(!report.credential_store_availability.is_ready()).then(||report.credential_store_availability.status_label())}
+fn quota_header_facts(report: &QuotaStatusReport) -> QuotaHeaderFacts {
+    let mut pool = QuotaPoolCensus::default();
+    let mut freshness = QuotaFreshnessCensus::default();
+    let mut observed_clients = None;
+    for row in &report.rows {
+        pool.observe(row.availability);
+        freshness.observe(row.freshness);
+        if let Some(count) = row.active_clients_value {
+            observed_clients = Some(observed_clients.unwrap_or(0u32).saturating_add(count));
+        }
+    }
+    QuotaHeaderFacts {
+        route_band: report.route_band.clone(),
+        pool,
+        freshness,
+        observed_clients,
+        credential_notice: (!report.credential_store_availability.is_ready())
+            .then(|| report.credential_store_availability.status_label()),
+    }
 }
 
 #[cfg(test)]
@@ -262,44 +282,161 @@ mod presentation_projection_tests {
     use super::*;
     use crate::presentation::quota::QuotaAccountStatus;
 
-    fn observed_row()->QuotaStatusRow {
+    fn observed_row() -> QuotaStatusRow {
         QuotaStatusRow {
-            provider:codex_router_core::provider::Provider::Openai,account_id:AccountId::new("projection-account").unwrap(),active_credential_generation:Some(1),account_label:"Projection account".to_owned(),account_status:"enabled".to_owned(),
-            short_window:String::new(),weekly_window:String::new(),pace:String::new(),burn:String::new(),updated:String::new(),active_clients:"3 clients".to_owned(),active_clients_value:Some(3),active_clients_source:"fixture",reset_credits_available:"unknown".to_owned(),reset_credits_available_value:None,credit_usage:CreditUsageStatus::default(),routing:String::new(),next_use:String::new(),weekly_pace:None,windows:Vec::new(),
-            availability:AccountAvailability::Usable,freshness:QuotaEvidenceFreshness::Fresh,routing_exclusion:RoutingExclusion::None,quota_evidence_reason:QuotaEvidenceReason::Ok,routing_reason:RoutingReason::AvailableSamePool,preferred_next:false,short_pressure:0,long_pressure:0,short_salvage:0,long_salvage:0,limiting_window:None,weekly_survival_margin_basis_points:None,weekly_projected_exhaustion_unix_seconds:None,weekly_burn_rate_confidence:QuotaRunRateConfidence::Unknown,weekly_quota_floor_basis_points:None,oauth_maintenance:None,
+            provider: codex_router_core::provider::Provider::Openai,
+            account_id: AccountId::new("projection-account").unwrap(),
+            active_credential_generation: Some(1),
+            account_label: "Projection account".to_owned(),
+            account_status: "enabled".to_owned(),
+            short_window: String::new(),
+            weekly_window: String::new(),
+            pace: String::new(),
+            burn: String::new(),
+            updated: String::new(),
+            active_clients: "3 clients".to_owned(),
+            active_clients_value: Some(3),
+            active_clients_source: "fixture",
+            reset_credits_available: "unknown".to_owned(),
+            reset_credits_available_value: None,
+            credit_usage: CreditUsageStatus::default(),
+            routing: String::new(),
+            next_use: String::new(),
+            weekly_pace: None,
+            windows: Vec::new(),
+            availability: AccountAvailability::Usable,
+            freshness: QuotaEvidenceFreshness::Fresh,
+            routing_exclusion: RoutingExclusion::None,
+            quota_evidence_reason: QuotaEvidenceReason::Ok,
+            routing_reason: RoutingReason::AvailableSamePool,
+            preferred_next: false,
+            short_pressure: 0,
+            long_pressure: 0,
+            short_salvage: 0,
+            long_salvage: 0,
+            limiting_window: None,
+            weekly_survival_margin_basis_points: None,
+            weekly_projected_exhaustion_unix_seconds: None,
+            weekly_burn_rate_confidence: QuotaRunRateConfidence::Unknown,
+            weekly_quota_floor_basis_points: None,
+            oauth_maintenance: None,
         }
     }
-    fn report(rows:Vec<QuotaStatusRow>)->QuotaStatusReport {
-        QuotaStatusReport {app_version:env!("CARGO_PKG_VERSION").to_owned(),route_band:"responses".to_owned(),selected_pool:SelectedPool::Usable,preferred_next_account_id:None,selection_projection_source:SelectionProjectionSource::SqlxProjection,now_unix_seconds:0,credential_store_availability:CredentialStoreAvailability::Ready,rows}
+    fn report(rows: Vec<QuotaStatusRow>) -> QuotaStatusReport {
+        QuotaStatusReport {
+            app_version: env!("CARGO_PKG_VERSION").to_owned(),
+            route_band: "responses".to_owned(),
+            selected_pool: SelectedPool::Usable,
+            preferred_next_account_id: None,
+            selection_projection_source: SelectionProjectionSource::SqlxProjection,
+            now_unix_seconds: 0,
+            credential_store_availability: CredentialStoreAvailability::Ready,
+            rows,
+        }
     }
     #[test]
     fn row_projection_preserves_preference_freshness_and_credential_override_precedence() {
-        for (preferred,freshness,availability,reason,expected) in [
-            (true,QuotaEvidenceFreshness::Stale,AccountAvailability::Reserve,RoutingReason::HeldReserve,QuotaAccountStatus::Preferred),
-            (false,QuotaEvidenceFreshness::Stale,AccountAvailability::Usable,RoutingReason::AvailableSamePool,QuotaAccountStatus::Stale),
-            (false,QuotaEvidenceFreshness::Unknown,AccountAvailability::Usable,RoutingReason::AvailableSamePool,QuotaAccountStatus::Unknown),
-            (false,QuotaEvidenceFreshness::Fresh,AccountAvailability::Usable,RoutingReason::AvailableSamePool,QuotaAccountStatus::Available),
-            (false,QuotaEvidenceFreshness::Fresh,AccountAvailability::Reserve,RoutingReason::HeldReserve,QuotaAccountStatus::Held),
-            (false,QuotaEvidenceFreshness::Fresh,AccountAvailability::Blocked,RoutingReason::UnknownFallbackAvailable,QuotaAccountStatus::Blocked),
+        for (preferred, freshness, availability, reason, expected) in [
+            (
+                true,
+                QuotaEvidenceFreshness::Stale,
+                AccountAvailability::Reserve,
+                RoutingReason::HeldReserve,
+                QuotaAccountStatus::Preferred,
+            ),
+            (
+                false,
+                QuotaEvidenceFreshness::Stale,
+                AccountAvailability::Usable,
+                RoutingReason::AvailableSamePool,
+                QuotaAccountStatus::Stale,
+            ),
+            (
+                false,
+                QuotaEvidenceFreshness::Unknown,
+                AccountAvailability::Usable,
+                RoutingReason::AvailableSamePool,
+                QuotaAccountStatus::Unknown,
+            ),
+            (
+                false,
+                QuotaEvidenceFreshness::Fresh,
+                AccountAvailability::Usable,
+                RoutingReason::AvailableSamePool,
+                QuotaAccountStatus::Available,
+            ),
+            (
+                false,
+                QuotaEvidenceFreshness::Fresh,
+                AccountAvailability::Reserve,
+                RoutingReason::HeldReserve,
+                QuotaAccountStatus::Held,
+            ),
+            (
+                false,
+                QuotaEvidenceFreshness::Fresh,
+                AccountAvailability::Blocked,
+                RoutingReason::UnknownFallbackAvailable,
+                QuotaAccountStatus::Blocked,
+            ),
         ] {
-            let mut row=observed_row();row.preferred_next=preferred;row.freshness=freshness;row.availability=availability;row.routing_reason=reason;
-            let mut report=report(vec![row.clone()]);
-            assert_eq!(display_quota_row_status(&report,&row),QuotaRowStatus::Account(expected));
-            assert_eq!(quota_selected_account_view_model(&report,&row).status,expected.label());
-            report.credential_store_availability=CredentialStoreAvailability::KeychainLocked;
-            assert_eq!(display_quota_row_status(&report,&row),QuotaRowStatus::CredentialUnavailable {notice:report.credential_store_availability.status_label()});
+            let mut row = observed_row();
+            row.preferred_next = preferred;
+            row.freshness = freshness;
+            row.availability = availability;
+            row.routing_reason = reason;
+            let mut report = report(vec![row.clone()]);
+            assert_eq!(
+                display_quota_row_status(&report, &row),
+                QuotaRowStatus::Account(expected)
+            );
+            assert_eq!(
+                quota_selected_account_view_model(&report, &row).status,
+                expected.label()
+            );
+            report.credential_store_availability = CredentialStoreAvailability::KeychainLocked;
+            assert_eq!(
+                display_quota_row_status(&report, &row),
+                QuotaRowStatus::CredentialUnavailable {
+                    notice: report.credential_store_availability.status_label()
+                }
+            );
         }
     }
     #[test]
     fn header_projects_whole_pool_even_when_visible_rows_are_filtered_and_status_is_stale() {
-        let mut stale_usable=observed_row();stale_usable.freshness=QuotaEvidenceFreshness::Stale;
-        let mut fresh_reserve=observed_row();fresh_reserve.account_id=AccountId::new("reserve-account").unwrap();fresh_reserve.availability=AccountAvailability::Reserve;fresh_reserve.routing_reason=RoutingReason::HeldReserve;fresh_reserve.active_clients_value=Some(0);
-        let report=report(vec![stale_usable.clone(),fresh_reserve]);
-        let projected=quota_status_view_model(&report,&[stale_usable],120);
-        assert_eq!(projected.rows.len(),1);
-        assert_eq!(projected.header.pool,QuotaPoolCensus {usable:1,reserve:1,blocked:0,unknown:0,excluded:0});
-        assert_eq!(projected.header.freshness,QuotaFreshnessCensus {fresh:1,stale:1,unknown:0});
-        assert_eq!(projected.header.observed_clients,Some(3));
-        assert_eq!(projected.rows[0].status,QuotaRowStatus::Account(QuotaAccountStatus::Stale));
+        let mut stale_usable = observed_row();
+        stale_usable.freshness = QuotaEvidenceFreshness::Stale;
+        let mut fresh_reserve = observed_row();
+        fresh_reserve.account_id = AccountId::new("reserve-account").unwrap();
+        fresh_reserve.availability = AccountAvailability::Reserve;
+        fresh_reserve.routing_reason = RoutingReason::HeldReserve;
+        fresh_reserve.active_clients_value = Some(0);
+        let report = report(vec![stale_usable.clone(), fresh_reserve]);
+        let projected = quota_status_view_model(&report, &[stale_usable], 120);
+        assert_eq!(projected.rows.len(), 1);
+        assert_eq!(
+            projected.header.pool,
+            QuotaPoolCensus {
+                usable: 1,
+                reserve: 1,
+                blocked: 0,
+                unknown: 0,
+                excluded: 0
+            }
+        );
+        assert_eq!(
+            projected.header.freshness,
+            QuotaFreshnessCensus {
+                fresh: 1,
+                stale: 1,
+                unknown: 0
+            }
+        );
+        assert_eq!(projected.header.observed_clients, Some(3));
+        assert_eq!(
+            projected.rows[0].status,
+            QuotaRowStatus::Account(QuotaAccountStatus::Stale)
+        );
     }
 }

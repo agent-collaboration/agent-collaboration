@@ -9,6 +9,9 @@ use crate::sessions::configured_inventory_read_tests::SourceApiFixture;
 #[path = "default_inventory_publication_tests.rs"]
 mod default_inventory_publication_tests;
 
+#[path = "ssh_source_publication_tests.rs"]
+mod ssh_source_publication_tests;
+
 async fn capture_all_status(
     source: PickerSourceContext,
     actual: SessionsPickerRecordLoader,
@@ -59,6 +62,7 @@ async fn capture_all_status(
             observer_sender.send(key(KeyCode::F(1))).unwrap();
         }
     };
+    let mut last_frame = String::new();
     let render = tokio::time::timeout(Duration::from_secs(2), async {
         let mut picker = element! {SessionsPickerComponent(request,record_loader:Some(loader),width:180usize,height:60usize,selected_outcome_out:&mut outcome)};
         let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(input));
@@ -67,6 +71,7 @@ async fn capture_all_status(
         let mut captured = None;
         while let Some(canvas) = frames.next().await {
             let text = canvas.to_string();
+            last_frame = text.clone();
             if !selected && text.contains("Choose machine") {
                 selected = true;
                 sender.send(key(KeyCode::Down)).unwrap();
@@ -84,7 +89,9 @@ async fn capture_all_status(
         captured.expect("actual source status must be rendered")
     });
     let (frame, ()) = tokio::join!(render, observer);
-    let frame = frame.unwrap();
+    let frame = frame.unwrap_or_else(|error| {
+        panic!("source status did not reach {marker}: {error}; last frame: {last_frame}")
+    });
     assert!(outcome.is_none());
     frame
 }

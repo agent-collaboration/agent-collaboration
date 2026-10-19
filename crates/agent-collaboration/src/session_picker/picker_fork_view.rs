@@ -22,7 +22,7 @@ pub(super) fn confirm_fork(
     {
         match confirmation.confirm() {
             Some(ForkLaunchTarget::Codex(selection)) => {
-                outcome.set(Some(SessionsPickerOutcome::ForkSession(selection)))
+                outcome.set(Some(SessionsPickerOutcome::ForkSession(*selection)))
             }
             Some(ForkLaunchTarget::Native(selection)) => {
                 model.begin_native_fork(*selection);

@@ -386,7 +386,13 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
                 })
                 .unwrap_or_else(|| panic!("missing {label}: {text}"));
             let byte = line.find(label).unwrap();
-            (unicode_width::UnicodeWidthStr::width(&line[..byte]), row)
+            (
+                unicode_width::UnicodeWidthStr::width(
+                    line.get(..byte)
+                        .expect("matched text starts at UTF-8 boundary"),
+                ),
+                row,
+            )
         };
         if !choices_open {
             let (column, row) = locate("Apply");

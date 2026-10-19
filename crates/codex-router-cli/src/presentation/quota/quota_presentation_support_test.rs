@@ -645,7 +645,9 @@ fn quota_selected_panel_text(frame: &str) -> String {
         .find(|line| line.contains("Selected account"))
         .expect("selected panel heading");
     let start = unicode_width::UnicodeWidthStr::width(
-        &heading[..heading.find("Selected account").unwrap()],
+        heading
+            .get(..heading.find("Selected account").unwrap())
+            .expect("matched text starts at UTF-8 boundary"),
     );
     frame
         .lines()

@@ -79,6 +79,10 @@ pub(crate) use router_connection_registry::{RouterRegistryError, RouterRegistryR
 #[path = "session_commands/picker_runtime_inventory.rs"]
 mod picker_runtime_inventory;
 
+#[cfg(test)]
+#[path = "../tests/fake_api_support/mod.rs"]
+pub(crate) mod fake_api_support;
+
 #[path = "session_commands/configured_inventory_loader.rs"]
 pub(crate) mod configured_inventory_loader;
 #[path = "session_commands/configured_inventory_query.rs"]

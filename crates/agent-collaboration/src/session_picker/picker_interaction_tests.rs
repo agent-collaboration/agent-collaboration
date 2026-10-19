@@ -41,12 +41,14 @@ async fn provider_selection_shows_read_only_details_without_a_codex_outcome() {
                     phase = 1;
                 } else if phase == 1
                     && frame.contains("Session details")
-                    && frame.contains("Read-only")
+                    && frame.contains("Client actions have not been checked")
                 {
                     assert!(
                         frame.contains("Claude fixture"),
                         "dialog must identify its provider session: {frame}"
                     );
+                    assert!(frame.contains("Copy session ID"));
+                    assert!(!frame.contains("Close  Copy session ID  Load"));
                     sender.send(control_shift_enter_key()).unwrap();
                     sender
                         .send(TerminalEvent::Key(KeyEvent::new(

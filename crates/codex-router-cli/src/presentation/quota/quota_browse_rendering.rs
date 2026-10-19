@@ -124,7 +124,7 @@ fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyEleme
         let account_id=row.account_id.clone();let state=props.focused_account_id;
         element! {InteractiveQuotaAccountRow(row:Some(row.clone()),width:row_width,focused:props.focused_row_index==Some(index),interaction_enabled:props.interaction_enabled,
             click_handler:move |_|if let Some(mut state)=state {state.set(Some(account_id.clone()));})}.into_any()
-    }).collect::<Vec<_>>();
+    });
     element! {
         View(width:props.width as u32,max_height:props.height as u32,min_height:0,flex_shrink:1.0_f32,
             border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
@@ -139,7 +139,7 @@ fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyEleme
             }
             codex_router_tui::DialogBodyViewport {
                 #(props.rows.is_empty().then(||element!(Text(content:props.empty_notice.clone().unwrap_or_else(||"No selectable account".to_owned()),color:Color::Grey))))
-                #((rows.into_iter().enumerate()).map(|(index,row)|element! {
+                #((rows.enumerate()).map(|(index,row)|element! {
                     View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else {1}) {#(row)}
                 }))
             }

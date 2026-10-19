@@ -45,6 +45,10 @@ pub(crate) type DetailsClientInspector = Arc<
 #[path = "details_client_action_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+#[path = "details_client_inspection_tests.rs"]
+mod inspection_tests;
+
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub(super) enum DetailsClientReadState {
     #[default]
@@ -138,9 +142,7 @@ impl DetailsClientCapabilities {
         use crate::sessions::SessionPickerIdentity;
         let service = match (&query.record.identity, self) {
             (SessionPickerIdentity::HostedProvider(target), Self::Managed { binding, .. })
-                if target.endpoint == binding.endpoint
-                    && binding.runtime.provider
-                        == collaboration_client::protocol::ProviderKind::Cursor =>
+                if target.endpoint == binding.endpoint =>
             {
                 Some(&binding.endpoint.service_id)
             }
@@ -173,7 +175,7 @@ pub(super) fn production_inspector(context: crate::CliContext) -> DetailsClientI
             };
             use collaboration_client::protocol::{
                 ChannelDescription, CodexGeneration, ProviderCapabilityName,
-                ProviderCapabilityStatus, ProviderKind, ProviderSessionState,
+                ProviderCapabilityStatus, ProviderSessionState,
             };
             let (expected, inventory, native_claude) =
                 super::new_session_client_inventory::read_client_inventory(
@@ -249,9 +251,6 @@ pub(super) fn production_inspector(context: crate::CliContext) -> DetailsClientI
                     let binding = bindings.next().ok_or(SourceReadError::InvalidReply)?;
                     if bindings.next().is_some() {
                         return Err(SourceReadError::InvalidReply);
-                    }
-                    if binding.runtime.provider != ProviderKind::Cursor {
-                        return Ok(DetailsClientCapabilities::Unavailable("Managed actions are available for Cursor; Claude uses its native background launcher".to_owned()));
                     }
                     let reply = crate::sessions::source_client_action::read_provider_details(
                         &context,

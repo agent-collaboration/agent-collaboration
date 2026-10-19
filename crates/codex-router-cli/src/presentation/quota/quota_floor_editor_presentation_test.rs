@@ -335,8 +335,10 @@ async fn real_iocraft_arrow_button_handles_mouse_click() {
                     .enumerate()
                     .find(|(_, line)| line.contains('▶'))
                     .expect("visible increment control");
-                let column =
-                    unicode_width::UnicodeWidthStr::width(&line[..line.find('▶').unwrap()]);
+                let column = unicode_width::UnicodeWidthStr::width(
+                    line.get(..line.find('▶').unwrap())
+                        .expect("matched text starts at UTF-8 boundary"),
+                );
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),

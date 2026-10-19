@@ -309,8 +309,10 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
                         .enumerate()
                         .find(|(_, line)| line.contains("beta") && line.contains("available"))
                         .expect("visible account row");
-                    let column =
-                        unicode_width::UnicodeWidthStr::width(&line[..line.find("beta").unwrap()]);
+                    let column = unicode_width::UnicodeWidthStr::width(
+                        line.get(..line.find("beta").unwrap())
+                            .expect("matched text starts at UTF-8 boundary"),
+                    );
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
@@ -655,10 +657,14 @@ fn quota_status_list_shows_weekly_5h_and_weekly_forecast() {
     let forecast_line = text.lines().find(|line| line.contains("□□□□□□□│")).unwrap();
     assert_eq!(
         unicode_width::UnicodeWidthStr::width(
-            &weekly_line[..weekly_line.find("██████████").unwrap()]
+            weekly_line
+                .get(..weekly_line.find("██████████").unwrap())
+                .expect("matched text starts at UTF-8 boundary")
         ),
         unicode_width::UnicodeWidthStr::width(
-            &forecast_line[..forecast_line.find("□□□□□□□│").unwrap()]
+            forecast_line
+                .get(..forecast_line.find("□□□□□□□│").unwrap())
+                .expect("matched text starts at UTF-8 boundary")
         ),
         "quota values share the right-hand field origin: {text}"
     );

@@ -3,9 +3,43 @@ use super::*;
 use crate::presentation::session_picker::SourceInventoryRejection;
 use serde_json::json;
 
-#[path = "../../tests/fake_api_support/mod.rs"]
-mod fake_api_support;
-use fake_api_support::{FakeCollaborationApi, FakeReply};
+use crate::sessions::fake_api_support::{FakeCollaborationApi, FakeReply};
+
+#[test]
+fn rejected_default_catalogue_invalidates_provider_state_and_native_coverage_even_when_runtime_unknown()
+ {
+    use crate::picker_runtime_status::{NativeLiveCoverage, NativeLiveReadState};
+    use crate::presentation::session_picker::picker_model::SessionsPickerModel;
+    let summary=serde_json::from_value(json!({"origin":"hostedProvider","target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"remembered-managed"},"workingDirectory":"/source/saved","updatedAt":2,"state":"running","requestedPolicy":{"access":"write-restricted"},"approver":{"humanId":"saved-approver"},"createdBy":{"humanId":"creator"}})).unwrap();
+    let mut row = SessionPickerRecord::from_provider_summary(&summary, "Remembered Cursor");
+    row.runtime_status = PickerRuntimeStatus::Unknown;
+    let identity = row.identity.clone();
+    let mut request = picker_request();
+    request.records = vec![row];
+    request.root = SessionsPickerRoot::Any;
+    let mut model = SessionsPickerModel::new(request, 120);
+    model.native_live_coverage = vec![NativeLiveCoverage {
+        endpoint: serde_json::from_value(
+            json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"}),
+        )
+        .unwrap(),
+        service_epoch: "00000000-0000-4000-8000-000000000002"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+        state: NativeLiveReadState::Complete,
+    }];
+    model.invalidate_runtime_statuses();
+    let row = model.request.records.first().unwrap();
+    assert_eq!(row.identity, identity);
+    assert_eq!(row.cwd.as_deref(), Some("/source/saved"));
+    assert_eq!(row.runtime_status, PickerRuntimeStatus::Unknown);
+    assert_eq!(row.provider_state, None);
+    assert!(
+        model.native_live_coverage.is_empty(),
+        "a rejected read has no fresh native completeness claim"
+    );
+}
 
 async fn create_stored_catalog(home: &Path) {
     use sqlx::Connection;

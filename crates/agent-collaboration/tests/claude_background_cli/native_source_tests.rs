@@ -14,7 +14,7 @@ fn source_request(fixture: &ClaudeProcessFixture) -> serde_json::Value {
 
 #[tokio::test]
 async fn source_native_missing_receipt_is_unknown_without_router_id_or_second_launch() {
-    let fixture = ClaudeProcessFixture::new().await;
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
     let request = source_request(&fixture);
     let output = tokio::time::timeout(
         Duration::from_secs(5),
@@ -64,7 +64,7 @@ async fn source_native_missing_receipt_is_unknown_without_router_id_or_second_la
         1,
         "no automatic preflight/recovery retry"
     );
-    assert_eq!(fixture.invocation().arguments, ["--bg"]);
+    assert_eq!(fixture.invocation().unwrap().arguments, ["--bg"]);
 }
 
 #[tokio::test]
@@ -81,7 +81,7 @@ async fn source_native_wrong_service_or_epoch_rejects_before_health_or_native_ch
             "staleBinding",
         ),
     ] {
-        let fixture = ClaudeProcessFixture::new().await;
+        let fixture = ClaudeProcessFixture::new().await.unwrap();
         let mut request = source_request(&fixture);
         *request.pointer_mut(field).unwrap() = json!(value);
         let output = fixture
@@ -100,7 +100,7 @@ async fn source_native_wrong_service_or_epoch_rejects_before_health_or_native_ch
 
 #[tokio::test]
 async fn source_native_observed_receipt_and_arguments_are_preserved_without_id_conversion() {
-    let fixture = ClaudeProcessFixture::new().await;
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
     let mut request = source_request(&fixture);
     let arguments = [
         "--append-system-prompt",
@@ -131,7 +131,7 @@ async fn source_native_observed_receipt_and_arguments_are_preserved_without_id_c
         "an opaque vendor receipt must not become a Router ID or conversation SessionRef"
     );
     assert_eq!(
-        fixture.invocation().arguments,
+        fixture.invocation().unwrap().arguments,
         [
             "--bg",
             "--append-system-prompt",
@@ -141,7 +141,7 @@ async fn source_native_observed_receipt_and_arguments_are_preserved_without_id_c
         ]
     );
     assert_eq!(
-        fixture.invocation().working_directory,
+        fixture.invocation().unwrap().working_directory,
         fixture.working_directory
     );
     assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 1);

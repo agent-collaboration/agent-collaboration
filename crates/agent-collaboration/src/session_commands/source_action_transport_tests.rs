@@ -27,7 +27,7 @@ fn profile() -> RouterConnectionProfile {
 async fn native_ssh_lost_or_misattributed_receipt_keeps_action_unknown_without_replay() {
     let root = tempfile::Builder::new()
         .prefix("native-ssh-")
-        .tempdir_in("/private/tmp")
+        .tempdir()
         .unwrap();
     let executable = root.path().join("ssh");
     std::fs::write(&executable, r#"#!/usr/bin/python3

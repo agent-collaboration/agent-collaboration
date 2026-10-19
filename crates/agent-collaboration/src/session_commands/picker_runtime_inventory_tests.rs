@@ -36,9 +36,7 @@ fn runtime_picker_preserves_native_subagent_classification() {
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 
-#[path = "../../tests/fake_api_support/mod.rs"]
-mod fake_api_support;
-use fake_api_support::{FakeCollaborationApi, FakeReply};
+use crate::sessions::fake_api_support::{FakeCollaborationApi, FakeReply};
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 

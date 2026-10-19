@@ -32,7 +32,9 @@ pub(in crate::quota) fn quota_human_group(row: &QuotaStatusRow) -> QuotaHumanGro
     }
 }
 
-pub(in crate::quota) fn quota_account_status(row: &QuotaStatusRow) -> crate::presentation::quota::QuotaAccountStatus {
+pub(in crate::quota) fn quota_account_status(
+    row: &QuotaStatusRow,
+) -> crate::presentation::quota::QuotaAccountStatus {
     use crate::presentation::quota::QuotaAccountStatus;
     if row.preferred_next {
         return QuotaAccountStatus::Preferred;

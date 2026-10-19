@@ -157,7 +157,8 @@ impl SourceApiFixture {
             format!("http://{address}/mcp"),
             shutdown.clone(),
         )
-        .await;
+        .await
+        .expect("start owned API observer");
         Self {
             _root: root,
             url: recorder.url.clone().expect("TCP fixture publishes a URL"),
@@ -222,7 +223,10 @@ impl SourceApiFixture {
 
     pub(crate) async fn finish(self) {
         self.shutdown.cancel();
-        self.recorder.finish().await;
+        self.recorder
+            .finish()
+            .await
+            .expect("settle owned API observer");
         tokio::time::timeout(Duration::from_secs(2), self.task)
             .await
             .unwrap()

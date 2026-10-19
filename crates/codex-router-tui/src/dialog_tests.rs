@@ -295,7 +295,9 @@ fn selectable_row_reserves_two_cells_for_every_content_line() {
         }.to_string();
         for (row, label) in [(0, "東京"), (1, "Provider"), (2, "Metadata")] {
             let line = frame.lines().nth(row).unwrap();
-            let prefix = &line[..line.find(label).unwrap()];
+            let prefix = line
+                .get(..line.find(label).unwrap())
+                .expect("matched label starts at UTF-8 boundary");
             assert_eq!(prefix.chars().count(), 2, "{frame}");
         }
     }
@@ -345,7 +347,9 @@ fn form_field_columns_use_terminal_layout_for_wide_labels() {
     .to_string();
     for label in ["Sunbook", "/repo"] {
         let line = frame.lines().find(|line| line.contains(label)).unwrap();
-        let prefix = &line[..line.find(label).unwrap()];
+        let prefix = line
+            .get(..line.find(label).unwrap())
+            .expect("matched label starts at UTF-8 boundary");
         // The CJK label occupies four cells, with four remaining label cells and a two-cell gap.
         let cells = prefix
             .chars()

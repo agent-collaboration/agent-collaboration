@@ -1,9 +1,7 @@
 //! Actual API target qualification, without executing a vendor or routed preflight.
 use super::*;
+use crate::sessions::fake_api_support::{FakeCollaborationApi, FakeReply};
 use serde_json::{Value, json};
-#[path = "../../tests/fake_api_support/mod.rs"]
-mod fake_api_support;
-use fake_api_support::{FakeCollaborationApi, FakeReply};
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 fn membership(endpoint_id: &str) -> Value {

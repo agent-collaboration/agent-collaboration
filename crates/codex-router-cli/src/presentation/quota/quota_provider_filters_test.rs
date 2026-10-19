@@ -727,10 +727,14 @@ fn account_rows_wrap_full_name_with_provider_below_and_fixed_selector_columns() 
                 "provider belongs below account: {frame}"
             );
             let name_column = unicode_width::UnicodeWidthStr::width(
-                &name_line[..name_line.find("東京").unwrap()],
+                name_line
+                    .get(..name_line.find("東京").unwrap())
+                    .expect("matched text starts at UTF-8 boundary"),
             );
             let provider_column = unicode_width::UnicodeWidthStr::width(
-                &provider_line[..provider_line.find("◎").unwrap()],
+                provider_line
+                    .get(..provider_line.find("◎").unwrap())
+                    .expect("matched text starts at UTF-8 boundary"),
             );
             assert_eq!(
                 name_column, provider_column,

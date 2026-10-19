@@ -29,7 +29,10 @@ async fn observe_session_pointer(
                         .find(|(_, line)| line.contains(target))
                         .expect("literal row must be visible");
                     let byte = line.find(target).unwrap();
-                    let column = unicode_width::UnicodeWidthStr::width(&line[..byte]);
+                    let column = unicode_width::UnicodeWidthStr::width(
+                        line.get(..byte)
+                            .expect("matched text starts at UTF-8 boundary"),
+                    );
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             kind,
@@ -129,7 +132,10 @@ async fn sessions_picker_start_new_click_opens_form_and_start_is_explicit() {
                         .find(|(_, line)| line.contains("Sessions ·"))
                         .unwrap();
                     let byte = line.find("New").unwrap();
-                    let column = unicode_width::UnicodeWidthStr::width(&line[..byte]);
+                    let column = unicode_width::UnicodeWidthStr::width(
+                        line.get(..byte)
+                            .expect("matched text starts at UTF-8 boundary"),
+                    );
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
@@ -302,7 +308,10 @@ async fn sealed_stored_model_fixture_exposes_real_pointer_targets() {
             .enumerate()
             .find(|(_, line)| line.contains(target))
             .expect("sealed fixture target");
-        let column = unicode_width::UnicodeWidthStr::width(&line[..line.find(target).unwrap()]);
+        let column = unicode_width::UnicodeWidthStr::width(
+            line.get(..line.find(target).unwrap())
+                .expect("matched text starts at UTF-8 boundary"),
+        );
         println!("sealed_pointer_target={target} column={column} row={row}");
         assert!(column < 160 && row < 24, "{frame}");
     }

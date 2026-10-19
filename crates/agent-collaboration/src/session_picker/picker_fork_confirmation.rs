@@ -52,7 +52,7 @@ pub(super) struct NativeForkSelection {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) enum ForkLaunchTarget {
-    Codex(SessionActionSelection),
+    Codex(Box<SessionActionSelection>),
     Native(Box<NativeForkSelection>),
     Unsupported,
 }
@@ -143,7 +143,9 @@ impl ForkConfirmation {
             launch_target: if record.identity.is_provider() {
                 ForkLaunchTarget::Unsupported
             } else {
-                ForkLaunchTarget::Codex(SessionActionSelection::from_picker_record(record))
+                ForkLaunchTarget::Codex(Box::new(SessionActionSelection::from_picker_record(
+                    record,
+                )))
             },
             title: record.title.clone(),
             source_label,
