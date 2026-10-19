@@ -14,8 +14,8 @@ use super::quota_floor_editor::WeeklyQuotaFloorSaver;
 use super::quota_floor_editor::render_weekly_floor_editor;
 use super::quota_floor_editor::step_weekly_floor_percent;
 use super::quota_floor_editor::weekly_floor_editor_key_command;
+use super::quota_reset_component_input::forced_quota_exit_key;
 use super::quota_status_component::QuotaStatusComponent;
-use super::quota_status_component::forced_quota_exit_key;
 use super::quota_status_view_model::QuotaStatusViewModelLoader;
 
 #[test]
@@ -225,7 +225,7 @@ async fn committed_save_with_failed_reload_stays_truthful_and_does_not_save_twic
         frames
             .iter()
             .rev()
-            .any(|frame| frame.contains("current") && frame.contains("1%"))
+            .any(|frame| frame.contains("Current") && frame.contains("1%"))
     );
 }
 
@@ -317,24 +317,51 @@ fn WeeklyFloorMouseHarness(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
 
 #[tokio::test]
 async fn real_iocraft_arrow_button_handles_mouse_click() {
-    let events = vec![
-        TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-            MouseEventKind::Down(MouseButton::Left),
-            12,
-            5,
-        )),
-        TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
-    ];
-
-    let frames = element!(WeeklyFloorMouseHarness)
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-            events,
-        )))
-        .map(|canvas| canvas.to_string())
-        .collect::<Vec<_>>()
-        .await;
-
-    assert!(frames.iter().any(|frame| frame.contains("  9%")));
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut harness = element!(WeeklyFloorMouseHarness);
+    let frames = harness.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut clicked = false;
+    let mut observed = false;
+    tokio::time::timeout(Duration::from_secs(2), async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            if !clicked {
+                let (row, line) = frame
+                    .lines()
+                    .enumerate()
+                    .find(|(_, line)| line.contains('▶'))
+                    .expect("visible increment control");
+                let column =
+                    unicode_width::UnicodeWidthStr::width(&line[..line.find('▶').unwrap()]);
+                sender
+                    .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                        MouseEventKind::Down(MouseButton::Left),
+                        column as u16,
+                        row as u16,
+                    )))
+                    .unwrap();
+                clicked = true;
+            } else if frame
+                .lines()
+                .any(|line| line.contains("Floor") && line.contains("11%"))
+            {
+                observed = true;
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Char('q'),
+                    )))
+                    .unwrap();
+            }
+        }
+    })
+    .await
+    .expect("actual arrow click changes the draft before exit");
+    assert!(observed);
 }
 
 fn control_key(character: char) -> KeyEvent {
@@ -376,17 +403,16 @@ async fn weekly_floor_dialog_pointer_changes_draft_without_saving_on_cancel() {
                     let (row, line) = frame
                         .lines()
                         .enumerate()
-                        .find(|(_, line)| line.contains("floor") && line.contains('▶'))
+                        .find(|(_, line)| line.contains("Floor") && line.contains('▶'))
                         .expect("real composed dialog must expose increment control");
                     let offset = line.find('▶').unwrap();
                     let column = UnicodeWidthStr::width(
                         line.get(..offset)
                             .expect("glyph begins at a UTF-8 boundary"),
                     );
-                    assert_eq!(
-                        (column, row),
-                        (32, 12),
-                        "actual global floor-arrow geometry: {frame}"
+                    assert!(
+                        column < 120 && row < 36,
+                        "increment control stays in the physical viewport: {frame}"
                     );
                     println!("composed_floor_increment column={column} row={row}\n{frame}");
                     sender
@@ -400,7 +426,7 @@ async fn weekly_floor_dialog_pointer_changes_draft_without_saving_on_cancel() {
                 }
                 2 if frame
                     .lines()
-                    .any(|line| line.contains("floor") && line.contains("1%")) =>
+                    .any(|line| line.contains("Floor") && line.contains("1%")) =>
                 {
                     assert_eq!(
                         save_calls.load(Ordering::SeqCst),

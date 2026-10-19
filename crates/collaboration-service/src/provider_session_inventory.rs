@@ -295,6 +295,7 @@ pub(crate) async fn list_provider_sessions(
                 working_directory: record.working_directory,
                 updated_at: record.updated_at_ms.div_euclid(1_000),
                 state,
+                requested_policy: record.requested_policy,
                 approver,
                 created_by: record.created_by,
             },

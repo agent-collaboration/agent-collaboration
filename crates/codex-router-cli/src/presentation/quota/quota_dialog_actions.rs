@@ -4,7 +4,6 @@ use super::quota_floor_editor::*;
 use super::quota_provider_filters::*;
 use super::quota_reset_component_input::*;
 use super::quota_reset_presentation_model::*;
-use super::quota_status_component::current_unix_seconds;
 use super::quota_status_view_model::QuotaStatusAccountViewModel;
 use crate::quota_reset::reset_session_supervisor::{
     ResetIntentSender, ResetWorkflowSnapshot, WorkflowPhase,
@@ -103,15 +102,15 @@ pub(super) fn quota_dialog_actions(context: QuotaDialogActionContext) -> Vec<Any
         match editor.phase {
             WeeklyFloorEditorPhase::Saving => vec![],
             WeeklyFloorEditorPhase::SavedRefreshFailed => vec![("Retry refresh", KeyCode::Enter)],
-            _ => vec![("Save", KeyCode::Enter), ("Cancel", KeyCode::Esc)],
+            _ => vec![("Cancel", KeyCode::Esc), ("Save", KeyCode::Enter)],
         }
     } else if phase == WorkflowPhase::Committing {
         vec![]
     } else if phase != WorkflowPhase::Browse {
         match phase {
-            WorkflowPhase::Inspected => vec![("Review", KeyCode::Enter), ("Cancel", KeyCode::Esc)],
+            WorkflowPhase::Inspected => vec![("Cancel", KeyCode::Esc), ("Review", KeyCode::Enter)],
             WorkflowPhase::Confirming => {
-                let mut choices = vec![("No", KeyCode::Left)];
+                let mut choices = vec![("Cancel", KeyCode::Esc), ("No", KeyCode::Left)];
                 if snapshot
                     .as_ref()
                     .is_some_and(ResetWorkflowSnapshot::yes_enabled)
@@ -119,38 +118,62 @@ pub(super) fn quota_dialog_actions(context: QuotaDialogActionContext) -> Vec<Any
                     choices.push(("Yes", KeyCode::Right));
                 }
                 choices.push(("Confirm", KeyCode::Enter));
-                choices.push(("Cancel", KeyCode::Esc));
                 choices
             }
             WorkflowPhase::Result => vec![("Close", KeyCode::Esc)],
             _ => vec![("Cancel", KeyCode::Esc)],
         }
     } else if let Some(options) = context.account_options.read().as_ref() {
-        if options.editor.is_some() {
-            vec![("Save", KeyCode::Enter), ("Cancel", KeyCode::Esc)]
+        if let Some(editor) = options.editor.as_ref() {
+            match editor.phase {
+                CreditPolicyEditorPhase::Saving => vec![],
+                CreditPolicyEditorPhase::SavedReloadFailed => {
+                    vec![("Cancel", KeyCode::Esc), ("Retry refresh", KeyCode::Enter)]
+                }
+                _ => vec![
+                    ("Cancel", KeyCode::Esc),
+                    (
+                        if editor.choice.is_open() {
+                            "Select"
+                        } else {
+                            "Save"
+                        },
+                        KeyCode::Enter,
+                    ),
+                ],
+            }
         } else {
-            vec![
+            let mut labels = vec![
+                ("Close", KeyCode::Esc),
                 (
                     if options.tab == AccountOptionsTab::Resets {
-                        "Inspect"
+                        "Credits"
                     } else {
-                        "Edit"
+                        "Resets"
                     },
-                    KeyCode::Enter,
+                    KeyCode::Tab,
                 ),
-                ("Close", KeyCode::Esc),
-            ]
+            ];
+            if options.tab == AccountOptionsTab::Credits {
+                labels.push(("Refresh", KeyCode::Char('r')));
+            }
+            labels.push((
+                if options.tab == AccountOptionsTab::Resets {
+                    "Inspect"
+                } else {
+                    "Edit"
+                },
+                KeyCode::Enter,
+            ));
+            labels
         }
     } else {
         vec![]
     };
     let buttons = labels.into_iter().map(|(label, code)| {
         let context = context.clone();
-        element!(DialogAction(label: label.to_owned(), handler: move |_| context.clone().dispatch(code))).into_any()
+        element!(DialogAction(label: label.to_owned(),keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
+            emphasis:if code==KeyCode::Enter {codex_router_tui::DialogActionEmphasis::Primary}else {codex_router_tui::DialogActionEmphasis::Secondary},handler: move |_| context.clone().dispatch(code))).into_any()
     }).collect::<Vec<_>>();
-    if buttons.is_empty() {
-        Vec::new()
-    } else {
-        vec![element! { View(column_gap: 3) { #(buttons) } }.into_any()]
-    }
+    buttons
 }

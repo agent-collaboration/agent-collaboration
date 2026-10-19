@@ -376,7 +376,7 @@ fn assert_ordered_inventory_pages(frames: &[String], expected_pages: &[(&str, &s
                 .enumerate()
                 .skip(next_frame_index)
                 .find_map(|(index, frame)| {
-                    (frame.contains("[ Resets ]")
+                    (frame.contains("Account options · Resets")
                         && frame.contains(page_range)
                         && frame.contains(&voucher_marker))
                     .then_some(index)

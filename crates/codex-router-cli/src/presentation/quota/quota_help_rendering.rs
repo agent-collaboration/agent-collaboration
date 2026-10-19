@@ -6,9 +6,7 @@ use codex_router_tui::{
 use iocraft::prelude::*;
 
 use super::quota_status_view_model::QuotaStatusViewModel;
-use super::responsive_quota_layout::{
-    quota_spinner_tick, quota_title_row, quota_title_status, truncate_quota_header_text,
-};
+use super::responsive_quota_layout::quota_title_row;
 
 #[derive(Clone, Copy, Default)]
 pub(super) enum QuotaHelpMode {
@@ -55,22 +53,40 @@ pub(super) fn render_quota_header(props: QuotaHeaderProps<'_>) -> AnyElement<'st
         return quota_title_row(model, width, tick);
     }
     let column_gap: u16 = if width < 64 { 1 } else { 2 };
-    // Keep the title and both actions; reserve their actual labels and three gaps.
     let status_width = width.saturating_sub(23 + 3 * usize::from(column_gap));
-    let full_status = quota_title_status(model, tick);
-    let status = if width < 64
-        && unicode_width::UnicodeWidthStr::width(full_status.as_str()) > status_width
-    {
-        // Operational words take precedence over a decorative spinner on phones.
-        full_status
-            .strip_prefix(quota_spinner_tick(tick))
-            .unwrap_or(&full_status)
-            .trim_start()
+    let status = model
+        .header
+        .freshness
+        .summary(model.header.observed_clients, status_width);
+    let separate = unicode_width::UnicodeWidthStr::width(status.as_str()) > status_width;
+    let children = if separate {
+        vec![details_action]
     } else {
-        full_status.as_str()
+        vec![
+            element!(UiText(content:status,role:UiTextRole::Secondary)).into_any(),
+            details_action,
+        ]
     };
-    let status = truncate_quota_header_text(status, status_width);
-    element!(SurfaceHeader(title: "Quota status".to_owned(), inactive, column_gap, help_action: Some(quota_help_action(help)), children: vec![element!(UiText(content: status, role: UiTextRole::Secondary)).into_any(), details_action])).into_any()
+    element! {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        SurfaceHeader(title:"Quota status".to_owned(),inactive,column_gap,help_action:Some(quota_help_action(help)),children)
+        #(separate.then(||element!(Text(content:model.header.freshness.summary(model.header.observed_clients,width),color:Color::Grey,wrap:TextWrap::Wrap))))
+    }}.into_any()
+}
+
+pub(super) fn render_quota_route(
+    model: &QuotaStatusViewModel,
+    width: usize,
+) -> AnyElement<'static> {
+    let route = format!("Pool-wide: {}", model.header.route_band);
+    let budget = width.saturating_sub(unicode_width::UnicodeWidthStr::width(route.as_str()) + 2);
+    let counts = model.header.pool.summary(budget);
+    element! {View(width:100pct,column_gap:2,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
+        Text(content:route,color:Color::White,wrap:TextWrap::Wrap)
+        View(max_width:100pct,flex_shrink:0.0_f32) {Text(content:counts,color:Color::Grey,wrap:TextWrap::Wrap)}
+        #(model.selection_projection_degraded.then(||element!(Text(content:"degraded",color:Color::White))))
+        #(model.header.credential_notice.as_ref().map(|notice|element!(Text(content:notice.clone(),color:Color::White,wrap:TextWrap::Wrap))))
+        #((model.header.pool.total()==0).then(||element!(Text(content:"no accounts",color:Color::White))))
+    }}.into_any()
 }
 
 pub(super) fn render_quota_help(
@@ -94,11 +110,12 @@ pub(super) fn render_quota_help(
         QuotaHelpMode::Filters => (
             "Account filters",
             vec![
-                ("↑ / ↓", "Choose provider"),
+                ("↑ / ↓", "Move field or choice focus"),
                 ("Tab / Shift+Tab", "Move focus"),
+                ("Type / Paste", "Search an open choice"),
                 ("Space", "Toggle disabled accounts"),
-                ("Enter", "Apply draft; Cancel when focused"),
-                ("Esc", "Discard draft"),
+                ("Enter", "Open choice; Apply draft when focused"),
+                ("Esc", "Close choice; otherwise discard draft"),
             ],
         ),
         QuotaHelpMode::Details => (
@@ -147,6 +164,38 @@ pub(super) fn render_quota_help(
                 .collect(),
         },
         ShortcutSection {
+            title: "Quota legend".to_owned(),
+            entries: [
+                (
+                    "Σ / ✓ / ◇ / ⊘ / ? / ×",
+                    "Pool: accounts / usable / reserve / blocked / unknown / excluded",
+                ),
+                (
+                    "● / ◷ / ?",
+                    "Samples: fresh / stale / unknown; independent of availability",
+                ),
+                (
+                    "★ / ✓ / ◇ / ⊘",
+                    "Row: preferred next / available / held / blocked",
+                ),
+                (
+                    "◷ / ?",
+                    "Row: stale / unknown; credential notices override status",
+                ),
+                (
+                    "⇄ / ↻",
+                    "Observed serving clients / available reset credits",
+                ),
+                ("Weekly pace", "Forecast for the weekly quota window"),
+            ]
+            .into_iter()
+            .map(|(keys, description)| ShortcutEntry {
+                keys: keys.to_owned(),
+                description: description.to_owned(),
+            })
+            .collect(),
+        },
+        ShortcutSection {
             title: "Help".to_owned(),
             entries: vec![
                 ShortcutEntry {
@@ -165,9 +214,9 @@ pub(super) fn render_quota_help(
 
 pub(super) struct QuotaScreenChromeProps {
     pub width: usize,
-    pub height: usize,
+    pub height: Option<usize>,
     pub header: AnyElement<'static>,
-    pub route: String,
+    pub route: AnyElement<'static>,
     pub controls: Vec<AnyElement<'static>>,
     pub body: AnyElement<'static>,
     pub actions: Vec<AnyElement<'static>>,
@@ -176,9 +225,9 @@ pub(super) struct QuotaScreenChromeProps {
 
 pub(super) fn render_quota_screen(props: QuotaScreenChromeProps) -> AnyElement<'static> {
     element! {
-        View(width: props.width as u32, height: props.height as u32, border_style: BorderStyle::Round, border_color: Color::Cyan, overflow: Overflow::Hidden, padding_left: 1, padding_right: 1, flex_direction: FlexDirection::Column) {
+        View(width: props.width as u32, height: props.height.map_or(Size::Auto,|height|Size::Length(height as u32)), border_style: BorderStyle::Round, border_color: Color::Cyan, overflow: Overflow::Hidden, padding_left: 1, padding_right: 1, flex_direction: FlexDirection::Column) {
             #(props.header)
-            Text(content: props.route, color: Color::White, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+            #(props.route)
             #(props.controls)
             #(props.body)
             View(width: 100pct, flex_grow: 1.0_f32) {}

@@ -101,7 +101,7 @@ async fn compiled_quota_filters_real_stored_providers_and_disabled_intersections
         let chooser_start = terminal.transcript_len();
         terminal.send(&[0x06])?;
         terminal.wait_for_text_after("Account provider", chooser_start, SEMANTIC_WAIT)?;
-        terminal.send(b"\x1b[B\x1b[B")?;
+        terminal.send(b"\r\x1b[B\x1b[B\r\t\t")?;
         let apply_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after("Provider: Claude", apply_start, SEMANTIC_WAIT)?;
@@ -109,7 +109,7 @@ async fn compiled_quota_filters_real_stored_providers_and_disabled_intersections
         let toggle_start = terminal.transcript_len();
         terminal.send(&[0x06])?;
         terminal.wait_for_text_after("Account provider", toggle_start, SEMANTIC_WAIT)?;
-        terminal.send(b"\t ")?;
+        terminal.send(b"\t \t")?;
         let intersection_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after("Disabled: Hidden", intersection_start, SEMANTIC_WAIT)?;

@@ -1,7 +1,7 @@
 //! Picker list view.
 use super::{
     InteractiveSessionChoiceRow, SessionPickerRecord, SessionsPickerModel, SessionsPickerOutcome,
-    compact_age, fit_line, truncate_end,
+    compact_age, truncate_end,
 };
 use iocraft::prelude::*;
 
@@ -22,7 +22,7 @@ fn session_column_widths(width: usize) -> (usize, usize, usize) {
 pub(super) fn render_session_list(
     model: &SessionsPickerModel,
     mut model_state: State<SessionsPickerModel>,
-    mut selected_outcome: State<Option<SessionsPickerOutcome>>,
+    _selected_outcome: State<Option<SessionsPickerOutcome>>,
     width: usize,
     visible_rows: usize,
     panel_height: usize,
@@ -33,11 +33,11 @@ pub(super) fn render_session_list(
     let focused_index = model.focused_visible_index();
     let visible_rows = visible_rows.max(1);
     let window_start = model.focused_window_start(visible_rows);
-    if window_start > 0 {
+    if window_start > 1 {
         rows.push(
             element! {
                 Text(
-                    content: format!("+{window_start} more above"),
+                    content: format!("+{} more above",window_start-1),
                     color: Color::DarkGrey,
                     weight: Weight::Light,
                 )
@@ -46,38 +46,20 @@ pub(super) fn render_session_list(
         );
         rows.push(list_gap());
     }
+    if model.visible_record_len() == 0 {
+        rows.push(
+            element!(Text(content:no_matching_sessions_label(model),color:Color::Grey)).into_any(),
+        );
+    }
     let window_end = (window_start + visible_rows).min(visible_len);
     for visible_index in window_start..window_end {
-        if visible_index > window_start {
+        if visible_index > window_start.max(1) {
             rows.push(list_gap());
         }
         if visible_index == 0 {
-            let row = render_start_new_row(model, visible_index == focused_index, row_width);
-            rows.push(
-                element! {
-                    InteractiveSessionChoiceRow(
-                        focus_handler: move |_| {
-                            model_state.write().machine_controls.control_focused = false;
-                            let should_update_focus = {
-                                let model_value = model_state.read();
-                                model_value.focused_session_id().is_some()
-                                    || model_value.focused_window_start(visible_rows) != window_start
-                            };
-                            if should_update_focus {
-                                model_state.write().focus_start_new_in_window(window_start);
-                            }
-                        },
-                        activation_handler: move |_| {
-                            selected_outcome.set(model_state.write().start_new_action());
-                        },
-                        activates_on_click: true,
-                    ) {
-                        #(row)
-                    }
-                }
-                .into_any(),
-            );
-        } else if let Some(record) = model.visible_choice_record_at(visible_index) {
+            continue;
+        }
+        if let Some(record) = model.visible_choice_record_at(visible_index) {
             let identity = record.identity.clone();
             let row = render_record_row(record, visible_index == focused_index, row_width);
             rows.push(
@@ -140,53 +122,6 @@ pub(super) fn render_session_list(
     .into_any()
 }
 
-pub(super) fn render_start_new_row(
-    model: &SessionsPickerModel,
-    selected: bool,
-    width: usize,
-) -> AnyElement<'static> {
-    let foreground = if selected { Color::White } else { Color::Grey };
-    let title_prefix = if selected { "❯ " } else { "  " };
-    let inner_width = width.saturating_sub(2);
-    let (title_width, status_width, age_width) = session_column_widths(width);
-    let metadata_line = if model.visible_record_len() == 0 {
-        format!(
-            "    {}  {}",
-            no_matching_sessions_label(model),
-            start_new_args_label(model)
-        )
-    } else {
-        format!("    {}", start_new_args_label(model))
-    };
-    let second_line = fit_line(&metadata_line, inner_width);
-
-    element! {
-        View(
-            width: width as u32,
-            flex_direction: FlexDirection::Column,
-            border_style: BorderStyle::Single,
-            border_color: Color::DarkGrey,
-            padding_left: 1,
-            padding_right: 1,
-            padding_top: 0,
-            padding_bottom: 0,
-        ) {
-            View(width: 100pct) {
-                View(width: 2) { Text(content: title_prefix, color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                View(width: title_width as u32, overflow: Overflow::Hidden) { Text(content: truncate_end("New Codex session", title_width), color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                Text(content: " ")
-                View(width: status_width as u32, overflow: Overflow::Hidden) { Text(content: "-", color: foreground, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                Text(content: " ")
-                View(width: age_width as u32, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: "-", color: foreground, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                Text(content: " ")
-                View(width: age_width as u32, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: "-", color: foreground, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-            }
-            Text(content: second_line, color: Color::Grey, weight: Weight::Light, wrap: TextWrap::NoWrap)
-        }
-    }
-    .into_any()
-}
-
 pub(super) fn no_matching_sessions_label(model: &SessionsPickerModel) -> &'static str {
     if model.search.is_empty() {
         "No existing sessions match these filters"
@@ -197,7 +132,7 @@ pub(super) fn no_matching_sessions_label(model: &SessionsPickerModel) -> &'stati
 
 pub(super) fn start_new_args_label(model: &SessionsPickerModel) -> String {
     if model.request.new_session_args_display.is_empty() {
-        "no extra args".to_owned()
+        String::new()
     } else {
         format!("args: {}", model.request.new_session_args_display)
     }
@@ -243,17 +178,10 @@ pub(super) fn render_record_row(
 ) -> AnyElement<'static> {
     let foreground = if selected { Color::White } else { Color::Grey };
     let metadata = Color::Grey;
-    let title_prefix = if selected { "❯ " } else { "  " };
     let (title_width, status_width, age_width) = session_column_widths(width);
     let title = truncate_end(&record.title, title_width);
     let status = record.runtime_status.icon();
     let cwd = record.cwd.as_deref().unwrap_or("-");
-    let metadata_line = if width < 43 {
-        format!("    ⎇ {:<10}  {cwd}", record.branch)
-    } else {
-        format!("    ⎇ {:<12}  📂 {cwd}", record.branch)
-    };
-    let second_line = fit_line(&metadata_line, width.saturating_sub(2));
 
     element! {
         View(
@@ -264,21 +192,19 @@ pub(super) fn render_record_row(
             padding_top: 0,
             padding_bottom: 0,
         ) {
-            View(width: 100pct) {
-                View(width: 2) { Text(content: title_prefix, color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                View(width: title_width as u32, overflow: Overflow::Hidden) { Text(content: title, color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                Text(content: " ")
-                View(width: status_width as u32, overflow: Overflow::Hidden) { Text(content: status, color: foreground, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                Text(content: " ")
-                View(width: age_width as u32, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: compact_age(&record.recency), color: foreground, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                Text(content: " ")
-                View(width: age_width as u32, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: compact_age(&record.created), color: foreground, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-            }
-            View(width: 100pct, column_gap: 1, overflow: Overflow::Hidden) {
-                Text(content: record.client_provider_family().label(), color: metadata, weight: Weight::Normal, wrap: TextWrap::NoWrap)
-                Text(content: record.machine_label(), color: metadata, weight: Weight::Normal, wrap: TextWrap::NoWrap)
-                Text(content: "·", color: metadata)
-                Text(content: second_line, color: metadata, weight: Weight::Normal, wrap: TextWrap::NoWrap)
+            codex_router_tui::SelectableRow(selected) {
+                View(width: 100pct,column_gap:1) {
+                    View(width: title_width as u32, overflow: Overflow::Hidden) { Text(content: title, color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
+                    View(width: status_width as u32, overflow: Overflow::Hidden) { Text(content: status, color:foreground,wrap:TextWrap::NoWrap) }
+                    View(width: age_width as u32, overflow: Overflow::Hidden, justify_content:JustifyContent::FlexEnd) {Text(content:compact_age(&record.recency),color:foreground,wrap:TextWrap::NoWrap)}
+                    View(width: age_width as u32, overflow: Overflow::Hidden, justify_content:JustifyContent::FlexEnd) {Text(content:compact_age(&record.created),color:foreground,wrap:TextWrap::NoWrap)}
+                }
+                View(width:100pct,column_gap:1,overflow:Overflow::Hidden) {
+                    Text(content:record.client_provider_family().label(),color:metadata,wrap:TextWrap::NoWrap)
+                    Text(content:record.machine_label(),color:metadata,wrap:TextWrap::NoWrap)
+                    View(max_width:12,overflow:Overflow::Hidden) {Text(content:format!("⎇ {}",record.branch),color:metadata,wrap:TextWrap::NoWrap)}
+                    View(flex_grow:1.0_f32,min_width:0,overflow:Overflow::Hidden) {Text(content:format!("📂 {cwd}"),color:metadata,wrap:TextWrap::NoWrap)}
+                }
             }
         }
     }

@@ -24,7 +24,7 @@ pub(super) fn render_start_new_details(
             overflow: Overflow::Hidden,
         ) {
             UiHeading(content: "New Codex session".to_owned(), level: UiHeadingLevel::Section)
-            Text(content: fit_line(&start_new_args_label(model), detail_width), color: Color::Yellow, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+            #((!model.request.new_session_args_display.is_empty()).then(||element!(Text(content: fit_line(&start_new_args_label(model), detail_width), color: Color::White, wrap: TextWrap::NoWrap))))
             #(if model.visible_record_len() == 0 {
                 Some(detail_text(no_matching_sessions_label(model), detail_width, Color::Grey))
             } else {
@@ -56,18 +56,25 @@ pub(super) fn render_details(
             }
         };
         let endpoint = record.endpoint_label.as_deref().unwrap_or("Provider");
-        let state = match record.provider_state {
-            Some(collaboration_client::protocol::ProviderSessionState::Unloaded) => "Unloaded",
-            Some(collaboration_client::protocol::ProviderSessionState::Idle) => "Idle",
-            Some(collaboration_client::protocol::ProviderSessionState::Running) => "Running",
-            Some(collaboration_client::protocol::ProviderSessionState::RequiresAction) => {
-                "Requires action"
+        let state = if matches!(
+            &record.identity,
+            crate::sessions::SessionPickerIdentity::NativeClaude(_)
+        ) {
+            record.runtime_status.label()
+        } else {
+            match record.provider_state {
+                Some(collaboration_client::protocol::ProviderSessionState::Unloaded) => "Unloaded",
+                Some(collaboration_client::protocol::ProviderSessionState::Idle) => "Idle",
+                Some(collaboration_client::protocol::ProviderSessionState::Running) => "Running",
+                Some(collaboration_client::protocol::ProviderSessionState::RequiresAction) => {
+                    "Requires action"
+                }
+                Some(
+                    collaboration_client::protocol::ProviderSessionState::AuthenticationRequired,
+                ) => "Authentication required",
+                Some(collaboration_client::protocol::ProviderSessionState::Closed) => "Closed",
+                None => "Unknown",
             }
-            Some(collaboration_client::protocol::ProviderSessionState::AuthenticationRequired) => {
-                "Authentication required"
-            }
-            Some(collaboration_client::protocol::ProviderSessionState::Closed) => "Closed",
-            None => "Unknown",
         };
         return element! {
             View(
@@ -75,17 +82,19 @@ pub(super) fn render_details(
                 height,
                 flex_direction: FlexDirection::Column,
                 flex_shrink: 0.0_f32,
-                border_style: BorderStyle::Single,
+                border_style: if height==Size::Auto {BorderStyle::None}else {BorderStyle::Single},
                 border_color: Color::DarkGrey,
                 overflow: if height == Size::Auto { Overflow::Visible } else { Overflow::Hidden },
-                padding_left: 1,
-                padding_right: 1,
+                padding_left: if height==Size::Auto {0}else {1},
+                padding_right: if height==Size::Auto {0}else {1},
             ) {
+                Text(content:record.full_title.clone(),color:Color::White,wrap)
+                Text(content:format!("Client: {}",record.client_provider_family().label()),color:Color::White,wrap)
+                Text(content:display_line(format!("Machine: {}",record.machine_label())),color:Color::Grey,wrap)
                 Text(content: display_line(format!("Session ID: {}", record.session_id)), color: Color::Grey, wrap)
                 Text(content: display_line(format!("Endpoint: {endpoint}")), color: Color::Grey, wrap)
                 Text(content: display_line(format!("State: {state}")), color: Color::Grey, wrap)
                 Text(content: display_line(format!("Working directory: {}", record.cwd.as_deref().unwrap_or("-"))), color: Color::Grey, wrap)
-                Text(content: "Read-only here; provider resume is unavailable.", color: Color::Yellow, wrap: TextWrap::Wrap)
             }
         }
         .into_any();
@@ -113,13 +122,15 @@ pub(super) fn render_details(
             height,
             flex_shrink: 0.0_f32,
             flex_direction: FlexDirection::Column,
-            border_style: BorderStyle::Single,
+            border_style: if height==Size::Auto {BorderStyle::None}else {BorderStyle::Single},
             border_color: Color::DarkGrey,
             overflow: if height == Size::Auto { Overflow::Visible } else { Overflow::Hidden },
-            padding_left: 1,
-            padding_right: 1,
+            padding_left: if height==Size::Auto {0}else {1},
+            padding_right: if height==Size::Auto {0}else {1},
         ) {
+            #((height==Size::Auto).then(||element!(Text(content:record.full_title.clone(),color:Color::White,wrap))))
             Text(content: format!("Session ID: {}", record.session_id), color: Color::Grey, weight: Weight::Normal, wrap)
+            #((height==Size::Auto).then(||element!(Text(content:format!("Working directory: {}",record.cwd.as_deref().unwrap_or("-")),color:Color::White,wrap))))
             View(height: 1) { Text(content: "") }
             UiHeading(content: "Conversation".to_owned(), level: UiHeadingLevel::Section)
             #(conversation_rows)

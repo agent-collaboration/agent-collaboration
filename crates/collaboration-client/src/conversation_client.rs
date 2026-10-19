@@ -61,7 +61,7 @@ pub struct ConversationLoadInput {
     pub operation_id: Option<OperationId>,
     pub target: SessionRef,
     pub working_directory: PathBuf,
-    pub requested_by: SessionRef,
+    pub requested_by: ProviderIdentity,
     #[serde(default)]
     pub approver: Option<ProviderIdentity>,
     pub access: RouterAccess,

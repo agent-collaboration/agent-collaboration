@@ -9,16 +9,33 @@ fn key(code: KeyCode) -> TerminalEvent {
 #[tokio::test]
 async fn sessions_provider_filter_real_keys_apply_cancel_and_hide_nonmatching_rows() {
     let mut outcome = Option::<SessionsPickerOutcome>::None;
-    let frames = element! {
-        SessionsPickerComponent(request: mixed_request(), width: 120usize, height: 36usize, selected_outcome_out: &mut outcome)
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(vec![
-        ctrl_key('f'), key(KeyCode::Down), key(KeyCode::Down), key(KeyCode::Down), key(KeyCode::Enter),
-        ctrl_key('f'), key(KeyCode::Up), key(KeyCode::Up), key(KeyCode::Tab), key(KeyCode::Tab), key(KeyCode::Enter),
-        ctrl_key('f'), key(KeyCode::Up), key(KeyCode::Esc),
+    let mut events = vec![
+        ctrl_key('f'),
+        key(KeyCode::Enter),
+        key(KeyCode::Down),
+        key(KeyCode::Down),
+        key(KeyCode::Down),
+        key(KeyCode::Enter),
+    ];
+    events.extend((0..6).map(|_| key(KeyCode::Tab)));
+    events.push(key(KeyCode::Enter));
+    events.extend([
+        ctrl_key('f'),
+        key(KeyCode::Enter),
+        key(KeyCode::Up),
+        key(KeyCode::Up),
+        key(KeyCode::Enter),
+    ]);
+    events.extend((0..7).map(|_| key(KeyCode::Tab)));
+    events.push(key(KeyCode::Enter));
+    events.extend([
+        ctrl_key('f'),
+        key(KeyCode::Up),
+        key(KeyCode::Esc),
         ctrl_key('d'),
-    ])))
-    .map(|canvas| canvas.to_string()).collect::<Vec<_>>().await;
+    ]);
+    let frames=element!(SessionsPickerComponent(request:mixed_request(),width:120usize,height:36usize,selected_outcome_out:&mut outcome))
+        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(events))).map(|canvas|canvas.to_string()).collect::<Vec<_>>().await;
     assert_eq!(outcome, None);
     let final_frame = frames.last().unwrap();
     assert!(
@@ -35,7 +52,12 @@ async fn sessions_provider_filter_real_keys_apply_cancel_and_hide_nonmatching_ro
         !final_frame.contains("Session client provider"),
         "Cancel must close: {final_frame}"
     );
-    assert!(final_frame.contains("New Codex session"), "{final_frame}");
+    assert!(
+        final_frame
+            .lines()
+            .any(|line| line.contains("Sessions ·") && line.contains("New")),
+        "New remains reachable in header: {final_frame}"
+    );
 }
 
 #[tokio::test]
@@ -72,14 +94,15 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let (phase, final_frame) = tokio::time::timeout(Duration::from_secs(2), async {
+    let mut choice_opened = false;
+    let mut phase = 0;
+    let mut final_frame = String::new();
+    let result = tokio::time::timeout(Duration::from_secs(2), async {
         let mut picker = element! {
             SessionsPickerComponent(request: mixed_request(), width: 120usize, height: 36usize)
         };
         let canvases = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(canvases);
-        let mut phase = 0;
-        let mut final_frame = String::new();
         while let Some(canvas) = canvases.next().await {
             let frame = canvas.to_string();
             if phase == 0 && frame.contains("Filters · All providers") {
@@ -102,10 +125,15 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                     )))
                     .unwrap();
                 phase = 1;
-            } else if phase == 1 && frame.contains("Session client provider") {
+            } else if phase == 1 && frame.contains("Session client provider") && !choice_opened {
+                sender.send(key(KeyCode::Enter)).unwrap();
+                choice_opened = true;
+            } else if phase == 1 && frame.contains("Search:") {
                 let row = frame
                     .lines()
-                    .position(|line| line.contains("○ Cursor"))
+                    .position(|line| {
+                        line.contains("Cursor") && line.contains("│                   Cursor")
+                    })
                     .unwrap();
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
@@ -115,13 +143,13 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                             .nth(row)
                             .unwrap()
                             .chars()
-                            .position(|character| character == '○')
+                            .position(|character| character == 'C')
                             .unwrap() as u16,
                         row as u16,
                     )))
                     .unwrap();
                 phase = 2;
-            } else if phase == 2 && frame.contains("● Cursor") {
+            } else if phase == 2 && frame.contains("Draft: Cursor") {
                 assert!(
                     frame.contains("Session client provider") && frame.contains("Draft: Cursor"),
                     "{frame}"
@@ -160,10 +188,12 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
             }
             final_frame = frame;
         }
-        (phase, final_frame)
     })
-    .await
-    .expect("provider pointer journey must finish within bounded event wait");
+    .await;
+    assert!(
+        result.is_ok(),
+        "provider pointer phase={phase}: {final_frame}"
+    );
     assert_eq!(phase, 4, "real pointer journey must apply: {final_frame}");
     assert!(final_frame.contains("Filters · Cursor") && final_frame.contains("Sessions · 1/5"));
     assert!(!final_frame.contains("Native Alpha"));
@@ -190,8 +220,6 @@ async fn sessions_picker_ctrl_f_and_f3_open_provider_filter_chooser() {
             "Session client provider",
             "Draft: All providers",
             "Codex",
-            "Claude Code",
-            "Cursor",
             "Apply",
             "Cancel",
         ] {
@@ -201,4 +229,119 @@ async fn sessions_picker_ctrl_f_and_f3_open_provider_filter_chooser() {
             );
         }
     }
+}
+
+#[tokio::test]
+async fn provider_inline_search_escape_cancels_choice_before_filter_draft() {
+    // R2/R6: choice cancellation leaves its enclosing unapplied draft visible.
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut picker =
+        element! { SessionsPickerComponent(request:mixed_request(),width:120usize,height:36usize) };
+    let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            match phase {
+                0 if frame.contains("Filters · All providers") => {
+                    sender.send(ctrl_key('f')).unwrap();
+                    phase = 1;
+                }
+                1 if frame.contains("Session filters") => {
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    phase = 2;
+                }
+                2 if frame.contains("Search:") => {
+                    sender
+                        .send(TerminalEvent::BracketedPaste("CURSOR".to_owned()))
+                        .unwrap();
+                    phase = 3;
+                }
+                3 if frame.contains("Search: CURSOR") => {
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 4;
+                }
+                4 if frame.contains("Session filters") && !frame.contains("Search:") => {
+                    assert!(
+                        frame.contains("Draft: All providers"),
+                        "uncommitted query changed draft: {frame}"
+                    );
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 5;
+                }
+                5 if !frame.contains("Session filters") => {
+                    sender.send(ctrl_key('d')).unwrap();
+                    phase = 6;
+                }
+                _ => {}
+            }
+            last = frame;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(2), journey)
+        .await
+        .expect("bounded inline choice journey");
+    assert_eq!(phase, 6, "{last}");
+}
+
+#[tokio::test]
+async fn session_filter_form_exposes_preserved_query_fields() {
+    let frames =
+        element! {SessionsPickerComponent(request:mixed_request(),width:120usize,height:36usize)}
+            .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
+                vec![ctrl_key('f'), ctrl_key('d')],
+            )))
+            .map(|canvas| canvas.to_string())
+            .collect::<Vec<_>>()
+            .await;
+    for label in ["Folder", "Model provider", "Source", "Runtime", "Sort"] {
+        assert!(
+            frames.iter().any(|frame| frame.contains(label)),
+            "missing {label}: {frames:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn constrained_filter_tabs_reveal_focused_field_and_retain_actions() {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut picker =
+        element!(SessionsPickerComponent(request:mixed_request(),width:48usize,height:12usize));
+    let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
+            if phase == 0 && frame.contains("Sessions") {
+                sender.send(ctrl_key('f')).unwrap();
+                phase = 1;
+            } else if phase == 1 && frame.contains("Session filters") {
+                for _ in 0..5 {
+                    sender.send(key(KeyCode::Tab)).unwrap();
+                }
+                phase = 2;
+            } else if phase == 2 && frame.contains("Sort") {
+                assert!(
+                    frame.contains("Apply") && frame.contains("Cancel"),
+                    "{frame}"
+                );
+                sender.send(ctrl_key('d')).unwrap();
+                phase = 3;
+            }
+            last = frame;
+        }
+    };
+    let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "phase={phase} {last}");
+    assert_eq!(phase, 3, "{last}");
 }

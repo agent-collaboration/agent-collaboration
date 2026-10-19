@@ -7,7 +7,7 @@ async fn provider_selection_shows_read_only_details_without_a_codex_outcome() {
         serde_json::from_value(serde_json::json!({
             "origin":"hostedProvider",
             "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-one"},
-            "workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction",
+            "workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},
             "approver":{"kind":"human","humanId":"owner"},
             "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
         }))
@@ -143,251 +143,6 @@ async fn sessions_picker_control_shift_enter_forks_the_focused_existing_session(
 }
 
 #[tokio::test]
-async fn sessions_picker_existing_row_pointer_focus_updates_conversation_without_activation() {
-    let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
-    let frames = element! {
-        SessionsPickerComponent(
-            request: capture_picker_request(),
-            width: 160usize,
-            height: 24usize,
-            selected_outcome_out: &mut selected_outcome,
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                MouseEventKind::Moved,
-                10,
-                14,
-            )),
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                MouseEventKind::Down(MouseButton::Left),
-                10,
-                14,
-            )),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-        ],
-    )))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
-
-    assert_eq!(selected_outcome, None);
-    assert!(
-        frames.iter().any(|frame| {
-            frame.contains("❯ Provider migration")
-                && frame
-                    .contains("Provider migration with very very long provider metadata first real")
-        }),
-        "pointer focus should update the existing-session conversation without activation: {frames:?}"
-    );
-}
-
-#[tokio::test]
-async fn sessions_picker_start_new_hover_focuses_preview_without_activation() {
-    let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
-    let frames = element! {
-        SessionsPickerComponent(
-            request: capture_picker_request(),
-            width: 160usize,
-            height: 24usize,
-            selected_outcome_out: &mut selected_outcome,
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Moved, 10, 8)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-        ],
-    )))
-    .map(|canvas| canvas.to_string())
-    .collect::<Vec<_>>()
-    .await;
-
-    assert_eq!(selected_outcome, None);
-    assert!(
-        frames.iter().any(|frame| {
-            frame.contains("❯ New Codex session") && frame.contains("no extra args")
-        }),
-        "Start New hover should focus its preview without activation: {frames:?}"
-    );
-}
-
-#[tokio::test]
-async fn sessions_picker_control_enter_resumes_pointer_focused_existing_session() {
-    let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
-    let _frames = element! {
-        SessionsPickerComponent(
-            request: capture_picker_request(),
-            width: 160usize,
-            height: 24usize,
-            selected_outcome_out: &mut selected_outcome,
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                MouseEventKind::Down(MouseButton::Left),
-                10,
-                14,
-            )),
-            resume_key(),
-        ],
-    )))
-    .collect::<Vec<_>>()
-    .await;
-
-    assert_eq!(
-        selected_outcome,
-        Some(SessionsPickerOutcome::ResumeSession(
-            picker_action_selection("thread-b")
-        ))
-    );
-}
-
-#[tokio::test]
-async fn sessions_picker_start_new_click_activates_immediately() {
-    let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
-    let _frames = element! {
-        SessionsPickerComponent(
-            request: capture_picker_request(),
-            width: 160usize,
-            height: 24usize,
-            selected_outcome_out: &mut selected_outcome,
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-            MouseEventKind::Down(MouseButton::Left),
-            10,
-            8,
-        ))],
-    )))
-    .collect::<Vec<_>>()
-    .await;
-
-    assert_eq!(
-        selected_outcome,
-        Some(SessionsPickerOutcome::StartNewSession)
-    );
-}
-
-#[tokio::test]
-async fn sessions_picker_non_left_row_events_do_not_focus_or_activate() {
-    let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
-    let _frames = element! {
-        SessionsPickerComponent(
-            request: capture_picker_request(),
-            width: 160usize,
-            height: 24usize,
-            selected_outcome_out: &mut selected_outcome,
-        )
-    }
-    .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                MouseEventKind::Down(MouseButton::Right),
-                10,
-                14,
-            )),
-            TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                MouseEventKind::Up(MouseButton::Left),
-                10,
-                14,
-            )),
-            resume_key(),
-        ],
-    )))
-    .collect::<Vec<_>>()
-    .await;
-
-    assert_eq!(
-        selected_outcome,
-        Some(SessionsPickerOutcome::ResumeSession(
-            picker_action_selection("thread-a")
-        )),
-        "ignored pointer events must leave the initial existing-session focus unchanged"
-    );
-}
-
-#[tokio::test]
-async fn sessions_picker_hover_keeps_scrolled_row_under_pointer_until_click_and_enter() {
-    let mut selected_outcome = Option::<SessionsPickerOutcome>::None;
-    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
-    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
-        receiver.recv().await.map(|event| (event, receiver))
-    });
-    let mut phase = 0;
-    let mut pointer_row = 0;
-    {
-        let mut picker = element! { SessionsPickerComponent(request: capture_picker_request(), width: 160usize, height: 24usize, selected_outcome_out: &mut selected_outcome) };
-        let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
-        tokio::pin!(frames);
-        tokio::time::timeout(Duration::from_secs(2), async {
-            while let Some(canvas) = frames.next().await {
-                let frame = canvas.to_string();
-                match phase {
-                    0 => {
-                        sender
-                            .send(TerminalEvent::Key(KeyEvent::new(
-                                KeyEventKind::Press,
-                                KeyCode::End,
-                            )))
-                            .unwrap();
-                        phase = 1;
-                    }
-                    1 if frame.contains("❯ Follow-up implementation lane 7") => {
-                        pointer_row = frame
-                            .lines()
-                            .position(|line| line.contains("Follow-up implementation lane 5"))
-                            .expect("literal row must be visible after End")
-                            as u16;
-                        sender
-                            .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                                MouseEventKind::Moved,
-                                10,
-                                pointer_row,
-                            )))
-                            .unwrap();
-                        phase = 2;
-                    }
-                    2 if frame.contains("❯ Follow-up implementation lane 5") => {
-                        assert!(
-                            frame
-                                .lines()
-                                .nth(pointer_row as usize)
-                                .unwrap()
-                                .contains("❯ Follow-up implementation lane 5"),
-                            "hover rewindowed the row: {frame}"
-                        );
-                        sender
-                            .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
-                                MouseEventKind::Down(MouseButton::Left),
-                                10,
-                                pointer_row,
-                            )))
-                            .unwrap();
-                        sender.send(resume_key()).unwrap();
-                        phase = 3;
-                    }
-                    _ => {}
-                }
-            }
-        })
-        .await
-        .expect("real pointer journey must complete within the event bound");
-    }
-    assert_eq!(phase, 3);
-    assert_eq!(
-        selected_outcome,
-        Some(SessionsPickerOutcome::ResumeSession(
-            picker_action_selection("thread-extra-5")
-        )),
-        "Enter must resume the literal row that stayed under the pointer"
-    );
-}
-
-#[tokio::test]
 async fn sessions_picker_iocraft_mock_terminal_ctrl_shortcuts_drive_filters() {
     let actual = element! {
         SessionsPickerComponent(
@@ -454,6 +209,7 @@ async fn sessions_picker_help_toggles_and_escape_closes_help_before_picker() {
             ctrl_key('/'),
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
             ctrl_key('n'),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
         ]),
     ));
     let actual = tokio::time::timeout(Duration::from_secs(2), frames.collect::<Vec<_>>())
@@ -482,7 +238,10 @@ async fn sessions_picker_iocraft_mock_terminal_ctrl_n_starts_new_thread() {
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
-        vec![ctrl_key('n')],
+        vec![
+            ctrl_key('n'),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
+        ],
     )))
     .collect::<Vec<_>>()
     .await;

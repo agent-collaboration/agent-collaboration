@@ -17,6 +17,7 @@ mod quota_reset_presentation_model;
 mod quota_status_component;
 mod quota_status_entrypoint;
 mod quota_status_view_model;
+mod quota_status_symbols;
 mod responsive_quota_layout;
 
 #[cfg(test)]
@@ -46,3 +47,5 @@ pub(crate) use quota_status_view_model::ResetPaceState;
 pub(crate) use quota_status_view_model::ResetPaceViewModel;
 pub(crate) use quota_status_view_model::SampleConfidence;
 pub(crate) use quota_status_view_model::SampleMetadata;
+
+pub(crate) use quota_status_symbols::{QuotaAccountStatus,QuotaRowStatus,QuotaHeaderFacts,QuotaPoolCensus,QuotaFreshnessCensus};

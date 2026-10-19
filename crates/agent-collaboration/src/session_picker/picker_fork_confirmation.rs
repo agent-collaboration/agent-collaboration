@@ -1,5 +1,5 @@
 //! Frozen fork source and destination choices; confirmation never re-reads focus.
-use super::{PickerSourceContext, SessionsPickerOutcome, SessionsPickerRequest};
+use super::{PickerSourceContext, SessionsPickerRequest};
 use crate::sessions::{
     RouterRegistryRead, SessionActionSelection, SessionPickerIdentity, SessionPickerRecord,
 };
@@ -29,14 +29,37 @@ impl ForkAvailability {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum ForkDestinationKey {
+    Source,
+    Machine(PickerSourceContext),
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ForkDestination {
+    pub(super) key: ForkDestinationKey,
     pub(super) label: String,
     pub(super) availability: ForkAvailability,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct NativeForkSelection {
+    pub(super) source: PickerSourceContext,
+    pub(super) binding: crate::sessions::source_ssh_protocol::SourceNativeBinding,
+    pub(super) target: collaboration_client::protocol::SessionRef,
+    pub(super) directory: crate::sessions::router_connection_registry::AbsoluteRemoteCwd,
+    pub(super) arguments: Vec<std::ffi::OsString>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum ForkLaunchTarget {
+    Codex(SessionActionSelection),
+    Native(Box<NativeForkSelection>),
+    Unsupported,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ForkConfirmation {
-    pub(super) selection: SessionActionSelection,
+    pub(super) launch_target: ForkLaunchTarget,
     pub(super) title: String,
     pub(super) source_label: String,
     pub(super) directory_label: String,
@@ -44,6 +67,7 @@ pub(super) struct ForkConfirmation {
     pub(super) destinations: Vec<ForkDestination>,
     pub(super) focused_destination: usize,
     pub(super) notice: Option<&'static str>,
+    pub(super) search: codex_router_tui::SearchSelectState<ForkDestinationKey>,
 }
 
 impl ForkConfirmation {
@@ -89,6 +113,7 @@ impl ForkConfirmation {
             ForkAvailability::Eligible
         };
         let mut destinations = vec![ForkDestination {
+            key: ForkDestinationKey::Source,
             label: source_label.clone(),
             availability,
         }];
@@ -99,19 +124,27 @@ impl ForkConfirmation {
                     .iter()
                     .filter(|profile| match &record.identity {
                         SessionPickerIdentity::HostedCodex(target)
-                        | SessionPickerIdentity::HostedProvider(target) => {
+                        | SessionPickerIdentity::HostedProvider(target)
+                        | SessionPickerIdentity::NativeClaude(target) => {
                             profile.service_id != target.endpoint.service_id
                         }
                         SessionPickerIdentity::LocalCodex(_) => true,
                     })
                     .map(|profile| ForkDestination {
+                        key: ForkDestinationKey::Machine(PickerSourceContext::ConfiguredHosted(
+                            profile.clone(),
+                        )),
                         label: profile.name.as_str().to_owned(),
                         availability: ForkAvailability::HistoryRemainsOnSource,
                     }),
             );
         }
         Self {
-            selection: SessionActionSelection::from_picker_record(record),
+            launch_target: if record.identity.is_provider() {
+                ForkLaunchTarget::Unsupported
+            } else {
+                ForkLaunchTarget::Codex(SessionActionSelection::from_picker_record(record))
+            },
             title: record.title.clone(),
             source_label,
             directory_label,
@@ -119,7 +152,80 @@ impl ForkConfirmation {
             destinations,
             focused_destination: 0,
             notice: None,
+            search: codex_router_tui::SearchSelectState::Closed,
         }
+    }
+
+    pub(super) fn capture_native(
+        record: &SessionPickerRecord,
+        request: &SessionsPickerRequest,
+        binding: &crate::sessions::source_ssh_protocol::SourceNativeBinding,
+    ) -> Option<Self> {
+        let SessionPickerIdentity::NativeClaude(target) = &record.identity else {
+            return None;
+        };
+        if target.endpoint.service_id != binding.service_id
+            || String::from(target.endpoint.endpoint_id.clone()) != "claude-local"
+        {
+            return None;
+        }
+        let source = record
+            .source_context
+            .clone()
+            .unwrap_or(PickerSourceContext::DefaultHosted);
+        match &source {
+            PickerSourceContext::DefaultHosted => {}
+            PickerSourceContext::ConfiguredHosted(profile)
+                if profile.service_id == binding.service_id
+                    && matches!(
+                        profile.transport,
+                        crate::sessions::router_connection_registry::RouterConnectionTransport::Ssh(
+                            _
+                        )
+                    ) => {}
+            _ => return None,
+        }
+        let directory: crate::sessions::router_connection_registry::AbsoluteRemoteCwd =
+            record.cwd.clone()?.try_into().ok()?;
+        let mut confirmation = Self::capture(record, request);
+        confirmation.directory_label = directory.as_str().to_owned();
+        confirmation.directory_origin = "source session";
+        confirmation.launch_target = ForkLaunchTarget::Native(Box::new(NativeForkSelection {
+            source,
+            binding: binding.clone(),
+            target: target.clone(),
+            directory,
+            arguments: request.native_arguments.clone(),
+        }));
+        confirmation.destinations.first_mut()?.availability = ForkAvailability::Eligible;
+        Some(confirmation)
+    }
+
+    pub(super) fn choice_options(&self) -> Vec<codex_router_tui::ChoiceOption<ForkDestinationKey>> {
+        self.destinations
+            .iter()
+            .map(|destination| {
+                let mut option = codex_router_tui::ChoiceOption::available(
+                    destination.key.clone(),
+                    destination.label.clone(),
+                );
+                if let Some(reason) = destination.availability.explanation() {
+                    option.availability = codex_router_tui::ChoiceAvailability::Unavailable {
+                        reason: reason.to_owned(),
+                    };
+                }
+                option
+            })
+            .collect()
+    }
+    pub(super) fn select_destination(&mut self, key: ForkDestinationKey) {
+        if let Some(index) = self.destinations.iter().position(|destination| {
+            destination.key == key && destination.availability == ForkAvailability::Eligible
+        }) {
+            self.focused_destination = index;
+            self.notice = None;
+        }
+        self.search = codex_router_tui::SearchSelectState::Closed;
     }
 
     pub(super) fn move_destination(&mut self, delta: isize) {
@@ -130,13 +236,16 @@ impl ForkConfirmation {
         self.notice = None;
     }
 
-    pub(super) fn confirm(&mut self) -> Option<SessionsPickerOutcome> {
+    pub(super) fn confirm(&mut self) -> Option<ForkLaunchTarget> {
         let destination = self.destinations.get(self.focused_destination)?;
         if let Some(reason) = destination.availability.explanation() {
             self.notice = Some(reason);
             None
         } else {
-            Some(SessionsPickerOutcome::ForkSession(self.selection.clone()))
+            match &self.launch_target {
+                ForkLaunchTarget::Unsupported => None,
+                target => Some(target.clone()),
+            }
         }
     }
 }

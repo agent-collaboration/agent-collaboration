@@ -55,7 +55,8 @@ impl SessionActionSelection {
         match &self.identity {
             SessionPickerIdentity::LocalCodex(session_id) => session_id.clone(),
             SessionPickerIdentity::HostedCodex(target)
-            | SessionPickerIdentity::HostedProvider(target) => {
+            | SessionPickerIdentity::HostedProvider(target)
+            | SessionPickerIdentity::NativeClaude(target) => {
                 String::from(target.session_id.clone())
             }
         }

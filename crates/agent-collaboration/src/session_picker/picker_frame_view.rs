@@ -1,9 +1,9 @@
 //! Picker frame view.
 use super::{
-    MIN_PICKER_WIDTH, NARROW_PICKER_WIDTH, SIDECAR_PICKER_WIDTH, SessionConversationPreview,
-    SessionsPickerModel, SessionsPickerOutcome, fit_line, picker_body_budget, render_details,
-    render_session_list, render_start_new_details, root_label, runtime_view_label,
-    session_visible_row_budget, sort_label,
+    MIN_PICKER_WIDTH, SIDECAR_PICKER_WIDTH, SessionConversationPreview, SessionsPickerModel,
+    SessionsPickerOutcome, fit_line, picker_body_budget, render_details, render_session_list,
+    render_start_new_details, root_label, runtime_view_label, session_visible_row_budget,
+    sort_label,
 };
 use codex_router_tui::{
     DialogAction, DialogFrame, DialogHost, DialogMargins, DialogPresentation, SurfaceHeader,
@@ -11,15 +11,24 @@ use codex_router_tui::{
 use iocraft::prelude::*;
 use unicode_width::UnicodeWidthStr;
 
+pub(super) struct PickerViewportBudget {
+    pub(super) height: usize,
+    pub(super) minimum_render_height: usize,
+}
+
 pub(super) fn render_picker_view(
     model: &SessionsPickerModel,
     model_state: State<SessionsPickerModel>,
     selected_outcome: State<Option<SessionsPickerOutcome>>,
     selected_conversation: Option<&SessionConversationPreview>,
-    height: usize,
-    minimum_render_height: usize,
+    viewport: PickerViewportBudget,
     session_id_copier: super::super::session_id_clipboard::SessionIdCopier,
+    apply_filters: Handler<()>,
 ) -> Element<'static, View> {
+    let PickerViewportBudget {
+        height,
+        minimum_render_height,
+    } = viewport;
     let content_width = model.width.saturating_sub(4).max(MIN_PICKER_WIDTH);
     let control_width = content_width.saturating_sub(2) / 2;
     let mut filter_controls = vec![element! {
@@ -33,10 +42,15 @@ pub(super) fn render_picker_view(
         }
     }.into_any()];
     filter_controls.extend(render_filter_controls(model, content_width));
-    if model.machine_controls.filter
+    let show_source_status = model.machine_controls.filter
         != super::super::picker_machine_controls::PickerMachineFilter::Default
-        && !model.source_progress.is_empty()
-    {
+        || model.source_progress.iter().any(|progress| {
+            matches!(
+                progress.read_state,
+                super::super::source_reload_progress::SourceReadState::Rejected { .. }
+            )
+        });
+    if show_source_status && !model.source_progress.is_empty() {
         let status = model
             .source_progress
             .iter()
@@ -56,6 +70,19 @@ pub(super) fn render_picker_view(
             Text(content: fit_line(notice, content_width), color: Color::Yellow, wrap: TextWrap::NoWrap)
         }.into_any());
     }
+    let incomplete_native = model
+        .native_live_coverage
+        .iter()
+        .filter(|part| {
+            matches!(
+                part.state,
+                crate::picker_runtime_status::NativeLiveReadState::Unavailable(_)
+            )
+        })
+        .count();
+    if incomplete_native > 0 {
+        filter_controls.push(element!(Text(content:format!("Native Claude inventory incomplete ({incomplete_native} sources)"),color:Color::Yellow)).into_any());
+    }
     if let Some(error) = super::super::source_action_view::source_error(model) {
         filter_controls.push(error);
     }
@@ -63,13 +90,15 @@ pub(super) fn render_picker_view(
     let body_budget = picker_body_budget(height, control_height, minimum_render_height);
     let inactive = model.show_help
         || model.provider_filter_draft.is_some()
+        || model.new_session.is_some()
         || model.details_dialog.is_some()
         || model.source_action.pending.is_some();
     let mut details_model = model_state;
+    let mut new_model = model_state;
     let mut children = vec![element! {
         SurfaceHeader(title: format!("Sessions · {}/{}", model.visible_record_len(), model.request.records.len()), inactive,
             help_action: Some(super::super::picker_help_view::help_action(model_state)),
-            children: vec![element!(DialogAction(label: "Details", handler: move |_| details_model.write().open_details_dialog())).into_any()])
+            children: vec![element!(DialogAction(label: "New", keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,has_focus:model.focused_identity().is_none(), handler: move |_|new_model.write().open_new_form())).into_any(),element!(DialogAction(label: "Details", handler: move |_| details_model.write().open_details_dialog())).into_any()])
     }.into_any()];
     children.extend(filter_controls);
 
@@ -136,13 +165,20 @@ pub(super) fn render_picker_view(
             model_state,
             picker_height,
         ))
+    } else if model.new_session.is_some() {
+        Some(super::super::new_session_form::render_new_form(
+            model,
+            model_state,
+            selected_outcome,
+            picker_height,
+        ))
     } else if model.provider_filter_draft.is_some() {
         Some(element! {
-            DialogFrame(width: viewport_width, height: viewport_height,
+            DialogFrame(width: viewport_width, height: viewport_height, keyboard_owner: codex_router_tui::DialogKeyboardOwner::Caller,
                 title: "Session filters".to_owned(), help_action: Some(super::super::picker_help_view::help_action(model_state)),
-                presentation: if model.width < NARROW_PICKER_WIDTH { DialogPresentation::FullScreen } else { DialogPresentation::Framed { maximum_width: 72, maximum_height: 16 } },
+                presentation: DialogPresentation::default(),
                 margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
-                actions: super::super::provider_filter_view::render_provider_actions(model, model_state)) {
+                actions: super::super::provider_filter_view::render_provider_actions(model, model_state, apply_filters)) {
                 #(super::super::provider_filter_view::render_provider_chooser(model, model_state))
             }
         }.into_any())

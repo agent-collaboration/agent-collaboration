@@ -1,5 +1,5 @@
-//! Test-only wire observer forwards every read to the genuine API unchanged.
-//! It records method names, never manufactures a tool response or provider rejection.
+//! Test-only wire observer forwards every call to the genuine API unchanged.
+//! It records actual method arguments and never manufactures a tool response or provider rejection.
 use axum::{Router, body::Body, extract::State, response::Response, routing::post};
 use std::{
     sync::{Arc, Mutex},
@@ -10,15 +10,23 @@ use tokio_util::sync::CancellationToken;
 struct RecorderState {
     api_url: String,
     client: reqwest::Client,
-    methods: Mutex<Vec<String>>,
+    requests: Mutex<Vec<serde_json::Value>>,
 }
 
+#[allow(
+    dead_code,
+    reason = "TCP and Unix observer entrypoints are shared by separate test targets"
+)]
 pub(super) struct RecordedApiListener {
-    pub(super) url: String,
+    pub(super) url: Option<String>,
     state: Arc<RecorderState>,
     task: tokio::task::JoinHandle<std::io::Result<()>>,
 }
 
+#[allow(
+    dead_code,
+    reason = "TCP and Unix observer entrypoints are shared by separate test targets"
+)]
 impl RecordedApiListener {
     pub(super) async fn start(api_url: String, shutdown: CancellationToken) -> Self {
         let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
@@ -33,10 +41,10 @@ impl RecordedApiListener {
                 .timeout(Duration::from_secs(2))
                 .build()
                 .unwrap(),
-            methods: Mutex::new(Vec::new()),
+            requests: Mutex::new(Vec::new()),
         });
         let router = Router::new()
-            .route("/mcp", post(record_read))
+            .route("/mcp", post(record_call))
             .with_state(Arc::clone(&state));
         let task = tokio::spawn(async move {
             axum::serve(listener, router)
@@ -44,19 +52,71 @@ impl RecordedApiListener {
                 .await
         });
         Self {
-            url: format!("http://{address}/mcp"),
+            url: Some(format!("http://{address}/mcp")),
             state,
             task,
         }
     }
 
-    pub(super) fn call_count(&self, method: &str) -> usize {
+    pub(super) async fn start_on_unix(
+        api_url: String,
+        path: &std::path::Path,
+        shutdown: CancellationToken,
+    ) -> Self {
+        let listener = tokio::net::UnixListener::bind(path).unwrap();
+        let state = Arc::new(RecorderState {
+            api_url,
+            client: reqwest::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .timeout(Duration::from_secs(12))
+                .build()
+                .unwrap(),
+            requests: Mutex::new(Vec::new()),
+        });
+        let router = Router::new()
+            .route("/mcp", post(record_call))
+            .with_state(Arc::clone(&state));
+        let task = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown.cancelled_owned())
+                .await
+        });
+        Self {
+            url: None,
+            state,
+            task,
+        }
+    }
+
+    pub(super) fn arguments_for(&self, method: &str) -> Vec<serde_json::Value> {
         self.state
-            .methods
+            .requests
             .lock()
             .unwrap()
             .iter()
-            .filter(|observed| observed.as_str() == method)
+            .filter(|request| {
+                request
+                    .pointer("/params/name")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(method)
+            })
+            .filter_map(|request| request.pointer("/params/arguments").cloned())
+            .collect()
+    }
+
+    pub(super) fn call_count(&self, method: &str) -> usize {
+        self.state
+            .requests
+            .lock()
+            .unwrap()
+            .iter()
+            .filter(|observed| {
+                observed
+                    .pointer("/params/name")
+                    .and_then(serde_json::Value::as_str)
+                    == Some(method)
+            })
             .count()
     }
 
@@ -69,7 +129,7 @@ impl RecordedApiListener {
     }
 }
 
-async fn record_read(
+async fn record_call(
     State(state): State<Arc<RecorderState>>,
     request: axum::extract::Request,
 ) -> Response {
@@ -81,11 +141,12 @@ async fn record_read(
     .await
     .unwrap();
     let message: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    if let Some(method) = message
+    if message
         .pointer("/params/name")
         .and_then(serde_json::Value::as_str)
+        .is_some()
     {
-        state.methods.lock().unwrap().push(method.to_owned());
+        state.requests.lock().unwrap().push(message);
     }
     let mut forwarded = state.client.post(&state.api_url);
     for header in [

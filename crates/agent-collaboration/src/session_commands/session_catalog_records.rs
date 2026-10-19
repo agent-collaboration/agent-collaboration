@@ -24,11 +24,12 @@ pub(crate) enum SessionPickerIdentity {
     LocalCodex(String),
     HostedCodex(SessionRef),
     HostedProvider(SessionRef),
+    NativeClaude(SessionRef),
 }
 
 impl SessionPickerIdentity {
     pub(crate) fn is_provider(&self) -> bool {
-        matches!(self, Self::HostedProvider(_))
+        matches!(self, Self::HostedProvider(_) | Self::NativeClaude(_))
     }
 }
 
@@ -93,7 +94,9 @@ impl SessionPickerRecord {
             SessionPickerIdentity::LocalCodex(_) | SessionPickerIdentity::HostedCodex(_) => {
                 SessionProviderFamily::Codex
             }
-            SessionPickerIdentity::HostedProvider(_) => self.provider_family,
+            SessionPickerIdentity::HostedProvider(_) | SessionPickerIdentity::NativeClaude(_) => {
+                self.provider_family
+            }
         }
     }
 
@@ -106,6 +109,20 @@ impl SessionPickerRecord {
         if !self.identity.is_provider() {
             return self;
         }
+        if let SessionPickerIdentity::NativeClaude(target) = &self.identity {
+            self.provider_family = if target == summary.target()
+                && target.endpoint == endpoint.endpoint
+                && String::from(target.endpoint.endpoint_id.clone()) == "claude-local"
+                && matches!(
+                    summary,
+                    ProviderSessionSummary::ClaudeCodeInteractive { .. }
+                ) {
+                SessionProviderFamily::External(ProviderKind::ClaudeCode)
+            } else {
+                SessionProviderFamily::Unclassified
+            };
+            return self;
+        }
         let mut kinds = endpoint
             .channels
             .iter()
@@ -115,7 +132,17 @@ impl SessionPickerRecord {
             });
         let kind = kinds.next();
         let consistent = summary.target().endpoint == endpoint.endpoint
-            && matches!(&self.identity, SessionPickerIdentity::HostedProvider(target) if target == summary.target())
+            && match (&self.identity, summary) {
+                (
+                    SessionPickerIdentity::HostedProvider(target),
+                    ProviderSessionSummary::HostedProvider { .. },
+                )
+                | (
+                    SessionPickerIdentity::NativeClaude(target),
+                    ProviderSessionSummary::ClaudeCodeInteractive { .. },
+                ) => target == summary.target(),
+                _ => false,
+            }
             && kinds.next().is_none()
             && !endpoint
                 .channels
@@ -332,7 +359,14 @@ impl SessionPickerRecord {
             .clone()
             .unwrap_or_else(|| format!("{endpoint_label} session · {context}"));
         Self {
-            identity: SessionPickerIdentity::HostedProvider(target.clone()),
+            identity: match summary {
+                ProviderSessionSummary::HostedProvider { .. } => {
+                    SessionPickerIdentity::HostedProvider(target.clone())
+                }
+                ProviderSessionSummary::ClaudeCodeInteractive { .. } => {
+                    SessionPickerIdentity::NativeClaude(target.clone())
+                }
+            },
             provider_family: match summary {
                 ProviderSessionSummary::ClaudeCodeInteractive { .. } => {
                     SessionProviderFamily::External(ProviderKind::ClaudeCode)

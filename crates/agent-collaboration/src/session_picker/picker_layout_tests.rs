@@ -70,41 +70,27 @@ async fn sessions_picker_selected_row_uses_contract_marker_and_metadata() {
 }
 
 #[tokio::test]
-async fn sessions_picker_start_new_row_uses_outline_instead_of_filled_background() {
-    let mut request = picker_request();
-    request.new_session_args_display =
-        "--router-root /Users/shravansunder/.codex-router".to_owned();
+async fn sessions_picker_start_new_is_a_header_action_without_synthetic_session_row() {
     let text = render_picker_capture(
-        request,
+        picker_request(),
         100,
         vec![
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Up)),
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
+            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Home)),
+            ctrl_key('d'),
         ],
     )
     .await;
-    let lines = text.lines().collect::<Vec<_>>();
-    let start_index = lines
-        .iter()
-        .position(|line| line.contains("New Codex session"))
-        .unwrap_or_else(|| panic!("start-new row should render:\n{text}"));
-
     assert!(
-        lines
-            .get(start_index.saturating_sub(1))
-            .is_some_and(|line| line.contains('┌') && line.contains('┐')),
-        "start-new row should have a thin outline top border:\n{text}"
+        text.lines().any(|line| line.contains("Sessions ·")
+            && line.contains("New")
+            && line.contains("Details")),
+        "{text}"
     );
     assert!(
-        lines
-            .get(start_index + 2)
-            .is_some_and(|line| line.contains('└') && line.contains('┘')),
-        "start-new row should have a thin outline bottom border:\n{text}"
+        !text.contains("New Codex session"),
+        "New must not be a synthetic row: {text}"
     );
-    assert!(
-        !lines[start_index].contains('█'),
-        "start-new row should not read as a filled selected row:\n{text}"
-    );
+    assert!(!text.contains("no extra args"), "{text}");
 }
 
 #[tokio::test]
@@ -200,7 +186,9 @@ async fn sessions_picker_width_contract_preserves_layout() {
     )
     .await;
     assert!(
-        empty_text.contains("New Codex session"),
+        empty_text
+            .lines()
+            .any(|line| line.contains("Sessions ·") && line.contains("New")),
         "empty state should offer a new session:\n{empty_text}"
     );
 }
@@ -208,44 +196,69 @@ async fn sessions_picker_width_contract_preserves_layout() {
 #[tokio::test]
 async fn sessions_picker_stacked_details_wraps_conversation_without_preview_or_metadata() {
     let mut request = capture_picker_request();
-    let record = request
-        .records
-        .get_mut(0)
-        .unwrap_or_else(|| panic!("capture request should have a record"));
-    record.session_id = "019ff0bb-5993-70d3-b1ba-f56724b94919".to_owned();
-    record.conversation.snippets = vec![format!(
+    request.records[0].session_id = "019ff0bb-5993-70d3-b1ba-f56724b94919".to_owned();
+    request.records[0].conversation.snippets = vec![format!(
         "{} final-conversation-marker",
         "conversation words that should use the available detail width ".repeat(3)
     )];
-
-    let width = 120;
-    let text = render_picker_capture(
-        request,
-        width,
-        vec![
-            TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::F(4))),
-            ctrl_key('d'),
-        ],
-    )
-    .await;
-
-    assert!(
-        text.lines().all(|line| line.chars().count() <= width),
-        "wrapped conversation should not overflow stacked details frame:\n{text}"
-    );
-    assert!(text.contains("final-conversation-marker"), "{text}");
-    let session_id_index = text
-        .find("Session ID: 019ff0bb-5993-70d3-b1ba-f56724b94919")
-        .unwrap_or_else(|| panic!("selected session ID should render:\n{text}"));
-    let conversation_index = text
-        .find("Conversation")
-        .unwrap_or_else(|| panic!("conversation heading should render:\n{text}"));
-    assert!(
-        session_id_index < conversation_index,
-        "selected session ID should appear before Conversation:\n{text}"
-    );
-    assert!(!text.contains("Preview"), "{text}");
-    assert!(!text.contains("Metadata"), "{text}");
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut picker = element!(SessionsPickerComponent(request,width:120usize));
+    let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let text = canvas.to_string();
+            if phase == 0 {
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::F(4),
+                    )))
+                    .unwrap();
+                phase = 1;
+            } else if phase == 1
+                && text.contains("Session details")
+                && text.contains("Conversation")
+            {
+                let session_id = text
+                    .find("Session ID: 019ff0bb-5993-70d3-b1ba-f56724b94919")
+                    .expect("full captured ID");
+                assert!(session_id < text.find("Conversation").unwrap(), "{text}");
+                assert!(
+                    !text.contains("Preview") && !text.contains("Metadata"),
+                    "{text}"
+                );
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::End,
+                    )))
+                    .unwrap();
+                phase = 2;
+            } else if phase == 2 && text.contains("final-conversation-marker") {
+                assert!(
+                    text.lines()
+                        .all(|line| unicode_width::UnicodeWidthStr::width(line) <= 120),
+                    "{text}"
+                );
+                assert!(
+                    text.contains("Session details") && text.contains("Close"),
+                    "{text}"
+                );
+                sender.send(ctrl_key('d')).unwrap();
+                phase = 3;
+            }
+            last = text;
+        }
+    };
+    let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "phase={phase}: {last}");
+    assert_eq!(phase, 3, "{last}");
 }
 
 #[tokio::test]

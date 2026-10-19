@@ -31,6 +31,9 @@ pub(super) fn qualify_bound_source_filter(
     query: &SessionsPickerDataQuery,
     binding: &SourceInventoryBinding,
 ) -> Result<(), SourceInventoryRejection> {
+    if query.source == SessionsSource::Subagents && binding.native_claude_endpoint.is_some() {
+        return Err(SourceInventoryRejection::UnsupportedViewOrScope);
+    }
     // Stored provider inventories cannot express the native source classifications.
     // Reject the whole common query rather than omitting provider rows or broadening it.
     if query.source != SessionsSource::All

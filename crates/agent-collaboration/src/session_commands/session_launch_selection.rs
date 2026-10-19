@@ -47,7 +47,8 @@ impl SessionsLaunchTarget {
                 .map_err(SessionsCommandError::CodexLaunch)?;
                 Ok(())
             }
-            super::SessionPickerIdentity::HostedProvider(_) => {
+            super::SessionPickerIdentity::HostedProvider(_)
+            | super::SessionPickerIdentity::NativeClaude(_) => {
                 Err(SessionsCommandError::SessionSourceUnavailable)
             }
         }

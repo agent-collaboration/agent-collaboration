@@ -1,6 +1,15 @@
+mod client_action_state;
+mod client_action_view;
+mod details_client_inventory;
 mod details_dialog_actions;
 mod details_dialog_state;
 mod interactive_row;
+mod new_session_client_inventory;
+mod new_session_form;
+pub(crate) use new_session_client_inventory::NewClientInventoryLoader;
+pub(crate) use new_session_client_inventory::{
+    SessionClientPorts, production_ports as production_client_ports,
+};
 mod picker_actions;
 mod picker_component;
 mod picker_filters;

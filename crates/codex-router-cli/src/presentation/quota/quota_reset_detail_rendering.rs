@@ -24,7 +24,14 @@ pub(super) struct ResetDetailDocument {
     pub(super) sections: Vec<ResetDetailSection>,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum ResetSectionRole {
+    Content,
+    Inventory,
+}
+
 pub(super) struct ResetDetailSection {
+    role: ResetSectionRole,
     pub(super) title: StyledText,
     pub(super) rows: Vec<ResetDetailRow>,
 }
@@ -114,7 +121,7 @@ pub(super) fn render_reset_panel(
     let sections = document
         .sections
         .into_iter()
-        .map(|section| render_section(section, inner_width))
+        .map(|section| render_section(section, inner_width, false))
         .collect::<Vec<_>>();
 
     element! {
@@ -140,7 +147,7 @@ pub(super) fn render_reset_panel_content(
     snapshot: &ResetWorkflowSnapshot,
     target: &ResetPaneTarget,
     width: usize,
-    height: usize,
+    _height: usize,
     inventory_page_start: usize,
     inventory_page_size: usize,
     spinner_tick: usize,
@@ -157,10 +164,10 @@ pub(super) fn render_reset_panel_content(
     let sections = document
         .sections
         .into_iter()
-        .map(|section| render_section(section, width.saturating_sub(2)))
+        .map(|section| render_section(section, width.saturating_sub(2), true))
         .collect::<Vec<_>>();
     element! {
-        View(width: width as u32, height: height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+        View(width: width as u32,max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
             #(title)
             #(sections)
         }
@@ -168,14 +175,15 @@ pub(super) fn render_reset_panel_content(
     .into_any()
 }
 
-fn render_section(section: ResetDetailSection, width: usize) -> AnyElement<'static> {
+fn render_section(section: ResetDetailSection, width: usize, natural: bool) -> AnyElement<'static> {
+    let reveal = natural && section.role == ResetSectionRole::Inventory;
     let title: AnyElement<'static> =
         element!(UiHeading(content: section.title.content, level: UiHeadingLevel::Section))
             .into_any();
     let rows = section
         .rows
         .into_iter()
-        .map(|row| render_detail_row(row, width))
+        .map(|row| render_detail_row(row, width, natural))
         .collect::<Vec<_>>();
     element! {
         View(
@@ -183,21 +191,22 @@ fn render_section(section: ResetDetailSection, width: usize) -> AnyElement<'stat
             flex_direction: FlexDirection::Column,
             margin_top: 1,
         ) {
-            #(title)
-            #(rows)
+            codex_router_tui::FocusReveal(has_focus:reveal) {#(title) #(rows)}
         }
     }
     .into_any()
 }
 
-fn render_detail_row(row: ResetDetailRow, width: usize) -> AnyElement<'static> {
+fn render_detail_row(row: ResetDetailRow, width: usize, natural: bool) -> AnyElement<'static> {
     match row {
+        ResetDetailRow::Text(text) if natural=>element!(Text(content:text.content,color:text.color,weight:text.weight,wrap:TextWrap::Wrap)).into_any(),
         ResetDetailRow::Text(text) => render_styled_text(text, width),
         ResetDetailRow::Field {
             label,
             value,
             value_color,
         } => {
+            if natural {return element!(codex_router_tui::FormField(label,label_width:DETAIL_LABEL_WIDTH as u16) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into_any();}
             let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH);
             element! {
                 View(width: 100pct) {
@@ -221,12 +230,12 @@ fn render_detail_row(row: ResetDetailRow, width: usize) -> AnyElement<'static> {
             element! {
                 View(width: 100pct) {
                     View(width: CREDIT_MARKER_WIDTH as u32) {
-                        Text(content: fit_line(&marker, CREDIT_MARKER_WIDTH), color: marker_color, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+                        Text(content: if natural {marker}else {fit_line(&marker, CREDIT_MARKER_WIDTH)}, color: marker_color, weight: Weight::Bold, wrap: TextWrap::NoWrap)
                     }
                     View(width: CREDIT_ID_WIDTH as u32) {
-                        Text(content: fit_line(&id_hint, CREDIT_ID_WIDTH), color: Color::White, wrap: TextWrap::NoWrap)
+                        Text(content: if natural {id_hint}else {fit_line(&id_hint, CREDIT_ID_WIDTH)}, color: Color::White, wrap: TextWrap::NoWrap)
                     }
-                    Text(content: fit_line(&description, description_width), color: Color::White, wrap: TextWrap::NoWrap)
+                    View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {Text(content: if natural {description}else {fit_line(&description, description_width)}, color: Color::White, wrap: if natural {TextWrap::Wrap}else {TextWrap::NoWrap})}
                 }
             }
             .into_any()
@@ -291,6 +300,7 @@ fn reset_detail_document(
 fn inspection_sections(snapshot: &ResetWorkflowSnapshot, spinner: &str) -> Vec<ResetDetailSection> {
     let activities = snapshot.activities();
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Checking live eligibility"),
         rows: vec![
             activity_field("Weekly usage", &activities.inspection_live_usage, spinner),
@@ -351,10 +361,12 @@ fn inspected_sections(
 
     vec![
         ResetDetailSection {
+            role: ResetSectionRole::Content,
             title: heading("Live eligibility"),
             rows: eligibility_rows,
         },
         ResetDetailSection {
+            role: ResetSectionRole::Inventory,
             title: heading(credit_section_title(
                 inventory_page_start,
                 inventory_page_size,
@@ -482,6 +494,7 @@ fn confirmation_sections(snapshot: &ResetWorkflowSnapshot) -> Vec<ResetDetailSec
         rows.push(muted_text(disabled_reason(reason)));
     }
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Confirm reset credit"),
         rows,
     }]
@@ -493,6 +506,7 @@ fn revalidation_sections(
 ) -> Vec<ResetDetailSection> {
     let activities = snapshot.activities();
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Rechecking live eligibility"),
         rows: vec![
             activity_field("Weekly usage", &activities.revalidation_live_usage, spinner),
@@ -509,6 +523,7 @@ fn revalidation_sections(
 
 fn committing_sections(spinner: &str) -> Vec<ResetDetailSection> {
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Reset request sent"),
         rows: vec![
             ResetDetailRow::Field {
@@ -575,6 +590,7 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
         },
         account: None,
         sections: vec![ResetDetailSection {
+            role: ResetSectionRole::Content,
             title: heading("Result"),
             rows: vec![
                 normal(summary),

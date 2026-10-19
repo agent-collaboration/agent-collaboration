@@ -109,41 +109,21 @@ pub(super) fn render_quota_filter_chooser(
             view_model.rows.len(),
         )
     };
-    let provider_choices = AccountProviderFilter::CHOICES
-        .into_iter()
-        .map(|provider| {
-            let selected = draft.filters.provider == provider;
-            element! {
-                QuotaFilterButton(
-                    label: format!("{} {}", if selected { "●" } else { "○" }, provider.label()),
-                    selected,
-                    has_focus: selected && draft.focus == QuotaFilterFocus::Provider,
-                    enabled: true,
-                    on_click: move |_| controller.dispatch(QuotaFilterAction::Provider(provider)),
-                )
-            }
-            .into_any()
-        })
-        .collect::<Vec<_>>();
+    let choice = controller.choice.read().clone();
+    let fields=[(QuotaFilterFocus::Provider,"Account provider",draft.filters.provider.label()),(QuotaFilterFocus::Disabled,"Disabled accounts",draft.filters.disabled.label())].into_iter().map(|(field,label,value)| {
+        let expanded=draft.focus==field&&choice.is_open();
+        let body=if expanded {
+            element!(codex_router_tui::SearchSelect<QuotaFilterValue>(state:choice.clone(),options:quota_filter_choices(field),on_select:move |value|controller.select_choice(value))).into_any()
+        } else {
+            element!(QuotaFilterButton(label:format!("{value} ▾"),selected:true,has_focus:draft.focus==field,enabled:true,on_click:move |_|controller.open_choice(field))).into_any()
+        };
+        element! {codex_router_tui::FormField(label:label.to_owned(),label_width:17u16,has_focus:draft.focus==field&&!expanded) {#(body)}}.into_any()
+    }).collect::<Vec<_>>();
     element! {
-        View(width: width as u32, flex_direction: FlexDirection::Column) {
-            View(column_gap: 1) {
-                UiHeading(content: "Account provider".to_owned(), level: UiHeadingLevel::Section)
-                Text(content: format!("· Draft: {}", draft.filters.provider.label()), color: Color::Yellow, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-            }
-            #(if width < 64 {
-                element! {
-                    View(flex_direction:FlexDirection::Column) {
-                        Text(content:format!("Current: Provider: {}",current_filters.provider.label()),color:Color::Grey,wrap:TextWrap::NoWrap)
-                        Text(content:format!("Disabled: {} · {}/{} accounts",current_filters.disabled.label(),current_filters.visible_count(&controller.view_model.read().rows),controller.view_model.read().rows.len()),color:Color::Grey,wrap:TextWrap::NoWrap)
-                    }
-                }.into_any()
-            } else {
-                element!(Text(content:format!("Current: {current_summary}"),color:Color::Grey,wrap:TextWrap::Wrap)).into_any()
-            })
-            #(provider_choices)
-            QuotaFilterButton(label: format!("Disabled accounts: {}", draft.filters.disabled.label()), has_focus: draft.focus == QuotaFilterFocus::Disabled, enabled: true, on_click: move |_| controller.dispatch(QuotaFilterAction::ToggleDisabled))
-
+        View(width:width as u32,max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+            UiHeading(content:format!("Account provider · Draft: {}",draft.filters.provider.label()),level:UiHeadingLevel::Section)
+            Text(content:format!("Current: {current_summary}"),color:Color::Grey)
+            #(fields)
         }
     }.into_any()
 }
@@ -158,13 +138,9 @@ pub(super) fn render_quota_details_button(
 pub(super) fn render_quota_filter_actions(
     draft: QuotaFilterDraft,
     controller: QuotaFilterController,
-) -> AnyElement<'static> {
-    element! {
-        View(flex_direction: FlexDirection::Column) {
-View(column_gap: 3, flex_direction: FlexDirection::Row) {
-                QuotaFilterButton(label: "Apply".to_owned(), has_focus: draft.focus == QuotaFilterFocus::Apply, enabled: true, on_click: move |_| controller.dispatch(QuotaFilterAction::Apply))
-                QuotaFilterButton(label: "Cancel".to_owned(), has_focus: draft.focus == QuotaFilterFocus::Cancel, enabled: true, on_click: move |_| controller.dispatch(QuotaFilterAction::Cancel))
-            }
-        }
-    }.into_any()
+) -> Vec<AnyElement<'static>> {
+    vec![
+        element!(codex_router_tui::DialogAction(label:"Cancel",keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,has_focus:draft.focus==QuotaFilterFocus::Cancel,emphasis:codex_router_tui::DialogActionEmphasis::Secondary,handler:move |_|controller.dispatch(QuotaFilterAction::Cancel))).into_any(),
+        element!(codex_router_tui::DialogAction(label:"Apply",keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,has_focus:draft.focus==QuotaFilterFocus::Apply,handler:move |_|controller.dispatch(QuotaFilterAction::Apply))).into_any(),
+    ]
 }

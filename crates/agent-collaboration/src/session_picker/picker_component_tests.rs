@@ -291,3 +291,6 @@ fn resume_key() -> TerminalEvent {
     event.modifiers = KeyModifiers::CONTROL;
     TerminalEvent::Key(event)
 }
+
+#[path = "picker_pointer_tests.rs"]
+mod picker_pointer_tests;

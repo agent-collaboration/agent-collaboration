@@ -243,23 +243,26 @@ mod quota_reset_pty_test {
             terminal.wait_for_text_after("Credit balance refreshed", refresh_start, SEMANTIC_WAIT),
             "explicit refresh completion",
         )?;
+        terminal.send(b"\x1b[H")?;
         stage(
-            terminal.wait_for_text_after("Available · 42.00", refresh_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("Available · 42", refresh_start, SEMANTIC_WAIT),
             "loopback provider balance display",
         )?;
 
         let first_edit_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         stage(
-            terminal.wait_for_text_after("› Disallow", first_edit_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("❯ Disallow", first_edit_start, SEMANTIC_WAIT),
             "credit policy editing state",
         )?;
         let first_allow_start = terminal.transcript_len();
         terminal.send(b"\x1b[C")?;
         stage(
-            terminal.wait_for_text_after("› Allow", first_allow_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("❯ Allow", first_allow_start, SEMANTIC_WAIT),
             "credit policy draft selection",
         )?;
+        terminal.send(b"\r")?;
+        terminal.wait_for_text("Save", SEMANTIC_WAIT)?;
         let cancel_draft_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
         stage(
@@ -280,15 +283,17 @@ mod quota_reset_pty_test {
         let second_edit_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         stage(
-            terminal.wait_for_text_after("› Disallow", second_edit_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("❯ Disallow", second_edit_start, SEMANTIC_WAIT),
             "second policy edit starts from the saved Disallow value",
         )?;
         let second_allow_start = terminal.transcript_len();
         terminal.send(b"\x1b[C")?;
         stage(
-            terminal.wait_for_text_after("› Allow", second_allow_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("❯ Allow", second_allow_start, SEMANTIC_WAIT),
             "second Allow draft selection",
         )?;
+        terminal.send(b"\r")?;
+        terminal.wait_for_text("Save", SEMANTIC_WAIT)?;
         let saved_policy_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         if let Err(error) = terminal.wait_for_text_after("Edit", saved_policy_start, SEMANTIC_WAIT)
@@ -338,9 +343,11 @@ mod quota_reset_pty_test {
         let reopen_editor_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         stage(
-            terminal.wait_for_text_after("› Allow", reopen_editor_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("❯ Allow", reopen_editor_start, SEMANTIC_WAIT),
             "reopened policy editor displays the saved Allow value",
         )?;
+        terminal.send(b"\x1b")?;
+        terminal.wait_for_text("Save", SEMANTIC_WAIT)?;
         let reopen_cancel_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
         stage(
@@ -585,9 +592,9 @@ mod quota_reset_pty_test {
             "weekly-floor editor",
         )?;
         let click_start = terminal.transcript_len();
-        // The centered 100x28 dialog at 120x36 places the visible increment
-        // arrow at zero-based (32, 12), pinned by the composed component test.
-        terminal.send_sgr_mouse_left_down(32, 12)?;
+        // The real shared-frame component proof pins the visible increment
+        // arrow at zero-based (37, 13) at 120x36.
+        terminal.send_sgr_mouse_left_down(37, 13)?;
         stage(
             terminal.wait_for_text_after("1%", click_start, SEMANTIC_WAIT),
             "pointer-incremented floor",
@@ -628,12 +635,12 @@ mod quota_reset_pty_test {
         terminal.resize(24, 160)?;
 
         stage(
-            terminal.wait_for_text("New Codex session", SEMANTIC_WAIT),
+            terminal.wait_for_text("Sessions", SEMANTIC_WAIT),
             "initial sessions picker",
         )?;
         let pointer_focus_start = terminal.transcript_len();
-        // The compact shared control row puts beta at zero-based row 14.
-        terminal.send_sgr_mouse_left_down(10, 14)?;
+        // The sealed real component draw pins beta at zero-based (7, 9).
+        terminal.send_sgr_mouse_left_down(7, 9)?;
         stage(
             terminal.wait_for_text_after(
                 "BETA_CONVERSATION_ACTIVE",
@@ -678,7 +685,7 @@ mod quota_reset_pty_test {
     }
 
     #[test]
-    fn compiled_sessions_tui_start_new_click_activates_immediately() -> TestResult<()> {
+    fn compiled_sessions_tui_new_click_opens_form_and_requires_explicit_start() -> TestResult<()> {
         let arguments = [OsString::from("--sessions-picker")];
         let mut terminal = TerminalDriver::spawn(
             Path::new(env!("CARGO_BIN_EXE_codex-router-quota-reset-test-harness")),
@@ -688,16 +695,22 @@ mod quota_reset_pty_test {
         terminal.resize(24, 160)?;
 
         stage(
-            terminal.wait_for_text("New Codex session", SEMANTIC_WAIT),
+            terminal.wait_for_text("Sessions", SEMANTIC_WAIT),
             "initial sessions picker",
         )?;
-        terminal.send_sgr_mouse_left_down(10, 8)?;
+        terminal.send_sgr_mouse_left_down(140, 1)?;
+        terminal.wait_for_text("New session", SEMANTIC_WAIT)?;
+        ensure(
+            terminal.child_is_running()?,
+            "New must only open a form before explicit Start",
+        )?;
+        terminal.send(b"\r")?;
 
         let transcript = terminal.finish(SEMANTIC_WAIT)?;
         let transcript = String::from_utf8_lossy(&transcript);
         ensure(
             transcript.contains("SESSION_PICKER_OUTCOME start-new"),
-            "Start New click did not activate immediately",
+            "explicit Start did not produce the preserved New outcome",
         )?;
         ensure(
             transcript.contains("\u{1b}[?1006l")

@@ -21,6 +21,7 @@ pub struct DialogActionProps {
     #[iocraft(required)]
     pub label: String,
     pub has_focus: bool,
+    pub enabled: Option<bool>,
     pub emphasis: DialogActionEmphasis,
     pub keyboard_owner: DialogKeyboardOwner,
     pub handler: HandlerMut<'static, ()>,
@@ -29,7 +30,7 @@ pub struct DialogActionProps {
 /// Native iocraft button with the dialog host's input policy applied.
 #[component]
 pub fn DialogAction(props: &mut DialogActionProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let enabled = hooks.dialog_input_enabled();
+    let enabled = hooks.dialog_input_enabled() && props.enabled.unwrap_or(true);
     let mut handler = props.handler.take();
     let (color, weight) = if !enabled {
         (Color::DarkGrey, Weight::Normal)

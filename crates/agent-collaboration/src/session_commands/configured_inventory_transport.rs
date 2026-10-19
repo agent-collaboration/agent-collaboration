@@ -1,7 +1,9 @@
 //! Read the existing stateless v3 JSON MCP API; no session, credential or recovery owner.
 use super::picker_runtime_inventory::native_inventory_pager::NativeInventoryReadClient;
 use super::router_connection_registry::{RouterConnectionProfile, RouterConnectionTransport};
+use super::source_inventory_failure::InventoryReadFailure;
 use super::source_ssh_protocol::{SourceOperation, SourceReply};
+use crate::picker_runtime_status::NativeLiveUnavailableReason;
 use collaboration_client::{
     ClientError,
     protocol::{
@@ -76,8 +78,8 @@ impl HttpConfiguredInventoryClient {
     pub(super) async fn provider_page(
         &self,
         request: &ProviderSessionListParams,
-    ) -> Result<ProviderSessionListResult, ClientError> {
-        self.call("provider_sessions_list", request).await
+    ) -> Result<ProviderSessionListResult, InventoryReadFailure> {
+        self.read_call("provider_sessions_list", request).await
     }
 
     async fn call<TResult: DeserializeOwned>(
@@ -85,12 +87,20 @@ impl HttpConfiguredInventoryClient {
         tool: &str,
         arguments: &impl Serialize,
     ) -> Result<TResult, ClientError> {
-        let arguments = serde_json::to_value(arguments)
-            .map_err(|_| ClientError::InvalidRequest("invalid source read arguments"))?;
+        self.read_call(tool, arguments)
+            .await
+            .map_err(InventoryReadFailure::into_client)
+    }
+
+    async fn read_call<TResult: DeserializeOwned>(
+        &self,
+        tool: &str,
+        arguments: &impl Serialize,
+    ) -> Result<TResult, InventoryReadFailure> {
+        let invalid = || InventoryReadFailure::Invalid { code: None };
+        let arguments = serde_json::to_value(arguments).map_err(|_| invalid())?;
         let serde_json::Value::Object(arguments) = arguments else {
-            return Err(ClientError::InvalidRequest(
-                "source read arguments must be an object",
-            ));
+            return Err(invalid());
         };
         let id = NumberOrString::Number(1);
         let request = ClientJsonRpcMessage::request(
@@ -111,19 +121,15 @@ impl HttpConfiguredInventoryClient {
             .send()
             .await
             .map_err(|error| {
-                if error.is_timeout() {
-                    ClientError::Timeout
+                InventoryReadFailure::Unavailable(if error.is_timeout() {
+                    NativeLiveUnavailableReason::TimedOut
                 } else {
-                    ClientError::Transport(std::io::Error::new(
-                        std::io::ErrorKind::ConnectionAborted,
-                        "source read transport failed",
-                    ))
-                }
+                    NativeLiveUnavailableReason::TransportUnavailable
+                })
             })?;
         if response.status() != reqwest::StatusCode::OK {
-            return Err(ClientError::Rejected {
-                code: i64::from(response.status().as_u16()),
-                data: None,
+            return Err(InventoryReadFailure::Invalid {
+                code: Some(i64::from(response.status().as_u16())),
             });
         }
         if !response
@@ -131,59 +137,51 @@ impl HttpConfiguredInventoryClient {
             .get(reqwest::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .is_some_and(|value| {
-                value.split(';').next().is_some_and(|media_type| {
-                    media_type.trim().eq_ignore_ascii_case("application/json")
-                })
+                value
+                    .split(';')
+                    .next()
+                    .is_some_and(|media| media.trim().eq_ignore_ascii_case("application/json"))
             })
         {
-            return Err(ClientError::Protocol(
-                "source does not provide stateless JSON reads",
-            ));
+            return Err(invalid());
         }
         let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| {
-            ClientError::Transport(std::io::Error::new(
-                std::io::ErrorKind::ConnectionAborted,
-                "source reply transport failed",
-            ))
+        while let Some(chunk) = response.chunk().await.map_err(|error| {
+            InventoryReadFailure::Unavailable(if error.is_timeout() {
+                NativeLiveUnavailableReason::TimedOut
+            } else {
+                NativeLiveUnavailableReason::TransportUnavailable
+            })
         })? {
             if chunk.len() > MAX_READ_REPLY_BYTES.saturating_sub(bytes.len()) {
-                return Err(ClientError::Protocol("source read reply exceeded bounds"));
+                return Err(invalid());
             }
             bytes.extend_from_slice(&chunk);
         }
-        let message: ServerJsonRpcMessage = serde_json::from_slice(&bytes)
-            .map_err(|_| ClientError::Protocol("invalid source API reply"))?;
+        let message: ServerJsonRpcMessage =
+            serde_json::from_slice(&bytes).map_err(|_| invalid())?;
         let value = match message {
             ServerJsonRpcMessage::Response(response) if response.id == id => {
                 let ServerResult::CallToolResult(result) = response.result else {
-                    return Err(ClientError::Protocol("source reply was not a tool result"));
+                    return Err(invalid());
                 };
                 if result.is_error == Some(true) {
-                    return Err(ClientError::Rejected {
-                        code: -32050,
-                        data: None,
-                    });
+                    return Err(result
+                        .structured_content
+                        .map(InventoryReadFailure::tool_error)
+                        .unwrap_or_else(invalid));
                 }
-                result
-                    .structured_content
-                    .ok_or(ClientError::Protocol("source result is not structured"))?
+                result.structured_content.ok_or_else(invalid)?
             }
-            // Failure details can contain private data. Only the fixed category crosses this edge.
-            ServerJsonRpcMessage::Error(_) => {
-                return Err(ClientError::Rejected {
-                    code: -32050,
-                    data: None,
-                });
-            }
-            _ => {
-                return Err(ClientError::Protocol(
-                    "source reply did not match its request",
+            ServerJsonRpcMessage::Error(error) if error.id.as_ref() == Some(&id) => {
+                return Err(InventoryReadFailure::published(
+                    i64::from(error.error.code.0),
+                    error.error.data.as_ref(),
                 ));
             }
+            _ => return Err(invalid()),
         };
-        serde_json::from_value(value)
-            .map_err(|_| ClientError::Protocol("invalid source inventory shape"))
+        serde_json::from_value(value).map_err(|_| invalid())
     }
 }
 
@@ -226,7 +224,7 @@ impl ConfiguredInventoryClient {
     pub(super) async fn provider_page(
         &self,
         request: &ProviderSessionListParams,
-    ) -> Result<ProviderSessionListResult, ClientError> {
+    ) -> Result<ProviderSessionListResult, InventoryReadFailure> {
         match self {
             Self::Remote(client) => client.provider_page(request).await,
             Self::Ssh(profile) => match ssh_read(
@@ -235,12 +233,11 @@ impl ConfiguredInventoryClient {
                     params: request.clone(),
                 },
             )
-            .await?
+            .await
+            .map_err(|error| InventoryReadFailure::from_client(&error))?
             {
                 SourceReply::ProviderSessions { page } => Ok(page),
-                _ => Err(ClientError::Protocol(
-                    "source reply kind does not match provider page",
-                )),
+                _ => Err(InventoryReadFailure::Invalid { code: None }),
             },
         }
     }

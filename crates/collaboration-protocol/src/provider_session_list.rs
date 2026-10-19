@@ -2,7 +2,7 @@
 
 use crate::{
     EndpointRef, NativeSessionScope, NativeSessionSource, NativeSessionView, ObservationTimestamp,
-    ProviderIdentity, ProviderWorkingDirectory, SessionRef,
+    ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, SessionRef,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -50,6 +50,7 @@ pub enum ProviderSessionSummary {
         /// Unix seconds; Router has no durable creation timestamp for these rows.
         updated_at: i64,
         state: ProviderSessionState,
+        requested_policy: ProviderRequestedPolicy,
         approver: ProviderIdentity,
         created_by: ProviderIdentity,
     },

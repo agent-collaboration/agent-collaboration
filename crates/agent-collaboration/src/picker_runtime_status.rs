@@ -1,5 +1,25 @@
 use collaboration_client::protocol::{NativeActiveFlag, NativeThreadStatus, ProviderSessionState};
 
+/// Fixed read categories, never server diagnostics or private payload data.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NativeLiveUnavailableReason {
+    TimedOut,
+    TransportUnavailable,
+    DiscoveryUnavailable,
+    ProviderUnavailable,
+}
+
+impl NativeLiveUnavailableReason {
+    pub(crate) const fn description(self) -> &'static str {
+        match self {
+            Self::TimedOut => "Native Claude inventory timed out",
+            Self::TransportUnavailable => "Native Claude inventory transport unavailable",
+            Self::DiscoveryUnavailable => "Native Claude inventory discovery unavailable",
+            Self::ProviderUnavailable => "Native Claude inventory unavailable",
+        }
+    }
+}
+
 /// Availability of the selected Host's observation, separate from any thread's state.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(crate) enum PickerRuntimeCoverage {
@@ -24,6 +44,22 @@ impl PickerRuntimeCoverage {
 pub(crate) struct PickerRecordsSnapshot {
     pub(crate) records: Vec<crate::sessions::SessionPickerRecord>,
     pub(crate) runtime_coverage: PickerRuntimeCoverage,
+    pub(crate) native_live_coverage: Vec<NativeLiveCoverage>,
+}
+
+/// A native partition is observed independently from managed and Codex catalogues.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct NativeLiveCoverage {
+    pub(crate) endpoint: collaboration_client::protocol::EndpointRef,
+    pub(crate) service_epoch: collaboration_client::protocol::UuidIdentity,
+    pub(crate) state: NativeLiveReadState,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NativeLiveReadState {
+    Reading,
+    Complete,
+    Unavailable(NativeLiveUnavailableReason),
 }
 
 /// Picker-owned projection of the native runtime states that affect browsing.

@@ -32,21 +32,22 @@ pub(in crate::quota) fn quota_human_group(row: &QuotaStatusRow) -> QuotaHumanGro
     }
 }
 
-pub(in crate::quota) fn quota_state_text(row: &QuotaStatusRow) -> &'static str {
+pub(in crate::quota) fn quota_account_status(row: &QuotaStatusRow) -> crate::presentation::quota::QuotaAccountStatus {
+    use crate::presentation::quota::QuotaAccountStatus;
     if row.preferred_next {
-        return "preferred";
+        return QuotaAccountStatus::Preferred;
     }
     if row.freshness == QuotaEvidenceFreshness::Stale {
-        return "stale";
+        return QuotaAccountStatus::Stale;
     }
     if row.freshness == QuotaEvidenceFreshness::Unknown {
-        return "unknown";
+        return QuotaAccountStatus::Unknown;
     }
     match quota_human_group(row) {
-        QuotaHumanGroup::Preferred => "preferred",
-        QuotaHumanGroup::Available => "available",
-        QuotaHumanGroup::Held => "held",
-        QuotaHumanGroup::BlockedOrStale => "blocked",
+        QuotaHumanGroup::Preferred => QuotaAccountStatus::Preferred,
+        QuotaHumanGroup::Available => QuotaAccountStatus::Available,
+        QuotaHumanGroup::Held => QuotaAccountStatus::Held,
+        QuotaHumanGroup::BlockedOrStale => QuotaAccountStatus::Blocked,
     }
 }
 

@@ -44,7 +44,6 @@ pub(super) use picker_display_text::fit_line;
 
 const MIN_RENDER_HEIGHT: usize = 24;
 const SIDECAR_PICKER_WIDTH: usize = 140;
-const NARROW_PICKER_WIDTH: usize = 72;
 const START_NEW_DETAILS_HEIGHT: usize = 6;
 
 #[path = "conversation_preview_state.rs"]
@@ -58,6 +57,9 @@ pub(crate) struct SessionsPickerComponentProps<'a> {
     request: SessionsPickerRequest,
     record_loader: Option<SessionsPickerRecordLoader>,
     source_preparer: Option<super::source_action_worker::SourceActionPreparer>,
+    client_inventory_loader: Option<super::NewClientInventoryLoader>,
+    client_executor: Option<crate::sessions::source_client_action::SessionClientExecutor>,
+    details_client_inspector: Option<super::details_client_inventory::DetailsClientInspector>,
     session_id_copier: Option<super::session_id_clipboard::SessionIdCopier>,
     width: usize,
     height: usize,
@@ -158,6 +160,7 @@ pub(crate) fn SessionsPickerComponent<'a>(
             loop {
                 refresh_interval.tick().await;
                 if model.read().source_action.pending.is_some()
+                    || model.read().client_action.is_active()
                     || model.read().machine_controls.filter != PickerMachineFilter::Default
                     || model.read().fork_confirmation.is_some()
                     || !matches!(
@@ -187,326 +190,46 @@ pub(crate) fn SessionsPickerComponent<'a>(
         }
     });
     let mut selected_outcome = hooks.use_state(|| Option::<SessionsPickerOutcome>::None);
-    let mut should_cancel = hooks.use_state(|| false);
+    let should_cancel = hooks.use_state(|| false);
+    super::new_session_client_inventory::use_client_inventory(
+        &mut hooks,
+        model,
+        props.client_inventory_loader.clone(),
+    );
+    super::details_client_inventory::use_details_client_inventory(
+        &mut hooks,
+        model,
+        props.details_client_inspector.clone(),
+    );
+    super::client_action_state::use_client_actions(
+        &mut hooks,
+        model,
+        props.client_executor.clone(),
+    );
     super::source_action_worker::use_source_preparation(
         &mut hooks,
         model,
         selected_outcome,
         props.source_preparer.clone(),
     );
-    hooks.use_terminal_events({
-        let session_id_copier = session_id_copier.clone();
-        let mut observed_width = observed_width;
-        let mut observed_height = observed_height;
-        let mut reload_generation = reload_generation;
-        let can_load_source = props.record_loader.is_some();
-        move |event| {
-            if let TerminalEvent::Resize(width, height) = event {
-                if live_terminal_width {
-                    observed_width.set(usize::from(width));
-                }
-                if live_terminal_height {
-                    observed_height.set(usize::from(height).max(1));
-                }
-                return;
-            }
-            if let TerminalEvent::BracketedPaste(text) = event {
-                if width < MIN_PICKER_WIDTH
-                    || should_cancel.get()
-                    || selected_outcome.read().is_some()
-                {
-                    return;
-                }
-                let mut model_value = model.write();
-                if model_value.source_action.pending.is_some()
-                    || model_value.show_help
-                    || model_value.fork_confirmation.is_some()
-                    || model_value.provider_filter_draft.is_some()
-                    || model_value.details_dialog.is_some()
-                    || !matches!(
-                        model_value.machine_controls.stage,
-                        PickerMachineStage::Browsing
-                    )
-                {
-                    return;
-                }
-                let previous_query = model_value.data_query();
-                model_value.append_search_text(&text);
-                let changed = model_value.data_query() != previous_query;
-                drop(model_value);
-                if changed {
-                    conversation_cache.write().invalidate();
-                    let generation = reload_generation.get().saturating_add(1);
-                    reload_generation.set(generation);
-                    reload_port.send(model.write().prepare_source_reload(generation));
-                }
-                return;
-            }
-            let TerminalEvent::Key(KeyEvent {
-                code,
-                kind,
-                modifiers,
-                ..
-            }) = event
-            else {
-                return;
-            };
-            if kind == KeyEventKind::Release {
-                return;
-            }
-            if width < MIN_PICKER_WIDTH {
-                return;
-            }
-
-            let mut model_value = model.write();
-            if modifiers.contains(KeyModifiers::CONTROL) && matches!(code, KeyCode::Char('c' | 'd'))
-                || matches!(code, KeyCode::Char('\u{3}' | '\u{4}'))
-            {
-                model_value.cancel_source_action();
-                should_cancel.set(true);
-                selected_outcome.set(None);
-                return;
-            }
-            if should_cancel.get() || selected_outcome.read().is_some() {
-                return;
-            }
-            if model_value.source_action.pending.is_some() {
-                if code == KeyCode::Esc {
-                    model_value.cancel_source_action();
-                }
-                return;
-            }
-            let help_key = matches!(code, KeyCode::F(1) | KeyCode::Char('\u{1f}'))
-                || matches!(code, KeyCode::Char('/' | '_' | '7'))
-                    && modifiers.contains(KeyModifiers::CONTROL);
-            if help_key {
-                model_value.handle_key(SessionsPickerKey::ToggleHelp);
-                return;
-            }
-            if model_value.show_help {
-                if code == KeyCode::Esc {
-                    model_value.show_help = false;
-                }
-                return;
-            }
-            if let Some(confirmation) = model_value.fork_confirmation.as_mut() {
-                match code {
-                    KeyCode::Up => confirmation.move_destination(-1),
-                    KeyCode::Down => confirmation.move_destination(1),
-                    KeyCode::Esc => model_value.fork_confirmation = None,
-                    KeyCode::Enter
-                        if !modifiers.intersects(
-                            KeyModifiers::ALT | KeyModifiers::CONTROL | KeyModifiers::SUPER,
-                        ) && !model_value.begin_source_fork() =>
-                    {
-                        if let Some(confirmation) = model_value.fork_confirmation.as_mut() {
-                            selected_outcome.set(confirmation.confirm());
-                        }
-                    }
-                    _ => {}
-                }
-                return;
-            }
-            if matches!(
-                model_value.machine_controls.stage,
-                PickerMachineStage::Loading { .. }
-            ) {
-                if matches!(code, KeyCode::Esc) {
-                    model_value.machine_controls.cancel_choice();
-                    conversation_cache.write().invalidate();
-                    let generation = reload_generation.get().saturating_add(1);
-                    reload_generation.set(generation);
-                    reload_port.send(model_value.prepare_source_reload(generation));
-                }
-                return;
-            }
-            if matches!(
-                model_value.machine_controls.stage,
-                PickerMachineStage::Choosing { .. }
-            ) {
-                let registry = model_value.request.router_registry.clone();
-                let mode = model_value.request.machine_mode;
-                let choice_count = model_value.machine_controls.choices(&registry, mode).len();
-                match code {
-                    KeyCode::Up => model_value.machine_controls.move_choice(-1, choice_count),
-                    KeyCode::Down => model_value.machine_controls.move_choice(1, choice_count),
-                    KeyCode::Esc => model_value.machine_controls.cancel_choice(),
-                    KeyCode::Enter
-                        if !modifiers.intersects(
-                            KeyModifiers::ALT | KeyModifiers::CONTROL | KeyModifiers::SUPER,
-                        ) =>
-                    {
-                        if model_value.begin_configured_new() {
-                            return;
-                        }
-                        let previous_filter = model_value.machine_controls.filter.clone();
-                        if model_value.machine_controls.select_choice(
-                            &registry,
-                            mode,
-                            can_load_source,
-                        ) {
-                            selected_outcome.set(Some(SessionsPickerOutcome::StartNewSession));
-                        }
-                        conversation_cache.write().invalidate();
-                        if model_value.machine_controls.filter != previous_filter
-                            || matches!(
-                                model_value.machine_controls.stage,
-                                PickerMachineStage::Loading { .. }
-                            )
-                        {
-                            let generation = reload_generation.get().saturating_add(1);
-                            reload_generation.set(generation);
-                            reload_port.send(model_value.prepare_source_reload(generation));
-                        }
-                    }
-                    _ => {}
-                }
-                return;
-            }
-            if super::provider_filter_input::handle_provider_filter_key(
-                &mut model_value,
-                code,
-                modifiers,
-            ) {
-                return;
-            }
-            if model_value.details_dialog.is_some() {
-                if let Some(outcome) = super::details_dialog_actions::handle_details_key(
-                    &mut model_value,
-                    code,
-                    modifiers,
-                    &session_id_copier,
-                ) {
-                    selected_outcome.set(Some(outcome));
-                }
-                return;
-            }
-            if code == KeyCode::F(4) {
-                model_value.open_details_dialog();
-                return;
-            }
-            if matches!(code, KeyCode::F(2))
-                || code == KeyCode::Char('g') && modifiers.contains(KeyModifiers::CONTROL)
-            {
-                let registry = model_value.request.router_registry.clone();
-                model_value.machine_controls.open_browse(&registry);
-                return;
-            }
-            if matches!(code, KeyCode::Tab | KeyCode::BackTab) {
-                model_value.machine_controls.control_focused =
-                    !model_value.machine_controls.control_focused;
-                return;
-            }
-            if model_value.machine_controls.control_focused {
-                match code {
-                    KeyCode::Enter => {
-                        if !modifiers.intersects(
-                            KeyModifiers::ALT | KeyModifiers::CONTROL | KeyModifiers::SUPER,
-                        ) {
-                            let registry = model_value.request.router_registry.clone();
-                            model_value.machine_controls.open_browse(&registry);
-                        }
-                        return;
-                    }
-                    KeyCode::Up | KeyCode::Down | KeyCode::Esc => {
-                        model_value.machine_controls.control_focused = false;
-                        return;
-                    }
-                    _ => {}
-                }
-            }
-            let previous_query = model_value.data_query();
-            match code {
-                KeyCode::Down => model_value.handle_key(SessionsPickerKey::MoveDown),
-                KeyCode::Up => model_value.handle_key(SessionsPickerKey::MoveUp),
-                KeyCode::PageDown => model_value.handle_key(SessionsPickerKey::PageDown),
-                KeyCode::PageUp => model_value.handle_key(SessionsPickerKey::PageUp),
-                KeyCode::Home => model_value.handle_key(SessionsPickerKey::MoveFirst),
-                KeyCode::End => model_value.handle_key(SessionsPickerKey::MoveLast),
-                KeyCode::Char('n') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    selected_outcome.set(model_value.start_new_action());
-                }
-                KeyCode::Char('s') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    model_value.handle_key(SessionsPickerKey::CycleRoot);
-                }
-                KeyCode::Char('t') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    model_value.handle_key(SessionsPickerKey::CycleRuntimeView);
-                }
-                KeyCode::Char('o') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    model_value.handle_key(SessionsPickerKey::CycleSort);
-                }
-                KeyCode::Char('r') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    conversation_cache.write().invalidate();
-                    let generation = reload_generation.get().saturating_add(1);
-                    reload_generation.set(generation);
-                    reload_port.send(model_value.prepare_source_reload(generation));
-                }
-                KeyCode::Char('c' | 'd') if modifiers.contains(KeyModifiers::CONTROL) => {
-                    should_cancel.set(true);
-                }
-                KeyCode::Char('\u{3}' | '\u{4}') => {
-                    should_cancel.set(true);
-                }
-                KeyCode::Backspace => model_value.handle_key(SessionsPickerKey::SearchBackspace),
-                KeyCode::Char(character)
-                    if !modifiers.intersects(
-                        KeyModifiers::CONTROL | KeyModifiers::ALT | KeyModifiers::SUPER,
-                    ) =>
-                {
-                    model_value.handle_key(SessionsPickerKey::SearchChar(character));
-                }
-                KeyCode::Enter
-                    if modifiers.contains(KeyModifiers::CONTROL | KeyModifiers::SHIFT)
-                        && !modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SUPER) =>
-                {
-                    model_value.open_fork_confirmation();
-                }
-                KeyCode::Enter
-                    if modifiers.contains(KeyModifiers::CONTROL)
-                        && !modifiers.intersects(KeyModifiers::ALT | KeyModifiers::SUPER) =>
-                {
-                    if model_value.begin_source_resume() {
-                        return;
-                    }
-                    let outcome = if model_value.focused_identity().is_none() {
-                        model_value.start_new_action()
-                    } else {
-                        model_value.activation_outcome_for_focus()
-                    };
-                    selected_outcome.set(outcome);
-                }
-                KeyCode::Enter if modifiers.is_empty() => model_value.open_details_dialog(),
-                KeyCode::Esc => {
-                    if model_value.search.is_empty()
-                        && model_value.machine_controls.filter != PickerMachineFilter::Default
-                    {
-                        let mode = model_value.request.machine_mode;
-                        model_value
-                            .machine_controls
-                            .return_to_default(mode, can_load_source);
-                        conversation_cache.write().invalidate();
-                        let generation = reload_generation.get().saturating_add(1);
-                        reload_generation.set(generation);
-                        reload_port.send(model_value.prepare_source_reload(generation));
-                    } else if model_value.search.is_empty() {
-                        should_cancel.set(true);
-                    } else {
-                        model_value.handle_key(SessionsPickerKey::ClearSearch);
-                    }
-                }
-                _ => {}
-            }
-            let next_query = model_value.data_query();
-            drop(model_value);
-
-            if next_query != previous_query {
-                conversation_cache.write().invalidate();
-                let generation = reload_generation.get().saturating_add(1);
-                reload_generation.set(generation);
-                reload_port.send(model.write().prepare_source_reload(generation));
-            }
-        }
-    });
+    picker_input::use_picker_input(
+        &mut hooks,
+        picker_input::PickerInputContext {
+            model,
+            session_id_copier: session_id_copier.clone(),
+            observed_width,
+            observed_height,
+            reload_generation,
+            can_load_source: props.record_loader.is_some(),
+            selected_outcome,
+            should_cancel,
+            conversation_cache,
+            reload_port: reload_port.clone(),
+            live_terminal_width,
+            live_terminal_height,
+            width,
+        },
+    );
 
     if should_cancel.get() {
         selected_outcome.set(None);
@@ -525,7 +248,8 @@ pub(crate) fn SessionsPickerComponent<'a>(
 
     if width < MIN_PICKER_WIDTH {
         if let Some(out) = props.selected_outcome_out.as_mut() {
-            **out = Some(SessionsPickerOutcome::TerminalTooNarrow);
+            **out = super::client_action_state::interrupt_client_action(&model.read())
+                .or(Some(SessionsPickerOutcome::TerminalTooNarrow));
         }
         system.exit();
         return element! {
@@ -535,9 +259,31 @@ pub(crate) fn SessionsPickerComponent<'a>(
         };
     }
 
-    if let Some(background) =
-        super::picker_help_view::render_choice_surface(&model.read(), model, height)
-    {
+    if model.read().client_action.is_active() {
+        return super::client_action_view::render_client_action(
+            &model.read(),
+            model,
+            selected_outcome,
+            height,
+        );
+    }
+
+    if let Some(background) = super::picker_help_view::render_choice_surface(
+        &model.read(),
+        model,
+        height,
+        Handler::from({
+            let context = picker_machine_input::MachineSelectionContext {
+                model,
+                can_load_source: props.record_loader.is_some(),
+                reload_port: reload_port.clone(),
+                reload_generation,
+                conversation_cache,
+            };
+            move |key| picker_machine_input::select_machine_choice(context.clone(), key)
+        }),
+        selected_outcome,
+    ) {
         return background;
     }
 
@@ -546,7 +292,7 @@ pub(crate) fn SessionsPickerComponent<'a>(
         model_value
             .details_dialog
             .as_ref()
-            .and_then(|dialog| dialog.record())
+            .map(|dialog| dialog.record())
             .or_else(|| model_value.focused_record())
             .map(|record| {
                 let selected_preview = {
@@ -571,9 +317,24 @@ pub(crate) fn SessionsPickerComponent<'a>(
         model,
         selected_outcome,
         selected_conversation.as_ref(),
-        height,
-        minimum_render_height,
+        picker_frame_view::PickerViewportBudget {
+            height,
+            minimum_render_height,
+        },
         session_id_copier,
+        Handler::from(move |_| {
+            let mut model = model;
+            let mut cache = conversation_cache;
+            let mut generation = reload_generation;
+            let previous = model.read().data_query();
+            model.write().apply_provider_filters();
+            if model.read().data_query() != previous {
+                cache.write().invalidate();
+                let next = generation.get().saturating_add(1);
+                generation.set(next);
+                reload_port.send(model.write().prepare_source_reload(next));
+            }
+        }),
     )
 }
 
@@ -586,3 +347,9 @@ pub(crate) use picker_entrypoint::run_sessions_picker_test_harness;
 #[cfg(test)]
 #[path = "picker_component_tests.rs"]
 mod tests;
+
+#[path = "picker_machine_input.rs"]
+mod picker_machine_input;
+
+#[path = "picker_input.rs"]
+mod picker_input;

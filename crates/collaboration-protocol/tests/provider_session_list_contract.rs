@@ -17,7 +17,7 @@ fn provider_inventory_has_only_known_durable_and_live_fields() {
             "origin":"hostedProvider",
             "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"session-1"},
             "workingDirectory":"/tmp/project","updatedAt":3,
-            "state":"unloaded",
+            "state":"unloaded","requestedPolicy":{"access":"write-restricted"},
             "approver":{"kind":"human","humanId":"owner"},
             "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
         }],"nextCursor":null
@@ -31,11 +31,11 @@ fn provider_inventory_has_only_known_durable_and_live_fields() {
 }
 
 #[test]
-fn cursor_provider_row_keeps_its_existing_wire_shape() {
+fn cursor_provider_row_keeps_origin_optional_and_projects_saved_policy() {
     let row = json!({
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"cursor-one"},
         "workingDirectory":"/tmp/project","updatedAt":3,
-        "state":"unloaded","approver":{"kind":"human","humanId":"owner"},
+        "state":"unloaded","requestedPolicy":{"access":"write-restricted"},"approver":{"kind":"human","humanId":"owner"},
         "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     });
     let decoded: collaboration_protocol::ProviderSessionSummary =
@@ -44,4 +44,18 @@ fn cursor_provider_row_keeps_its_existing_wire_shape() {
     assert!(serialized.get("origin").is_none());
     assert_eq!(serialized["target"], row["target"]);
     assert_eq!(serialized["state"], row["state"]);
+    assert_eq!(
+        serialized["requestedPolicy"],
+        json!({"access":"write-restricted"})
+    );
+    let mut missing_policy = row;
+    missing_policy
+        .as_object_mut()
+        .expect("row object")
+        .remove("requestedPolicy");
+    assert!(
+        serde_json::from_value::<collaboration_protocol::ProviderSessionSummary>(missing_policy)
+            .is_err(),
+        "missing authoritative policy must reject instead of inventing a New default"
+    );
 }

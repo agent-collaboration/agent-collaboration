@@ -41,7 +41,7 @@ pub(super) fn session_list_height(
 ) -> usize {
     let visible_rows = visible_rows.max(1);
     let window_end = (window_start + visible_rows).min(visible_len);
-    let visible_count = window_end.saturating_sub(window_start);
+    let visible_count = window_end.saturating_sub(window_start.max(1));
     let remaining = visible_len.saturating_sub(window_start + visible_rows);
 
     let header_height = 2;
@@ -49,7 +49,7 @@ pub(super) fn session_list_height(
         .map(session_choice_row_height)
         .sum::<usize>();
     let record_gap_height = visible_count.saturating_sub(1);
-    let more_above_height = if window_start > 0 { 2 } else { 0 };
+    let more_above_height = if window_start > 1 { 2 } else { 0 };
     let more_below_height = if remaining > 0 { 2 } else { 0 };
     let list_border_and_padding_height = 2;
 
@@ -62,5 +62,5 @@ pub(super) fn session_list_height(
 }
 
 const fn session_choice_row_height(visible_index: usize) -> usize {
-    if visible_index == 0 { 4 } else { 2 }
+    if visible_index == 0 { 0 } else { 2 }
 }

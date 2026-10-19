@@ -288,10 +288,7 @@ pub(super) fn assert_quota_capture_width_contract(width: usize, text: &str) {
                 }),
                 "quota capture should include {account_label}:\n{text}"
             );
-            assert!(
-                text.contains("weekly · resets") && text.contains("5h · resets"),
-                "quota capture width 72 should preserve weekly reset facts for {account_label}:\n{text}"
-            );
+            assert_quota_capture_account_windows(text, account_label);
         }
         assert!(
             !text.contains("..."),
@@ -310,6 +307,33 @@ pub(super) fn assert_quota_capture_width_contract(width: usize, text: &str) {
             "quota capture width 90 should not clip table cells:\n{text}"
         );
     }
+}
+
+// Each account's natural row may wrap labels and values onto separate lines.
+// Keep the reset facts bound to that account, rather than accepting another
+// account or the selected-detail section as evidence.
+pub(super) fn assert_quota_capture_account_windows(text: &str, account_label: &str) {
+    let account_lines = text
+        .lines()
+        .skip_while(|line| !line.contains(account_label))
+        .take_while(|line| {
+            !line.contains('└')
+                && !line
+                    .chars()
+                    .all(|character| character == '│' || character.is_whitespace())
+        })
+        .collect::<Vec<_>>();
+    let account_block = account_lines.join("\n");
+    for fact in ["Weekly", "5h", "resets 7d", "resets 5h", "%"] {
+        assert!(
+            account_block.contains(fact),
+            "account {account_label} must retain {fact} in its own wrapped row:\n{account_block}"
+        );
+    }
+    assert!(
+        account_block.contains('█') || account_block.contains('░'),
+        "account {account_label} must retain a quota bar:\n{account_block}"
+    );
 }
 
 pub(super) fn format_next_use_for_capture(reason: RoutingReason) -> &'static str {

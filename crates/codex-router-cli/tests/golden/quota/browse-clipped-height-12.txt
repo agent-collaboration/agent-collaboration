@@ -1,12 +1,12 @@
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Quota status                                                                                                                       ◌ fresh 10  Details  Help │
-│ Pool-wide: responses -> acct00    [preferred]                                                                                                                │
+│ Quota status                                                                               ⇄ clients ? · ● fresh 10 · ◷ stale 0 · ? unknown 0  Details  Help │
+│ Pool-wide: responses  Σ accounts 10 · ✓ usable 10 · ◇ reserve 0 · ⊘ blocked 0 · ? unknown 0 · × excluded 0                                                   │
 │ Filters ▾  Provider: All · Disabled: Shown · 10/10 accounts                                                                                                  │
 │ ┌──────────────────────────────────────────────────────────────────────────────────────────┐  ┌────────────────────────────────────────────────────────────┐ │
-│ │  ❯ acct00         [usable]          account 00 detail                                    │  │ Selected account                                           │ │
-│ │                   0 clients         █████ 83% left, reset 7d                             │  │ acct00    [usable]    account 00 detail                    │ │
-│ │                   2 resets          █████ 99% left, reset 5h                             │  │ Quota windows                                              │ │
-│ │                   unknown           □□□□□□□│□□□□□□□  burn unavailable                    │  │ weekly    ████ 83% left, reset 7d                          │ │
-│ │ +9 more below                                                                            │  │ 5h        █████ 99% left, reset 5h                         │ │
+│ │    Account                          Status                 Quota                         │  │ Selected account                                           │ │
+│ │  ❯ acct00                           ✓ available            account 00 detail           ┃ │  │ acct00    available    account 00 detail                   │ │
+│ │    ◎ OpenAI                         0 clients              Weekly                      │ │  │ Quota windows                                              │ │
+│ │                                     ↻ 2 resets             █████ 83% left, reset 7d    │ │  │ weekly    ████ 83% left, reset 7d                          │ │
+│ │                                     Credits unknown        5h                          │ │  │ 5h        █████ 99% left, reset 5h                         │ │
 │ └──────────────────────────────────────────────────────────────────────────────────────────┘  └────────────────────────────────────────────────────────────┘ │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

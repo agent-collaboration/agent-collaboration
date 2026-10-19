@@ -49,7 +49,7 @@ fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyEleme
     element! {
         DialogHost(width,height, dialog: Some(element! {
             DialogFrame(width,height, title: format!("{width}x{height} {status}"),
-                presentation: if width < 60 { DialogPresentation::FullScreen } else { DialogPresentation::Framed { maximum_width: 50, maximum_height: 14 } },
+                presentation: if width < 60 { DialogPresentation::FullScreen } else { DialogPresentation::cells(50, 14) },
                 margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
                 actions: vec![element! {
                     DialogAction(label: format!("Apply {}", clicks.get()), has_focus: true, handler: move |_| clicks.set(clicks.get()+1))
@@ -137,7 +137,7 @@ fn dialog_render_performance_measurements() {
                 for _ in 0..50 {
                     let start = std::time::Instant::now();
                     let dialog=dialog_open.then(||element! {
-                        DialogFrame(width,height,title:"Filters".to_owned(),presentation:DialogPresentation::Framed{maximum_width:72,maximum_height:20},
+                        DialogFrame(width,height,title:"Filters".to_owned(),presentation:DialogPresentation::cells(72, 20),
                             actions:vec![element!(Text(content:"Apply Cancel")).into_any()]) {
                             Text(content:content.clone())
                         }

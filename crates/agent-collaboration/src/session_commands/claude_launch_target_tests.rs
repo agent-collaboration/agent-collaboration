@@ -262,14 +262,14 @@ async fn new_and_resume_commands_set_routed_environment_on_child_command_only() 
             .get_args()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>(),
-        vec!["--verbose"]
+        vec!["--bg", "--verbose"]
     );
     assert_eq!(
         resume_command
             .get_args()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>(),
-        vec!["--resume", SESSION_ID]
+        vec!["--bg", "--resume", SESSION_ID]
     );
     assert_eq!(new_command.get_current_dir(), None);
     assert_eq!(
@@ -498,4 +498,34 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
     assert_eq!(records[0]["sessionId"], SESSION_ID);
     assert_eq!(records[0]["source"], "active");
     assert_eq!(records[0]["name"], "Active local Claude");
+}
+
+#[test]
+fn background_arguments_preserve_all_supplied_tokens_and_literal_prompt_boundary() {
+    let target = ClaudeLaunchTarget {
+        service_directory: PathBuf::new(),
+        secret_root: PathBuf::new(),
+        claude_projects_directory: None,
+    };
+    for aliases in [
+        vec![],
+        vec!["--bg"],
+        vec!["--background"],
+        vec!["--bg", "--background", "--bg"],
+    ] {
+        let arguments = aliases.into_iter().map(OsString::from).collect::<Vec<_>>();
+        let launch = target.launch_arguments(None, &arguments);
+        assert_eq!(
+            launch.as_slice(),
+            std::iter::once(OsString::from("--bg"))
+                .chain(arguments)
+                .collect::<Vec<_>>()
+        );
+    }
+    let literal = ["--", "--print", "--bg", "a prompt with spaces"].map(OsString::from);
+    let launch = target.launch_arguments(None, &literal);
+    assert_eq!(
+        launch.as_slice(),
+        ["--bg", "--", "--print", "--bg", "a prompt with spaces"].map(OsString::from)
+    );
 }

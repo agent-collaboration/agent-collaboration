@@ -28,7 +28,7 @@ async fn ambiguous_native_attribution_preserves_the_independent_provider_invento
     ambiguous["endpoints"].as_array_mut().unwrap().push(second);
     let provider_endpoint = ambiguous["endpoints"][1]["endpoint"].clone();
     let (mut client, peer) = connect_fixture(vec![
-        ("endpoints_list", ambiguous),
+        ("endpoints_list", ambiguous.clone()),
         (
             "provider_sessions_list",
             json!({
@@ -36,10 +36,12 @@ async fn ambiguous_native_attribution_preserves_the_independent_provider_invento
                 "sessions":[],"nextCursor":null
             }),
         ),
+        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null})),
+        ("endpoints_list",ambiguous),
     ])
     .await;
     let result = load_provider_records(&mut client).await;
-    let (attribution, records) = result.unwrap();
+    let (attribution, records, _) = result.unwrap();
     assert!(
         attribution.is_none(),
         "ambiguous native entries cannot attribute stored rows"
@@ -47,7 +49,7 @@ async fn ambiguous_native_attribution_preserves_the_independent_provider_invento
     assert!(records.is_empty());
     assert_eq!(
         peer.await.unwrap().len(),
-        2,
+        4,
         "valid provider read remains independent"
     );
 }
@@ -58,22 +60,24 @@ async fn provider_only_inventory_remains_readable_without_native_attribution() {
     providers["endpoints"].as_array_mut().unwrap().remove(0);
     let provider_endpoint = providers["endpoints"][0]["endpoint"].clone();
     let (mut client, peer) = connect_fixture(vec![
-        ("endpoints_list", providers),
+        ("endpoints_list", providers.clone()),
         (
             "provider_sessions_list",
             json!({
                 "endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z",
                 "sessions":[{
                     "origin":"hostedProvider", "target":{"endpoint":provider_endpoint,"sessionId":"healthy-provider"},
-                    "workingDirectory":"/provider/project","updatedAt":3,"state":"requiresAction",
+                    "workingDirectory":"/provider/project","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},
                     "approver":{"kind":"human","humanId":"owner"},
                     "createdBy":{"endpoint":endpoint(),"sessionId":"creator"}
                 }],"nextCursor":null
             }),
         ),
+        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null})),
+        ("endpoints_list",providers),
     ])
     .await;
-    let (attribution, records) = load_provider_records(&mut client).await.unwrap();
+    let (attribution, records, _) = load_provider_records(&mut client).await.unwrap();
     assert!(attribution.is_none());
     assert_eq!(records.len(), 1);
     assert_eq!(records[0].session_id, "healthy-provider");
@@ -81,5 +85,5 @@ async fn provider_only_inventory_remains_readable_without_native_attribution() {
         matches!(&records[0].identity, SessionPickerIdentity::HostedProvider(target) if target.endpoint.endpoint_id == "claude-local".to_owned().try_into().unwrap())
     );
     assert_eq!(records[0].runtime_status, PickerRuntimeStatus::Blocked);
-    assert_eq!(peer.await.unwrap().len(), 2);
+    assert_eq!(peer.await.unwrap().len(), 4);
 }

@@ -6,7 +6,7 @@ use super::{
     source_reload_worker::SessionRecordsReloadRequest,
 };
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(super) struct SourceSwitchCheckpoint {
     switch_request: SessionRecordsReloadRequest,
     prior_model: Box<SessionsPickerModel>,
@@ -47,7 +47,7 @@ impl SessionsPickerModel {
         request: &SessionRecordsReloadRequest,
         update: SourceReloadUpdate,
     ) -> SourceReloadAcceptance {
-        if self.source_action.pending.is_some() {
+        if self.source_action.pending.is_some() || self.client_action.is_active() {
             return SourceReloadAcceptance::Ignored;
         }
         if self.data_query() != request.query || self.source_contexts() != request.sources {
@@ -61,7 +61,10 @@ impl SessionsPickerModel {
                 SourceRecordsUpdate::Pending => {}
                 SourceRecordsUpdate::Ready(records) => {
                     let complete = update.source_progress.iter().all(|progress| {
-                        matches!(progress.read_state, SourceReadState::Complete { .. })
+                        matches!(
+                            progress.read_state,
+                            SourceReadState::Complete { .. } | SourceReadState::Partial { .. }
+                        )
                     });
                     if !complete && self.source_switch_checkpoint.is_none() {
                         let mut previous = self.clone();
@@ -82,8 +85,10 @@ impl SessionsPickerModel {
                 SourceRecordsUpdate::Rejected(reason) => {
                     self.machine_controls.complete_source_switch(Err(reason));
                     let failed_choice = self.machine_controls.stage.clone();
+                    let failed_search = self.machine_controls.search.clone();
                     if let Some(acceptance) = self.restore_switch_checkpoint(request, reason) {
                         self.machine_controls.stage = failed_choice;
+                        self.machine_controls.search = failed_search;
                         return acceptance;
                     }
                 }
@@ -94,11 +99,12 @@ impl SessionsPickerModel {
         match update.records_update {
             SourceRecordsUpdate::Pending => {}
             SourceRecordsUpdate::Ready(records) => {
-                if self
-                    .source_progress
-                    .iter()
-                    .all(|progress| matches!(progress.read_state, SourceReadState::Complete { .. }))
-                {
+                if self.source_progress.iter().all(|progress| {
+                    matches!(
+                        progress.read_state,
+                        SourceReadState::Complete { .. } | SourceReadState::Partial { .. }
+                    )
+                }) {
                     self.source_switch_checkpoint = None;
                 }
                 self.replace_records(records);
@@ -111,6 +117,7 @@ impl SessionsPickerModel {
                     != super::picker_machine_controls::PickerMachineFilter::Default
                 {
                     self.replace_records(crate::picker_runtime_status::PickerRecordsSnapshot {
+                        native_live_coverage: Vec::new(),
                         records: vec![],
                         runtime_coverage:
                             crate::picker_runtime_status::PickerRuntimeCoverage::Unavailable,
@@ -146,8 +153,20 @@ impl SessionsPickerModel {
         if contains_failed {
             previous.retire_restored_work(&request.sources, reason);
         }
-        // A view rollback cannot rewind invocation-local source attempts or their error state.
+        // The checkpoint owns catalogue state, not subsequently captured user
+        // intent. Restoring it must neither retarget an action nor discard drafts.
+        previous.details_dialog = self.details_dialog.take();
+        previous.fork_confirmation = self.fork_confirmation.take();
+        previous.new_session = self.new_session.take();
+        previous.provider_filter_draft = self.provider_filter_draft.take();
+        previous.provider_choice = std::mem::replace(
+            &mut self.provider_choice,
+            codex_router_tui::SearchSelectState::Closed,
+        );
+        previous.show_help = self.show_help;
         previous.source_action = std::mem::take(&mut self.source_action);
+        previous.client_action = std::mem::take(&mut self.client_action);
+        previous.next_client_generation = self.next_client_generation;
         *self = previous;
         Some(if contains_failed {
             SourceReloadAcceptance::RestoredRetiredView
@@ -201,13 +220,17 @@ impl SessionsPickerModel {
                 record.source_context.as_ref().is_some_and(|source| {
                     self.source_progress.iter().any(|progress| {
                         progress.source_context == *source
-                            && matches!(progress.read_state, SourceReadState::Complete { .. })
+                            && matches!(
+                                progress.read_state,
+                                SourceReadState::Complete { .. } | SourceReadState::Partial { .. }
+                            )
                     })
                 })
             })
             .cloned()
             .collect();
         self.replace_records(crate::picker_runtime_status::PickerRecordsSnapshot {
+            native_live_coverage: self.native_live_coverage.clone(),
             records,
             runtime_coverage: self.runtime_coverage,
         });
@@ -346,10 +369,7 @@ mod tests {
 
     #[test]
     fn source_action_view_rollback_keeps_attempts_monotonic_and_rejects_canceled_completion() {
-        use crate::presentation::session_picker::{
-            picker_machine_controls::MachineChoicePurpose,
-            source_action_tests::{prepared, source_model},
-        };
+        use crate::presentation::session_picker::source_action_tests::{prepared, source_model};
         let mut model = source_model();
         let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
         else {
@@ -366,11 +386,15 @@ mod tests {
             model.source_switch_checkpoint.is_some(),
             "checkpoint must precede the action"
         );
-        model.machine_controls.stage = PickerMachineStage::Choosing {
-            purpose: MachineChoicePurpose::NewSession,
-            focus: 1,
-            notice: None,
+        model.open_new_form();
+        let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+        else {
+            panic!("source fixture");
         };
+        let profile = registry.routers[0].clone();
+        model.select_new_machine(
+            crate::presentation::session_picker::PickerSourceContext::ConfiguredHosted(profile),
+        );
         assert!(model.begin_configured_new());
         let canceled = model.source_action.pending.clone().unwrap();
         model.cancel_source_action();
@@ -385,11 +409,15 @@ mod tests {
             Some(crate::sessions::source_ssh_protocol::SourceReadError::ReadUnavailable),
             "view restoration must not restore an old source error"
         );
-        model.machine_controls.stage = PickerMachineStage::Choosing {
-            purpose: MachineChoicePurpose::NewSession,
-            focus: 1,
-            notice: None,
+        model.open_new_form();
+        let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+        else {
+            panic!("source fixture");
         };
+        let profile = registry.routers[0].clone();
+        model.select_new_machine(
+            crate::presentation::session_picker::PickerSourceContext::ConfiguredHosted(profile),
+        );
         assert!(model.begin_configured_new());
         let current = model.source_action.pending.clone().unwrap();
         assert_eq!(current.profile, canceled.profile);

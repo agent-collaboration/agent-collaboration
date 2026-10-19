@@ -1,8 +1,7 @@
 //! Content-sized machine controls and choices in the existing iocraft visual language.
 use super::interactive_row::InteractiveSessionChoiceRow;
-use super::picker_machine_controls::{MachineChoicePurpose, PickerMachineStage};
+use super::picker_machine_controls::PickerMachineStage;
 use super::picker_model::SessionsPickerModel;
-use codex_router_tui::SurfaceHeader;
 use iocraft::prelude::*;
 
 pub(super) fn render_machine_control(
@@ -43,100 +42,37 @@ pub(super) fn render_machine_choices(
     model: &SessionsPickerModel,
     height: usize,
     help_action: AnyElement<'static>,
+    selection_handler: Handler<super::picker_machine_controls::MachineChoiceKey>,
 ) -> Element<'static, View> {
-    if let PickerMachineStage::Loading { source, .. } = &model.machine_controls.stage {
-        let name = match source.as_ref() {
-            super::PickerSourceContext::ConfiguredHosted(profile) => profile.name.as_str(),
-            super::PickerSourceContext::DefaultHosted => "This machine",
-            super::PickerSourceContext::LocalCodex => "Local Codex",
-        };
-        return element! {
-            View(width: model.width as u32, height: height as u32, padding: 1,
-                flex_direction: FlexDirection::Column, border_style: BorderStyle::Round, border_color: Color::Cyan) {
-                SurfaceHeader(title: format!("Loading machine: {name}"), inactive: model.show_help || model.source_action.pending.is_some(), help_action: Some(help_action))
-                Text(content: "Previous view retained until the selected source is verified", color: Color::Grey)
-                View(flex_grow: 1.0_f32) {}
-
-            }
-        };
-    }
-    let PickerMachineStage::Choosing {
-        purpose,
-        focus,
-        notice,
-    } = model.machine_controls.stage.clone()
-    else {
-        return element! { View {} };
-    };
-    let title = match purpose {
-        MachineChoicePurpose::Browse => "Choose machine",
-        MachineChoicePurpose::NewSession => "Choose machine for new session",
-    };
-    let choices = model
-        .machine_controls
-        .choices(&model.request.router_registry, model.request.machine_mode);
-    let available_rows = height.saturating_sub(10).max(1);
-    let window_start = focus.saturating_sub(available_rows.saturating_sub(1));
-    let rows = choices.iter().enumerate().skip(window_start).take(available_rows).map(|(index, label)| {
-        let selected = index == focus;
-        element! {
-            View(column_gap: 1) {
-                Text(content: if selected { "❯" } else { " " }, color: Color::Yellow, wrap: TextWrap::NoWrap)
-                Text(content: label.clone(), color: if selected { Color::Yellow } else { Color::Grey }, wrap: TextWrap::NoWrap)
-            }
-        }.into_any()
-    }).collect::<Vec<_>>();
-    let detail = if matches!(purpose, MachineChoicePurpose::NewSession) && focus > 0 {
-        if let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
-        {
-            registry
-                .routers
-                .get(focus.saturating_sub(1))
-                .map(|profile| {
-                    profile.default_remote_cwd.as_ref().map_or_else(
-                        || "Working directory: not configured".to_owned(),
-                        |cwd| format!("Working directory: {}", cwd.as_str()),
-                    )
-                })
-        } else {
-            None
+    let width = u16::try_from(model.width).unwrap_or(u16::MAX);
+    let height = u16::try_from(height).unwrap_or(u16::MAX);
+    let (title, body) = match &model.machine_controls.stage {
+        PickerMachineStage::Loading { source, .. } => {
+            let name = match source.as_ref() {
+                super::PickerSourceContext::ConfiguredHosted(profile) => profile.name.as_str(),
+                super::PickerSourceContext::DefaultHosted => "This machine",
+                super::PickerSourceContext::LocalCodex => "Local Codex",
+            };
+            (format!("Loading machine: {name}"),element!(Text(content:"Previous view retained until the selected source is verified",color:Color::Grey)).into_any())
         }
-    } else {
-        None
-    };
-    let explanation = notice.as_ref().map(|notice| notice.message());
-    let source_status = if matches!(purpose, MachineChoicePurpose::Browse) {
-        model
-            .source_progress
-            .iter()
-            .find(|progress| match &progress.source_context {
-                super::PickerSourceContext::DefaultHosted
-                | super::PickerSourceContext::LocalCodex => focus == 0,
-                super::PickerSourceContext::ConfiguredHosted(profile) => {
-                    focus > 1
-                        && choices
-                            .get(focus)
-                            .is_some_and(|choice| choice == profile.name.as_str())
+        PickerMachineStage::Choosing { notice, .. } => {
+            let options = model
+                .machine_controls
+                .choice_options(&model.request.router_registry, model.request.machine_mode);
+            ("Choose machine".to_owned(),element! {
+                View(flex_direction:FlexDirection::Column) {
+                    codex_router_tui::SearchSelect<super::picker_machine_controls::MachineChoiceKey>(state:model.machine_controls.search.clone(),options,on_select:selection_handler)
+                    #(notice.as_ref().map(|notice|element!(Text(content:notice.message(),color:Color::Yellow))))
                 }
-            })
-            .map(|progress| progress.display_line())
-    } else {
-        None
+            }.into_any())
+        }
+        PickerMachineStage::Browsing => return element!(View),
     };
     element! {
-        View(width: model.width as u32, height: height as u32, padding_left: 1, padding_right: 1,
-            flex_direction: FlexDirection::Column, border_style: BorderStyle::Round,
-            border_color: Color::Cyan, overflow: Overflow::Hidden) {
-            SurfaceHeader(title: title.to_owned(), inactive: model.show_help || model.source_action.pending.is_some(), help_action: Some(help_action))
-            View(border_style: BorderStyle::Single, border_color: Color::DarkGrey, padding: 1,
-                flex_direction: FlexDirection::Column, margin_top: 1) {
-                #(rows)
-            }
-            #(detail.map(|detail| element! { Text(content: detail, color: Color::Grey) }))
-            #(source_status.map(|status| element! { Text(content: status, color: Color::Grey) }))
-            #(explanation.map(|message| element! { Text(content: message, color: Color::Yellow) }))
-            View(flex_grow: 1.0_f32) {}
-
+        View(width:u32::from(width),height:u32::from(height)) {
+            codex_router_tui::DialogFrame(width,height,title,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
+                margins:codex_router_tui::DialogMargins {top:1,right:2,bottom:1,left:2},help_action:Some(help_action),
+                actions:vec![element!(Text(content:"Esc Cancel",color:Color::Grey)).into_any()]) {#(body)}
         }
     }
 }

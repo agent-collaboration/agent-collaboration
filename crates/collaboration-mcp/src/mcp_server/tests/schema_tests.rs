@@ -382,7 +382,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
                     {
                         "origin":"hostedProvider","target":provider_target,
                         "workingDirectory":"/tmp/project","updatedAt":1790162500,
-                        "state":"idle","approver":{"kind":"human","humanId":"owner"},
+                        "state":"idle","requestedPolicy":{"access":"write-restricted"},"approver":{"kind":"human","humanId":"owner"},
                         "createdBy":{"kind":"human","humanId":"owner"}
                     },
                     {
@@ -497,4 +497,42 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
             );
         }
     }
+}
+
+#[test]
+fn advertised_load_input_accepts_established_human_or_session_identity_shapes() {
+    let surface = super::super::ToolSurface::new(None);
+    let tool = surface
+        .tools()
+        .iter()
+        .find(|tool| tool.name == "conversation_load")
+        .expect("public Load tool");
+    let schema = serde_json::to_value(&tool.input_schema).expect("Load input schema");
+    let validator = jsonschema::validator_for(&schema).expect("Load schema compiles");
+    let endpoint = serde_json::json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"});
+    let target = serde_json::json!({"endpoint":endpoint,"sessionId":"stored-session"});
+    for requester in [
+        serde_json::json!({"humanId":"source-human"}),
+        target.clone(),
+    ] {
+        let input = serde_json::json!({"operationId":collaboration_protocol::OperationId::generate(),
+            "target":target,"workingDirectory":"/saved/project","requestedBy":requester,
+            "approver":{"humanId":"saved-approver"},"access":"write-restricted"});
+        assert!(
+            validator.is_valid(&input),
+            "public schema must expose both typed requester variants: {input}"
+        );
+        let decoded: collaboration_client::ConversationLoadInput =
+            serde_json::from_value(input).expect("schema and actual client Load shape agree");
+        assert_eq!(
+            serde_json::to_value(decoded.requested_by).expect("requester JSON"),
+            requester
+        );
+    }
+    let invalid = serde_json::json!({"target":target,"workingDirectory":"/saved/project",
+        "requestedBy":"source-human","access":"write-restricted"});
+    assert!(
+        !validator.is_valid(&invalid),
+        "a bare string is not a provider identity"
+    );
 }

@@ -11,9 +11,17 @@ async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
                 ("Filters ▾", vec![TerminalEvent::Key(opening_key)]),
                 (
                     "Account provider · Draft: All",
+                    vec![provider_filter_key(KeyCode::Enter)],
+                ),
+                ("Search:", vec![provider_filter_key(KeyCode::Esc)]),
+                (
+                    "Account provider · Draft: All",
                     vec![provider_filter_key(KeyCode::Esc)],
                 ),
-                ("All · Disabled: Shown", vec![provider_filter_key(KeyCode::Esc)]),
+                (
+                    "All · Disabled: Shown",
+                    vec![provider_filter_key(KeyCode::Esc)],
+                ),
             ],
             None,
         )
@@ -21,7 +29,7 @@ async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
 
         assert!(
             frames.iter().any(|frame| {
-                frame.contains("Account provider · Draft: All")
+                frame.contains("Search:")
                     && frame.contains("OpenAI")
                     && frame.contains("Claude")
                     && frame.contains("Disabled accounts")
@@ -39,75 +47,114 @@ fn provider_filter_key(code: KeyCode) -> TerminalEvent {
 
 #[test]
 fn compact_account_rows_preserve_identity_and_quota_values() {
-    let mut model=quota_two_account_view_model();
-    model.rows[0].account="Claude Delta".to_owned();
-    // Preserve the original 13-cell narrow account column; Details retains the full name.
-    for (width,visible_name) in [(40,"Claude De…"),(68,"Claude De…"),(96,"Claude Delta")] {
-        let frame=super::quota_browse_rendering::render_account_row(&model.rows[0],width,true).render(None).to_string();
-        for marker in [visible_name,"1 client","2 resets","83%","99%"] {
-            assert!(frame.contains(marker),"missing {marker} atwidth{width}: {frame}");
+    let mut model = quota_two_account_view_model();
+    model.rows[0].account = "Claude Delta".to_owned();
+    // Full names wrap in the responsive Account column.
+    for (width, visible_name) in [
+        (40, "Claude Delta"),
+        (68, "Claude Delta"),
+        (96, "Claude Delta"),
+    ] {
+        let frame = crate::presentation::quota::quota_browse_rendering::render_account_row(
+            &model.rows[0],
+            width,
+            true,
+            super::quota_provider_filters::QuotaInteractionMode::Interactive,
+        )
+        .render(None)
+        .to_string();
+        for marker in [visible_name, "1 client", "↻ 2", "resets", "83%", "99%"] {
+            assert!(
+                frame.contains(marker),
+                "missing {marker} atwidth{width}: {frame}"
+            );
         }
-        assert!(frame.lines().all(|line|line.chars().count()<=width),"{frame}");
+        assert!(
+            frame.lines().all(|line| line.chars().count() <= width),
+            "{frame}"
+        );
     }
 }
 
 #[tokio::test]
 async fn quota_details_dialog_resizes_scrolls_and_blocks_background_navigation() {
-    let (sender,receiver)=tokio::sync::mpsc::unbounded_channel();
-    let events=futures_util::stream::unfold(receiver,|mut receiver|async{
-        receiver.recv().await.map(|event|(event,receiver))
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut component=element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,height:0usize));
-    let frames=component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,height:0usize));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
-    let mut phase=0;
-    let mut last=String::new();
-    let journey=async{
-        while let Some(canvas)=frames.next().await {
-            let frame=canvas.to_string();
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let frame = canvas.to_string();
             match phase {
                 0 if frame.contains("Details") => {
-                    sender.send(TerminalEvent::Resize(48,24)).unwrap();
-                    phase=1;
-                },
-                1 if frame.lines().next().is_some_and(|line|line.chars().count()==48) => {
+                    sender.send(TerminalEvent::Resize(48, 24)).unwrap();
+                    phase = 1;
+                }
+                1 if frame
+                    .lines()
+                    .next()
+                    .is_some_and(|line| line.chars().count() == 48) =>
+                {
                     sender.send(provider_filter_key(KeyCode::F(4))).unwrap();
-                    phase=2;
-                },
+                    phase = 2;
+                }
                 2 if frame.contains("Account details") => {
-                    assert!(frame.contains("alpha"),"{frame}");
+                    assert!(frame.contains("alpha"), "{frame}");
                     sender.send(provider_filter_key(KeyCode::End)).unwrap();
-                    phase=3;
-                },
-                3 if frame.lines().any(|line|line.contains("note") && line.contains("alpha detail")) => {
-                    assert!(frame.contains("Close"),"scroll must retain the close action: {frame}");
-                    sender.send(TerminalEvent::Resize(160,40)).unwrap();
-                    phase=4;
-                },
-                4 if frame.contains("Account details") && frame.lines().count()==40 => {
-                    sender.send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left),5,10))).unwrap();
+                    phase = 3;
+                }
+                3 if frame
+                    .lines()
+                    .any(|line| line.contains("note") && line.contains("alpha detail")) =>
+                {
+                    assert!(
+                        frame.contains("Close"),
+                        "scroll must retain the close action: {frame}"
+                    );
+                    sender.send(TerminalEvent::Resize(160, 40)).unwrap();
+                    phase = 4;
+                }
+                4 if frame.contains("Account details") && frame.lines().count() == 40 => {
+                    sender
+                        .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                            MouseEventKind::Down(MouseButton::Left),
+                            5,
+                            10,
+                        )))
+                        .unwrap();
                     sender.send(provider_filter_key(KeyCode::F(3))).unwrap();
-                    sender.send(TerminalEvent::Resize(48,24)).unwrap();
-                    phase=5;
-                },
-                5 if frame.contains("Account details") && frame.lines().count()==24 => {
-                    assert!(!frame.contains("Account provider"),"background filter opened: {frame}");
+                    sender.send(TerminalEvent::Resize(48, 24)).unwrap();
+                    phase = 5;
+                }
+                5 if frame.contains("Account details") && frame.lines().count() == 24 => {
+                    assert!(
+                        !frame.contains("Account provider"),
+                        "background filter opened: {frame}"
+                    );
                     sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-                    phase=6;
-                },
+                    phase = 6;
+                }
                 6 if !frame.contains("Account details") && frame.contains("Details") => {
-                    assert!(frame.contains("❯ alpha"),"background click changed focus: {frame}");
+                    assert!(
+                        frame.contains("❯ alpha"),
+                        "background click changed focus: {frame}"
+                    );
                     sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-                    phase=7;
-                },
+                    phase = 7;
+                }
                 _ => {}
             }
-            last=frame;
+            last = frame;
         }
     };
-    let result=tokio::time::timeout(Duration::from_secs(2),journey).await;
-    assert!(result.is_ok(),"quota dialog phase={phase}: {last}");
-    assert_eq!(phase,7,"{last}");
+    let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "quota dialog phase={phase}: {last}");
+    assert_eq!(phase, 7, "{last}");
 }
 
 fn mixed_provider_filter_view_model() -> QuotaStatusViewModel {
@@ -137,6 +184,7 @@ fn mixed_provider_filter_view_model() -> QuotaStatusViewModel {
     .collect();
     model.selected = Some(model.rows[0].details.clone());
     model.route_line = "fixture pool summary".to_owned();
+    model.header = test_header_facts(4, 4);
     model
 }
 
@@ -145,7 +193,12 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
     for (width, height) in [(76, 30), (48, 24)] {
         let mut model = mixed_provider_filter_view_model();
         assert_eq!(model.rows.len(), 4);
-        let names = ["OpenAI Alpha", "OpenAI Beta", "Claude Gamma", "Claude Delta"];
+        let names = [
+            "OpenAI Alpha",
+            "OpenAI Beta",
+            "Claude Gamma",
+            "Claude Delta",
+        ];
         for (row, name) in model.rows.iter_mut().zip(names) {
             row.account = name.to_owned();
         }
@@ -156,10 +209,13 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
             (
                 "Account provider · Draft: All",
                 vec![
+                    provider_filter_key(KeyCode::Enter),
                     provider_filter_key(KeyCode::Down),
                     provider_filter_key(KeyCode::Down),
+                    provider_filter_key(KeyCode::Enter),
                     provider_filter_key(KeyCode::Tab),
                     provider_filter_key(KeyCode::Char(' ')),
+                    provider_filter_key(KeyCode::Tab),
                     provider_filter_key(KeyCode::Enter),
                 ],
             ),
@@ -169,7 +225,7 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
         let frame = frames.last().expect("filtered narrow frame");
         // The original 13-cell account column preserves this distinguishing
         // visible label; the complete identity remains in the model and Details.
-        assert!(frame.contains("Claude Ga…"), "{frame}");
+        assert!(frame.contains("Claude Gamma"), "{frame}");
         assert!(frame.contains("1/4"), "{frame}");
         assert!(!frame.contains("Claude De"), "{frame}");
         assert!(!frame.contains("OpenAI"), "{frame}");
@@ -177,12 +233,17 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
 }
 
 fn apply_filter_events(provider_steps: usize, hidden: bool) -> Vec<TerminalEvent> {
-    let mut events = vec![provider_filter_key(KeyCode::F(3))];
+    let mut events = vec![
+        provider_filter_key(KeyCode::F(3)),
+        provider_filter_key(KeyCode::Enter),
+    ];
     events.extend((0..provider_steps).map(|_| provider_filter_key(KeyCode::Down)));
+    events.push(provider_filter_key(KeyCode::Enter));
+    events.push(provider_filter_key(KeyCode::Tab));
     if hidden {
-        events.push(provider_filter_key(KeyCode::Tab));
         events.push(provider_filter_key(KeyCode::Char(' ')));
     }
+    events.push(provider_filter_key(KeyCode::Tab));
     events.push(provider_filter_key(KeyCode::Enter));
     events
 }
@@ -212,7 +273,10 @@ async fn quota_provider_filters_real_component_partitions_provider_and_disabled_
             text.contains(&format!("{}/4 accounts", expected.len())),
             "{text}"
         );
-        assert!(text.contains("Pool-wide: fixture pool summary"), "{text}");
+        assert!(
+            text.contains("Pool-wide: responses") && text.contains("Σ accounts 4"),
+            "{text}"
+        );
     }
 }
 
@@ -225,8 +289,10 @@ async fn quota_provider_filters_cancel_draft_and_cancel_button_preserve_committe
         let mut events = vec![
             provider_filter_key(KeyCode::Down),
             provider_filter_key(KeyCode::F(3)),
+            provider_filter_key(KeyCode::Enter),
             provider_filter_key(KeyCode::Down),
             provider_filter_key(KeyCode::Down),
+            provider_filter_key(KeyCode::Enter),
         ];
         events.extend(cancel.into_iter().map(provider_filter_key));
         events.push(provider_filter_key(KeyCode::Esc));
@@ -321,27 +387,44 @@ async fn quota_provider_filters_mouse_open_select_toggle_and_apply_match_keyboar
             let frame = canvas.to_string();
             let target = match phase {
                 0 if frame.contains("Filters ▾") => Some("Filters ▾"),
-                1 if frame.contains("Account provider · Draft: All") => Some("○ Claude"),
-                2 if frame.contains("Account provider · Draft: Claude") => Some("Disabled accounts: Shown"),
-                3 if frame.contains("Disabled accounts: Hidden") => Some("Apply"),
+                1 if frame.contains("Account provider · Draft: All") => Some("All ▾"),
+                2 if frame.contains("Search:") => Some("Claude"),
+                3 if frame.contains("Account provider · Draft: Claude")
+                    && !frame.contains("Search:") =>
+                {
+                    Some("Shown ▾")
+                }
+                4 if frame.contains("Search:") => Some("Hidden"),
+                5 if !frame.contains("Search:") => Some("Apply"),
                 _ => None,
             };
             if let Some(target) = target {
-                let (row, line) = frame.lines().enumerate().find(|(_,line)| line.contains(target)).expect("literal visible click target");
+                let (row, line) = frame
+                    .lines()
+                    .enumerate()
+                    .find(|(_, line)| line.contains(target) && !(phase == 2 && line.contains("◆")))
+                    .expect("literal visible click target");
                 let byte_index = line.find(target).unwrap();
-                let column = line.get(..byte_index).expect("literal match begins at a UTF-8 boundary").chars().count();
+                let column = line
+                    .get(..byte_index)
+                    .expect("literal match begins at a UTF-8 boundary")
+                    .chars()
+                    .count();
                 sender.send(click(column as u16, row as u16)).unwrap();
                 phase += 1;
-            } else if phase == 4 && !frame.contains("Account provider") && frame.contains("Provider: Claude · Disabled: Hidden") {
+            } else if phase == 6
+                && !frame.contains("Account provider")
+                && frame.contains("Provider: Claude · Disabled: Hidden")
+            {
                 sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-                phase = 5;
+                phase = 7;
             }
             frames.push(frame);
         }
     };
     let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
     assert!(result.is_ok(), "mouse dialog phase={phase}: {frames:?}");
-    assert_eq!(phase,5,"{frames:?}");
+    assert_eq!(phase, 7, "{frames:?}");
     let text = frames.last().expect("applied mouse filters must render");
     assert!(
         text.contains("Provider: Claude")
@@ -384,10 +467,16 @@ async fn quota_provider_filters_real_component_preserves_account_options_and_flo
                             4,
                             3,
                         )),
+                        // Ignored input need not trigger a render. Queue the
+                        // normal close after it; a competing filter draft would
+                        // retain an overlay and fail the browse-state phase.
+                        provider_filter_key(KeyCode::Esc),
                     ],
                 ),
-                (expected_modal, vec![provider_filter_key(KeyCode::Esc)]),
-                ("All · Disabled: Shown", vec![provider_filter_key(KeyCode::Esc)]),
+                (
+                    "All · Disabled: Shown",
+                    vec![provider_filter_key(KeyCode::Esc)],
+                ),
             ],
             Some(saver),
         )
@@ -431,8 +520,12 @@ async fn quota_provider_filters_reload_keeps_filters_and_reconciles_latest_visib
     };
     let (events, acknowledgement_sender) = acknowledged_account_options_events(vec![
         (provider_filter_key(KeyCode::F(3)), None),
+        (provider_filter_key(KeyCode::Enter), None),
         (provider_filter_key(KeyCode::Down), None),
         (provider_filter_key(KeyCode::Down), None),
+        (provider_filter_key(KeyCode::Enter), None),
+        (provider_filter_key(KeyCode::Tab), None),
+        (provider_filter_key(KeyCode::Tab), None),
         (
             provider_filter_key(KeyCode::Enter),
             Some("Delta-after-reload"),
@@ -467,21 +560,21 @@ async fn quota_provider_filters_reload_keeps_filters_and_reconciles_latest_visib
 
 #[tokio::test]
 async fn quota_provider_filters_toolbar_chooser_and_footer_fit_owner_viewports() {
-    for (width, height) in [(120, 36), (76, 30), (48,24)] {
+    for (width, height) in [(120, 36), (76, 30), (48, 24)] {
         let frames = render_quota_filter_phases(
             mixed_provider_filter_view_model(),
             width,
             height,
             vec![
-                (
-                    "Quota status",
-                    vec![provider_filter_key(KeyCode::F(3))],
-                ),
+                ("Quota status", vec![provider_filter_key(KeyCode::F(3))]),
                 (
                     "Account provider · Draft: All",
                     vec![provider_filter_key(KeyCode::Esc)],
                 ),
-                ("All · Disabled: Shown", vec![provider_filter_key(KeyCode::Esc)]),
+                (
+                    "All · Disabled: Shown",
+                    vec![provider_filter_key(KeyCode::Esc)],
+                ),
             ],
             None,
         )
@@ -496,9 +589,9 @@ async fn quota_provider_filters_toolbar_chooser_and_footer_fit_owner_viewports()
             "Help",
             "Provider: All",
             "Disabled: Shown",
-            "4/4 accounts",
-            "OpenAI",
-            "Claude",
+            "4/4",
+            "All ▾",
+            "Shown ▾",
             "Apply",
             "Cancel",
         ] {
@@ -519,6 +612,8 @@ async fn render_quota_filter_phases(
         receiver.recv().await.map(|event| (event, receiver))
     });
     let mut phases = phases.into_iter().peekable();
+    let latest_frame = Arc::new(std::sync::Mutex::new(String::new()));
+    let observed_frame = Arc::clone(&latest_frame);
     let mut component = element! {
         QuotaStatusComponent(view_model, width, height, weekly_floor_saver)
     };
@@ -526,6 +621,7 @@ async fn render_quota_filter_phases(
         .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
+            *observed_frame.lock().expect("frame diagnostic lock") = frame.clone();
             if phases
                 .peek()
                 .is_some_and(|(marker, _)| frame.contains(marker))
@@ -541,30 +637,174 @@ async fn render_quota_filter_phases(
         .collect::<Vec<_>>();
     tokio::time::timeout(Duration::from_secs(2), render)
         .await
-        .expect("real quota filter scenario must complete within its existing lifecycle bound")
+        .unwrap_or_else(|error| panic!("real quota filter scenario must complete within its existing lifecycle bound: {error}; last frame:\n{}", latest_frame.lock().expect("frame diagnostic lock")))
 }
 
 #[test]
 fn compact_header_quota_toolbar_uses_at_most_two_rows_and_preserves_filter_state() {
     use super::quota_provider_filter_rendering::render_quota_filter_toolbar;
     use super::quota_provider_filters::QuotaAccountFilters;
-    let frame = render_quota_filter_toolbar(QuotaAccountFilters::default(), 4, 4, 44, true, |_| {}).render(None).to_string();
-    assert!(frame.lines().count() <= 2, "phone toolbar must leave account space: {frame}");
-    assert!(frame.lines().any(|line| line.contains("All") && line.contains("Shown") && line.contains("4/4")), "one compact committed summary: {frame}");
-    assert!(frame.contains("▾"), "the compact filter action stays discoverable: {frame}");
+    let frame = render_quota_filter_toolbar(QuotaAccountFilters::default(), 4, 4, 44, true, |_| {})
+        .render(None)
+        .to_string();
+    assert!(
+        frame.lines().count() <= 2,
+        "phone toolbar must leave account space: {frame}"
+    );
+    assert!(
+        frame
+            .lines()
+            .any(|line| line.contains("All") && line.contains("Shown") && line.contains("4/4")),
+        "one compact committed summary: {frame}"
+    );
+    assert!(
+        frame.contains("▾"),
+        "the compact filter action stays discoverable: {frame}"
+    );
 }
 
 #[tokio::test]
-async fn owner_feedback_quota_chrome_uses_title_plus_two_supporting_rows() {
+async fn owner_feedback_quota_chrome_retains_wrapped_counters_and_controls() {
     for (width, height) in [(120, 36), (76, 30), (48, 24)] {
         let frame = render_quota_capture_model_at(
-            quota_two_account_view_model(), width, height,
+            quota_two_account_view_model(),
+            width,
+            height,
             vec![provider_filter_key(KeyCode::Esc)],
-        ).await;
-        let title_row = frame.lines().position(|line| line.contains("Quota status")).unwrap();
-        let first_account = frame.lines().position(|line| line.contains("alpha") && line.contains("[usable]")).unwrap();
-        assert!(first_account <= title_row + 4,
-            "title plus at most two supporting rows and the existing list border at {width}: {frame}");
-        assert!(frame.contains("Details") && frame.contains("Disabled") && frame.contains("Shown"), "keep active controls and state visible: {frame}");
+        )
+        .await;
+        let title_row = frame
+            .lines()
+            .position(|line| line.contains("Quota status"))
+            .unwrap();
+        let first_account = frame
+            .lines()
+            .position(|line| line.contains("alpha") && !line.contains("Pool-wide"))
+            .unwrap();
+        assert!(
+            first_account <= title_row + 7,
+            "typed counters may wrap; title, controls, list border and group heading stay compact at {width}: {frame}"
+        );
+        assert!(
+            frame.contains("Details") && frame.contains("Disabled") && frame.contains("Shown"),
+            "keep active controls and state visible: {frame}"
+        );
     }
+}
+
+#[test]
+fn account_rows_wrap_full_name_with_provider_below_and_fixed_selector_columns() {
+    let mut row = mixed_provider_filter_view_model().rows[0].clone();
+    row.account = "東京 Team Account Alpha Beta Gamma".to_owned();
+    for width in [44usize, 72, 116] {
+        let mut provider_columns = Vec::new();
+        for focused in [false, true] {
+            let frame = crate::presentation::quota::quota_browse_rendering::render_account_row(
+                &row,
+                width,
+                focused,
+                super::quota_provider_filters::QuotaInteractionMode::Interactive,
+            )
+            .render(None)
+            .to_string();
+            for word in [
+                "東京", "Team", "Account", "Alpha", "Beta", "Gamma", "OpenAI",
+            ] {
+                assert!(frame.contains(word), "width{width} missing {word}: {frame}");
+            }
+            let (name_row, name_line) = frame
+                .lines()
+                .enumerate()
+                .find(|(_, line)| line.contains("東京"))
+                .unwrap();
+            let (provider_row, provider_line) = frame
+                .lines()
+                .enumerate()
+                .find(|(_, line)| line.contains("OpenAI"))
+                .unwrap();
+            assert!(
+                provider_row > name_row,
+                "provider belongs below account: {frame}"
+            );
+            let name_column = unicode_width::UnicodeWidthStr::width(
+                &name_line[..name_line.find("東京").unwrap()],
+            );
+            let provider_column = unicode_width::UnicodeWidthStr::width(
+                &provider_line[..provider_line.find("◎").unwrap()],
+            );
+            assert_eq!(
+                name_column, provider_column,
+                "name/provider share Account start: {frame}"
+            );
+            provider_columns.push(provider_column);
+        }
+        assert_eq!(provider_columns[0], provider_columns[1]);
+    }
+}
+
+#[tokio::test]
+async fn quota_header_exposes_distinct_availability_and_operational_censuses() {
+    let frame = render_quota_capture_model_at(
+        quota_two_account_view_model(),
+        160,
+        36,
+        vec![provider_filter_key(KeyCode::Esc)],
+    )
+    .await;
+    let header = frame.lines().take(6).collect::<Vec<_>>().join("\n");
+    for counter in [
+        "Σ accounts 2",
+        "✓ usable 2",
+        "◇ reserve 0",
+        "⊘ blocked 0",
+        "? unknown 0",
+        "× excluded 0",
+        "● fresh 2",
+        "◷ stale 0",
+    ] {
+        assert!(
+            header.contains(counter),
+            "missing {counter} in typed pool/operational header: {frame}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn routing_preference_and_stale_status_do_not_move_with_keyboard_focus() {
+    use super::quota_status_symbols::{QuotaAccountStatus, QuotaRowStatus};
+    let mut model = quota_two_account_view_model();
+    model.rows[0].status = QuotaRowStatus::Account(QuotaAccountStatus::Preferred);
+    model.rows[0].details.status = "preferred".to_owned();
+    model.rows[1].status = QuotaRowStatus::Account(QuotaAccountStatus::Stale);
+    model.rows[1].details.status = "stale".to_owned();
+    model.header.freshness = super::quota_status_symbols::QuotaFreshnessCensus {
+        fresh: 1,
+        stale: 1,
+        unknown: 0,
+    };
+    let frames = render_quota_navigation_until(
+        model,
+        160,
+        36,
+        vec![provider_filter_key(KeyCode::Down)],
+        "❯ beta",
+    )
+    .await;
+    let frame = frames.last().unwrap();
+    assert!(
+        frame
+            .lines()
+            .any(|line| line.contains("alpha") && line.contains("★ preferred")),
+        "routing preference remains on alpha: {frame}"
+    );
+    assert!(
+        frame
+            .lines()
+            .any(|line| line.contains("❯ beta") && line.contains("◷ stale")),
+        "focus remains independent of freshness-derived status: {frame}"
+    );
+    assert!(
+        frame.contains("✓ usable 2") && frame.contains("◷ stale 1"),
+        "whole-pool availability and freshness remain independent: {frame}"
+    );
 }

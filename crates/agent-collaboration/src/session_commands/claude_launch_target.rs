@@ -47,8 +47,52 @@ pub(super) struct RoutedClaudeEnvironment {
 }
 
 impl ClaudeLaunchTarget {
+    /// Read-only route qualification. Presence is not a vendor compatibility
+    /// claim; the actual launch still rechecks the source and returns its result.
+    pub(super) async fn launch_availability(
+        &self,
+        context: &CliContext,
+    ) -> super::source_ssh_protocol::SourceNativeLaunchAvailability {
+        use super::source_ssh_protocol::SourceNativeLaunchAvailability;
+        use std::os::unix::fs::PermissionsExt;
+        let mut executable_found = false;
+        if let Some(path) = context.env_var("PATH") {
+            for directory in std::env::split_paths(&path) {
+                if let Ok(metadata) = tokio::fs::metadata(directory.join("claude")).await
+                    && metadata.is_file()
+                    && metadata.permissions().mode() & 0o111 != 0
+                {
+                    executable_found = true;
+                    break;
+                }
+            }
+        }
+        if !executable_found {
+            return SourceNativeLaunchAvailability::Unavailable {
+                message: "Native Claude executable is unavailable on the source PATH".to_owned(),
+            };
+        }
+        match self.routed_environment().await {
+            Ok(_) => SourceNativeLaunchAvailability::Ready,
+            Err(error) => SourceNativeLaunchAvailability::Unavailable {
+                message: error.to_string(),
+            },
+        }
+    }
+
     pub(super) fn resolve(context: &CliContext) -> Result<Self, SessionsCommandError> {
-        let service_directory = collaboration_service_directory(context)?;
+        Self::resolve_for_service(context, collaboration_service_directory(context)?)
+    }
+
+    pub(super) fn resolve_for_service(
+        context: &CliContext,
+        service_directory: PathBuf,
+    ) -> Result<Self, SessionsCommandError> {
+        if !service_directory.is_absolute() {
+            return Err(SessionsCommandError::ClaudeLaunch(
+                "source service directory must be absolute".to_owned(),
+            ));
+        }
         let router_root = service_directory
             .parent()
             .ok_or_else(|| {
@@ -75,16 +119,14 @@ impl ClaudeLaunchTarget {
         session_id: Option<&str>,
         passthrough_arguments: &[OsString],
     ) -> Vec<OsString> {
-        let mut arguments = Vec::with_capacity(
-            passthrough_arguments
-                .len()
-                .saturating_add(if session_id.is_some() { 2 } else { 0 }),
-        );
+        // Native Claude owns its option grammar, including values that resemble
+        // flags and incompatible modes. Preserve its actual result unchanged.
+        let mut arguments = Vec::with_capacity(passthrough_arguments.len() + 3);
+        arguments.push(OsString::from("--bg"));
         if let Some(session_id) = session_id {
-            arguments.push(OsString::from("--resume"));
-            arguments.push(OsString::from(session_id));
+            arguments.extend([OsString::from("--resume"), OsString::from(session_id)]);
         }
-        arguments.extend(passthrough_arguments.iter().cloned());
+        arguments.extend_from_slice(passthrough_arguments);
         arguments
     }
 
@@ -142,6 +184,16 @@ impl ClaudeLaunchTarget {
             command.current_dir(working_directory);
         }
         command
+    }
+
+    pub(super) async fn service_manifest(&self) -> Result<ServiceManifest, SessionsCommandError> {
+        let path = self.service_directory.join("service.json");
+        tokio::task::spawn_blocking(move || read_service_manifest(&path))
+            .await
+            .map_err(|error| {
+                SessionsCommandError::ClaudeLaunch(format!("source discovery task failed: {error}"))
+            })?
+            .map_err(SessionsCommandError::ClaudeLaunch)
     }
 
     async fn router_proxy_endpoint(&self) -> Result<SocketAddr, SessionsCommandError> {
@@ -279,7 +331,7 @@ fn active_claude_session_record(session: ProviderSessionSummary) -> Option<serde
     }))
 }
 
-pub(super) fn parse_router_proxy_endpoint(manifest_path: &Path) -> Result<SocketAddr, String> {
+pub(super) fn read_service_manifest(manifest_path: &Path) -> Result<ServiceManifest, String> {
     let manifest_metadata = fs::symlink_metadata(manifest_path).map_err(|error| {
         if error.kind() == std::io::ErrorKind::NotFound {
             ROUTER_PROXY_ENDPOINT_NOT_PUBLISHED.to_owned()
@@ -303,7 +355,11 @@ pub(super) fn parse_router_proxy_endpoint(manifest_path: &Path) -> Result<Socket
     }
     let manifest: ServiceManifest = serde_json::from_slice(&manifest_bytes)
         .map_err(|_| "Router service discovery is invalid; restart the Router Host".to_owned())?;
-    manifest
+    Ok(manifest)
+}
+
+pub(super) fn parse_router_proxy_endpoint(manifest_path: &Path) -> Result<SocketAddr, String> {
+    read_service_manifest(manifest_path)?
         .router_proxy_endpoint
         .ok_or_else(|| ROUTER_PROXY_ENDPOINT_NOT_PUBLISHED.to_owned())
 }

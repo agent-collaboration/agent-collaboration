@@ -52,9 +52,9 @@ pub(super) fn render_help(
         sections.push(ShortcutSection {
             title: "Session filters".to_owned(),
             entries: entries(&[
-                ("↑ / ↓", "Choose provider draft"),
-                ("Tab / Shift+Tab", "Move between provider, Apply and Cancel"),
-                ("Enter", "Apply draft, or cancel when Cancel is focused"),
+                ("↑ / ↓", "Move field focus"),
+                ("Tab / Shift+Tab", "Move field focus"),
+                ("Enter", "Search choice or activate action"),
                 ("Esc", "Cancel draft"),
             ]),
         });
@@ -129,6 +129,8 @@ pub(super) fn render_choice_surface(
     model: &SessionsPickerModel,
     state: State<SessionsPickerModel>,
     height: usize,
+    selection_handler: Handler<super::picker_machine_controls::MachineChoiceKey>,
+    outcome: State<Option<super::SessionsPickerOutcome>>,
 ) -> Option<Element<'static, View>> {
     let background = if let Some(confirmation) = &model.fork_confirmation {
         super::picker_fork_view::render_fork_confirmation(
@@ -137,14 +139,21 @@ pub(super) fn render_choice_surface(
             height,
             help_action(state),
             model.show_help || model.source_action.pending.is_some(),
+            state,
+            outcome,
         )
         .into_any()
     } else if !matches!(
         model.machine_controls.stage,
         super::picker_machine_controls::PickerMachineStage::Browsing
     ) {
-        super::picker_machine_view::render_machine_choices(model, height, help_action(state))
-            .into_any()
+        super::picker_machine_view::render_machine_choices(
+            model,
+            height,
+            help_action(state),
+            selection_handler,
+        )
+        .into_any()
     } else {
         return None;
     };

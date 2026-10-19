@@ -1,9 +1,5 @@
 //! Captured source/action/attempt claims; no SSH or native process is substituted here.
-use super::{
-    picker_machine_controls::{MachineChoicePurpose, PickerMachineStage},
-    picker_model::SessionsPickerModel,
-    test_support::picker_request,
-};
+use super::{picker_model::SessionsPickerModel, test_support::picker_request};
 use crate::sessions::source_ssh_protocol::{SourceReadError, SourceRejection};
 use crate::sessions::{RouterRegistryRead, router_connection_registry::RouterConnectionRegistry};
 
@@ -16,11 +12,13 @@ pub(super) fn source_model() -> SessionsPickerModel {
 #[test]
 fn source_action_new_captures_directory_and_cancel_invalidates_completion() {
     let mut model = source_model();
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     assert!(model.begin_configured_new());
     let captured = model.source_action.pending.clone().unwrap();
     assert!(model.begin_configured_new());
@@ -32,14 +30,10 @@ fn source_action_new_captures_directory_and_cancel_invalidates_completion() {
             .is_none()
     );
     assert!(model.source_action.error.is_none());
-    assert!(matches!(
-        model.machine_controls.stage,
-        PickerMachineStage::Choosing {
-            purpose: MachineChoicePurpose::NewSession,
-            focus: 1,
-            ..
-        }
-    ));
+    assert!(model.new_session.as_ref().is_some_and(|draft| matches!(
+        draft.selected_source,
+        super::PickerSourceContext::ConfiguredHosted(_)
+    )));
     assert!(model.begin_configured_new());
     assert_ne!(
         model.source_action.pending.as_ref().unwrap().attempt,
@@ -51,11 +45,13 @@ fn source_action_new_captures_directory_and_cancel_invalidates_completion() {
 fn source_action_forbidden_native_options_do_not_enter_checking() {
     let mut model = source_model();
     model.request.native_arguments = vec!["--cd".into(), "/caller".into()];
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     assert!(model.begin_configured_new());
     assert!(model.source_action.pending.is_none());
     assert_eq!(
@@ -83,11 +79,13 @@ pub(super) fn prepared(
 #[test]
 fn source_action_completion_requires_current_full_tuple_and_publishes_once() {
     let mut model = source_model();
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     assert!(model.begin_configured_new());
     let captured = model.source_action.pending.clone().unwrap();
     let mut wrong_attempt = captured.clone();
@@ -118,11 +116,13 @@ fn source_action_completion_requires_current_full_tuple_and_publishes_once() {
 #[test]
 fn source_action_failed_prepare_retains_chooser_and_fixed_error() {
     let mut model = source_model();
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     model.begin_configured_new();
     let captured = model.source_action.pending.clone().unwrap();
     assert!(
@@ -141,14 +141,10 @@ fn source_action_failed_prepare_retains_chooser_and_fixed_error() {
             SourceRejection::DirectoryUnavailable
         ))
     );
-    assert!(matches!(
-        model.machine_controls.stage,
-        PickerMachineStage::Choosing {
-            purpose: MachineChoicePurpose::NewSession,
-            focus: 1,
-            ..
-        }
-    ));
+    assert!(model.new_session.as_ref().is_some_and(|draft| matches!(
+        draft.selected_source,
+        super::PickerSourceContext::ConfiguredHosted(_)
+    )));
 }
 
 #[test]
@@ -196,11 +192,13 @@ fn source_action_resume_and_fork_freeze_full_source_model_and_cwd() {
 #[test]
 fn source_action_rejects_wrong_reply_and_unobserved_rows() {
     let mut model = source_model();
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     model.begin_configured_new();
     let captured = model.source_action.pending.clone().unwrap();
     let mut reply = prepared(&captured);
@@ -243,11 +241,13 @@ async fn source_action_worker_drops_canceled_read_without_publishing() {
         }
     }
     let mut model = source_model();
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     model.begin_configured_new();
     let request = model.source_action.pending.clone().unwrap();
     let (sender, receiver) = tokio::sync::watch::channel(Some(request));
@@ -291,18 +291,23 @@ fn source_action_default_local_http_and_cross_machine_fork_do_not_prepare() {
     let mut local = SessionsPickerModel::new(picker_request(), 120);
     assert!(!local.begin_source_resume());
     assert_eq!(
-        local.start_new_action(),
+        {
+            assert!(local.start_new_action().is_none());
+            local.submit_new_form()
+        },
         Some(super::SessionsPickerOutcome::StartNewSession)
     );
     let mut model = source_model();
     let mut request = model.request.clone();
     request.router_registry = RouterRegistryRead::Ready(RouterConnectionRegistry::parse(r#"{"version":1,"routers":[{"name":"HTTP source","connection":{"kind":"remote","serviceId":"00000000-0000-4000-8000-000000000001","mcpUrl":"https://fixture.invalid/mcp"},"defaultRemoteCwd":"/source/only"}]}"#).unwrap());
     model = SessionsPickerModel::new(request, 120);
-    model.machine_controls.stage = PickerMachineStage::Choosing {
-        purpose: MachineChoicePurpose::NewSession,
-        focus: 1,
-        notice: None,
+    model.open_new_form();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("source fixture");
     };
+    let profile = registry.routers[0].clone();
+    model.select_new_machine(super::PickerSourceContext::ConfiguredHosted(profile));
     assert!(
         !model.begin_configured_new(),
         "HTTP remains unqualified for native launch"
@@ -312,6 +317,9 @@ fn source_action_default_local_http_and_cross_machine_fork_do_not_prepare() {
         confirmation
             .destinations
             .push(super::picker_fork_confirmation::ForkDestination {
+                key: super::picker_fork_confirmation::ForkDestinationKey::Machine(
+                    super::PickerSourceContext::DefaultHosted,
+                ),
                 label: "Other source".to_owned(),
                 availability:
                     super::picker_fork_confirmation::ForkAvailability::HistoryRemainsOnSource,

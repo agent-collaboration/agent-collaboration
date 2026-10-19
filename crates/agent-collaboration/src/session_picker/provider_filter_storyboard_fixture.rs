@@ -141,6 +141,9 @@ fn managed_summary(
             .map_err(std::io::Error::other)?,
         updated_at: observed_seconds,
         state: ProviderSessionState::Idle,
+        requested_policy: collaboration_client::protocol::ProviderRequestedPolicy {
+            access: collaboration_client::protocol::RouterAccess::WriteRestricted,
+        },
         approver: creator.clone(),
         created_by: creator,
     })

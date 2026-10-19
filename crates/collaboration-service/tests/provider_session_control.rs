@@ -178,6 +178,11 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     );
     let wire = serde_json::to_value(&cold.sessions[0]).expect("row JSON");
     assert_eq!(wire["approver"], json!(creator));
+    assert_eq!(
+        wire["requestedPolicy"],
+        json!({"access":"write-restricted"}),
+        "Stored inventory must project the seeded policy, never New's workspace-write default"
+    );
     assert!(wire.get("title").is_none());
     let cursor_page = client
         .list_provider_sessions(ProviderSessionListParams {

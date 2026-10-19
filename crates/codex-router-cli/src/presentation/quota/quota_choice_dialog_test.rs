@@ -1,0 +1,132 @@
+use crate::presentation::quota::quota_browse_presentation_test::quota_two_account_view_model;
+use crate::presentation::quota::quota_status_component::QuotaStatusComponent;
+use futures_util::StreamExt;
+use iocraft::prelude::*;
+use std::sync::{
+    Arc,
+    atomic::{AtomicUsize, Ordering},
+};
+fn key(code: KeyCode) -> TerminalEvent {
+    TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
+}
+fn control(character: char) -> TerminalEvent {
+    let mut event = KeyEvent::new(KeyEventKind::Press, KeyCode::Char(character));
+    event.modifiers = KeyModifiers::CONTROL;
+    TerminalEvent::Key(event)
+}
+
+#[tokio::test]
+async fn quota_credit_choice_cancel_is_owned_before_editor_and_never_saves() {
+    let saves = Arc::new(AtomicUsize::new(0));
+    let saver: crate::presentation::quota::quota_account_options::CreditUsagePolicySaver = {
+        let saves = saves.clone();
+        Arc::new(move |_, _, policy| {
+            saves.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move { Ok(policy) })
+        })
+    };
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:120usize,height:36usize,credit_policy_saver:Some(saver)));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let text = canvas.to_string();
+            match phase {
+                0 => {
+                    sender.send(control('r')).unwrap();
+                    phase = 1;
+                }
+                1 if text.contains("Resets") => {
+                    sender.send(key(KeyCode::Tab)).unwrap();
+                    phase = 2;
+                }
+                2 if text.contains("Credit balance") => {
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    phase = 3;
+                }
+                3 if text.contains("Search:") => {
+                    sender
+                        .send(TerminalEvent::BracketedPaste("no-match-policy".to_owned()))
+                        .unwrap();
+                    phase = 4;
+                }
+                4 if text.contains("No matching choices") => {
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 5;
+                }
+                5 if text.contains("Credit usage")
+                    && text.contains("Save")
+                    && !text.contains("Search:") =>
+                {
+                    assert_eq!(saves.load(Ordering::SeqCst), 0);
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 6;
+                }
+                6 if text.contains("Credit balance") && text.contains("Edit") => {
+                    sender.send(control('d')).unwrap();
+                    phase = 7;
+                }
+                _ => {}
+            }
+            last = text;
+        }
+    };
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "phase={phase}: {last}");
+    assert_eq!(phase, 7, "{last}");
+    assert_eq!(saves.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
+async fn quota_wrapped_list_reveals_last_focused_account_before_exit() {
+    let mut model = quota_two_account_view_model();
+    let template = model.rows[0].clone();
+    model.rows = (0..10)
+        .map(|index| {
+            let mut row = template.clone();
+            row.account_id =
+                codex_router_core::ids::AccountId::new(format!("account-{index}")).unwrap();
+            row.account = format!("Account {index:02}");
+            row.selected = index == 0;
+            row
+        })
+        .collect();
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component =
+        element!(QuotaStatusComponent(view_model:model,width:76usize,height:24usize));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let text = canvas.to_string();
+            match phase {
+                0 => {
+                    for _ in 0..9 {
+                        sender.send(key(KeyCode::Down)).unwrap();
+                    }
+                    phase = 1;
+                }
+                1 if text.contains("❯ Account 09") => {
+                    sender.send(control('d')).unwrap();
+                    phase = 2;
+                }
+                _ => {}
+            }
+            last = text;
+        }
+    };
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "phase={phase}: {last}");
+    assert_eq!(phase, 2, "{last}");
+}

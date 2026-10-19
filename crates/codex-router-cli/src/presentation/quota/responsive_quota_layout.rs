@@ -296,3 +296,40 @@ pub(super) fn apply_live_terminal_width_sample(
     *observed_width = terminal_width;
     true
 }
+
+/// Keep runtime repaint scheduling separate from screen composition.
+pub(super) fn use_quota_status_spinner(
+    hooks: &mut Hooks,
+    mut tick: State<usize>,
+    interval: std::time::Duration,
+) {
+    hooks.use_future(async move {
+        let mut interval = tokio::time::interval(interval);
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            tick += 1;
+        }
+    });
+}
+
+pub(super) fn use_live_terminal_width(
+    hooks: &mut Hooks,
+    enabled: bool,
+    mut observed_width: State<usize>,
+) {
+    hooks.use_future(async move {
+        if !enabled {
+            return;
+        }
+        let mut interval = tokio::time::interval(std::time::Duration::from_millis(80));
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let mut width = observed_width.get();
+            if apply_live_terminal_width_sample(&mut width, current_terminal_width()) {
+                observed_width.set(width);
+            }
+        }
+    });
+}

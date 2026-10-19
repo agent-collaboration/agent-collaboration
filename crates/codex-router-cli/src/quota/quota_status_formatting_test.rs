@@ -92,15 +92,11 @@ fn quota_status_table_separates_quota_bars_from_burn_bars() {
         text.contains("%/h") && text.contains("%/h/conn"),
         "quota table should expose total and per-connection rate units:\n{text}"
     );
+    for account_label in ["ssdev", "askluna", "matches", "legacy"] {
+        assert_quota_capture_account_windows(&text, account_label);
+    }
     assert!(
-        text.contains("weekly · resets")
-            && text.contains("5h · resets")
-            && text.contains("█")
-            && text.contains("%"),
-        "main account rows should show weekly and 5h quota lines after connection/reset metadata:\n{text}"
-    );
-    assert!(
-        text.contains("weekly pace") || text.contains("weekly · runs out"),
+        text.contains("Weekly pace"),
         "account list should end with weekly burndown:\n{text}"
     );
     assert!(

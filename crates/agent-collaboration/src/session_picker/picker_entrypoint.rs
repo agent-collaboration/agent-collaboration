@@ -5,6 +5,7 @@ use std::io;
 pub(crate) fn run_sessions_picker(
     request: SessionsPickerRequest,
     record_loader: Option<SessionsPickerRecordLoader>,
+    client_ports: Option<super::super::SessionClientPorts>,
 ) -> io::Result<Option<SessionsPickerOutcome>> {
     let mut selected_outcome = None;
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -15,6 +16,9 @@ pub(crate) fn run_sessions_picker(
             SessionsPickerComponent(
                 request: request,
                 record_loader: record_loader,
+                client_inventory_loader: client_ports.as_ref().map(|ports|ports.inventory_loader.clone()),
+                client_executor: client_ports.as_ref().map(|ports|ports.executor.clone()),
+                details_client_inspector:client_ports.as_ref().map(|ports|ports.details_inspector.clone()),
                 session_id_copier: Some(super::super::session_id_clipboard::terminal_session_id_copier()),
                 width: 0usize,
                 selected_outcome_out: &mut selected_outcome,
@@ -38,7 +42,7 @@ pub(crate) fn run_sessions_picker_test_harness() -> io::Result<()> {
     let request =
         super::super::provider_filter_storyboard_fixture::provider_filter_storyboard_request()?;
 
-    let outcome = run_sessions_picker(request, None)?;
+    let outcome = run_sessions_picker(request, None, None)?;
     let marker = match outcome {
         Some(SessionsPickerOutcome::ResumeSession(selection)) => {
             format!("SESSION_PICKER_OUTCOME resume:{}", selection.session_id())
@@ -54,6 +58,9 @@ pub(crate) fn run_sessions_picker_test_harness() -> io::Result<()> {
         }
         Some(SessionsPickerOutcome::TerminalTooNarrow) => {
             "SESSION_PICKER_OUTCOME terminal-too-narrow".to_owned()
+        }
+        Some(SessionsPickerOutcome::InterruptedClientAction(_)) => {
+            "SESSION_PICKER_OUTCOME interrupted-client".to_owned()
         }
         None => "SESSION_PICKER_OUTCOME canceled".to_owned(),
     };

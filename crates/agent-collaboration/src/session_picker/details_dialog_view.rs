@@ -21,7 +21,6 @@ pub(super) fn render_details_dialog(
     };
     let title = match &dialog.target {
         SessionDetailsTarget::Session(record) => format!("Session details · {}", record.title),
-        SessionDetailsTarget::NewSession => "New session details".to_owned(),
     };
     let expected_target = dialog.target.clone();
     let actions = dialog.actions().iter().map(|action| {
@@ -36,16 +35,12 @@ pub(super) fn render_details_dialog(
                 }
             })).into_any()
     }).collect::<Vec<_>>();
-    let content_width = usize::from(width)
-        .saturating_sub(4)
-        .min(90)
-        .saturating_sub(4);
+    let ((_, frame_width), _) =
+        DialogPresentation::default().resolve(width.saturating_sub(4), height.saturating_sub(2));
+    let content_width = usize::from(frame_width.saturating_sub(4));
     let content = match &dialog.target {
         SessionDetailsTarget::Session(record) => {
             render_details(record, content_width, selected_conversation, Size::Auto)
-        }
-        SessionDetailsTarget::NewSession => {
-            render_start_new_details(model, content_width, START_NEW_DETAILS_HEIGHT)
         }
     };
     let notice = match dialog.clipboard_status {
@@ -55,10 +50,11 @@ pub(super) fn render_details_dialog(
     };
     element! {
         DialogFrame(width, height, title, help_action: Some(super::super::picker_help_view::help_action(model_state)),
-            presentation: if model.width < NARROW_PICKER_WIDTH { DialogPresentation::FullScreen } else { DialogPresentation::Framed { maximum_width: 100, maximum_height: 28 } },
-            margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, keyboard_scroll: true, actions) {
-            #(content)
+            presentation: DialogPresentation::default(),
+            margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, scroll_keys: codex_router_tui::DialogScrollKeys::Navigation, actions) {
             #(notice.map(|notice| element!(UiText(content: notice, role: UiTextRole::Secondary))))
+            #(dialog.inspection_notice().map(|notice|element!(UiText(content:notice.to_owned(),role:UiTextRole::Secondary))))
+            #(content)
             #(super::super::source_action_view::source_error(model))
         }
     }.into_any()

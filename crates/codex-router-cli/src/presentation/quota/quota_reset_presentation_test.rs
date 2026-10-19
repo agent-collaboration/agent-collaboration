@@ -238,11 +238,11 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             ),
             (
                 TerminalEvent::Resize(width.saturating_sub(1) as u16, height as u16),
-                Some("Checking live eligibility"),
+                Some("narrow inspection frame"),
             ),
             (
                 TerminalEvent::Resize(width as u16, height as u16),
-                Some("Checking live eligibility"),
+                Some("wide inspection frame"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
@@ -250,7 +250,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-                Some("Filters"),
+                Some("Details"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
@@ -271,7 +271,21 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
             if let Some(marker) = *expected_frame.borrow()
-                && frame.contains(marker)
+                && match marker {
+                    "narrow inspection frame" => {
+                        frame.contains("Checking live eligibility")
+                            && frame.lines().next().is_some_and(|line| {
+                                unicode_width::UnicodeWidthStr::width(line) == width - 1
+                            })
+                    }
+                    "wide inspection frame" => {
+                        frame.contains("Checking live eligibility")
+                            && frame.lines().next().is_some_and(|line| {
+                                unicode_width::UnicodeWidthStr::width(line) == width
+                            })
+                    }
+                    _ => frame.contains(marker),
+                }
             {
                 let _ = frame_acknowledgements.send(marker);
             }
@@ -296,19 +310,14 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
                 .all(|frame| !frame.contains("Selected account")),
             "reset and selected-account detail panes must be mutually exclusive: {reset_frames:?}"
         );
-        if width == 160 {
-            let has_sidecar = |frame: &str| {
-                frame
-                    .lines()
-                    .any(|line| line.matches('┌').count() >= 2 && line.matches('┐').count() >= 2)
-            };
+        for expected_width in [width - 1, width] {
             assert!(
-                reset_frames.iter().any(|frame| !has_sidecar(frame)),
-                "shrinking to 159 columns should stack the active inspection: {reset_frames:?}"
-            );
-            assert!(
-                reset_frames.iter().any(|frame| has_sidecar(frame)),
-                "growing back to 160 columns should restore the active inspection sidecar: {reset_frames:?}"
+                reset_frames
+                    .iter()
+                    .any(|frame| frame.lines().next().is_some_and(|line| {
+                        unicode_width::UnicodeWidthStr::width(line) == expected_width
+                    }) && frame.contains("Account options · Resets")),
+                "same active inspection survives actual {expected_width}-cell resize: {reset_frames:?}"
             );
         }
         if height == 48 {
@@ -336,8 +345,11 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             "the account-options Resets tab should remain after inspection cancellation: {frames:?}"
         );
         assert!(
-            frames.last().is_some_and(|frame| frame.contains("Filters")),
-            "closing the Resets tab should restore the quota browse footer: {frames:?}"
+            frames
+                .last()
+                .is_some_and(|frame| frame.contains("Details")
+                    && !frame.contains("Account options · Resets")),
+            "closing the Resets tab should restore browse controls: {frames:?}"
         );
     }
 }

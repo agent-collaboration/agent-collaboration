@@ -15,13 +15,14 @@ fn framed_dialog_overlays_without_reducing_background_viewport() {
             }.into_any()],
             dialog: Some(element! {
                 DialogFrame(width: 40u16, height: 12u16, title: "Filters".to_owned(),
-                    presentation: DialogPresentation::Framed { maximum_width: 26, maximum_height: 8 },
+                    presentation: DialogPresentation::cells(26, 8),
                     margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
                     actions: vec![element!(Text(content: "Apply  Cancel")).into_any()]) {
                     Text(content: "Claude")
                 }
             }.into_any()))
-    }.to_string();
+    }
+    .to_string();
     assert_eq!(frame.lines().count(), 12, "{frame}");
     assert!(
         frame
@@ -140,8 +141,8 @@ fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
     let dialog = if open.get() {
         Some(element! {
             DialogFrame(width: width.max(40), height: height.max(12), title: "Dialog active".to_owned(),
-                presentation: DialogPresentation::Framed { maximum_width: 30, maximum_height: 10 },
-                keyboard_scroll: true, on_close: move |_| open.set(false),
+                presentation: DialogPresentation::cells(30, 10),
+                scroll_keys: crate::DialogScrollKeys::Navigation, on_close: move |_| open.set(false),
                 actions: vec![element!(Text(content: "Esc Close")).into_any()]) {
                 #((1..=40).map(|index| element!(Text(content: format!("CONTENT {index}")))))
             }
@@ -236,4 +237,142 @@ async fn dialog_blocks_background_keys_and_pointer_then_restores_them_after_canc
         .await
         .unwrap();
     assert_eq!(phase, 4, "{last_frame}");
+}
+
+#[test]
+fn dialog_actions_share_a_wrapping_horizontal_row() {
+    // R4: roomy action groups share a row; a vertical action stack is wrong.
+    let frame = element! {
+        View(width: 80, height: 24) {
+            DialogFrame(width: 80u16, height: 24u16, title: "Form".to_owned(),
+                presentation: DialogPresentation::cells(60, 14),
+                actions: vec![element!(Text(content: "Cancel")).into_any(), element!(Text(content: "Start")).into_any()]) {
+                Text(content: "Machine: local")
+            }
+        }
+    }.to_string();
+    assert!(
+        frame
+            .lines()
+            .any(|line| line.contains("Cancel") && line.contains("Start")),
+        "{frame}"
+    );
+}
+
+#[test]
+fn content_dialog_fits_one_tree_and_preserves_wide_body() {
+    let frame = element! {
+        View(width: 100, height: 30) {
+            DialogFrame(width: 100u16, height: 30u16, title: "Short".to_owned(),
+                presentation: DialogPresentation::Sized {
+                    width: DialogAxisSize::Content { maximum: Some(88) },
+                    height: DialogAxisSize::Content { maximum: Some(24) },
+                },
+                actions: vec![element!(Text(content: "Cancel")).into_any(), element!(Text(content: "Start")).into_any()]) {
+                Text(content: "A substantially wider body line than header and actions")
+            }
+        }
+    }.to_string();
+    let top = frame.lines().position(|line| line.contains('╭')).unwrap();
+    let bottom = frame.lines().position(|line| line.contains('╰')).unwrap();
+    assert!(
+        bottom - top < 10,
+        "content fit must not fill maximum: {frame}"
+    );
+    assert!(
+        frame.contains("A substantially wider body line than header and actions"),
+        "{frame}"
+    );
+}
+
+#[test]
+fn selectable_row_reserves_two_cells_for_every_content_line() {
+    for selected in [false, true] {
+        let frame = element! {
+            View(width: 40, height: 3) {
+                SelectableRow(selected) { Text(content: "東京 title") Text(content: "Provider") Text(content: "Metadata") }
+            }
+        }.to_string();
+        for (row, label) in [(0, "東京"), (1, "Provider"), (2, "Metadata")] {
+            let line = frame.lines().nth(row).unwrap();
+            let prefix = &line[..line.find(label).unwrap()];
+            assert_eq!(prefix.chars().count(), 2, "{frame}");
+        }
+    }
+}
+
+#[test]
+fn default_frames_keep_header_and_actions_usable_at_supported_and_constrained_sizes() {
+    for (width, height, expected_width, expected_height) in [
+        (120u16, 36u16, 88u16, 20u16),
+        (76, 30, 57, 16),
+        (48, 24, 42, 13),
+        (48, 12, 42, 8),
+    ] {
+        let frame=element! {
+            View(width:u32::from(width),height:u32::from(height)) {
+                DialogFrame(width,height,title:"Filters".to_owned(),margins:DialogMargins {top:1,right:2,bottom:1,left:2},
+                    actions:vec![element!(Text(content:"Cancel")).into_any(),element!(Text(content:"Apply")).into_any()]) {
+                    #((1..=40).map(|row|element!(Text(content:format!("Body {row}")))))
+                }
+            }
+        }.to_string();
+        assert!(
+            frame.contains("Filters") && frame.contains("Cancel") && frame.contains("Apply"),
+            "{width}x{height}: {frame}"
+        );
+        assert!(frame.lines().count() <= usize::from(height), "{frame}");
+        let top = frame.lines().position(|line| line.contains('╭')).unwrap();
+        let bottom = frame.lines().position(|line| line.contains('╰')).unwrap();
+        assert_eq!(bottom - top + 1, usize::from(expected_height), "{frame}");
+        let border = frame.lines().nth(top).unwrap().trim();
+        assert_eq!(
+            border.chars().count(),
+            usize::from(expected_width),
+            "{frame}"
+        );
+    }
+}
+
+#[test]
+fn form_field_columns_use_terminal_layout_for_wide_labels() {
+    let frame = element! {
+        View(width:40,flex_direction:FlexDirection::Column) {
+            FormField(label:"機械".to_owned(),label_width:8u16) {Text(content:"Sunbook")}
+            FormField(label:"Folder".to_owned(),label_width:8u16) {Text(content:"/repo")}
+        }
+    }
+    .to_string();
+    for label in ["Sunbook", "/repo"] {
+        let line = frame.lines().find(|line| line.contains(label)).unwrap();
+        let prefix = &line[..line.find(label).unwrap()];
+        // The CJK label occupies four cells, with four remaining label cells and a two-cell gap.
+        let cells = prefix
+            .chars()
+            .map(|character| if "機械".contains(character) { 2 } else { 1 })
+            .sum::<usize>();
+        assert_eq!(cells, 10, "{frame}");
+    }
+}
+
+#[test]
+fn percentage_dialog_keeps_actions_at_the_fixed_bottom_edge() {
+    let frame=element! {View(width:80,height:30) {
+        DialogFrame(width:80u16,height:30u16,title:"Fixed actions".to_owned(),margins:DialogMargins {top:0,right:0,bottom:0,left:0},actions:vec![element!(crate::DialogAction(label:"Apply")).into_any()]) {
+            Text(content:"Short body")
+        }
+    }}.render(None).to_string();
+    let bottom = frame
+        .lines()
+        .position(|line| line.contains('╰'))
+        .expect("dialog bottom");
+    let action = frame
+        .lines()
+        .position(|line| line.contains("Apply"))
+        .expect("action");
+    assert_eq!(
+        bottom - action,
+        2,
+        "actions sit above one padding row and the border: {frame}"
+    );
 }

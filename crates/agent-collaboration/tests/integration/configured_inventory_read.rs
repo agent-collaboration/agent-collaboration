@@ -178,6 +178,9 @@ fn source_provider_projection_keeps_source_path_and_unknown_model_without_caller
         working_directory: source_path.display().to_string().try_into().unwrap(),
         updated_at: 2000,
         state: ProviderSessionState::Idle,
+        requested_policy: collaboration_client::protocol::ProviderRequestedPolicy {
+            access: collaboration_client::protocol::RouterAccess::WriteRestricted,
+        },
         approver: ProviderIdentity::Session(target.clone()),
         created_by: ProviderIdentity::Session(target.clone()),
     };
@@ -339,7 +342,11 @@ async fn configured_full_uuid_search_reads_later_pages_without_reinterpreting_re
         "caller filters the complete native/provider projection"
     );
     assert_eq!(fixture.api_call_count("sessions_list"), 2);
-    assert_eq!(fixture.api_call_count("provider_sessions_list"), 1);
+    assert_eq!(
+        fixture.api_call_count("provider_sessions_list"),
+        2,
+        "separate Stored managed and native-only Loaded reads"
+    );
     fixture.finish().await;
 }
 
@@ -376,6 +383,7 @@ pub(crate) async fn read_complete_source(
                             request: initial,
                             binding,
                             snapshot: crate::picker_runtime_status::PickerRecordsSnapshot {
+                                native_live_coverage: snapshot.native_live_coverage,
                                 records: rows,
                                 runtime_coverage: snapshot.runtime_coverage,
                             },
@@ -389,4 +397,47 @@ pub(crate) async fn read_complete_source(
             }
         }
     }
+}
+
+#[tokio::test]
+async fn configured_inventory_retains_real_stored_rows_with_explicit_native_unavailability() {
+    use crate::picker_runtime_status::{NativeLiveReadState, NativeLiveUnavailableReason};
+    let fixture = SourceApiFixture::start_with_provider(
+        "00000000-0000-4000-8000-000000000008",
+        "stored-model",
+        true,
+    )
+    .await;
+    let snapshot = read_complete_source(
+        fixture.loader(),
+        fixture.request("Stored survives native unavailable"),
+    )
+    .await
+    .into_snapshot()
+    .expect("independent Stored inventory stays usable");
+    assert_eq!(
+        snapshot.records.len(),
+        2,
+        "valid native Codex and managed Stored records survive"
+    );
+    assert_eq!(
+        snapshot.native_live_coverage.len(),
+        1,
+        "native absence cannot become successful empty inventory"
+    );
+    let coverage = snapshot.native_live_coverage.first().unwrap();
+    assert_eq!(
+        String::from(coverage.endpoint.endpoint_id.clone()),
+        "claude-local"
+    );
+    assert_eq!(
+        coverage.state,
+        NativeLiveReadState::Unavailable(NativeLiveUnavailableReason::ProviderUnavailable)
+    );
+    assert_eq!(
+        fixture.api_call_count("provider_sessions_list"),
+        2,
+        "separate managed Stored and native Loaded reads"
+    );
+    fixture.finish().await;
 }

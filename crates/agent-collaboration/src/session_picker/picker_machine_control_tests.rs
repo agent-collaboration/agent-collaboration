@@ -392,33 +392,58 @@ async fn unavailable_machine_keeps_the_previous_view_and_cannot_fall_back_to_new
 
 #[tokio::test]
 async fn named_new_uses_configured_remote_cwd_and_cannot_create_before_route_qualification() {
-    let (frames, outcome) = render_events(
-        configured_request().unwrap(),
-        vec![
-            control_key('n'),
-            key(KeyCode::Down),
-            key(KeyCode::Enter),
-            key(KeyCode::Esc),
-            control_key('c'),
-        ],
-    )
-    .await
-    .unwrap();
-    assert_eq!(outcome, None);
-    assert!(
-        frames
-            .iter()
-            .any(|frame| frame.contains("Choose machine for new session"))
-    );
-    assert!(
-        frames
-            .iter()
-            .any(|frame| frame.contains("/remote/only/project"))
-    );
-    assert!(
-        frames
-            .iter()
-            .any(|frame| frame.contains("no session created"))
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut outcome: Option<SessionsPickerOutcome> = None;
+    let mut phase = 0;
+    let mut last = String::new();
+    {
+        let mut picker = element!(SessionsPickerComponent(request:configured_request().unwrap(),width:100usize,height:40usize,selected_outcome_out:&mut outcome));
+        let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(frames);
+        let journey = async {
+            while let Some(canvas) = frames.next().await {
+                let text = canvas.to_string();
+                if phase == 0 {
+                    sender.send(control_key('n')).unwrap();
+                    phase = 1;
+                } else if phase == 1 && text.contains("New session") {
+                    for code in [
+                        KeyCode::BackTab,
+                        KeyCode::BackTab,
+                        KeyCode::BackTab,
+                        KeyCode::Enter,
+                    ] {
+                        sender.send(key(code)).unwrap();
+                    }
+                    phase = 2;
+                } else if phase == 2
+                    && text.contains("Search:")
+                    && text.contains("/remote/only/project")
+                    && text.contains("no session created")
+                {
+                    for event in [
+                        key(KeyCode::Down),
+                        key(KeyCode::Enter),
+                        key(KeyCode::Esc),
+                        control_key('c'),
+                    ] {
+                        sender.send(event).unwrap();
+                    }
+                    phase = 3;
+                }
+                last = text;
+            }
+        };
+        let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
+        assert!(result.is_ok(), "phase={phase}: {last}");
+    }
+    assert_eq!(phase, 3, "{last}");
+    assert_eq!(
+        outcome, None,
+        "unavailable remote cannot fall back to local New"
     );
 }
 

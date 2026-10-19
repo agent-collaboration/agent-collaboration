@@ -13,6 +13,7 @@ pub(crate) fn observed_records(
     records: Vec<SessionPickerRecord>,
 ) -> crate::picker_runtime_status::PickerRecordsSnapshot {
     crate::picker_runtime_status::PickerRecordsSnapshot {
+        native_live_coverage: Vec::new(),
         records,
         runtime_coverage: crate::picker_runtime_status::PickerRuntimeCoverage::Available,
     }

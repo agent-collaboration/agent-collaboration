@@ -34,7 +34,7 @@ impl SourceApiFixture {
         Self::start_with_provider(service, model, false).await
     }
 
-    pub(super) async fn start_with_provider(
+    pub(crate) async fn start_with_provider(
         service: &str,
         model: &str,
         include_provider: bool,
@@ -160,7 +160,7 @@ impl SourceApiFixture {
         .await;
         Self {
             _root: root,
-            url: recorder.url.clone(),
+            url: recorder.url.clone().expect("TCP fixture publishes a URL"),
             direct_api_url: format!("http://{address}/mcp"),
             endpoint,
             shutdown,

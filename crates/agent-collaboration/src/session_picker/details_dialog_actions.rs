@@ -22,21 +22,24 @@ pub(super) fn apply_details_action(
     action: DetailsAction,
     copy_session_id: &super::session_id_clipboard::SessionIdCopier,
 ) -> Option<SessionsPickerOutcome> {
-    if model.source_action.pending.is_some() || model.show_help {
+    if model.source_action.pending.is_some() || model.client_action.is_active() || model.show_help {
         return None;
     }
     let dialog = model.details_dialog.clone()?;
     if !dialog.actions().contains(&action) {
         return None;
     }
+    if dialog.record().identity.is_provider()
+        && matches!(action, DetailsAction::Load | DetailsAction::Resume)
+    {
+        model.begin_details_client_action(&dialog, action);
+        return None;
+    }
     match action {
+        DetailsAction::Load => {}
         DetailsAction::Close => model.details_dialog = None,
-        DetailsAction::StartNew => {
-            model.details_dialog = None;
-            return model.start_new_action();
-        }
         DetailsAction::Resume => {
-            let record = dialog.record()?;
+            let record = dialog.record();
             let selection = SessionActionSelection::from_picker_record(record);
             if model.begin_source_selection(&selection, false, record.cwd.clone()) {
                 return None;
@@ -45,14 +48,29 @@ pub(super) fn apply_details_action(
             return Some(SessionsPickerOutcome::ResumeSession(selection));
         }
         DetailsAction::Fork => {
-            let record = dialog.record()?;
+            let record = dialog.record();
+            if let super::details_client_inventory::DetailsClientReadState::Ready(
+                super::details_client_inventory::DetailsClientCapabilities::Native { source },
+            ) = &dialog.client_inventory
+            {
+                model.fork_confirmation =
+                    super::picker_fork_confirmation::ForkConfirmation::capture_native(
+                        record,
+                        &model.request,
+                        source,
+                    );
+                if model.fork_confirmation.is_some() {
+                    model.details_dialog = None;
+                }
+                return None;
+            }
             model.fork_confirmation = Some(
                 super::picker_fork_confirmation::ForkConfirmation::capture(record, &model.request),
             );
             model.details_dialog = None;
         }
         DetailsAction::CopySessionId => {
-            let copied = copy_session_id(&dialog.record()?.session_id);
+            let copied = copy_session_id(&dialog.record().session_id);
             if let Some(current) = &mut model.details_dialog {
                 current.clipboard_status = if copied.is_ok() {
                     ClipboardRequestStatus::Sent
@@ -77,21 +95,16 @@ pub(super) fn handle_details_key(
     let action = if control_enter && modifiers.contains(KeyModifiers::SHIFT) {
         Some(DetailsAction::Fork)
     } else if control_enter {
-        Some(
-            if model.details_dialog.as_ref().is_some_and(|dialog| {
-                matches!(
-                    dialog.target,
-                    super::details_dialog_state::SessionDetailsTarget::NewSession
-                )
-            }) {
-                DetailsAction::StartNew
-            } else {
-                DetailsAction::Resume
-            },
-        )
+        Some(DetailsAction::Resume)
     } else {
         match code {
             KeyCode::Esc => Some(DetailsAction::Close),
+            KeyCode::Left | KeyCode::Right if modifiers.is_empty() => {
+                if let Some(dialog) = &mut model.details_dialog {
+                    dialog.move_focus(code == KeyCode::Left);
+                }
+                None
+            }
             KeyCode::Tab | KeyCode::BackTab => {
                 if let Some(dialog) = &mut model.details_dialog {
                     dialog.move_focus(
