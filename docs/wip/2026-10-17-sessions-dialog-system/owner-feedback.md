@@ -2,6 +2,15 @@
 
 Canonical checklist for this redesign. Origin: this owner conversation, 2026-10-17. A checked item needs linked evidence. The HTML is a proposal, not product completion. Latest owner corrections override earlier proposed exclusions.
 
+## Current verification checkpoint — 2026-10-19
+
+- The same paired Verifier personally opened every one of24 Quota originals at120×36,76×30 and48×24 and recorded per-image visual findings. Lead independently opened all eight medium and eight narrow images and verified the wide images are byte-identical to the originals already personally inspected. [Screenshots, source/build, journeys and visual self-review](proof.html#quota-current-checkpoint). This is a partial gallery from before the constrained-height repair, not whole-UI acceptance.
+- A subsequent capture completed24 originals across120×36,76×30 and48×24, then found a constrained-height defect:48×12 provider search hides its no-match result above the fixed actions. The failure is retained; the Implementer is diagnosing the shared choice/scroll boundary. No expectation was removed to pass it. The24-image visual report is now included in the linked public gallery. The minimal SearchSelect focus-reveal repair is committed atd7bb5ce8; its focused regression and all four affected package suites pass1,264/0/51ignored. Fresh compiled images of the repair remain pending.
+- Product checkpoint626a5653 passed2,421 affected-package tests,0 failed,70 ignored,229 outer targets; strict Clippy and formatting passed. Later apparatus changes and the final publication-marker test have their own checks. Final current-head CI/review and actual provider acceptance remain open.
+- Current-artifact native Claude New returned a background handle and matching full UUID, then exact own stop succeeded. The new Host Loaded query reached the matching row but failed timestamp equality; its actual timestamp was not retained. A separate Stored-only diagnostic on that stopped job is being investigated. No native catalogue completion claim.
+- Sunbook-local Cursor version/help/ACP-help results have now been recovered from the local Chief relay; all exited0. Functional create/load/resume and local debug Host execution are still pending. No SSH Keychain workaround is permitted.
+- Lead and Verifier until-done wakes are saved and active. The complete Sessions/Quota dialog matrix, lower-body scroll, resize, provider actions on both machines, independent review and latest-head CI remain required. PR155 stays draft/unmerged.
+
 ## Scope and delivery
 
 - [x] Start a separate branch from freshly fetched origin/main: codex/sessions-ux-redesign at ffced1c1c3c84e0ca41701fb9eb4326acea2451e; isolated worktree created and clean base verified.
@@ -144,7 +153,7 @@ Researcher Worker returned a read-only inventory; Lead inspected the decisive fr
 
 - [ ] Native background jobs must also be discoverable in Sessions. The subsequent real no-prompt run created its job successfully, but one complete own-debug-Host Loaded/Interactive inventory query for the exact UUID returned missing. Root read the actual observation and cleanup. The peer catalogue and native public job list are separate sources. The owner now approved **shared Router catalogue** in the privately retained decision record, preserving both Claude-owned and Router-managed entries and existing interactive sessions; all new Claude launches through agent-sessions must be background. Implementation, discovery, Resume/Fork and remote proof remain open. Public New success above remains valid and narrower.
 - Current full Sessions library checkpoint: actual raw log `s2b-inventory-full-lib-second.log` shows 420 passed, 0 failed, 6 ignored, exit 0, before the latest Details changes. Earlier counts above are historical checkpoints, including their retained failures. No final current-target whole-suite pass is claimed.
-- Original Quota proof remains three JPEGs from one same-PTY Filters resize journey. Later capture attempts stopped before new product images: high-level browser tab factory timed out; a separate agent-added data-URL control was rejected and withdrawn. A smaller actual HTTP/ttyd fixture observation is being prepared using documented primitives. Remaining menus/grids/provider scenes remain open.
+- Historical checkpoint before the2026-10-19 captures: original Quota proof was three JPEGs from one same-PTY Filters resize journey. Those earlier capture attempts stopped before new product images: high-level browser tab factory timed out; a separate agent-added data-URL control was rejected and withdrawn. A smaller actual HTTP/ttyd fixture observation is being prepared using documented primitives. Remaining menus/grids/provider scenes remain open.
 
 ## Direct owner resume and public checkpoint
 
@@ -153,3 +162,7 @@ Researcher Worker returned a read-only inventory; Lead inspected the decisive fr
 - Direct owner instruction “ok set wakes get to work” supersedes the prior wake-and-stop. Same implementer/verifier are resumed; finite Lead and verifier wakes were saved/read back. A wake firing is not a delivery result.
 - Full Sessions library checkpoint now observed in raw `resume-agent-lib-second.log`: **424 passed, 0 failed, 6 ignored, exit 0**. Later changes still need affected checks. Managed-Claude restore must retain its managed API path; the existing Cursor-only guard is an admitted correction, not a reason to convert managed Claude IDs to native IDs.
 - Actual browser navigation now reaches the frozen Quota screen at kernel 120×36. The first pending-inspection attempt failed after Ctrl+R left browse visible; no requested image was earned. One separately declared focus/input diagnostic is in progress. Earlier three accepted resize JPEGs stay valid and narrow.
+
+## Sunbook local execution correction
+
+- [ ] Run Sunbook Cursor checks in its logged-in local macOS session with help from Sun / the Station Chiefs. The owner clarified that unlocking Sunbook does not give SSH processes Keychain access. Do not retry Cursor over SSH or infer readiness from an unlocked desktop. The current Sunclaw Station Chief received the request to coordinate local execution; local results and later current-artifact create/load/resume proof remain pending.
