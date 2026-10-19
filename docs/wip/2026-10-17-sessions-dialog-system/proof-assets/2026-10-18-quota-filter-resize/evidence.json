@@ -1,0 +1,135 @@
+{
+  "scope": "One compiled Quota Account filters draft/resize/cancel journey; overall delivery incomplete",
+  "observedAt": "2026-10-18T16:31:59.097987+00:00",
+  "source": {
+    "baseHead": "ffced1c1c3c84e0ca41701fb9eb4326acea2451e",
+    "dirtySourceIncluded": true,
+    "indexedSourceFileCount": 2139,
+    "sourceBindingFileSha256": "29b15f166f45d136b5ebff2ca8c34b31614721a6a8ef611a72d7a6c69db7163b",
+    "observationSourceManifestDigest": "1d90cb6736849b723f43a4623d031082c359efadbfcea2d722178b51e1ba5577"
+  },
+  "build": {
+    "componentBinarySha256": "b0ca46da4b5f7f39d3da1aa2d6b9386de01b2dd4e839e6f7d378febe92d44ae6",
+    "captureDriverSha256": "82455226f6c7a4e9211029eb3199c4725a971d9c52e8a24acaf2c94d1e2554a6",
+    "profile": "ordinary dev CLI libtest with default features; incremental build, not independent rebuild"
+  },
+  "images": [
+    {
+      "scene": "quota-filter-draft-120x36",
+      "file": "quota-filter-draft-120x36.jpg",
+      "sha256": "d313a2adae768565100f0117253c7812a99e3b3550c09bc1aaedd7b722f2c41b",
+      "bytes": 28357,
+      "mimeType": "image/jpeg",
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "browser_pixels": {
+          "width": 1113,
+          "height": 704
+        }
+      },
+      "state": {
+        "provider": "All",
+        "draft_disabled": "Hidden",
+        "committed_disabled": "Shown",
+        "focus": "Disabled field",
+        "selected_account": "東京 OpenAI Research Account Alpha Long Name",
+        "header_and_cancel_apply_visible": true
+      },
+      "encodingRoundTrip": true
+    },
+    {
+      "scene": "quota-filter-draft-48x12",
+      "file": "quota-filter-draft-48x12.jpg",
+      "sha256": "f3e5cbdfe0b079c6fa86dfb2d4ecfa622cf49daca51d0095115b6146e0a59061",
+      "bytes": 6673,
+      "mimeType": "image/jpeg",
+      "viewport": {
+        "columns": 48,
+        "rows": 12,
+        "browser_pixels": {
+          "width": 462,
+          "height": 256
+        }
+      },
+      "state": {
+        "provider": "All",
+        "draft_disabled": "Hidden",
+        "committed_disabled": "Shown",
+        "focus": "Disabled field",
+        "selected_account": "東京 OpenAI Research Account Alpha Long Name",
+        "header_and_cancel_apply_visible": true
+      },
+      "encodingRoundTrip": true
+    },
+    {
+      "scene": "quota-filter-draft-restored-120x36",
+      "file": "quota-filter-draft-restored-120x36.jpg",
+      "sha256": "d313a2adae768565100f0117253c7812a99e3b3550c09bc1aaedd7b722f2c41b",
+      "bytes": 28357,
+      "mimeType": "image/jpeg",
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "browser_pixels": {
+          "width": 1113,
+          "height": 704
+        }
+      },
+      "state": {
+        "provider": "All",
+        "draft_disabled": "Hidden",
+        "committed_disabled": "Shown",
+        "focus": "Disabled field",
+        "selected_account": "東京 OpenAI Research Account Alpha Long Name",
+        "header_and_cancel_apply_visible": true
+      },
+      "encodingRoundTrip": true
+    }
+  ],
+  "sameProcessAcrossAllThreeKernelReadbacks": true,
+  "kernelGrids": [
+    {
+      "columns": 120,
+      "rows": 36
+    },
+    {
+      "columns": 48,
+      "rows": 12
+    },
+    {
+      "columns": 120,
+      "rows": 36
+    }
+  ],
+  "journey": "F3, Tab, Space; preserve draft Hidden and Disabled focus through resize; Escape returns committed Shown; q exits",
+  "lifecycle": {
+    "kind": "live-cua-fixture-lifecycle-only",
+    "surface": "quota",
+    "binary_sha256": "b0ca46da4b5f7f39d3da1aa2d6b9386de01b2dd4e839e6f7d378febe92d44ae6",
+    "child_exit": 0,
+    "provider_requests": 0,
+    "state_and_secrets_unchanged": true,
+    "owned_processes_stopped": true,
+    "artifact_sink_stopped": true,
+    "artifact_count": 3,
+    "last_viewport": "120 36",
+    "ui_observation": "separate-original-CUA-evidence-required",
+    "quota_fixture_scenario": "normal"
+  },
+  "cleanup": {
+    "ownedPidsAbsent": true,
+    "bothListenersClosed": true,
+    "ownedTabsClosed": true,
+    "viewportOverrideReset": true
+  },
+  "limits": [
+    "All other Quota dialogs/scenarios and76x30/48x24 grids",
+    "Long-body scroll/focus/action and sizing-policy cases",
+    "Sessions dialogs/all-menu/current entry/U15/U16/local+remote vendor outcomes",
+    "Root proof HTML/checklist/acceptance, full quality/review/CI",
+    "Synthetic records and memory effect ports; no real account changes.",
+    "No separately retained cancellation screenshot.",
+    "HTML rendered view and shared image-inspector integration are unverified."
+  ]
+}
