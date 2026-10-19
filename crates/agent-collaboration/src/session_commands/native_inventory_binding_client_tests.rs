@@ -36,7 +36,8 @@ async fn ambiguous_native_attribution_preserves_the_independent_provider_invento
                 "sessions":[],"nextCursor":null
             }),
         ),
-        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null})),
+        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null,"nativeCoverage":{"peer":{"kind":"notRequested"},"background":{"kind":"complete"}}})),
+        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null,"nativeCoverage":{"peer":{"kind":"complete"},"background":{"kind":"complete"}}})),
         ("endpoints_list",ambiguous),
     ])
     .await;
@@ -49,7 +50,7 @@ async fn ambiguous_native_attribution_preserves_the_independent_provider_invento
     assert!(records.is_empty());
     assert_eq!(
         peer.await.unwrap().len(),
-        4,
+        5,
         "valid provider read remains independent"
     );
 }
@@ -73,7 +74,8 @@ async fn provider_only_inventory_remains_readable_without_native_attribution() {
                 }],"nextCursor":null
             }),
         ),
-        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null})),
+        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null,"nativeCoverage":{"peer":{"kind":"notRequested"},"background":{"kind":"complete"}}})),
+        ("provider_sessions_list",json!({"endpoint":provider_endpoint,"observedAt":"2026-10-06T00:00:00Z","sessions":[],"nextCursor":null,"nativeCoverage":{"peer":{"kind":"complete"},"background":{"kind":"complete"}}})),
         ("endpoints_list",providers),
     ])
     .await;
@@ -85,5 +87,5 @@ async fn provider_only_inventory_remains_readable_without_native_attribution() {
         matches!(&records[0].identity, SessionPickerIdentity::HostedProvider(target) if target.endpoint.endpoint_id == "claude-local".to_owned().try_into().unwrap())
     );
     assert_eq!(records[0].runtime_status, PickerRuntimeStatus::Blocked);
-    assert_eq!(peer.await.unwrap().len(), 4);
+    assert_eq!(peer.await.unwrap().len(), 5);
 }

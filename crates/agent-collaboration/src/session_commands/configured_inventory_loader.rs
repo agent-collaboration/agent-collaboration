@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     picker_runtime_status::{
-        NativeLiveCoverage, NativeLiveReadState, NativeLiveUnavailableReason,
+        NativeCatalogueView, NativeLiveCoverage, NativeLiveReadState, NativeLiveUnavailableReason,
         PickerRecordsSnapshot, PickerRuntimeCoverage,
     },
     presentation::session_picker::{
@@ -20,7 +20,7 @@ use collaboration_client::{
     ClientError,
     protocol::{
         EndpointInventory, EndpointRef, NativeSessionListParams, NativeSessionScope,
-        NativeSessionSource, NativeSessionView, ProviderSessionListParams, ProviderSessionSummary,
+        NativeSessionSource, NativeSessionView, ProviderSessionListParams,
     },
 };
 use std::{
@@ -44,24 +44,25 @@ pub(crate) struct StoredSourceContinuation {
     provider_pages: usize,
     seen: BTreeSet<SessionPickerIdentity>,
     native_live_coverage: Vec<NativeLiveCoverage>,
+    partition_seen: BTreeSet<SessionPickerIdentity>,
 }
 
 #[derive(Clone)]
 enum StoredReadPartition {
     NativeCodex(EndpointRef),
     ManagedStored(EndpointRef),
-    NativeClaudeLoaded(EndpointRef),
+    NativeClaude(EndpointRef, NativeCatalogueView),
 }
 impl StoredReadPartition {
     fn endpoint(&self) -> &EndpointRef {
         match self {
             Self::NativeCodex(endpoint)
             | Self::ManagedStored(endpoint)
-            | Self::NativeClaudeLoaded(endpoint) => endpoint,
+            | Self::NativeClaude(endpoint, _) => endpoint,
         }
     }
     fn is_native_claude(&self) -> bool {
-        matches!(self, Self::NativeClaudeLoaded(_))
+        matches!(self, Self::NativeClaude(..))
     }
 }
 
@@ -129,10 +130,11 @@ async fn read_page(
             SourceContinuation::stored(state),
         ));
     };
-    let native_read = state
-        .pending
-        .front()
-        .is_some_and(StoredReadPartition::is_native_claude);
+    let native_view = match state.pending.front() {
+        Some(StoredReadPartition::NativeClaude(_, view)) => Some(*view),
+        _ => None,
+    };
+    let native_read = native_view.is_some();
     let rows = state.next_page(deadline).await?;
     // Revalidate every page when the read budget permits. An unavailable extra
     // native read may retain its previously qualified prefix, never an invalid reply.
@@ -152,13 +154,13 @@ async fn read_page(
             let already_partial = state
                 .native_live_coverage
                 .iter()
-                .any(|part| matches!(part.state, NativeLiveReadState::Unavailable(_)));
+                .any(|part| part.state.is_incomplete());
             if !native_read || !availability || !already_partial {
                 return Err(read_rejection(error));
             }
         }
         Err(_) if native_read => {
-            state.mark_native_unavailable(NativeLiveUnavailableReason::TimedOut)
+            state.mark_native_unavailable(native_view, NativeLiveUnavailableReason::TimedOut)
         }
         Err(_) => return Err(SourceInventoryRejection::SourceUnavailable),
     }
@@ -204,12 +206,18 @@ impl StoredSourceContinuation {
             })
             .collect();
         let native_live_coverage = if let Some(endpoint) = &binding.native_claude_endpoint {
-            pending.push_back(StoredReadPartition::NativeClaudeLoaded(endpoint.clone()));
-            vec![NativeLiveCoverage {
-                endpoint: endpoint.clone(),
-                service_epoch: binding.service_epoch.clone(),
-                state: NativeLiveReadState::Reading,
-            }]
+            [NativeCatalogueView::Stored, NativeCatalogueView::Loaded]
+                .into_iter()
+                .map(|view| {
+                    pending.push_back(StoredReadPartition::NativeClaude(endpoint.clone(), view));
+                    NativeLiveCoverage {
+                        view,
+                        endpoint: endpoint.clone(),
+                        service_epoch: binding.service_epoch.clone(),
+                        state: NativeLiveReadState::Reading,
+                    }
+                })
+                .collect()
         } else {
             Vec::new()
         };
@@ -225,6 +233,7 @@ impl StoredSourceContinuation {
             provider_cursors: BTreeSet::new(),
             provider_pages: 0,
             seen: BTreeSet::new(),
+            partition_seen: BTreeSet::new(),
         })
     }
 
@@ -239,6 +248,10 @@ impl StoredSourceContinuation {
             .ok_or(SourceInventoryRejection::InvalidInventory)?;
         let endpoint = partition.endpoint().clone();
         let native = partition.is_native_claude();
+        let view = match &partition {
+            StoredReadPartition::NativeClaude(_, view) => Some(*view),
+            _ => None,
+        };
         let source = match self.captured.query.source {
             SessionsSource::All => NativeSessionSource::All,
             SessionsSource::Interactive => NativeSessionSource::Interactive,
@@ -282,7 +295,7 @@ impl StoredSourceContinuation {
                 }
                 (rows, complete)
             }
-            StoredReadPartition::ManagedStored(_) | StoredReadPartition::NativeClaudeLoaded(_) => {
+            StoredReadPartition::ManagedStored(_) | StoredReadPartition::NativeClaude(..) => {
                 if self.provider_pages >= MAX_SOURCE_PAGES {
                     return Err(SourceInventoryRejection::InvalidInventory);
                 }
@@ -290,11 +303,8 @@ impl StoredSourceContinuation {
                     deadline,
                     self.client.provider_page(&ProviderSessionListParams {
                         endpoint: endpoint.clone(),
-                        view: if native {
-                            NativeSessionView::Loaded
-                        } else {
-                            NativeSessionView::Stored
-                        },
+                        view: view
+                            .map_or(NativeSessionView::Stored, NativeCatalogueView::request_view),
                         scope: NativeSessionScope::Any,
                         source: if native {
                             NativeSessionSource::Interactive
@@ -317,7 +327,7 @@ impl StoredSourceContinuation {
                     Err(super::source_inventory_failure::InventoryReadFailure::Unavailable(
                         reason,
                     )) if native => {
-                        self.mark_native_unavailable(reason);
+                        self.mark_native_unavailable(view, reason);
                         self.finish_partition();
                         return Ok(Vec::new());
                     }
@@ -335,6 +345,22 @@ impl StoredSourceContinuation {
                 {
                     return Err(SourceInventoryRejection::InvalidInventory);
                 }
+                if let Some(view) = view {
+                    let observed =
+                        NativeLiveReadState::from_observation(view, page.native_coverage)
+                            .map_err(|_| SourceInventoryRejection::InvalidInventory)?;
+                    let current = self
+                        .native_live_coverage
+                        .iter_mut()
+                        .find(|part| part.view == view)
+                        .ok_or(SourceInventoryRejection::InvalidInventory)?;
+                    if !matches!(current.state, NativeLiveReadState::Reading)
+                        && current.state != observed
+                    {
+                        return Err(SourceInventoryRejection::InvalidInventory);
+                    }
+                    current.state = observed;
+                }
                 let description = self
                     .inventory
                     .endpoints
@@ -345,20 +371,29 @@ impl StoredSourceContinuation {
                 let mut rows = Vec::new();
                 for summary in page.sessions {
                     if summary.target().endpoint != endpoint
-                        || native
-                            != matches!(
-                                &summary,
-                                ProviderSessionSummary::ClaudeCodeInteractive { .. }
-                            )
+                        || native != summary.is_native_claude()
+                        || view.is_some_and(|view| {
+                            !SessionPickerRecord::validate_native_summary(&summary, view)
+                        })
                     {
                         return Err(SourceInventoryRejection::InvalidInventory);
                     }
-                    let row = SessionPickerRecord::from_source_provider_summary(
+                    let mut row = SessionPickerRecord::from_source_provider_summary(
                         &summary,
                         &String::from(description.label.clone()),
                     )
                     .with_provider_endpoint(&summary, &description);
-                    self.accept_target(row.identity.clone())?;
+                    if let Some(view) = view {
+                        row = row.with_native_inventory_view(view);
+                    }
+                    if !self.partition_seen.insert(row.identity.clone()) {
+                        return Err(SourceInventoryRejection::InvalidInventory);
+                    }
+                    if view != Some(NativeCatalogueView::Loaded)
+                        || !self.seen.contains(&row.identity)
+                    {
+                        self.accept_target(row.identity.clone())?;
+                    }
                     rows.push(row);
                 }
                 let complete = match page.next_cursor {
@@ -377,11 +412,6 @@ impl StoredSourceContinuation {
             }
         };
         if complete {
-            if native {
-                for coverage in &mut self.native_live_coverage {
-                    coverage.state = NativeLiveReadState::Complete;
-                }
-            }
             self.finish_partition();
         }
         Ok(rows)
@@ -393,10 +423,17 @@ impl StoredSourceContinuation {
         self.provider_cursor = None;
         self.provider_cursors.clear();
         self.provider_pages = 0;
+        self.partition_seen.clear();
     }
-    fn mark_native_unavailable(&mut self, reason: NativeLiveUnavailableReason) {
+    fn mark_native_unavailable(
+        &mut self,
+        view: Option<NativeCatalogueView>,
+        reason: NativeLiveUnavailableReason,
+    ) {
         for part in &mut self.native_live_coverage {
-            part.state = NativeLiveReadState::Unavailable(reason);
+            if Some(part.view) == view {
+                part.state = NativeLiveReadState::Unavailable(reason);
+            }
         }
     }
 

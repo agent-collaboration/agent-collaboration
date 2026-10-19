@@ -204,7 +204,7 @@ pub(super) async fn run_session_record_reload_worker(
                         Ok((record_count,page_progress))=>{
                             match page_progress {
                                 super::InventoryPageProgress::Complete=>{if let Some(progress)=progress {
-                                    let partial=snapshots.iter().find(|(source,_,_)|source==&expected.source_context).is_some_and(|(_,_,snapshot)|snapshot.native_live_coverage.iter().any(|part|matches!(part.state,crate::picker_runtime_status::NativeLiveReadState::Unavailable(_))));
+                                    let partial=snapshots.iter().find(|(source,_,_)|source==&expected.source_context).is_some_and(|(_,_,snapshot)|snapshot.native_live_coverage.iter().any(|part|part.state.is_incomplete()));
                                     progress.read_state=if partial {SourceReadState::Partial {record_count}}else {SourceReadState::Complete {record_count}};
                                 }}
                                 super::InventoryPageProgress::MoreAvailable {continuation}=>{
@@ -278,15 +278,19 @@ fn validate_source_page(
         if *previous_binding != binding {
             return Err(SourceInventoryRejection::StaleSnapshot);
         }
-        if snapshot.records.iter().any(|row| {
-            previous
+        for row in snapshot.records {
+            if let Some(stored) = previous
                 .records
-                .iter()
-                .any(|old| old.identity == row.identity)
-        }) {
-            return Err(SourceInventoryRejection::InvalidInventory);
+                .iter_mut()
+                .find(|old| old.identity == row.identity)
+            {
+                stored
+                    .corroborate_native_loaded(row)
+                    .map_err(|_| SourceInventoryRejection::InvalidInventory)?;
+            } else {
+                previous.records.push(row);
+            }
         }
-        previous.records.extend(snapshot.records);
         previous.runtime_coverage = snapshot.runtime_coverage;
         previous.native_live_coverage = snapshot.native_live_coverage;
         Ok((previous.records.len(), progress))
@@ -315,7 +319,7 @@ fn source_snapshot_matches(
     if snapshot.native_live_coverage.iter().any(|part| {
         part.service_epoch != binding.service_epoch
             || binding.native_claude_endpoint.as_ref() != Some(&part.endpoint)
-            || !native_membership.insert(part.endpoint.clone())
+            || !native_membership.insert((part.endpoint.clone(), part.view))
     }) {
         return false;
     }
@@ -380,7 +384,7 @@ fn merge_source_snapshots(
         }
         for part in &snapshot.native_live_coverage {
             native_live_coverage
-                .entry((part.endpoint.clone(), part.service_epoch.clone()))
+                .entry((part.endpoint.clone(), part.service_epoch.clone(), part.view))
                 .or_insert_with(|| part.clone());
         }
         if snapshot.runtime_coverage == PickerRuntimeCoverage::Available {

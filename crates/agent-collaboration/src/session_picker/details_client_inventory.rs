@@ -148,7 +148,8 @@ impl DetailsClientCapabilities {
             }
             (SessionPickerIdentity::NativeClaude(target), Self::Native { source })
                 if target.endpoint.service_id == source.service_id
-                    && String::from(target.endpoint.endpoint_id.clone()) == "claude-local" =>
+                    && String::from(target.endpoint.endpoint_id.clone()) == "claude-local"
+                    && query.record.native_restore_eligible() =>
             {
                 Some(&source.service_id)
             }
@@ -187,6 +188,11 @@ pub(super) fn production_inspector(context: crate::CliContext) -> DetailsClientI
                 .map_err(|_| SourceReadError::InvalidReply)?;
             match &query.record.identity {
                 SessionPickerIdentity::NativeClaude(target) => {
+                    if !query.record.native_restore_eligible() {
+                        return Ok(DetailsClientCapabilities::Unavailable(
+                            "Native job lifecycle is unknown; restore unavailable".to_owned(),
+                        ));
+                    }
                     if membership.native_claude_endpoint.as_ref() != Some(&target.endpoint) {
                         return Err(SourceReadError::InvalidReply);
                     }

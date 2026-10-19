@@ -229,7 +229,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     ));
     let terminal = client
         .list_provider_sessions(ProviderSessionListParams {
-            view: NativeSessionView::Active,
+            view: NativeSessionView::Loaded,
             source: NativeSessionSource::Interactive,
             page_size: 10,
             ..params.clone()
@@ -308,17 +308,26 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             ..
         }
     ));
-    let invalid_source = client
+    let stored_native = client
         .list_provider_sessions(ProviderSessionListParams {
             source: NativeSessionSource::Interactive,
             ..params
         })
         .await
-        .expect_err("Claude terminal stored view is unsupported");
-    assert!(matches!(
-        invalid_source,
-        collaboration_client::ClientError::Rejected { code: -32050, .. }
-    ));
+        .expect("native Stored history has independent coverage");
+    assert!(
+        stored_native.sessions.is_empty(),
+        "the peer registry is not historical job storage"
+    );
+    assert_eq!(
+        stored_native
+            .native_coverage
+            .expect("native coverage")
+            .background,
+        collaboration_protocol::NativeClaudeInventoryPart::Unavailable {
+            reason: collaboration_protocol::NativeInventoryUnavailableReason::ReadUnavailable
+        }
+    );
     served.stop().await.expect("close");
 
     let served = served_api::ServedApi::start(second_identity)
@@ -378,7 +387,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     let terminal_only = client
         .list_provider_sessions(ProviderSessionListParams {
             endpoint: target.endpoint,
-            view: NativeSessionView::Active,
+            view: NativeSessionView::Loaded,
             scope: NativeSessionScope::Any,
             source: NativeSessionSource::Interactive,
             query: None,

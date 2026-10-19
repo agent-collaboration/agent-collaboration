@@ -73,15 +73,10 @@ pub(super) fn render_picker_view(
     let incomplete_native = model
         .native_live_coverage
         .iter()
-        .filter(|part| {
-            matches!(
-                part.state,
-                crate::picker_runtime_status::NativeLiveReadState::Unavailable(_)
-            )
-        })
+        .filter(|part| part.state.is_incomplete())
         .count();
     if incomplete_native > 0 {
-        filter_controls.push(element!(Text(content:format!("Native Claude inventory incomplete ({incomplete_native} sources)"),color:Color::Yellow)).into_any());
+        filter_controls.push(element!(Text(content:fit_line(&format!("Native Claude inventory incomplete ({incomplete_native} reads)"),content_width),color:Color::Yellow,wrap:TextWrap::NoWrap)).into_any());
     }
     if let Some(error) = super::super::source_action_view::source_error(model) {
         filter_controls.push(error);

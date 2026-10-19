@@ -29,6 +29,9 @@ mod picker_performance_tests;
 #[path = "picker_details_navigation_tests.rs"]
 mod picker_details_navigation_tests;
 
+#[path = "native_catalogue_publication_tests.rs"]
+mod native_catalogue_publication_tests;
+
 // Blocking external fixture procedures run off the executor; production loaders are async.
 fn fixture_record_loader<FixtureProcedure>(
     procedure: FixtureProcedure,
@@ -159,6 +162,9 @@ fn capture_record(
         provenance: crate::sessions::SessionRowProvenance::LocalHomeCatalog,
         endpoint_label: None,
         provider_state: None,
+        native_background: None,
+        native_peer: None,
+        native_inventory_view: None,
         session_id: session_id.to_owned(),
         title: title.to_owned(),
         full_title: title.to_owned(),

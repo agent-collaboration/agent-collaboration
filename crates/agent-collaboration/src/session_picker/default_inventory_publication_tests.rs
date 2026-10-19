@@ -19,6 +19,7 @@ fn rejected_default_catalogue_invalidates_provider_state_and_native_coverage_eve
     request.root = SessionsPickerRoot::Any;
     let mut model = SessionsPickerModel::new(request, 120);
     model.native_live_coverage = vec![NativeLiveCoverage {
+        view: crate::picker_runtime_status::NativeCatalogueView::Loaded,
         endpoint: serde_json::from_value(
             json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"}),
         )

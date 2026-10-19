@@ -1,6 +1,11 @@
 //! Provider partitions and retained Stored metadata through actual read boundaries.
 use super::*;
 
+fn native_catalogue_page(sessions: Value, stored: bool) -> Value {
+    json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"observedAt":"2026-09-07T00:00:00Z","sessions":sessions,"nextCursor":null,
+        "nativeCoverage":{"peer":{"kind":if stored {"notRequested"}else {"complete"}},"background":{"kind":"complete"}}})
+}
+
 #[tokio::test]
 async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
     let provider_page = json!({
@@ -17,8 +22,15 @@ async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
     let (mut client, peer) = connect_fixture(vec![
         ("endpoints_list", inventory_with_provider()),
         ("provider_sessions_list", provider_page),
-        ("provider_sessions_list",json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"observedAt":"2026-09-07T00:00:00Z","sessions":[],"nextCursor":null})),
-        ("endpoints_list",inventory_with_provider()),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([]), false),
+        ),
+        ("endpoints_list", inventory_with_provider()),
     ])
     .await;
     let (native_endpoint, rows, _) = load_provider_records(&mut client)
@@ -41,7 +53,7 @@ async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
 
 #[tokio::test]
 async fn provider_inventory_adds_loaded_native_claude_without_collapsing_managed_equal_ids() {
-    let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"equal-id"});
+    let target = json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"});
     let managed = json!({"origin":"hostedProvider","target":target,
         "workingDirectory":"/managed","updatedAt":3,"state":"idle",
         "requestedPolicy":{"access":"write-restricted"},
@@ -59,7 +71,14 @@ async fn provider_inventory_adds_loaded_native_claude_without_collapsing_managed
             "provider_sessions_list",
             provider_page(json!([managed.clone()])),
         ),
-        ("provider_sessions_list", provider_page(json!([native]))),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([]), true),
+        ),
+        (
+            "provider_sessions_list",
+            native_catalogue_page(json!([native]), false),
+        ),
         ("endpoints_list", inventory_with_provider()),
     ])
     .await;
@@ -81,16 +100,17 @@ async fn provider_inventory_adds_loaded_native_claude_without_collapsing_managed
     ));
     let requests = peer.await.unwrap();
     assert_eq!(requests[1]["arguments"]["view"], "stored");
-    assert_eq!(requests[2]["arguments"]["view"], "loaded");
+    assert_eq!(requests[2]["arguments"]["view"], "stored");
+    assert_eq!(requests[3]["arguments"]["view"], "loaded");
     assert_eq!(requests[2]["arguments"]["source"], "interactive");
-    assert_eq!(coverage.len(), 1);
+    assert_eq!(coverage.len(), 2);
     assert_eq!(
         coverage[0].state,
         crate::picker_runtime_status::NativeLiveReadState::Complete
     );
     assert_eq!(
         requests.len(),
-        4,
+        5,
         "only read-only inventory requests and binding revalidation"
     );
 }
@@ -239,6 +259,7 @@ async fn local_native_availability_keeps_stored_when_final_probe_is_unavailable_
                 FakeReply::Result(inventory_with_provider()),
                 FakeReply::Result(stored.clone()),
                 FakeReply::Error(unavailable.clone()),
+                FakeReply::Error(unavailable.clone()),
                 FakeReply::Error(final_reply),
             ],
             std::time::Duration::from_millis(25),
@@ -252,7 +273,7 @@ async fn local_native_availability_keeps_stored_when_final_probe_is_unavailable_
             .unwrap()
             .unwrap()
             .unwrap();
-        assert_eq!(transcript.calls.len(), 4);
+        assert_eq!(transcript.calls.len(), 5);
         assert!(transcript.further_call.is_none());
         if valid_availability {
             let (_, records, coverage) = result

@@ -77,6 +77,10 @@ sys.exit(child.returncode if child.returncode >= 0 else 128-child.returncode)
         ];
         if mode == "unavailable" {
             responses.push(FakeReply::Result(inventory()));
+            responses.push(FakeReply::Error(
+                json!({"code":code,"message":"SSH_SOURCE_PRIVATE_SENTINEL","data":data}),
+            ));
+            responses.push(FakeReply::Result(inventory()));
         }
         let api_peer = api.serve(responses);
         let transcript = root.path().join(format!("{mode}.jsonl"));
@@ -117,11 +121,15 @@ sys.exit(child.returncode if child.returncode >= 0 else 128-child.returncode)
             .lines()
             .map(|line| serde_json::from_str::<Value>(line).unwrap())
             .collect::<Vec<_>>();
-        let expected_count = if mode == "unavailable" { 5 } else { 4 };
+        let expected_count = if mode == "unavailable" { 7 } else { 4 };
         assert_eq!(calls.len(), expected_count);
         assert_eq!(requests.len(), expected_count, "no retry or fallback");
         assert_eq!(requests[1]["operation"]["params"]["view"], "stored");
-        assert_eq!(requests[3]["operation"]["params"]["view"], "loaded");
+        assert_eq!(requests[3]["operation"]["params"]["view"], "stored");
+        if mode == "unavailable" {
+            assert_eq!(requests[5]["operation"]["params"]["view"], "loaded");
+            assert_eq!(requests[5]["operation"]["params"]["source"], "interactive");
+        }
         assert_eq!(requests[3]["operation"]["params"]["source"], "interactive");
         assert!(!String::from_utf8_lossy(&child.stdout).contains("SSH_SOURCE_PRIVATE_SENTINEL"));
         assert!(!String::from_utf8_lossy(&child.stderr).contains("SSH_SOURCE_PRIVATE_SENTINEL"));

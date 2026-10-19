@@ -386,11 +386,15 @@ impl CollaborationRuntime {
             crate::session_message_route_composition::default_peer_registry_directory,
             Ok,
         )?;
-        let identity = identity.with_claude_code_sessions(std::sync::Arc::new(
-            claude_code_peer_messaging::ClaudeCodeSessionRegistry::new(
-                peer_registry_directory.clone(),
-            ),
-        ));
+        let identity = identity
+            .with_claude_background_jobs(std::sync::Arc::new(
+                claude_code_peer_messaging::NativeClaudeJobReader::default(),
+            ))
+            .with_claude_code_sessions(std::sync::Arc::new(
+                claude_code_peer_messaging::ClaudeCodeSessionRegistry::new(
+                    peer_registry_directory.clone(),
+                ),
+            ));
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {

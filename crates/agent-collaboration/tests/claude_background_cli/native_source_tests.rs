@@ -146,3 +146,105 @@ async fn source_native_observed_receipt_and_arguments_are_preserved_without_id_c
     );
     assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 1);
 }
+
+#[tokio::test]
+async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_before_one_child() {
+    use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
+    use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
+    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    const SESSION: &str = "00000000-0000-4000-8000-000000000042";
+    for (action, state, captured_cwd, session, allowed) in [
+        ("resume", "stopped", true, SESSION, true),
+        ("fork", "done", true, SESSION, true),
+        ("resume", "stopped", false, SESSION, false),
+        ("resume", "future-state", true, SESSION, false),
+        (
+            "resume",
+            "stopped",
+            true,
+            "distinct-background-handle",
+            false,
+        ),
+    ] {
+        let fixture = ClaudeProcessFixture::new().await.unwrap();
+        let root = fixture.root.path();
+        let peers = root.join("peers");
+        fs::create_dir(&peers).unwrap();
+        let output = root.join("native-jobs.json");
+        fs::write(&output,serde_json::to_vec(&json!([{"kind":"background","id":"distinct-background-handle","sessionId":SESSION,"cwd":fixture.working_directory,"state":state,"startedAt":1790162100000_i64}])).unwrap()).unwrap();
+        let reader = root.join("native-read");
+        fs::write(&reader,format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",serde_json::to_string(&output).unwrap())).unwrap();
+        fs::set_permissions(&reader, fs::Permissions::from_mode(0o700)).unwrap();
+        let description=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
+        let identity = ServiceIdentity::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )
+        .unwrap()
+        .with_endpoints(vec![description])
+        .unwrap()
+        .with_claude_code_sessions(Arc::new(ClaudeCodeSessionRegistry::new(peers)))
+        .with_claude_background_jobs(Arc::new(NativeClaudeJobReader::for_executable(reader)));
+        let service_directory = root.join("router/agent-communication");
+        fs::set_permissions(&service_directory, fs::Permissions::from_mode(0o700)).unwrap();
+        let api = ServedCollaborationApi::start_with(
+            &service_directory,
+            CollaborationApplication::new(identity),
+            TestServeOptions {
+                router_proxy_endpoint: Some(fixture.endpoint),
+                ..TestServeOptions::default()
+            },
+        )
+        .await
+        .unwrap();
+        let mut request = source_request(&fixture);
+        let directory = if captured_cwd {
+            fixture.working_directory.clone()
+        } else {
+            root.join("home")
+        };
+        request["operation"]["action"] = json!({"kind":action,"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":session},"directory":directory,"arguments":Vec::<OsString>::new()});
+        let output = tokio::time::timeout(
+            Duration::from_secs(10),
+            fixture
+                .command()
+                .args(["--source-request-v1", &request.to_string()])
+                .output(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        let response: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        if allowed {
+            assert!(output.status.success(), "{action}/{state}: {response}");
+            let mut expected = vec!["--bg", "--resume", SESSION];
+            if action == "fork" {
+                expected.push("--fork-session");
+            }
+            assert_eq!(fixture.invocation().unwrap().arguments, expected);
+            assert_eq!(fixture.invocation().unwrap().working_directory, directory);
+            assert_eq!(
+                response["reply"]["result"]["action"]["target"]["sessionId"],
+                SESSION
+            );
+            assert_eq!(
+                fs::read_to_string(root.join("invocations.txt"))
+                    .unwrap()
+                    .lines()
+                    .count(),
+                1
+            );
+        } else {
+            assert!(
+                !output.status.success(),
+                "forbidden restore {state}/{captured_cwd}/{session}: {response}"
+            );
+            assert!(
+                !root.join("invocations.txt").exists(),
+                "no child before qualified UUID/directory/lifecycle"
+            );
+            assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 0);
+        }
+        api.stop().await.unwrap();
+    }
+}

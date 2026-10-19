@@ -344,8 +344,8 @@ async fn configured_full_uuid_search_reads_later_pages_without_reinterpreting_re
     assert_eq!(fixture.api_call_count("sessions_list"), 2);
     assert_eq!(
         fixture.api_call_count("provider_sessions_list"),
-        2,
-        "separate Stored managed and native-only Loaded reads"
+        3,
+        "separate managed Stored, native history and native Loaded reads"
     );
     fixture.finish().await;
 }
@@ -358,7 +358,7 @@ pub(crate) async fn read_complete_source(
 ) -> crate::presentation::session_picker::SourceInventoryResult {
     use crate::presentation::session_picker::{InventoryPageProgress, SourceInventoryResult};
     let mut request = initial.clone();
-    let mut rows = Vec::new();
+    let mut rows: Vec<SessionPickerRecord> = Vec::new();
     loop {
         match loader(request.clone()).await {
             SourceInventoryResult::Qualified { continuation, .. } => {
@@ -376,7 +376,15 @@ pub(crate) async fn read_complete_source(
                 progress,
                 ..
             } => {
-                rows.extend(snapshot.records);
+                for row in snapshot.records {
+                    if let Some(stored) = rows.iter_mut().find(|old| old.identity == row.identity) {
+                        stored
+                            .corroborate_native_loaded(row)
+                            .expect("test consumer must use production cross-view corroboration");
+                    } else {
+                        rows.push(row);
+                    }
+                }
                 match progress {
                     InventoryPageProgress::Complete => {
                         return SourceInventoryResult::Ready {
@@ -401,7 +409,10 @@ pub(crate) async fn read_complete_source(
 
 #[tokio::test]
 async fn configured_inventory_retains_real_stored_rows_with_explicit_native_unavailability() {
-    use crate::picker_runtime_status::{NativeLiveReadState, NativeLiveUnavailableReason};
+    use crate::picker_runtime_status::{NativeCatalogueView, NativeLiveReadState};
+    use collaboration_client::protocol::{
+        NativeClaudeInventoryCoverage, NativeClaudeInventoryPart, NativeInventoryUnavailableReason,
+    };
     let fixture = SourceApiFixture::start_with_provider(
         "00000000-0000-4000-8000-000000000008",
         "stored-model",
@@ -422,22 +433,34 @@ async fn configured_inventory_retains_real_stored_rows_with_explicit_native_unav
     );
     assert_eq!(
         snapshot.native_live_coverage.len(),
-        1,
+        2,
         "native absence cannot become successful empty inventory"
     );
-    let coverage = snapshot.native_live_coverage.first().unwrap();
-    assert_eq!(
-        String::from(coverage.endpoint.endpoint_id.clone()),
-        "claude-local"
-    );
-    assert_eq!(
-        coverage.state,
-        NativeLiveReadState::Unavailable(NativeLiveUnavailableReason::ProviderUnavailable)
-    );
+    for coverage in &snapshot.native_live_coverage {
+        assert_eq!(
+            String::from(coverage.endpoint.endpoint_id.clone()),
+            "claude-local"
+        );
+        assert_eq!(
+            coverage.state,
+            NativeLiveReadState::Incomplete(NativeClaudeInventoryCoverage {
+                peer: if coverage.view == NativeCatalogueView::Stored {
+                    NativeClaudeInventoryPart::NotRequested
+                } else {
+                    NativeClaudeInventoryPart::Unavailable {
+                        reason: NativeInventoryUnavailableReason::ReadUnavailable,
+                    }
+                },
+                background: NativeClaudeInventoryPart::Unavailable {
+                    reason: NativeInventoryUnavailableReason::ReadUnavailable
+                },
+            })
+        );
+    }
     assert_eq!(
         fixture.api_call_count("provider_sessions_list"),
-        2,
-        "separate managed Stored and native Loaded reads"
+        3,
+        "managed Stored, native history and native live remain separate"
     );
     fixture.finish().await;
 }

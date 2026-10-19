@@ -311,6 +311,7 @@ impl SessionsPickerModel {
         for record in &mut self.request.records {
             record.runtime_status = PickerRuntimeStatus::Unknown;
             record.provider_state = None;
+            record.native_peer = None;
         }
         self.rebuild_visible_rows();
         self.restore_focus_or_fallback(previous_index);

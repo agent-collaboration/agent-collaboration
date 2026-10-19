@@ -327,9 +327,9 @@ async fn reply(State(state): State<Arc<PeerState>>, Json(request): Json<Value>) 
         }
         "provider_sessions_list" => {
             if request
-                .pointer("/params/arguments/view")
+                .pointer("/params/arguments/source")
                 .and_then(Value::as_str)
-                == Some("loaded")
+                == Some("interactive")
             {
                 assert_eq!(
                     request
@@ -337,7 +337,7 @@ async fn reply(State(state): State<Arc<PeerState>>, Json(request): Json<Value>) 
                         .and_then(Value::as_str),
                     Some("interactive")
                 );
-                json!({"endpoint":provider_endpoint,"observedAt":"2026-10-11T00:00:00Z","nextCursor":null,"sessions":[]})
+                json!({"endpoint":provider_endpoint,"observedAt":"2026-10-11T00:00:00Z","nextCursor":null,"sessions":[],"nativeCoverage":{"peer":{"kind":if request.pointer("/params/arguments/view").and_then(Value::as_str)==Some("stored") {"notRequested"}else {"complete"}},"background":{"kind":"complete"}}})
             } else {
                 json!({"skippedRecords":if matches!(state.scenario,ReplyScenario::ProviderSkipped){1}else{0},"endpoint":provider_endpoint,"observedAt":"2026-10-11T00:00:00Z","nextCursor":null,
             "sessions":[{"target":{"endpoint":provider_endpoint,"sessionId":"provider-only-id"},"workingDirectory":"/source/provider",

@@ -42,6 +42,18 @@ pub enum ProviderSessionState {
 #[derive(JsonSchema, Clone, Debug, Serialize, Deserialize)]
 #[serde(untagged, rename_all_fields = "camelCase", deny_unknown_fields)]
 pub enum ProviderSessionSummary {
+    ClaudeCodeBackground {
+        origin: ClaudeCodeBackgroundOrigin,
+        target: SessionRef,
+        job_handle: crate::NativeClaudeJobHandle,
+        working_directory: ProviderWorkingDirectory,
+        name: Option<String>,
+        /// Actual creation observation, in Unix seconds. No updated time is inferred.
+        started_at: i64,
+        state: crate::NativeClaudeBackgroundState,
+        status: Option<ClaudeCodeInteractiveStatus>,
+        peer: Option<crate::NativeClaudePeerObservation>,
+    },
     HostedProvider {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         origin: Option<HostedProviderOrigin>,
@@ -83,12 +95,25 @@ pub enum ClaudeCodeInteractiveOrigin {
     ClaudeCodeInteractive,
 }
 
+#[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ClaudeCodeBackgroundOrigin {
+    ClaudeCodeBackground,
+}
+
 impl ProviderSessionSummary {
+    #[must_use]
+    pub const fn is_native_claude(&self) -> bool {
+        matches!(
+            self,
+            Self::ClaudeCodeInteractive { .. } | Self::ClaudeCodeBackground { .. }
+        )
+    }
     pub fn target(&self) -> &SessionRef {
         match self {
-            Self::HostedProvider { target, .. } | Self::ClaudeCodeInteractive { target, .. } => {
-                target
-            }
+            Self::HostedProvider { target, .. }
+            | Self::ClaudeCodeInteractive { target, .. }
+            | Self::ClaudeCodeBackground { target, .. } => target,
         }
     }
 }
@@ -111,6 +136,8 @@ pub struct ProviderSessionListResult {
     pub observed_at: ObservationTimestamp,
     #[schemars(length(max = 100))]
     pub sessions: Vec<ProviderSessionSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub native_coverage: Option<crate::NativeClaudeInventoryCoverage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub skipped_records: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]

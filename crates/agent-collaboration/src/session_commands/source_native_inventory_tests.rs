@@ -24,16 +24,21 @@ fn request(directory: &Path) -> SourceRequest {
 async fn native_target_qualification_reads_only_canonical_loaded_interactive_origin() {
     let mut api = FakeCollaborationApi::new(SERVICE, EPOCH).unwrap();
     let request = request(api.directory());
-    let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"owned-native"})).unwrap();
+    let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"00000000-0000-4000-8000-000000000042"})).unwrap();
     let serving=api.serve_then_watch(vec![
         FakeReply::Result(json!({"serviceEpoch":EPOCH,"sequence":1,"endpoints":[membership("claude-local")]})),
-        FakeReply::Result(json!({"endpoint":target.endpoint,"observedAt":"2026-10-18T00:00:00Z","nextCursor":null,"sessions":[{
+        FakeReply::Result(json!({"endpoint":target.endpoint,"observedAt":"2026-10-18T00:00:00Z","nextCursor":null,"nativeCoverage":{"peer":{"kind":"complete"},"background":{"kind":"complete"}},"sessions":[{
             "origin":"claudeCodeInteractive","target":target,"workingDirectory":"/native","name":"Owned native","status":"idle","startedAt":1,"updatedAt":2,"statusUpdatedAt":2,"kind":"interactive","entrypoint":"cli"}]})),
     ],Duration::from_millis(25));
     let peer = tokio::spawn(serving);
-    validate_native_target(&request, &EPOCH.to_owned().try_into().unwrap(), &target)
-        .await
-        .unwrap();
+    validate_native_target(
+        &request,
+        &EPOCH.to_owned().try_into().unwrap(),
+        &target,
+        "/native",
+    )
+    .await
+    .unwrap();
     let transcript = peer.await.unwrap().unwrap().unwrap();
     assert_eq!(transcript.calls.len(), 2);
     assert!(transcript.further_call.is_none());
@@ -59,7 +64,7 @@ async fn native_target_rejects_noncanonical_or_duplicate_membership_before_sessi
     ] {
         let mut api = FakeCollaborationApi::new(SERVICE, EPOCH).unwrap();
         let request = request(api.directory());
-        let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":SERVICE,"endpointId":endpoint_id},"sessionId":"owned-native"})).unwrap();
+        let target:SessionRef=serde_json::from_value(json!({"endpoint":{"serviceId":SERVICE,"endpointId":endpoint_id},"sessionId":"00000000-0000-4000-8000-000000000042"})).unwrap();
         let serving = api.serve_then_watch(
             vec![FakeReply::Result(
                 json!({"serviceEpoch":EPOCH,"sequence":1,"endpoints":descriptions}),
@@ -68,9 +73,14 @@ async fn native_target_rejects_noncanonical_or_duplicate_membership_before_sessi
         );
         let peer = tokio::spawn(serving);
         assert!(
-            validate_native_target(&request, &EPOCH.to_owned().try_into().unwrap(), &target)
-                .await
-                .is_err()
+            validate_native_target(
+                &request,
+                &EPOCH.to_owned().try_into().unwrap(),
+                &target,
+                "/native"
+            )
+            .await
+            .is_err()
         );
         let transcript = peer.await.unwrap().unwrap().unwrap();
         assert_eq!(transcript.calls.len(), 1);

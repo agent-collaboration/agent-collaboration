@@ -46,6 +46,11 @@ pub(super) struct RoutedClaudeEnvironment {
     auth_token: String,
 }
 
+struct ActiveClaudeInventory {
+    records: Vec<serde_json::Value>,
+    notice: Option<String>,
+}
+
 impl ClaudeLaunchTarget {
     /// Read-only route qualification. Presence is not a vendor compatibility
     /// claim; the actual launch still rechecks the source and returns its result.
@@ -151,7 +156,7 @@ impl ClaudeLaunchTarget {
     ) -> Result<(Vec<serde_json::Value>, Option<String>), SessionsCommandError> {
         let stored_records = self.stored_transcript_records().await?;
         let (active_records, active_error) = match self.active_session_records(limit).await {
-            Ok(records) => (records, None),
+            Ok(inventory) => (inventory.records, inventory.notice),
             Err(error) => (Vec::new(), Some(error)),
         };
         let mut records = active_records;
@@ -250,7 +255,7 @@ impl ClaudeLaunchTarget {
             .map_err(SessionsCommandError::ClaudeLaunch)
     }
 
-    async fn active_session_records(&self, limit: usize) -> Result<Vec<serde_json::Value>, String> {
+    async fn active_session_records(&self, limit: usize) -> Result<ActiveClaudeInventory, String> {
         let client = collaboration_client::CollaborationClient::connect(
             &self.service_directory,
             "agent-sessions-claude-list",
@@ -266,6 +271,7 @@ impl ClaudeLaunchTarget {
             endpoint_id,
         };
         let mut records = Vec::new();
+        let mut notice = None;
         let mut cursor = None;
         let mut seen_cursors = HashSet::new();
         while records.len() < limit {
@@ -281,6 +287,21 @@ impl ClaudeLaunchTarget {
                 })
                 .await
                 .map_err(|error| error.to_string())?;
+            let coverage = crate::picker_runtime_status::NativeLiveReadState::from_observation(
+                crate::picker_runtime_status::NativeCatalogueView::Loaded,
+                page.native_coverage,
+            )
+            .map_err(str::to_owned)?;
+            if coverage.is_incomplete() {
+                notice = Some("Native Claude inventory incomplete".to_owned());
+            }
+            if page.endpoint != endpoint
+                || page.sessions.iter().any(|summary| {
+                    !summary.is_native_claude() || summary.target().endpoint != endpoint
+                })
+            {
+                return Err("invalid native Claude inventory".to_owned());
+            }
             for session in page.sessions {
                 if let Some(record) = active_claude_session_record(session) {
                     records.push(record);
@@ -297,38 +318,61 @@ impl ClaudeLaunchTarget {
             }
             cursor = Some(next_cursor);
         }
-        Ok(records)
+        Ok(ActiveClaudeInventory { records, notice })
     }
 }
 
 fn active_claude_session_record(session: ProviderSessionSummary) -> Option<serde_json::Value> {
-    let ProviderSessionSummary::ClaudeCodeInteractive {
-        target,
-        name,
-        working_directory,
-        status,
-        started_at,
-        updated_at,
-        status_updated_at,
-        kind,
-        entrypoint,
-        ..
-    } = session
-    else {
-        return None;
-    };
-    Some(serde_json::json!({
-        "source": "active",
-        "sessionId": String::from(target.session_id),
-        "name": name,
-        "workingDirectory": String::from(working_directory),
-        "status": status,
-        "startedAtUnixSeconds": started_at,
-        "updatedAtUnixSeconds": updated_at,
-        "statusUpdatedAtUnixSeconds": status_updated_at,
-        "kind": kind,
-        "entrypoint": entrypoint,
-    }))
+    match session {
+        ProviderSessionSummary::ClaudeCodeInteractive {
+            target,
+            name,
+            working_directory,
+            status,
+            started_at,
+            updated_at,
+            status_updated_at,
+            kind,
+            entrypoint,
+            ..
+        } => Some(serde_json::json!({
+            "source": "active",
+            "sessionId": String::from(target.session_id),
+            "name": name,
+            "workingDirectory": String::from(working_directory),
+            "status": status,
+            "startedAtUnixSeconds": started_at,
+            "updatedAtUnixSeconds": updated_at,
+            "statusUpdatedAtUnixSeconds": status_updated_at,
+            "kind": kind,
+            "entrypoint": entrypoint,
+        })),
+        ProviderSessionSummary::ClaudeCodeBackground {
+            target,
+            job_handle,
+            working_directory,
+            name,
+            started_at,
+            state,
+            status,
+            peer,
+            ..
+        } => {
+            let peer_name = peer.as_ref().and_then(|peer| peer.name.clone());
+            Some(serde_json::json!({
+                "source":"active","sessionId":String::from(target.session_id),
+                "jobHandle":String::from(job_handle),"backgroundState":state,
+                "name":peer_name.or(name),"workingDirectory":String::from(working_directory),
+                "status":peer.as_ref().map(|peer|peer.status).or(status),
+                "startedAtUnixSeconds":peer.as_ref().map_or(started_at,|peer|peer.started_at),
+                "updatedAtUnixSeconds":peer.as_ref().map(|peer|peer.updated_at),
+                "statusUpdatedAtUnixSeconds":peer.as_ref().and_then(|peer|peer.status_updated_at),
+                "kind":peer.as_ref().map_or("background",|peer|peer.kind.as_str()),
+                "entrypoint":peer.as_ref().map(|peer|peer.entrypoint.as_str())
+            }))
+        }
+        ProviderSessionSummary::HostedProvider { .. } => None,
+    }
 }
 
 pub(super) fn read_service_manifest(manifest_path: &Path) -> Result<ServiceManifest, String> {

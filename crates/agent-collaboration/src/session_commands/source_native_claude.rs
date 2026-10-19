@@ -14,8 +14,8 @@ use crate::{
     },
 };
 use collaboration_client::protocol::{
-    NativeSessionScope, NativeSessionSource, NativeSessionView, ProviderSessionListParams,
-    ProviderSessionSummary, SessionRef, UuidIdentity,
+    NativeSessionScope, NativeSessionSource, ProviderSessionListParams, ProviderSessionSummary,
+    SessionRef, UuidIdentity,
 };
 use std::{
     collections::BTreeSet,
@@ -85,7 +85,7 @@ pub(super) async fn execute_native_claude(
         return Err(SourceRejection::DirectoryUnavailable);
     }
     if let Some(target) = target {
-        validate_native_target(request, service_epoch, target).await?;
+        validate_native_target(request, service_epoch, target, directory.as_str()).await?;
     }
     let environment = launch
         .routed_environment()
@@ -179,6 +179,7 @@ async fn validate_native_target(
     request: &SourceRequest,
     epoch: &UuidIdentity,
     target: &SessionRef,
+    directory: &str,
 ) -> Result<(), SourceRejection> {
     if target.endpoint.service_id != request.expected_service {
         return Err(SourceRejection::WrongService);
@@ -199,15 +200,35 @@ async fn validate_native_target(
     if binding.native_claude_endpoint.as_ref() != Some(&target.endpoint) {
         return Err(SourceRejection::UnavailableEndpoint);
     }
+    UuidIdentity::try_from(String::from(target.session_id.clone()))
+        .map_err(|_| SourceRejection::SessionUnavailable)?;
+    for view in [
+        crate::picker_runtime_status::NativeCatalogueView::Loaded,
+        crate::picker_runtime_status::NativeCatalogueView::Stored,
+    ] {
+        if native_target_in_view(&client, target, directory, view).await? {
+            return Ok(());
+        }
+    }
+    Err(SourceRejection::SessionUnavailable)
+}
+
+async fn native_target_in_view(
+    client: &collaboration_client::CollaborationClient,
+    target: &SessionRef,
+    directory: &str,
+    view: crate::picker_runtime_status::NativeCatalogueView,
+) -> Result<bool, SourceRejection> {
+    use crate::sessions::source_inventory_failure::InventoryReadFailure;
     let mut cursor = None;
     let mut seen_cursors = BTreeSet::new();
     let mut seen_targets = BTreeSet::new();
     let mut found = false;
     loop {
-        let page = client
+        let page = match client
             .list_provider_sessions(ProviderSessionListParams {
                 endpoint: target.endpoint.clone(),
-                view: NativeSessionView::Loaded,
+                view: view.request_view(),
                 scope: NativeSessionScope::Any,
                 source: NativeSessionSource::Interactive,
                 query: None,
@@ -215,37 +236,75 @@ async fn validate_native_target(
                 cursor,
             })
             .await
-            .map_err(|_| SourceRejection::SessionUnavailable)?;
+        {
+            Ok(page) => page,
+            Err(error) => {
+                return match InventoryReadFailure::from_client(&error) {
+                    InventoryReadFailure::Unavailable(_) => Ok(false),
+                    InventoryReadFailure::Invalid { .. } => {
+                        Err(SourceRejection::SessionUnavailable)
+                    }
+                };
+            }
+        };
+        crate::picker_runtime_status::NativeLiveReadState::from_observation(
+            view,
+            page.native_coverage,
+        )
+        .map_err(|_| SourceRejection::SessionUnavailable)?;
         if page.endpoint != target.endpoint
             || page.sessions.len() > 100
             || page.skipped_records.unwrap_or(0) > 0
         {
-            return Err(SourceRejection::WrongService);
+            return Err(SourceRejection::SessionUnavailable);
         }
         for summary in &page.sessions {
-            if !matches!(
-                summary,
-                ProviderSessionSummary::ClaudeCodeInteractive { .. }
-            ) || summary.target().endpoint != target.endpoint
+            if !crate::sessions::SessionPickerRecord::validate_native_summary(summary, view)
+                || summary.target().endpoint != target.endpoint
                 || seen_targets.len() >= 4096
                 || !seen_targets.insert(summary.target().clone())
             {
                 return Err(SourceRejection::SessionUnavailable);
             }
+            if summary.target() == target {
+                let (working_directory, eligible) = match summary {
+                    ProviderSessionSummary::ClaudeCodeInteractive {
+                        working_directory, ..
+                    } => (working_directory, true),
+                    ProviderSessionSummary::ClaudeCodeBackground {
+                        working_directory,
+                        state,
+                        peer,
+                        ..
+                    } => (
+                        working_directory,
+                        !matches!(
+                            state,
+                            collaboration_client::protocol::NativeClaudeBackgroundState::Unknown { .. }
+                        ) || peer.is_some(),
+                    ),
+                    ProviderSessionSummary::HostedProvider { .. } => {
+                        return Err(SourceRejection::SessionUnavailable);
+                    }
+                };
+                if String::from(working_directory.clone()) != directory || !eligible {
+                    return Err(SourceRejection::SessionUnavailable);
+                }
+                found = true;
+            }
         }
-        found|=page.sessions.iter().any(|summary|matches!(summary,ProviderSessionSummary::ClaudeCodeInteractive {target:actual,..} if actual==target));
         match page.next_cursor {
-            Some(next) if seen_cursors.len() < 64 && seen_cursors.insert(next.clone()) => {
+            Some(next)
+                if !next.is_empty()
+                    && next.len() <= 1024
+                    && seen_cursors.len() < 64
+                    && seen_cursors.insert(next.clone()) =>
+            {
                 cursor = Some(next)
             }
             Some(_) => return Err(SourceRejection::SessionUnavailable),
-            None => break,
+            None => return Ok(found),
         }
-    }
-    if found {
-        Ok(())
-    } else {
-        Err(SourceRejection::SessionUnavailable)
     }
 }
 

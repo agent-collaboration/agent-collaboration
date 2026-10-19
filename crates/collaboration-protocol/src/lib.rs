@@ -77,9 +77,15 @@ pub use permission_diagnostic::{
     PermissionDiagnosticStage,
 };
 pub use provider_session_list::{
-    ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus, HostedProviderOrigin,
-    ProviderSessionListParams, ProviderSessionListResult, ProviderSessionState,
-    ProviderSessionSummary,
+    ClaudeCodeBackgroundOrigin, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
+    HostedProviderOrigin, ProviderSessionListParams, ProviderSessionListResult,
+    ProviderSessionState, ProviderSessionSummary,
+};
+mod native_claude_inventory;
+pub use native_claude_inventory::{
+    NativeClaudeBackgroundState, NativeClaudeInventoryCoverage, NativeClaudeInventoryPart,
+    NativeClaudeJobHandle, NativeClaudePeerObservation, NativeClaudeStateName,
+    NativeInventoryUnavailableReason,
 };
 pub use question_contract::{
     QuestionAnswerParams, QuestionAnswerResult, QuestionAnswerValue, QuestionFieldView,

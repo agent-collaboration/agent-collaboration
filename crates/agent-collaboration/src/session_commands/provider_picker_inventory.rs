@@ -1,11 +1,11 @@
 //! Independent local Stored and native-live provider partitions, within one read budget.
 use super::*;
 use crate::picker_runtime_status::{
-    NativeLiveCoverage, NativeLiveReadState, NativeLiveUnavailableReason,
+    NativeCatalogueView, NativeLiveCoverage, NativeLiveReadState, NativeLiveUnavailableReason,
 };
 use crate::presentation::session_picker::SourceInventoryBinding;
 use crate::sessions::source_inventory_failure::InventoryReadFailure;
-use collaboration_client::protocol::{EndpointDescription, ProviderSessionSummary};
+use collaboration_client::protocol::EndpointDescription;
 use tokio::time::{Instant, timeout_at};
 
 pub(super) type ProviderPickerRecords = (
@@ -16,7 +16,7 @@ pub(super) type ProviderPickerRecords = (
 
 enum ProviderReadPartition {
     ManagedStored(EndpointDescription),
-    NativeClaudeLoaded(EndpointDescription),
+    NativeClaude(EndpointDescription, NativeCatalogueView),
 }
 
 pub(super) async fn read_provider_records(
@@ -59,31 +59,31 @@ pub(super) async fn read_provider_records(
             .iter()
             .find(|entry| entry.endpoint == *endpoint)
             .ok_or(ClientError::Protocol("native membership unavailable"))?;
-        partitions.push(ProviderReadPartition::NativeClaudeLoaded(
-            description.clone(),
-        ));
+        for view in [NativeCatalogueView::Stored, NativeCatalogueView::Loaded] {
+            partitions.push(ProviderReadPartition::NativeClaude(
+                description.clone(),
+                view,
+            ));
+        }
     }
-    let mut rows = Vec::new();
-    let mut seen = BTreeSet::new();
+    let mut rows: Vec<SessionPickerRecord> = Vec::new();
     let mut coverage = Vec::new();
     for partition in partitions {
-        let (description, native) = match partition {
-            ProviderReadPartition::ManagedStored(description) => (description, false),
-            ProviderReadPartition::NativeClaudeLoaded(description) => (description, true),
+        let (description, view) = match partition {
+            ProviderReadPartition::ManagedStored(description) => (description, None),
+            ProviderReadPartition::NativeClaude(description, view) => (description, Some(view)),
         };
+        let native = view.is_some();
+        let mut partition_seen = BTreeSet::new();
         let mut cursor = None;
         let mut cursors = BTreeSet::new();
-        let mut state = NativeLiveReadState::Complete;
+        let mut state = NativeLiveReadState::Reading;
         loop {
             let response = timeout_at(
                 deadline,
                 client.list_provider_sessions(ProviderSessionListParams {
                     endpoint: description.endpoint.clone(),
-                    view: if native {
-                        NativeSessionView::Loaded
-                    } else {
-                        NativeSessionView::Stored
-                    },
+                    view: view.map_or(NativeSessionView::Stored, NativeCatalogueView::request_view),
                     scope: NativeSessionScope::Any,
                     source: if native {
                         NativeSessionSource::Interactive
@@ -114,27 +114,48 @@ pub(super) async fn read_provider_records(
             {
                 return Err(ClientError::Protocol("invalid provider inventory page"));
             }
+            if let Some(view) = view {
+                let observed = NativeLiveReadState::from_observation(view, page.native_coverage)
+                    .map_err(ClientError::Protocol)?;
+                if !matches!(state, NativeLiveReadState::Reading) && state != observed {
+                    return Err(ClientError::Protocol(
+                        "native coverage changed across pages",
+                    ));
+                }
+                state = observed;
+            }
             for summary in page.sessions {
                 if summary.target().endpoint != description.endpoint
-                    || native
-                        != matches!(
-                            &summary,
-                            ProviderSessionSummary::ClaudeCodeInteractive { .. }
-                        )
+                    || native != summary.is_native_claude()
+                    || view.is_some_and(|view| {
+                        !SessionPickerRecord::validate_native_summary(&summary, view)
+                    })
                 {
                     return Err(ClientError::Protocol("invalid provider inventory origin"));
                 }
-                let row = SessionPickerRecord::from_provider_summary(
+                let mut row = SessionPickerRecord::from_provider_summary(
                     &summary,
                     &String::from(description.label.clone()),
                 )
                 .with_provider_endpoint(&summary, &description);
-                if rows.len() >= MAX_RUNTIME_ROWS || !seen.insert(row.identity.clone()) {
+                if let Some(view) = view {
+                    row = row.with_native_inventory_view(view);
+                }
+                if rows.len() >= MAX_RUNTIME_ROWS || !partition_seen.insert(row.identity.clone()) {
                     return Err(ClientError::Protocol(
                         "duplicate or excessive provider inventory",
                     ));
                 }
-                rows.push(row);
+                if let Some(stored) = rows
+                    .iter_mut()
+                    .find(|stored| stored.identity == row.identity)
+                {
+                    stored
+                        .corroborate_native_loaded(row)
+                        .map_err(ClientError::Protocol)?;
+                } else {
+                    rows.push(row);
+                }
             }
             match page.next_cursor {
                 Some(next)
@@ -153,8 +174,9 @@ pub(super) async fn read_provider_records(
                 None => break,
             }
         }
-        if native {
+        if let Some(view) = view {
             coverage.push(NativeLiveCoverage {
+                view,
                 endpoint: description.endpoint,
                 service_epoch: binding.service_epoch.clone(),
                 state,
@@ -174,9 +196,7 @@ pub(super) async fn read_provider_records(
             }
             Ok(Err(error)) => {
                 let failure = InventoryReadFailure::from_client(&error);
-                let already_partial = coverage
-                    .iter()
-                    .any(|part| matches!(part.state, NativeLiveReadState::Unavailable(_)));
+                let already_partial = coverage.iter().any(|part| part.state.is_incomplete());
                 if !already_partial || !matches!(failure, InventoryReadFailure::Unavailable(_)) {
                     return Err(failure.into_client());
                 }

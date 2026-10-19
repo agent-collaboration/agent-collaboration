@@ -92,6 +92,9 @@ pub(super) fn render_details(
                 Text(content:format!("Client: {}",record.client_provider_family().label()),color:Color::White,wrap)
                 Text(content:display_line(format!("Machine: {}",record.machine_label())),color:Color::Grey,wrap)
                 Text(content: display_line(format!("Session ID: {}", record.session_id)), color: Color::Grey, wrap)
+                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job handle: {}",String::from(job.job_handle.clone()))),color:Color::Grey,wrap))))
+                #(record.native_background.as_ref().map(|job|element!(Text(content:display_line(format!("Job state: {}",native_job_state_label(&job.state))),color:Color::Grey,wrap))))
+                #(record.native_peer.as_ref().map(|peer|element!(Text(content:display_line(format!("Peer status: {:?}",peer.status)),color:Color::Grey,wrap))))
                 Text(content: display_line(format!("Endpoint: {endpoint}")), color: Color::Grey, wrap)
                 Text(content: display_line(format!("State: {state}")), color: Color::Grey, wrap)
                 Text(content: display_line(format!("Working directory: {}", record.cwd.as_deref().unwrap_or("-"))), color: Color::Grey, wrap)
@@ -137,6 +140,22 @@ pub(super) fn render_details(
         }
     }
     .into_any()
+}
+
+fn native_job_state_label(
+    state: &collaboration_client::protocol::NativeClaudeBackgroundState,
+) -> String {
+    use collaboration_client::protocol::NativeClaudeBackgroundState;
+    match state {
+        NativeClaudeBackgroundState::Working => "Working".to_owned(),
+        NativeClaudeBackgroundState::Blocked => "Blocked".to_owned(),
+        NativeClaudeBackgroundState::Done => "Done".to_owned(),
+        NativeClaudeBackgroundState::Failed => "Failed".to_owned(),
+        NativeClaudeBackgroundState::Stopped => "Stopped".to_owned(),
+        NativeClaudeBackgroundState::Unknown { state } => {
+            format!("Unknown ({})", String::from(state.clone()))
+        }
+    }
 }
 
 pub(super) fn conversation_text(value: &str, color: Color) -> AnyElement<'static> {

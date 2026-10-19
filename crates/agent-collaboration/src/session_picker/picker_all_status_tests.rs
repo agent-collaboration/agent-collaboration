@@ -480,7 +480,10 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
         );
         assert!(result.is_ok(), "phase={phase}: {last}");
         assert_eq!(phase, 7);
-        assert_eq!(copied.lock().unwrap().as_slice(), ["equal-id"]);
+        assert_eq!(
+            copied.lock().unwrap().as_slice(),
+            ["00000000-0000-4000-8000-000000000042"]
+        );
         assert!(outcome.is_none());
         peer.finish().await;
     }

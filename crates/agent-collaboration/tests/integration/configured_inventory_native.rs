@@ -136,8 +136,14 @@ pub(super) async fn reply(
                 } else {
                     json!([native_row(&endpoint)])
                 };
-                json!({"endpoint":endpoint,"observedAt":"2026-10-18T00:00:00Z","sessions":sessions,
+                json!({"endpoint":endpoint,"observedAt":"2026-10-18T00:00:00Z","nativeCoverage":{"peer":{"kind":"complete"},"background":{"kind":"complete"}},"sessions":sessions,
                     "nextCursor":if cursor.is_none()&&matches!(scenario,NativeScenario::PrefixUnavailable|NativeScenario::Duplicate|NativeScenario::PrefixHeld|NativeScenario::PrefixHeldUnavailable){json!("native-next")}else {Value::Null}})
+            } else if arguments.get("source").and_then(Value::as_str) == Some("interactive") {
+                assert_eq!(
+                    arguments.get("view").and_then(Value::as_str),
+                    Some("stored")
+                );
+                json!({"endpoint":endpoint,"observedAt":"2026-10-18T00:00:00Z","sessions":[],"nextCursor":null,"nativeCoverage":{"peer":{"kind":"notRequested"},"background":{"kind":"complete"}}})
             } else {
                 assert_eq!(
                     arguments.get("view").and_then(Value::as_str),
@@ -153,10 +159,10 @@ pub(super) async fn reply(
 }
 
 fn managed_row(endpoint: &Value) -> Value {
-    json!({"origin":"hostedProvider","target":{"endpoint":endpoint,"sessionId":"equal-id"},"workingDirectory":"/source/managed","updatedAt":2000,"state":"idle","requestedPolicy":{"access":"write-restricted"},"approver":{"humanId":"saved-owner"},"createdBy":{"humanId":"creator"}})
+    json!({"origin":"hostedProvider","target":{"endpoint":endpoint,"sessionId":"00000000-0000-4000-8000-000000000042"},"workingDirectory":"/source/managed","updatedAt":2000,"state":"idle","requestedPolicy":{"access":"write-restricted"},"approver":{"humanId":"saved-owner"},"createdBy":{"humanId":"creator"}})
 }
 fn native_row(endpoint: &Value) -> Value {
-    json!({"origin":"claudeCodeInteractive","target":{"endpoint":endpoint,"sessionId":"equal-id"},"workingDirectory":"/source/native","name":"Native equal ID","status":"idle","startedAt":1,"updatedAt":2000,"statusUpdatedAt":2000,"kind":"interactive","entrypoint":"cli"})
+    json!({"origin":"claudeCodeInteractive","target":{"endpoint":endpoint,"sessionId":"00000000-0000-4000-8000-000000000042"},"workingDirectory":"/source/native","name":"Native equal ID","status":"idle","startedAt":1,"updatedAt":2000,"statusUpdatedAt":2000,"kind":"interactive","entrypoint":"cli"})
 }
 
 #[tokio::test]
@@ -189,7 +195,12 @@ async fn configured_inventory_native_partitions_preserve_prefix_empty_and_qualif
         .unwrap();
         assert_eq!(snapshot.records.len(), expected_rows, "{scenario:?}");
         assert_eq!(
-            snapshot.native_live_coverage.first().unwrap().state,
+            snapshot
+                .native_live_coverage
+                .iter()
+                .find(|part| part.view == crate::picker_runtime_status::NativeCatalogueView::Loaded)
+                .unwrap()
+                .state,
             expected_state,
             "{scenario:?}"
         );
@@ -219,7 +230,8 @@ async fn configured_inventory_native_partitions_preserve_prefix_empty_and_qualif
                 !calls
                     .iter()
                     .any(|(name, args)| name == "provider_sessions_list"
-                        && args.get("view").and_then(Value::as_str) == Some("stored")),
+                        && args.get("view").and_then(Value::as_str) == Some("stored")
+                        && args.get("source").and_then(Value::as_str) == Some("all")),
                 "native-only membership must not require managed store"
             );
         }
@@ -318,7 +330,12 @@ async fn configured_inventory_native_timeout_keeps_completed_stored_and_live_pre
     tokio::time::resume();
     assert_eq!(snapshot.records.len(), 2);
     assert_eq!(
-        snapshot.native_live_coverage.first().unwrap().state,
+        snapshot
+            .native_live_coverage
+            .iter()
+            .find(|part| part.view == crate::picker_runtime_status::NativeCatalogueView::Loaded)
+            .unwrap()
+            .state,
         NativeLiveReadState::Unavailable(NativeLiveUnavailableReason::TimedOut)
     );
     assert!(

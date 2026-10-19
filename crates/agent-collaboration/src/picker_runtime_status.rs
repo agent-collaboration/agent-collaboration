@@ -52,14 +52,67 @@ pub(crate) struct PickerRecordsSnapshot {
 pub(crate) struct NativeLiveCoverage {
     pub(crate) endpoint: collaboration_client::protocol::EndpointRef,
     pub(crate) service_epoch: collaboration_client::protocol::UuidIdentity,
+    pub(crate) view: NativeCatalogueView,
     pub(crate) state: NativeLiveReadState,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
+pub(crate) enum NativeCatalogueView {
+    Stored,
+    Loaded,
+}
+
+impl NativeCatalogueView {
+    pub(crate) const fn request_view(self) -> collaboration_client::protocol::NativeSessionView {
+        match self {
+            Self::Stored => collaboration_client::protocol::NativeSessionView::Stored,
+            Self::Loaded => collaboration_client::protocol::NativeSessionView::Loaded,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum NativeLiveReadState {
     Reading,
     Complete,
+    Incomplete(collaboration_client::protocol::NativeClaudeInventoryCoverage),
     Unavailable(NativeLiveUnavailableReason),
+}
+
+impl NativeLiveReadState {
+    pub(crate) const fn is_incomplete(&self) -> bool {
+        matches!(self, Self::Incomplete(_) | Self::Unavailable(_))
+    }
+    pub(crate) fn from_observation(
+        view: NativeCatalogueView,
+        coverage: Option<collaboration_client::protocol::NativeClaudeInventoryCoverage>,
+    ) -> Result<Self, &'static str> {
+        use collaboration_client::protocol::NativeClaudeInventoryPart as Part;
+        let coverage = coverage.ok_or("missing native inventory coverage")?;
+        if matches!(coverage.background, Part::NotRequested)
+            || match view {
+                NativeCatalogueView::Stored => !matches!(coverage.peer, Part::NotRequested),
+                NativeCatalogueView::Loaded => matches!(coverage.peer, Part::NotRequested),
+            }
+            || [&coverage.peer, &coverage.background].iter().any(|part| {
+                matches!(
+                    part,
+                    Part::Incomplete {
+                        unidentified_jobs: 0
+                    }
+                )
+            })
+        {
+            return Err("invalid native inventory coverage");
+        }
+        if matches!(coverage.background, Part::Complete)
+            && matches!(coverage.peer, Part::Complete | Part::NotRequested)
+        {
+            Ok(Self::Complete)
+        } else {
+            Ok(Self::Incomplete(coverage))
+        }
+    }
 }
 
 /// Picker-owned projection of the native runtime states that affect browsing.
