@@ -151,13 +151,12 @@ pub struct SearchSelectProps<TKey: Clone + Eq + Send + Sync + 'static> {
 #[component]
 pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
     props: &mut SearchSelectProps<TKey>,
-    mut hooks: Hooks,
+    hooks: Hooks,
 ) -> impl Into<AnyElement<'static>> {
     let reveal_empty = matches!(
         &props.state,
         SearchSelectState::Searching { focused: None, .. }
     );
-    crate::dialog_focus_reveal::use_focus_reveal(&mut hooks, reveal_empty);
     let SearchSelectState::Searching { query, focused } = &props.state else {
         return element!(View).into_any();
     };
@@ -190,10 +189,15 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
     element! {
         View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             Text(content:format!("Search: {query}"),color:Color::Grey)
-            #(rows.is_empty().then(||element!(Text(content:"No matching choices",color:Color::Grey))))
+            #(rows.is_empty().then(||element! {
+                crate::FocusReveal(has_focus:reveal_empty) {
+                    Text(content:"No matching choices",color:Color::Grey)
+                }
+            }))
             #(rows)
         }
-    }.into_any()
+    }
+    .into_any()
 }
 
 #[cfg(test)]

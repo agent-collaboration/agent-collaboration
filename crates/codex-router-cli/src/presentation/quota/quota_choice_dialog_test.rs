@@ -130,3 +130,81 @@ async fn quota_wrapped_list_reveals_last_focused_account_before_exit() {
     assert!(result.is_ok(), "phase={phase}: {last}");
     assert_eq!(phase, 2, "{last}");
 }
+
+#[tokio::test]
+async fn quota_filter_no_match_stays_visible_above_actions_in_a_two_row_body() {
+    for (width, height) in [(48usize, 12usize), (48, 24), (76, 30)] {
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+            receiver.recv().await.map(|event| (event, receiver))
+        });
+        let mut component = element!(QuotaStatusComponent(
+            view_model:quota_two_account_view_model(),width,height));
+        let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(frames);
+        let mut phase = 0;
+        let mut last = String::new();
+        let journey = async {
+            while let Some(canvas) = frames.next().await {
+                let text = canvas.to_string();
+                let visible_words = text
+                    .chars()
+                    .map(|character| {
+                        if ('\u{2500}'..='\u{257f}').contains(&character) {
+                            ' '
+                        } else {
+                            character
+                        }
+                    })
+                    .collect::<String>()
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                match phase {
+                    0 => {
+                        sender.send(control('f')).unwrap();
+                        phase = 1;
+                    }
+                    1 if text.contains("Account filters") => {
+                        sender.send(key(KeyCode::Enter)).unwrap();
+                        sender
+                            .send(TerminalEvent::BracketedPaste("zznomatchzz".to_owned()))
+                            .unwrap();
+                        phase = 2;
+                    }
+                    2 if visible_words.contains("No matching choices") => {
+                        assert!(
+                            text.contains("Account filters")
+                                && text.contains("Cancel")
+                                && text.contains("Apply"),
+                            "{text}"
+                        );
+                        // An empty Enter is deliberately a no-op and need not repaint.
+                        // If it commits or closes the choice, this Escape dismisses
+                        // the draft and the next required chooser frame is absent.
+                        sender.send(key(KeyCode::Enter)).unwrap();
+                        sender.send(key(KeyCode::Esc)).unwrap();
+                        phase = 4;
+                    }
+                    4 if text.contains("Account filters") && !text.contains("No matching") => {
+                        sender.send(key(KeyCode::Esc)).unwrap();
+                        phase = 5;
+                    }
+                    5 if !text.contains("Account filters") => {
+                        assert!(
+                            text.contains("All") && text.contains("2/2"),
+                            "draft cancellation preserves the committed filter: {text}"
+                        );
+                        sender.send(control('d')).unwrap();
+                        phase = 6;
+                    }
+                    _ => {}
+                }
+                last = text;
+            }
+        };
+        let result = tokio::time::timeout(std::time::Duration::from_secs(2), journey).await;
+        assert!(result.is_ok(), "{width}x{height} phase={phase}: {last}");
+        assert_eq!(phase, 6, "{width}x{height}: {last}");
+    }
+}

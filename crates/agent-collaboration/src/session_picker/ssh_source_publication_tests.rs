@@ -152,7 +152,9 @@ async fn source_executable_ssh_publication_probe() {
         None,
     );
     let marker = if mode == "unavailable" {
-        "Native Claude inventory incomplete"
+        // The per-partition warning can render while Loaded is still in flight.
+        // Observe the final publication, after both native partitions settle.
+        "Observed source: 1 sessions; Native Claude inventory incomplete"
     } else {
         "Observed source: Unavailable"
     };
