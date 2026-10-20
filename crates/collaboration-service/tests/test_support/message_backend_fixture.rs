@@ -209,13 +209,20 @@ async fn exercise_message(
         match fixture_target {
             FixtureTarget::InvalidRecordedResume => {
                 scenario.steps.truncate(2);
-                scenario.steps[1].reply = NativeReply::Result(
+                scenario
+                    .steps
+                    .get_mut(1)
+                    .ok_or("recorded fixture omitted resume")?
+                    .reply = NativeReply::Result(
                     json!({"thread":{"id":"target","cwd":root},"cwd":root,"sandbox":{"type":"readOnly"}}),
                 );
             }
             FixtureTarget::MissingRecordedCwd => {
                 scenario.steps.truncate(1);
-                scenario.steps[0] = read("idle");
+                *scenario
+                    .steps
+                    .first_mut()
+                    .ok_or("recorded fixture omitted read")? = read("idle");
             }
             _ => {}
         }

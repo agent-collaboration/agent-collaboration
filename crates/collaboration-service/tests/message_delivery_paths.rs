@@ -424,22 +424,26 @@ async fn new_auto_resumes_unloaded_target_and_submits_its_stored_notice_once() {
 }
 
 fn assert_native_failure(shown: &Value, operation: &str, stage: &str, cause: &str, resume: &str) {
-    let outcome = &shown["result"]["record"]["lastOutcome"]["outcome"];
-    assert_eq!(shown["result"]["record"]["deliveryState"], "rejected");
-    assert_eq!(outcome["kind"], "rejected");
-    assert_eq!(outcome["reason"], "localRejection");
-    assert_eq!(outcome["nextAction"], "inspectTarget");
-    assert!(outcome["clientCode"].is_null());
+    let outcome = shown.pointer("/result/record/lastOutcome/outcome");
+    let outcome_field = |field_name: &str| outcome.and_then(|outcome| outcome.get(field_name));
     assert_eq!(
-        outcome["nativeFailure"],
-        json!({
+        shown.pointer("/result/record/deliveryState"),
+        Some(&json!("rejected"))
+    );
+    assert_eq!(outcome_field("kind"), Some(&json!("rejected")));
+    assert_eq!(outcome_field("reason"), Some(&json!("localRejection")));
+    assert_eq!(outcome_field("nextAction"), Some(&json!("inspectTarget")));
+    assert_eq!(outcome_field("clientCode"), Some(&Value::Null));
+    assert_eq!(
+        outcome_field("nativeFailure"),
+        Some(&json!({
             "operation": operation,
             "stage": stage,
             "cause": cause,
             "generation": {"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
             "resume": resume,
             "submission":"notDispatched"
-        })
+        }))
     );
 }
 
