@@ -63,6 +63,7 @@ pub(crate) async fn dispatch(
             client_code: None,
             detail: Some("Scheduled target generation changed before submission".into()),
             claims: None,
+            native_failure: None,
         }));
     }
     let schemas = admission
@@ -292,6 +293,7 @@ pub(crate) async fn dispatch(
                 client_code: None,
                 detail: Some("Native scheduled start was rejected.".into()),
                 claims: None,
+                native_failure: None,
             })
         }
         Err(NativeConnectionError::InvalidInput | NativeConnectionError::Unavailable) => {
@@ -302,6 +304,7 @@ pub(crate) async fn dispatch(
                 client_code: None,
                 detail: Some("Native scheduled start was not dispatched.".into()),
                 claims: None,
+                native_failure: None,
             })
         }
         Err(_) => {
@@ -321,5 +324,6 @@ fn policy_rejected() -> RunSubmission {
         client_code: None,
         detail: Some("Native scheduled target settings do not match its recorded policy".into()),
         claims: None,
+        native_failure: None,
     })
 }

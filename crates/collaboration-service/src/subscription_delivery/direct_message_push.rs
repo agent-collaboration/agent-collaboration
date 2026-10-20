@@ -13,6 +13,17 @@ use collaboration_protocol::{
 use message_board::BoardError;
 
 impl SubscriptionPushStore {
+    pub(super) fn direct_message_load_policy(record: &PushRecord) -> LoadPolicy {
+        if record.mode == Some(MessageDelivery::Auto)
+            && record.delivery_state == collaboration_protocol::PushDeliveryState::Pending
+            && record.guard.is_none()
+        {
+            LoadPolicy::MayLoad
+        } else {
+            LoadPolicy::LoadedOnly
+        }
+    }
+
     pub(super) async fn restore_direct_messages(
         &self,
     ) -> Result<Vec<SessionRef>, automation_storage::StorageError> {
@@ -87,6 +98,7 @@ impl SubscriptionPushStore {
                 client_code: None,
                 detail: Some(detail.to_owned()),
                 claims: None,
+                native_failure: None,
             }),
             reachability: None,
             client: None,
@@ -121,7 +133,7 @@ impl SubscriptionPushStore {
         let prepared = PreparedPush {
             push_id: record.push_id.clone(),
             line: MessageText::try_from(line).map_err(|_| BoardError::board_unavailable())?,
-            load_policy: LoadPolicy::LoadedOnly,
+            load_policy: Self::direct_message_load_policy(record),
         };
         let correlation = DeliveryCorrelationId::try_from(record.push_id.as_str().to_owned())
             .map_err(|_| BoardError::board_unavailable())?;
@@ -162,6 +174,7 @@ impl SubscriptionPushStore {
                         "Queue delivery isn't supported for Claude Code terminals".to_owned(),
                     ),
                     claims: None,
+                    native_failure: None,
                 }),
                 reachability: None,
                 client: None,

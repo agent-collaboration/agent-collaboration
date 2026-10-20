@@ -55,7 +55,7 @@ flowchart TB
 | `collaboration-service` · `push_record_resolver.rs` | `router/show`: load the record, apply R10, mark read per R11, expand subscription ranges through the existing board range read | new |
 | `collaboration-service` · `machine_identity.rs` | machine id = service id; label from the Remote Control name, else the host name (escaped, bounded); written to `service.json` | new |
 | producers | `session_message_dispatch` / `session_message_reply_dispatch` (DM, reply by id, owner DMs); `wakeup_delivery_sender` (one record per firing, existing delivery mode); `scheduled_native_dispatch`, `provider_acp_run_dispatch` and `provider_delivery_submission` (existing-session runs become pushes; fresh runs keep task input); `interaction_broker`; the subscription owner (batch and expiry records) | cutover |
-| `ReaderDeliveryOwner` (subscriptions) | started for a target with **either** active or draining subscriptions **or** pending or held DM records. On restore it scans both; it ends when both are empty. Commands add `DmQueued(push_id)`. DM holds use `LoadedOnly`; one push in flight per target across DMs and subscription batches | extend |
+| `ReaderDeliveryOwner` (subscriptions) | started for a target with **either** active or draining subscriptions **or** pending or held DM records. On restore it scans both; it ends when both are empty. Commands add `DmQueued(push_id)`. New unguarded pending Auto DMs use `MayLoad`; Queue and previously held DMs use `LoadedOnly`. Already-held messages wait for the target's next load. One push in flight per target across DMs and subscription batches | extend |
 | `codex_queue_reconciliation.rs` | matches by `clientUserMessageId == push_id` + target + route; drops content comparison | cutover |
 | `session_display_text.rs` (agent-collaboration), `session_inventory_dispatch`, client `session_catalog` | titles from `parse_push_line_header`, never the preview; fall back to an endpoint label | cutover |
 | peer route, `provider_prompt_contents.rs`, client `acp_conversation.rs` | deliver `PreparedPush.line`; no rendering or guidance text | cutover |
@@ -125,7 +125,7 @@ sequenceDiagram
   D->>DB: INSERT router_pushes (pending)
   D->>O: DmQueued(push_id)  (spawn the owner if absent)
   O->>DB: state = attempted
-  O->>R: deliver PreparedPush (LoadedOnly, correlation = push_id)
+  O->>R: deliver PreparedPush (new Auto: MayLoad; otherwise LoadedOnly; correlation = push_id)
   alt accepted
     R->>T: ✉️ … · "preview" · router://…/push/id
     O->>DB: delivered (retry the write on failure; never re-push)

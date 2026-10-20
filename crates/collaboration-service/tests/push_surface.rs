@@ -373,6 +373,7 @@ async fn show_returns_stored_rejected_and_unknown_delivery_outcomes() {
                         cwd: None,
                     },
                 ]),
+                native_failure: None,
             }),
             "rejected",
             "rejected",

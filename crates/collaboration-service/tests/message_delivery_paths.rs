@@ -1,10 +1,12 @@
 #[path = "test_support/message_backend_fixture.rs"]
 mod message_backend_fixture;
-use collaboration_protocol::{DeliveryClientReceipt, MessageDelivery, NativeSendAcceptance};
+use collaboration_protocol::{
+    DeliveryClientReceipt, MessageDelivery, NativeSendAcceptance, PushDeliveryState,
+};
 use message_backend_fixture::{
     MessageScenario, NativeReply, NativeStep, exercise, outcome_data, read,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
 #[tokio::test]
 async fn explicit_queue_rejects_unloaded_without_resume_or_enqueue() {
@@ -378,4 +380,155 @@ fn assert_recorded_loaded_receipt(witness: &RecordedReceiptWitness, mode: Messag
             )
         );
     }
+}
+
+#[tokio::test]
+async fn new_auto_resumes_unloaded_target_and_submits_its_stored_notice_once() {
+    let observed = message_backend_fixture::exercise_unloaded(MessageScenario {
+        delivery: MessageDelivery::Auto,
+        steps: vec![
+            read("notLoaded"),
+            NativeStep {
+                method: "thread/resume",
+                reply: NativeReply::Result(json!({"thread":{"id":"target"}})),
+            },
+            NativeStep {
+                method: "turn/start",
+                reply: NativeReply::Result(json!({"turn":{"id":"resumed-turn"}})),
+            },
+        ],
+    })
+    .await
+    .unwrap();
+    let sent = observed.result.unwrap();
+    assert_eq!(sent.delivery_state, PushDeliveryState::Delivered);
+    assert_eq!(observed.requests.len(), 3);
+    assert_eq!(
+        observed.requests[1]["params"],
+        json!({"threadId":"target","excludeTurns":true})
+    );
+    assert_eq!(
+        observed.requests[2]["params"]["clientUserMessageId"],
+        sent.push_id.as_str()
+    );
+    assert!(
+        observed.requests[2]["params"]["input"][0]["text"]
+            .as_str()
+            .unwrap()
+            .ends_with(&sent.link)
+    );
+    assert_eq!(
+        observed.shown["result"]["record"]["lastOutcome"]["client"]["resumeEffect"],
+        "accepted"
+    );
+}
+
+fn assert_native_failure(shown: &Value, operation: &str, stage: &str, cause: &str, resume: &str) {
+    let outcome = &shown["result"]["record"]["lastOutcome"]["outcome"];
+    assert_eq!(shown["result"]["record"]["deliveryState"], "rejected");
+    assert_eq!(outcome["kind"], "rejected");
+    assert_eq!(outcome["reason"], "localRejection");
+    assert_eq!(outcome["nextAction"], "inspectTarget");
+    assert!(outcome["clientCode"].is_null());
+    assert_eq!(
+        outcome["nativeFailure"],
+        json!({
+            "operation": operation,
+            "stage": stage,
+            "cause": cause,
+            "generation": {"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+            "resume": resume,
+            "submission":"notDispatched"
+        })
+    );
+}
+
+#[tokio::test]
+async fn rejected_invalid_thread_response_keeps_local_failure_facts_in_show() {
+    let observed = message_backend_fixture::exercise_rejected(MessageScenario {
+        delivery: MessageDelivery::Auto,
+        steps: vec![NativeStep {
+            method: "thread/read",
+            reply: NativeReply::Result(
+                json!({"thread":{"id":"wrong-thread","status":{"type":"idle"}}}),
+            ),
+        }],
+    })
+    .await
+    .unwrap();
+    assert_native_failure(
+        &observed.shown,
+        "thread/read",
+        "inspect",
+        "invalidThreadResponse",
+        "notRequested",
+    );
+    assert_eq!(observed.requests.len(), 1);
+}
+
+#[tokio::test]
+async fn rejected_recorded_preparation_keeps_not_requested_resume_in_show() {
+    let observed = message_backend_fixture::exercise_missing_recorded_cwd()
+        .await
+        .unwrap();
+    assert_native_failure(
+        &observed.shown,
+        "thread/resume",
+        "resume",
+        "recordedResumePreparationFailed",
+        "notRequested",
+    );
+    assert_eq!(observed.requests.len(), 1);
+}
+
+#[tokio::test]
+async fn rejected_recorded_resume_validation_keeps_accepted_resume_in_show() {
+    let observed = message_backend_fixture::exercise_invalid_recorded_resume()
+        .await
+        .unwrap();
+    assert_native_failure(
+        &observed.shown,
+        "thread/resume",
+        "resume",
+        "invalidResumeResponse",
+        "accepted",
+    );
+    assert_eq!(observed.requests.len(), 2);
+}
+
+#[tokio::test]
+async fn upstream_method_not_found_keeps_unsupported_capability_and_native_failure_in_show() {
+    let observed = message_backend_fixture::exercise_rejected(MessageScenario {
+        delivery: MessageDelivery::Auto,
+        steps: vec![
+            read("idle"),
+            NativeStep {
+                method: "turn/start",
+                reply: NativeReply::RejectWith {
+                    code: -32601,
+                    message: "missing method; PRIVATE BACKEND DETAIL",
+                },
+            },
+        ],
+    })
+    .await
+    .unwrap();
+    let outcome = &observed.shown["result"]["record"]["lastOutcome"]["outcome"];
+    assert_eq!(outcome["reason"], "unsupportedCapability");
+    assert_eq!(outcome["clientCode"], -32601);
+    assert_eq!(
+        outcome["nativeFailure"],
+        json!({
+            "operation":"turn/start", "stage":"start", "cause":"nativeRejected",
+            "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+            "resume":"notRequested", "submission":"rejected"
+        })
+    );
+    assert!(
+        !observed
+            .shown
+            .to_string()
+            .contains("PRIVATE BACKEND DETAIL")
+    );
+    assert_eq!(observed.requests.len(), 2);
 }

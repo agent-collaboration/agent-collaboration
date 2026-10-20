@@ -213,6 +213,7 @@ fn peer_rejection(reason: DeliveryRejectionReason, detail: &str) -> DeliveryRece
             client_code: None,
             detail: Some(detail.to_owned()),
             claims: None,
+            native_failure: None,
         }),
         None,
     )
@@ -236,6 +237,7 @@ fn peer_claim_rejection(claims: Vec<claude_code_peer_messaging::PeerClaim>) -> D
             "this Claude session is claimed by {claim_count} live terminals"
         )),
         claims: Some(claims),
+        native_failure: None,
     }
 }
 

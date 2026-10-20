@@ -42,12 +42,13 @@ pub struct RecordedMessageObservation {
     pub stored: Option<PushRecord>,
     pub target: SessionRef,
     pub generation: CodexGeneration,
+    pub shown: Value,
 }
 
 pub async fn exercise(
     scenario: MessageScenario,
 ) -> Result<(Result<DeliveryReceipt, ClientError>, Vec<Value>), FixtureError> {
-    let observation = exercise_message(scenario, false).await?;
+    let observation = exercise_message(scenario, FixtureTarget::Running).await?;
     let result = observation
         .result
         .map(|push| push.receipt)
@@ -67,15 +68,65 @@ pub async fn exercise_recorded_loaded(
             delivery,
             steps: Vec::new(),
         },
-        true,
+        FixtureTarget::Recorded,
     )
     .await
 }
 
+pub async fn exercise_unloaded(
+    scenario: MessageScenario,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(scenario, FixtureTarget::Unloaded).await
+}
+
+pub async fn exercise_rejected(
+    scenario: MessageScenario,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(scenario, FixtureTarget::Running).await
+}
+
+pub async fn exercise_invalid_recorded_resume() -> Result<RecordedMessageObservation, FixtureError>
+{
+    exercise_message(
+        MessageScenario {
+            delivery: MessageDelivery::Auto,
+            steps: Vec::new(),
+        },
+        FixtureTarget::InvalidRecordedResume,
+    )
+    .await
+}
+
+pub async fn exercise_missing_recorded_cwd() -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(
+        MessageScenario {
+            delivery: MessageDelivery::Auto,
+            steps: Vec::new(),
+        },
+        FixtureTarget::MissingRecordedCwd,
+    )
+    .await
+}
+
+enum FixtureTarget {
+    Running,
+    Unloaded,
+    Recorded,
+    InvalidRecordedResume,
+    MissingRecordedCwd,
+}
+
 async fn exercise_message(
     mut scenario: MessageScenario,
-    recorded: bool,
+    fixture_target: FixtureTarget,
 ) -> Result<RecordedMessageObservation, FixtureError> {
+    let unloaded = matches!(fixture_target, FixtureTarget::Unloaded);
+    let recorded = matches!(
+        fixture_target,
+        FixtureTarget::Recorded
+            | FixtureTarget::InvalidRecordedResume
+            | FixtureTarget::MissingRecordedCwd
+    );
     // Private RAII ownership keeps the native socket short and cleans broker/store sidecars too.
     let directory = tempfile::Builder::new().prefix("mf-").tempdir()?;
     let root = directory.path().to_path_buf();
@@ -149,7 +200,25 @@ async fn exercise_message(
             path,
         )
         .await?;
-        scenario.steps = recorded_loaded_steps(scenario.delivery, &root, &scratch)?;
+        let fixture_mode = if matches!(fixture_target, FixtureTarget::Recorded) {
+            scenario.delivery
+        } else {
+            MessageDelivery::Queue
+        };
+        scenario.steps = recorded_loaded_steps(fixture_mode, &root, &scratch)?;
+        match fixture_target {
+            FixtureTarget::InvalidRecordedResume => {
+                scenario.steps.truncate(2);
+                scenario.steps[1].reply = NativeReply::Result(
+                    json!({"thread":{"id":"target","cwd":root},"cwd":root,"sandbox":{"type":"readOnly"}}),
+                );
+            }
+            FixtureTarget::MissingRecordedCwd => {
+                scenario.steps.truncate(1);
+                scenario.steps[0] = read("idle");
+            }
+            _ => {}
+        }
         Some(broker)
     } else {
         None
@@ -170,7 +239,11 @@ async fn exercise_message(
     });
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
-    let presence = Arc::new(RunningPresence);
+    let presence = Arc::new(FixturePresence(if unloaded {
+        collaboration_service::TargetPresence::Wakeable
+    } else {
+        collaboration_service::TargetPresence::Running
+    }));
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
@@ -272,7 +345,7 @@ async fn exercise_message(
         Duration::from_secs(3),
         client.send_message(MessageSendRequest {
             target: target.clone(),
-            generation_guard: Some(generation.clone()),
+            generation_guard: (!unloaded).then(|| generation.clone()),
             message: PublicMessageContent::Agent {
                 sender: target.clone(),
                 text: "A finding".to_owned().try_into()?,
@@ -281,27 +354,41 @@ async fn exercise_message(
         }),
     )
     .await?;
+    let push_id = automation_store
+        .lock()
+        .await
+        .list_direct_message_inbox(&automation_storage::PushInboxQuery {
+            target: target.clone(),
+            limit: 1,
+        })
+        .await?
+        .first()
+        .map(|record| record.push_id.clone());
+    let shown = match &push_id {
+        Some(push_id) => {
+            served
+                .call(
+                    "router_show",
+                    json!({"caller":target,"reference":push_id.as_str()}),
+                )
+                .await?
+        }
+        None => Value::Null,
+    };
     drop(client);
     served.stop().await?;
     owner.shutdown().await;
     drop(owner);
     let requests = backend.await?;
-    let stored = if recorded {
-        match requests.as_ref().ok().and_then(|requests| {
-            requests.iter().find_map(|request| {
-                request
-                    .pointer("/params/clientUserMessageId")
-                    .and_then(Value::as_str)
-            })
-        }) {
-            Some(correlation) => {
-                let push = collaboration_protocol::PushId::try_from(correlation.to_owned())?;
-                automation_store.lock().await.get_push_record(&push).await
-            }
-            None => Ok(None),
+    let stored = match push_id {
+        Some(push_id) => {
+            automation_store
+                .lock()
+                .await
+                .get_push_record(&push_id)
+                .await
         }
-    } else {
-        Ok(None)
+        None => Ok(None),
     };
     drop(broker);
     let automation_store = Arc::try_unwrap(automation_store)
@@ -315,17 +402,18 @@ async fn exercise_message(
         stored: stored?,
         target,
         generation,
+        shown,
     })
 }
 
-struct RunningPresence;
+struct FixturePresence(collaboration_service::TargetPresence);
 
-impl collaboration_service::TargetPresenceProbe for RunningPresence {
+impl collaboration_service::TargetPresenceProbe for FixturePresence {
     fn presence(
         &self,
         _: &SessionRef,
     ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::TargetPresence> {
-        Box::pin(async { Ok(collaboration_service::TargetPresence::Running) })
+        Box::pin(async { Ok(self.0.clone()) })
     }
 }
 
