@@ -7,9 +7,9 @@ use codex_native_integration::{
 };
 use collaboration_protocol::{
     AcceptedResumeEffect, ChannelDescription, CodexGeneration, EndpointDescription,
-    MessageDelivery, MessageInputKind, MessageRepresentation, MessageText, NativeInputDisposition,
-    NativeInputOperation, NativeSendAcceptance, NativeSendReceipt, NonEmptyText, RenderedMessage,
-    SessionRef, UuidIdentity,
+    MessageDelivery, MessageInputKind, MessageRepresentation, MessageText,
+    NativeDeliveryFailureCause, NativeInputDisposition, NativeInputOperation, NativeSendAcceptance,
+    NativeSendReceipt, NonEmptyText, RenderedMessage, SessionRef, UuidIdentity,
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -31,7 +31,7 @@ pub(crate) struct NativeThreadSnapshot {
 pub(crate) enum NativeThreadStatusReadError {
     Missing,
     Rejected { code: i64, native: Option<Value> },
-    Unsupported,
+    LocalRejection(NativeDeliveryFailureCause),
     Unavailable,
     InvalidResponse,
 }
@@ -79,12 +79,17 @@ pub(crate) async fn read_native_thread_status(
             }
             return Err(NativeThreadStatusReadError::Rejected { code, native });
         }
+        Err(NativeConnectionError::InvalidInput) => {
+            return Err(NativeThreadStatusReadError::LocalRejection(
+                NativeDeliveryFailureCause::InvalidNativeRequest,
+            ));
+        }
         Err(
-            NativeConnectionError::InvalidInput
-            | NativeConnectionError::Unavailable
-            | NativeConnectionError::UnavailableWithCause(_),
+            NativeConnectionError::Unavailable | NativeConnectionError::UnavailableWithCause(_),
         ) => {
-            return Err(NativeThreadStatusReadError::Unsupported);
+            return Err(NativeThreadStatusReadError::LocalRejection(
+                NativeDeliveryFailureCause::NativeRequestUnavailable,
+            ));
         }
         Err(_) => return Err(NativeThreadStatusReadError::Unavailable),
     };
@@ -170,7 +175,11 @@ pub(crate) async fn dispatch_message(
     };
     let backend = request.backend;
     if backend.endpoint != params.target.endpoint {
-        return NativeMessageOutcome::Failed(effects.failure("unsupportedCapability", "inspect"));
+        return NativeMessageOutcome::Failed(effects.local_rejection(
+            "nativeAdmission",
+            "inspect",
+            NativeDeliveryFailureCause::BackendEndpointMismatch,
+        ));
     }
     let Ok(admission) = backend.gate.acquire() else {
         return NativeMessageOutcome::Failed(effects.failure("unavailable", "inspect"));
@@ -179,16 +188,26 @@ pub(crate) async fn dispatch_message(
         return NativeMessageOutcome::Failed(effects.failure("staleGeneration", "inspect"));
     }
     let Some(schemas) = admission.schemas() else {
-        return NativeMessageOutcome::Failed(effects.failure("unsupportedCapability", "inspect"));
+        return NativeMessageOutcome::Failed(effects.local_rejection(
+            "nativeAdmission",
+            "inspect",
+            NativeDeliveryFailureCause::NativeSchemaUnavailable,
+        ));
     };
     let advertised = endpoint.channels.iter().any(|c| matches!(c, ChannelDescription::NativeCodex { schema_digest: Some(d), generation: Some(g), .. } if g == admission.generation() && String::from(d.clone()) == schemas.schema_digest()));
     if !advertised {
-        return NativeMessageOutcome::Failed(effects.failure("unsupportedCapability", "inspect"));
+        return NativeMessageOutcome::Failed(effects.local_rejection(
+            "nativeAdmission",
+            "inspect",
+            NativeDeliveryFailureCause::NativeSchemaMismatch,
+        ));
     }
     if params.delivery == MessageDelivery::Queue
         && !schemas.supports_operation(NativeOperation::QueueAdd)
     {
-        return NativeMessageOutcome::Failed(effects.failure("unsupportedCapability", "queue"));
+        return NativeMessageOutcome::Failed(
+            effects.unsupported_method("thread/queue/add", "queue"),
+        );
     }
     let rendered = render_native_message(&params.body);
     let correlation = match &params.client_user_message_id {
@@ -328,7 +347,12 @@ impl MessageSession<'_> {
                             self.effects.submission = "rejected";
                         }
                         let native = self.connection.take_last_rejection();
-                        return Err(self.effects.native_rejection(stage, code, native.as_ref()));
+                        return Err(self.effects.native_rejection(
+                            operation.method_name(),
+                            stage,
+                            code,
+                            native.as_ref(),
+                        ));
                     }
                     NativeConnectionError::InvalidInput
                     | NativeConnectionError::Unavailable
@@ -338,7 +362,16 @@ impl MessageSession<'_> {
                         } else if mutation {
                             self.effects.submission = "notDispatched";
                         }
-                        "unsupportedCapability"
+                        let cause = if matches!(error, NativeConnectionError::InvalidInput) {
+                            NativeDeliveryFailureCause::InvalidNativeRequest
+                        } else {
+                            NativeDeliveryFailureCause::NativeRequestUnavailable
+                        };
+                        return Err(self.effects.local_rejection(
+                            operation.method_name(),
+                            stage,
+                            cause,
+                        ));
                     }
                     _ if mutation => "outcomeUnknown",
                     _ => "unavailable",
@@ -363,16 +396,18 @@ impl MessageSession<'_> {
                 .failure("threadMissingOrUnmaterialized", "inspect")),
             Err(NativeThreadStatusReadError::Rejected { code, native }) => Err(self
                 .effects
-                .native_rejection("inspect", code, native.as_ref())),
-            Err(NativeThreadStatusReadError::Unsupported) => {
-                Err(self.effects.failure("unsupportedCapability", "inspect"))
-            }
+                .native_rejection("thread/read", "inspect", code, native.as_ref())),
+            Err(NativeThreadStatusReadError::LocalRejection(cause)) => Err(self
+                .effects
+                .local_rejection("thread/read", "inspect", cause)),
             Err(NativeThreadStatusReadError::Unavailable) => {
                 Err(self.effects.failure("unavailable", "inspect"))
             }
-            Err(NativeThreadStatusReadError::InvalidResponse) => {
-                Err(self.effects.failure("nativeRejected", "inspect"))
-            }
+            Err(NativeThreadStatusReadError::InvalidResponse) => Err(self.effects.local_rejection(
+                "thread/read",
+                "inspect",
+                NativeDeliveryFailureCause::InvalidThreadResponse,
+            )),
         }
     }
     async fn read_active_turn_id(&mut self, id: &str) -> Result<String, Value> {
@@ -396,7 +431,13 @@ impl MessageSession<'_> {
             .and_then(|turn| turn.get("id"))
             .and_then(Value::as_str)
             .map(str::to_owned)
-            .ok_or_else(|| self.effects.failure("unsupportedCapability", "steer"))
+            .ok_or_else(|| {
+                self.effects.local_rejection(
+                    "thread/turns/list",
+                    "steer",
+                    NativeDeliveryFailureCause::MissingActiveTurn,
+                )
+            })
     }
     async fn deliver(
         &mut self,
@@ -460,7 +501,13 @@ impl MessageSession<'_> {
                     Ok(Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown)) => {
                         return Err(self.effects.failure("outcomeUnknown", "resume"));
                     }
-                    Ok(Err(_)) => return Err(self.effects.failure("nativeRejected", "resume")),
+                    Ok(Err(_)) => {
+                        return Err(self.effects.local_rejection(
+                            "thread/resume",
+                            "resume",
+                            NativeDeliveryFailureCause::InvalidResumeResponse,
+                        ));
+                    }
                     Err(_) => return Err(self.effects.failure("unavailable", "resume")),
                 }
             }
@@ -521,7 +568,7 @@ impl MessageSession<'_> {
                     Ok(Err(codex_acp_adapter::SessionSetupError::Unavailable)) | Err(_) => {
                         Err(self.effects.failure("unavailable", "resume"))
                     }
-                    Ok(Err(_)) => Err(self.effects.failure("nativeRejected", "resume")),
+                    Ok(Err(_)) => Err(self.effects.local_rejection("thread/resume", "resume", NativeDeliveryFailureCause::RecordedResumePreparationFailed)),
                 }
             }
         }

@@ -547,6 +547,7 @@ async fn approval_notice_uses_selected_delivery_outcome() {
                 client_code: None,
                 detail: None,
                 claims: None,
+                native_failure: None,
             }),
             false,
         ),

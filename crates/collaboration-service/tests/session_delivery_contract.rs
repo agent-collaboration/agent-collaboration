@@ -37,6 +37,7 @@ fn route_claims_and_preconditions_keep_tagged_meaning() -> Result<(), Box<dyn st
     }
     let rejected = RouteClaim::Rejected {
         rejection: DeliveryRejection {
+            native_failure: None,
             reason: DeliveryRejectionReason::LiveElsewhere,
             next_action: DeliveryNextAction::InspectTarget,
             client_code: None,
@@ -111,6 +112,7 @@ fn scheduled_submission_and_settlement_keep_distinct_recovery_outcomes()
             client_code: None,
             detail: Some("worker still active".into()),
             claims: None,
+            native_failure: None,
         }),
         RunSubmission::Unknown,
     ] {

@@ -145,12 +145,19 @@ runs, and the summary worker's read-only thread. Task input is delivered in full
   push under `🧑 Owner (unverified)` and carries no authority beyond its text. Full-body delivery for
   **proven** owner messages (U12) arrives with the owner-verification follow-up; nothing in this design grants
   it on the self-declared flag.
-- **R14 — hold for DMs only.**
-  - A DM whose target isn't running is held and delivered when the target is next running, using the
-    subscriptions presence and hold rules. The result says `held`.
+- **R14 — Auto resumes; Queue holds.**
+  - A new, unguarded Auto DM to a known unloaded Router-owned Codex session resumes it and delivers
+    once, using the same load policy as wakes. Queue keeps its loaded-session requirement, and Steer
+    keeps its active-turn requirement. Desktop writer ownership still rejects as `heldByAnotherClient`.
+  - A DM already held before upgrade waits for its target's next load. Startup does not revive its
+    unloaded target. Held delivery uses `LoadedOnly`.
   - Wakes and schedule runs keep their existing delivery mode and load behaviour: Auto may resume an
     unloaded Codex thread, exactly as today.
 - **R15 — delivery outcomes.**
+  - A rejected native delivery retains operation, stage, bounded cause, admitted backend generation,
+    and resume/submission effects in `lastOutcome.outcome.nativeFailure`, visible through `show --json`.
+    Router-local refusals use `localRejection`; a genuinely unsupported native method keeps
+    `unsupportedCapability`. Detail comes from fixed Router text, never raw backend error text.
   - The push id is the delivery correlation id, which makes it unique per attempt target.
   - `outcome-unknown` counts as passed and is recorded.
   - A failure to record an accepted delivery retries the record write, never the push.
@@ -188,7 +195,7 @@ runs, and the summary worker's read-only thread. Task input is delivered in full
 | --- | --- | --- | --- |
 | S1 | Main sends a Sidekick "S1 is green" | it arrives | one line: `✉️ ✳️ Main (claude-local/8d47f947) @Sunbook-Pro-M4 → you · "S1 is green" · router://…/push/…` |
 | S2 | a 1,340-char receipt | it arrives | 100 source scalars plus `…`, `(+1240) 📖 Load full message → `, the complete link; `show` returns everything |
-| S3 | the recipient's terminal is closed | a DM is sent | the result says `held`; the DM arrives on resume |
+| S3 | a known Router-owned Codex session is unloaded | a new Auto DM is sent | the same session resumes and receives one notice; Queue instead stays held until the next load |
 | S4 | the Sidekick got DMs from A then B | `message reply <A's id> "done"` | A receives it; `message reply "done"` with no id is rejected |
 | S5 | a subscription batch covers 2 threads, held | the owner resumes the session | one 🧵 line, 2 threads, `held since …`; one `show` returns both ranges |
 | S6 | a wake to an unloaded Codex thread | it fires | Auto resumes the thread as today; the push is one ⏰ line |

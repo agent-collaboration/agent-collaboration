@@ -12,6 +12,7 @@ pub enum DeliveryRejectionReason {
     NotResumable,
     PermissionDenied,
     UnsupportedCapability,
+    LocalRejection,
     Unknown,
     EndpointUnavailable,
     NoRoute,
@@ -53,4 +54,6 @@ pub struct DeliveryRejection {
     /// Full claims for an ambiguous live Claude session; absent for other rejections.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub claims: Option<Vec<DeliveryPeerClaim>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub native_failure: Option<crate::NativeDeliveryFailure>,
 }

@@ -141,6 +141,7 @@ impl ProviderAcpDeliveryRoute {
                 client_code: None,
                 detail: Some(detail.to_owned()),
                 claims: None,
+                native_failure: None,
             }),
             None,
         )
@@ -507,6 +508,7 @@ impl ProviderAcpDeliveryRoute {
                 client_code,
                 detail,
                 claims: None,
+                native_failure: None,
             }),
             None,
         ))

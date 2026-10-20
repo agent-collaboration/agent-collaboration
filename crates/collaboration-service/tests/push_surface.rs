@@ -289,7 +289,7 @@ async fn message_send_persists_before_delivery_and_submits_one_linked_line() {
         assert_eq!(prepared.payload.push_id, push_id);
         assert_eq!(
             prepared.payload.load_policy,
-            collaboration_service::LoadPolicy::LoadedOnly
+            collaboration_service::LoadPolicy::MayLoad
         );
         assert_eq!(prepared.correlation.as_str(), push_id.as_str());
         let text = &prepared.payload.line;
@@ -373,6 +373,7 @@ async fn show_returns_stored_rejected_and_unknown_delivery_outcomes() {
                         cwd: None,
                     },
                 ]),
+                native_failure: None,
             }),
             "rejected",
             "rejected",

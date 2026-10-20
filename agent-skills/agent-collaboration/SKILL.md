@@ -69,15 +69,17 @@ For a provider Session that does not advertise steering (currently Claude Code a
 | `outcome: peerMessageWritten` | delivered, but agent-router can't see what happens next | wait for the reply; don't resend |
 | `outcome: notSubmitted`, `rejected` | not delivered | follow the receipt's reason and next action |
 | `outcome: unknown` | delivery outcome is unknown | for a DM, run `show <link>` before sending again; otherwise check `delivery show` |
-| `deliveryState: held` | CLI prints `held: <link>`; Router saved the DM and delivers it when the target next runs | don't resend; run `show <link>` to check |
+| `deliveryState: held` | Queue to an unloaded Codex session, or a message held before this release, waits for the target's next load. CLI prints `held: <link>` | don't resend; run `show <link>` to check |
 
-DM holds do not change the delivery modes for wakes or scheduled runs.
+A new Auto DM to a known unloaded Router-owned Codex session resumes it. Queue requires a loaded session; Steer requires an active turn. A message already held waits until the target next loads, including across Router startup. Wakes and scheduled runs keep their existing delivery modes.
 
 DMs and board posts cap at 64 KiB, and pasted terminal colour codes are rejected. Put logs, diffs and reports in a file (the repository's `tmp/`, or `scratch/<root-id>/` for sessions sharing a board root) and send a short summary with its absolute path.
 
 ### Read a Router push
 
 Router pushes use a compact line with a link to the stored record. Run `agent-collaboration show <PUSH_ID_OR_LINK>` to fetch the stored content; the same operation is `router_show` in MCP. A subscription notice expands to the messages in its listed thread ranges. Use the push id or link for follow-up actions instead of parsing the notice. Push records expire after 30 days. For a DM, only its sender or target can read it; only the target's `show` marks it read.
+
+For a rejected native DM, `show --json` exposes `lastOutcome.outcome.nativeFailure`: operation, stage, bounded cause, backend generation, resume and submission facts. Router-local refusals use `localRejection`; an unsupported native method keeps `unsupportedCapability`.
 
 ### Reply to a stored DM
 

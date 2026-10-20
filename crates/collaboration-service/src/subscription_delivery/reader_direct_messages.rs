@@ -28,7 +28,9 @@ impl ReaderDeliveryOwner {
                 self.presence.presence(&target).await,
                 Ok(TargetPresence::Wakeable)
             );
-            let settled = if !known_unloaded {
+            let new_auto =
+                SubscriptionPushStore::direct_message_load_policy(record) == LoadPolicy::MayLoad;
+            let settled = if !known_unloaded || new_auto {
                 self.push.deliver_direct_message(record).await?
             } else if record.mode == Some(MessageDelivery::Steer) || record.guard.is_some() {
                 self.push.reject_direct_message(record).await?

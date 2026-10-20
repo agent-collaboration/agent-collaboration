@@ -92,6 +92,10 @@ pub use session_observation_contract::{
 };
 mod backend_generation;
 mod delivery_rejection;
+mod native_delivery_failure;
+pub use native_delivery_failure::{
+    NativeDeliveryFailure, NativeDeliveryFailureCause, NativeDeliveryOperation, NativeDeliveryStage,
+};
 mod delivery_route_evidence;
 mod message_content;
 mod push_line;
