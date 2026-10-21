@@ -78,6 +78,19 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
         operator_request: Duration::from_secs(15),
     })?;
     let collaboration_directory = directory.path().join("agent-communication");
+    // A crashed Host leaves real endpoint pathnames; production startup must recover them.
+    std::fs::create_dir(&collaboration_directory)?;
+    std::fs::set_permissions(
+        &collaboration_directory,
+        std::os::unix::fs::PermissionsExt::from_mode(0o700),
+    )?;
+    for name in ["control.sock", "codex-native.sock", "codex-acp.sock"] {
+        drop(std::os::unix::net::UnixListener::bind(
+            collaboration_directory.join(name),
+        )?);
+    }
+    let retained_entry = collaboration_directory.join("unknown-entry.txt");
+    std::fs::write(&retained_entry, b"retain this runtime entry")?;
     let config = HostConfig::new(HostConfigInputs {
         coordination_paths: coordination_paths.clone(),
         router_endpoint: router.address(),
@@ -149,6 +162,17 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
     )
     .await?;
     let initial_inventory = collaboration.list_endpoints().await?;
+    for name in ["control.sock", "codex-native.sock", "codex-acp.sock"] {
+        check(
+            collaboration_directory.join(name).exists(),
+            "production startup must rebind every recovered endpoint",
+        )?;
+    }
+    check_equal(
+        std::fs::read(retained_entry)?,
+        b"retain this runtime entry".to_vec(),
+        "production startup must retain unknown directory entries",
+    )?;
     check(
         initial_inventory.endpoints.iter().any(|endpoint| {
             matches!(

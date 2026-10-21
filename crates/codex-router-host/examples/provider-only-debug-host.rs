@@ -1,7 +1,7 @@
 //! Provider-only proof Host: real collaboration runtime, no native Codex process or home.
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
-    ExternalProviderStartup,
+    ExternalProviderStartup, HostCoordinationPaths, HostInstance,
 };
 use codex_router_secret_store::{SecretStore, file_backend::FileSecretStore, model::SecretKey};
 use std::{
@@ -74,6 +74,13 @@ async fn main() -> ExampleResult<()> {
         }
         validate_private_directory(directory)?;
     }
+    let instance = HostInstance::acquire(HostCoordinationPaths::new(
+        run_directory.join("operator.sock"),
+        run_directory.join("host.lock"),
+    ))?;
+    instance
+        .clear_stale_endpoint_sockets(&service_directory)
+        .await?;
     let mut runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
             owner_human_id: None,
