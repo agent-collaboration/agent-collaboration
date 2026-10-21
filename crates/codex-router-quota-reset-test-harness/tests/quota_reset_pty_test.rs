@@ -261,8 +261,12 @@ mod quota_reset_pty_test {
             terminal.wait_for_text_after("❯ Allow", first_allow_start, SEMANTIC_WAIT),
             "credit policy draft selection",
         )?;
+        let first_choice_selected_start = terminal.transcript_len();
         terminal.send(b"\r")?;
-        terminal.wait_for_text("Save", SEMANTIC_WAIT)?;
+        stage(
+            terminal.wait_for_text_after("Save", first_choice_selected_start, SEMANTIC_WAIT),
+            "selected Allow draft collapses before cancellation",
+        )?;
         let cancel_draft_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
         stage(
@@ -292,8 +296,12 @@ mod quota_reset_pty_test {
             terminal.wait_for_text_after("❯ Allow", second_allow_start, SEMANTIC_WAIT),
             "second Allow draft selection",
         )?;
+        let second_choice_selected_start = terminal.transcript_len();
         terminal.send(b"\r")?;
-        terminal.wait_for_text("Save", SEMANTIC_WAIT)?;
+        stage(
+            terminal.wait_for_text_after("Save", second_choice_selected_start, SEMANTIC_WAIT),
+            "selected Allow draft collapses before save",
+        )?;
         let saved_policy_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         if let Err(error) = terminal.wait_for_text_after("Edit", saved_policy_start, SEMANTIC_WAIT)
@@ -346,8 +354,12 @@ mod quota_reset_pty_test {
             terminal.wait_for_text_after("❯ Allow", reopen_editor_start, SEMANTIC_WAIT),
             "reopened policy editor displays the saved Allow value",
         )?;
+        let reopened_choice_cancel_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
-        terminal.wait_for_text("Save", SEMANTIC_WAIT)?;
+        stage(
+            terminal.wait_for_text_after("Save", reopened_choice_cancel_start, SEMANTIC_WAIT),
+            "reopened inline choice collapses before cancelling the editor",
+        )?;
         let reopen_cancel_start = terminal.transcript_len();
         terminal.send(b"\x1b")?;
         stage(

@@ -18,19 +18,27 @@
 <ex-document id="quota-gallery">
 <h1>Sessions and Quota: screenshot review</h1>
 <p>Original compiled terminal captures, with their observed build and result. Use the gallery to compare sizes and open pictures fullscreen. Narrow width and short height are the approved phone proxy.</p>
-<ex-callout tone="risk" title="Not merge-ready">
-These original captures precede the latest owner corrections: the shared value-column indentation, Copy path, sentence-case action wording, and orange warnings with yellow reserved for focus/selection are now implemented and pass scoped source tests. Replacement compiled pictures are still pending. The captured builds and earlier reviews remain identified below; they do not establish completion of these corrections. Narrow/short and live-provider proof remain incomplete.
+<ex-callout tone="risk" title="Release verification in progress">
+The current 0.1.99 Sessions Browse and Details originals are first in the gallery. Their two-scene observation is valid; the planned four-scene aggregate failed because New and search were not captured. Current Quota observation and final CI remain pending. Earlier pictures retain their historical build labels. Wider provider and narrow/resize checks are follow-up work under the owner's later release decision.
 </ex-callout>
 
-<h2 id="sessions">Sessions</h2>
-<p><strong>Current compiled captures · 120×36.</strong> Browse, Details, New, Fork, searchable choices, Filters and Help are below. All 20 image checks and three wrong-image controls passed. An independent verifier opened and hash-checked every original and found no confirmed visible P0–P3 issue in this bounded set.</p>
+<h2 id="sessions">Earlier Sessions evidence</h2>
+<p><strong>Earlier compiled captures · 120×36.</strong> Browse, Details, New, Fork, searchable choices, Filters and Help are below. All 20 image checks and three wrong-image controls passed. An independent verifier opened and hash-checked every original and found no confirmed visible P0–P3 issue in this bounded set.</p>
 <p>These use synthetic session records through the real UI and input loop, rendered by fixture harness <code>144801f2…</code>. They do not prove installed-client actions. <a href="proof-assets/2026-10-20-sessions-wide/evidence.json">Exact evidence and limits</a> · <a href="proof-assets/2026-10-20-sessions-wide/independent-ux.md">Independent visual review</a>.</p>
 <h2 id="screenshots">Screenshot gallery</h2>
-<p>Start with Sessions. Filter by screen, view or observed build; each image keeps its original viewport and result. The nine retained Quota examples are from earlier builds.</p>
-<ex-gallery id="quota-evidence" label="Sessions and Quota screenshots" selected="sessions-browse-120x36" filters="surface tags build">
+<p>Start with the 0.1.99 originals. Filter by screen, view or observed build; earlier captures remain available with their original identities.</p>
+<ex-gallery id="quota-evidence" label="Sessions and Quota screenshots" selected="release-sessions-browse" filters="surface tags build">
   <script type="application/json" data-gallery-filters>
     [{"field":"surface","label":"Screen","icon":"terminal"},{"field":"tags","label":"View","icon":"file"},{"field":"build","label":"Observed build","icon":"package"}]
   </script>
+  <figure id="release-sessions-browse" data-surface="Sessions" data-screen="Release Sessions Browse" data-state="Browse" data-viewport="120×36" data-tags="Browse" data-build="0.1.99 / 8bd2f0b6 fixture">
+    <img src="proof-assets/2026-10-21-release-0.1.99/sessions-browse.jpg" alt="Original 0.1.99 compiled Sessions Browse at 120 by 36" loading="lazy">
+    <figcaption><strong>0.1.99 · Sessions Browse · 120×36.</strong> Original browser screenshot of the real compiled UI with six synthetic sessions. The name and metadata columns retain a fixed selection gutter. Full-browser scaling is preserved. <a href="proof-assets/2026-10-21-release-0.1.99/sessions-browse.jpg">Original JPEG</a> · <a href="proof-assets/2026-10-21-release-0.1.99/sessions-evidence.json">Build, hashes and limits</a>.</figcaption>
+  </figure>
+  <figure id="release-sessions-details" data-surface="Sessions" data-screen="Release Session details" data-state="Details" data-viewport="120×36" data-tags="Dialog" data-build="0.1.99 / 8bd2f0b6 fixture">
+    <img src="proof-assets/2026-10-21-release-0.1.99/sessions-details.jpg" alt="Original 0.1.99 compiled Session details at 120 by 36" loading="lazy">
+    <figcaption><strong>0.1.99 · Session details · 120×36.</strong> Captured title, ID, directory and conversation are separate from Close, Copy session ID, Copy path, Fork and Resume. Yellow marks the selected action. This proves appearance of this scene, not provider dispatch or OS clipboard delivery. <a href="proof-assets/2026-10-21-release-0.1.99/sessions-details.jpg">Original JPEG</a>.</figcaption>
+  </figure>
   <figure id="sessions-browse-120x36" data-surface="Sessions" data-screen="Sessions Browse" data-state="Browse" data-viewport="120×36" data-tags="Browse" data-build="144801f2 fixture">
     <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-all.png" alt="Sessions · Browse · original compiled 120 by 36 capture" loading="lazy">
     <figcaption><strong>Sessions · Browse · 120×36 · renderer <code>144801f2…</code>.</strong> Six attributable sessions, fixed selection gutter and aligned title/metadata. Header actions are New, Details and Help. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-all.png">Original image</a></figcaption>
@@ -149,7 +157,7 @@ These original captures precede the latest owner corrections: the shared value-c
   </figure>
 </ex-gallery>
 
-<ex-presentation id="sessions-walkthrough" title="Sessions review" description="Current original captures of Browse, Details, New, Filters and Fork." variations>
+<ex-presentation id="sessions-walkthrough" title="Earlier Sessions review" description="Earlier original captures of Browse, Details, New, Filters and Fork." variations>
   <ex-step to="sessions-browse-120x36">Browse uses one selection gutter and aligned session metadata. New, Details and Help are in the title row.</ex-step>
   <ex-step to="sessions-codex-details-120x36">Details separates captured identity and facts from Copy, Fork and Resume.</ex-step>
   <ex-step to="sessions-new-120x36">New is a single Client, Machine and Directory form before Start.</ex-step>
