@@ -12,6 +12,13 @@ test -x "$QUOTA_STORYBOARD_VHS"
 test -x "$QUOTA_STORYBOARD_TTYD"
 xcrun swiftc -parse-as-library -module-cache-path "$tool_root/swift-module-cache" \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_image.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_pace.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_sessions_controls.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_sessions.swift \
     -o "$QUOTA_STORYBOARD_IMAGE_VERIFIER"
 env -u CC -u CXX -u LDFLAGS -u CPPFLAGS \
     PATH="/opt/homebrew/opt/rustup/bin:$PATH" \

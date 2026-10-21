@@ -1,0 +1,63 @@
+{
+  "start": "2026-10-20T06:28:13.616029+00:00",
+  "authority": "Root01a157fc-126a ONE<=60s existing-pixel diagnostic; paired allocation",
+  "request_sha256": "81472dcee3d19458a0ac5d1c28de5f309084d71fa9aa5ad3c41f859089f75e2b",
+  "kind": "Read-only original-pixel ink counts in exact existing native Tokyo/OpenAI overlap and adjacent gap; no new OCR read",
+  "steps": [
+    {
+      "name": "compile",
+      "command": [
+        "/usr/bin/xcrun",
+        "swiftc",
+        "-warnings-as-errors",
+        "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-verification/c7-readonly-current48-pixel-gap-probe.swift",
+        "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift",
+        "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift",
+        "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift",
+        "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift",
+        "-o",
+        "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/read-native-cause"
+      ],
+      "timeout": false,
+      "cap_seconds": 30,
+      "pid": 91627,
+      "group": 91627,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/compile.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/compile.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    },
+    {
+      "name": "case-0-0-en",
+      "command": [
+        "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/read-native-cause",
+        "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-strict-remaining-three-20261020T060307Z/phone-first-observation/quota-component-normal-48x24/component-quota-browse-credit-window.png",
+        "en"
+      ],
+      "timeout": false,
+      "cap_seconds": 4,
+      "pid": 91638,
+      "group": 91638,
+      "stdout": "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/case-0-0-en.stdout",
+      "stderr": "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/case-0-0-en.stderr",
+      "exit": 0,
+      "ps_exit": 0,
+      "remaining_group": []
+    }
+  ],
+  "signals": [],
+  "whole_seconds": 60,
+  "work_seconds": 50,
+  "cleanup_seconds": 10,
+  "binary": {
+    "path": "/private/tmp/2026-10-tui-component-system/c7-readonly-current48-pixel-gap-probe/read-native-cause",
+    "sha256": "7d6201b31974bd513f8921f57bcbfa185b4524b9e05d2cf80fbf5997273e1ea0"
+  },
+  "passed": true,
+  "sources_unchanged": true,
+  "owned18_unchanged": true,
+  "originals_unchanged": true,
+  "native_metadata_unchanged": true,
+  "seconds": 3.562336750328541
+}

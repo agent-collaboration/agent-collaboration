@@ -55,6 +55,12 @@ pub enum SessionsCommandError {
         /// SSH exit status, with no source-supplied diagnostic payload.
         status: String,
     },
+    /// The caller stopped waiting after admitting a client action.
+    #[error("{description}")]
+    ClientActionUnknown {
+        /// Captured source/action and the existing managed recovery ID, if any.
+        description: String,
+    },
     /// Codex failed to launch.
     #[error("failed to launch codex resume command: {0}")]
     CodexLaunch(std::io::Error),

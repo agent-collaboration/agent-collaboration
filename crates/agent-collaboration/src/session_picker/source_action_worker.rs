@@ -25,14 +25,33 @@ pub(super) fn production_preparer() -> SourceActionPreparer {
 }
 
 pub(super) async fn run_source_preparation(
-    mut receiver: tokio::sync::watch::Receiver<Option<PendingSourceAction>>,
+    receiver: tokio::sync::watch::Receiver<Option<PendingSourceAction>>,
     prepare: SourceActionPreparer,
-    mut publish: impl FnMut(PendingSourceAction, Result<PreparedSourceLaunch, SourceReadError>),
+    publish: impl FnMut(PendingSourceAction, Result<PreparedSourceLaunch, SourceReadError>),
+) {
+    run_latest_source_read(
+        receiver,
+        move |request: PendingSourceAction| prepare(request.profile, request.action),
+        publish,
+    )
+    .await;
+}
+
+/// Read-only qualification is latest-view work. A changed/closed view drops
+/// its one owned read future; this scheduler must never receive mutations.
+pub(super) async fn run_latest_source_read<
+    TRequest: Clone,
+    TResult,
+    TRead: Future<Output = TResult>,
+>(
+    mut receiver: tokio::sync::watch::Receiver<Option<TRequest>>,
+    read: impl Fn(TRequest) -> TRead,
+    mut publish: impl FnMut(TRequest, TResult),
 ) {
     loop {
         let request = receiver.borrow_and_update().clone();
         if let Some(request) = request {
-            let future = prepare(request.profile.clone(), request.action.clone());
+            let future = read(request.clone());
             tokio::select! {
                 biased;
                 changed = receiver.changed() => { if changed.is_err() { return; } continue; }
@@ -45,15 +64,17 @@ pub(super) async fn run_source_preparation(
     }
 }
 
-type SourcePreparationReceiver = tokio::sync::watch::Receiver<Option<PendingSourceAction>>;
+type SourceReadReceiver<TRequest> = tokio::sync::watch::Receiver<Option<TRequest>>;
+
+type SourcePreparationPort = LatestSourceReadPort<PendingSourceAction>;
 
 #[derive(Clone)]
-pub(super) struct SourcePreparationPort {
-    sender: tokio::sync::watch::Sender<Option<PendingSourceAction>>,
-    receiver: Arc<std::sync::Mutex<Option<SourcePreparationReceiver>>>,
+pub(super) struct LatestSourceReadPort<TRequest> {
+    sender: tokio::sync::watch::Sender<Option<TRequest>>,
+    receiver: Arc<std::sync::Mutex<Option<SourceReadReceiver<TRequest>>>>,
 }
 
-impl SourcePreparationPort {
+impl<TRequest: Clone + PartialEq> LatestSourceReadPort<TRequest> {
     pub(super) fn new() -> Self {
         let (sender, receiver) = tokio::sync::watch::channel(None);
         Self {
@@ -61,13 +82,13 @@ impl SourcePreparationPort {
             receiver: Arc::new(std::sync::Mutex::new(Some(receiver))),
         }
     }
-    pub(super) fn take_receiver(&self) -> Option<SourcePreparationReceiver> {
+    pub(super) fn take_receiver(&self) -> Option<SourceReadReceiver<TRequest>> {
         self.receiver
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take()
     }
-    pub(super) fn synchronize(&self, pending: Option<PendingSourceAction>) {
+    pub(super) fn synchronize(&self, pending: Option<TRequest>) {
         self.sender.send_if_modified(|current| {
             if *current == pending {
                 false

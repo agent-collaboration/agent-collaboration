@@ -31,6 +31,8 @@ pub struct ServiceIdentity {
     pub(crate) provider_session_hub: Option<std::sync::Arc<dyn crate::SessionEventHub>>,
     pub(crate) claude_code_sessions:
         Option<std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>>,
+    pub(crate) claude_background_jobs:
+        Option<std::sync::Arc<claude_code_peer_messaging::NativeClaudeJobReader>>,
     pub(crate) codex_conversation_recorder:
         Option<std::sync::Arc<crate::CodexConversationOperationRecorder>>,
     pub(crate) provider_conversations:
@@ -146,6 +148,15 @@ impl ServiceIdentity {
         registry: std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>,
     ) -> Self {
         self.claude_code_sessions = Some(registry);
+        self
+    }
+
+    #[must_use]
+    pub fn with_claude_background_jobs(
+        mut self,
+        reader: std::sync::Arc<claude_code_peer_messaging::NativeClaudeJobReader>,
+    ) -> Self {
+        self.claude_background_jobs = Some(reader);
         self
     }
 
@@ -284,6 +295,7 @@ impl ServiceIdentity {
             provider_operations: None,
             provider_session_hub: None,
             claude_code_sessions: None,
+            claude_background_jobs: None,
             codex_conversation_recorder: None,
             provider_conversations: None,
             board: None,

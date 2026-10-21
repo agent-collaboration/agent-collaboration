@@ -29,7 +29,7 @@ async fn codex_conversation_cancel_names_turn_interrupt_without_sending_acp_canc
     let acp =
         tokio::net::UnixListener::bind(root.path().join("codex-acp.sock")).expect("ACP listener");
     let acp_peer = tokio::spawn(async move {
-        for operation in ["cancel", "prompt", "load"] {
+        for operation in ["cancel", "prompt", "load", "human load"] {
             let (stream, _) = acp.accept().await.expect("ACP accept");
             let (reader, mut writer) = stream.into_split();
             let mut lines = BufReader::new(reader).lines();
@@ -174,6 +174,40 @@ async fn codex_conversation_cancel_names_turn_interrupt_without_sending_acp_canc
         load["result"]["structuredContent"]["fix"],
         "omit the operation ID for Codex prompts; it is not inspectable"
     );
+    let response = client
+        .post(listener.url())
+        .header(CONTENT_TYPE, "application/json")
+        .header(ACCEPT, "application/json, text/event-stream")
+        .header("mcp-protocol-version", "2025-11-25")
+        .json(
+            &json!({"jsonrpc":"2.0","id":5,"method":"tools/call","params":{
+            "name":"conversation_load","arguments":{
+                "target":target,"workingDirectory":root.path(),
+                "requestedBy":{"humanId":"source-human"},
+                "access":"write-restricted","timeoutSeconds":1
+            }}}),
+        )
+        .send()
+        .await
+        .expect("MCP Human Codex load response");
+    let body = response.text().await.expect("MCP Human load body");
+    let encoded = body
+        .lines()
+        .filter_map(|line| line.strip_prefix("data: "))
+        .find(|line| !line.is_empty())
+        .unwrap_or(&body);
+    let human_load: Value = serde_json::from_str(encoded).expect("MCP Human load JSON");
+    assert_eq!(human_load["result"]["isError"], true, "{human_load}");
+    assert_eq!(
+        human_load["result"]["structuredContent"]["kind"], "unsupportedCapability",
+        "{human_load}"
+    );
+    assert_eq!(
+        human_load["result"]["structuredContent"]["field"],
+        "requestedBy"
+    );
+    // The ACP peer above observes EOF after initialize for every branch,
+    // including Human Load: rejection must precede native session effects.
     acp_peer.await.expect("ACP peer");
     listener.stop().await;
 }

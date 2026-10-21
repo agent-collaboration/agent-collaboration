@@ -1,0 +1,12 @@
+
+running 1 test
+test compiled_compact_current_storyboard_exports_both_real_tuis ... compiled filter storyboard verified: /private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36
+FAILED
+
+failures:
+
+failures:
+    compiled_compact_current_storyboard_exports_both_real_tuis
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 44 filtered out; finished in 39.01s
+

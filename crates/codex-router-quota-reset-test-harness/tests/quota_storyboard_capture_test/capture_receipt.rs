@@ -19,6 +19,10 @@ pub(super) fn write_receipt(
         "{:x}",
         Sha256::digest(include_bytes!("verify_screen_image.swift"))
     );
+    let image_checkpoint_source_digest = format!(
+        "{:x}",
+        Sha256::digest(include_bytes!("verify_screen_checkpoint.swift"))
+    );
     let font_digest = digest_file(Path::new("/System/Library/Fonts/Menlo.ttc"))?;
     let source_digest = digest_file(Path::new(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -41,7 +45,7 @@ pub(super) fn write_receipt(
     fs::write(
         output.join("receipt.json"),
         format!(
-            "{{\"binary_sha256\":\"{binary_digest}\",\"entrypoint_source_sha256\":\"{source_digest}\",\"driver_source_sha256\":\"{driver_source_digest}\",\"image_verifier_source_sha256\":\"{image_verifier_source_digest}\",\"image_verifier_binary_sha256\":\"{image_verifier_digest}\",\"vhs_sha256\":\"{vhs_digest}\",\"ttyd_sha256\":\"{ttyd_digest}\",\"columns\":{columns},\"rows\":{rows},\"configured_font_family\":\"{FONT_FAMILY}\",\"candidate_font_file_sha256\":\"{font_digest}\",\"fixture\":\"sealed synthetic loopback data; actual quota TUI\",\"expected_timeout\":{expected_timeout},\"get_requests\":{request_count},\"post_requests\":0,\"saved_policies\":\"Disallow\",\"secret_manifest_unchanged\":true,\"owned_children_stopped\":true,\"images\":[{image_records}],\"pixel_semantics\":\"Vision checks independent scene text in every positive PNG and rejects blank/wrong images; no full styled-cell, native Ghostty or synchronized paint claim\"}}\n"
+            "{{\"binary_sha256\":\"{binary_digest}\",\"entrypoint_source_sha256\":\"{source_digest}\",\"driver_source_sha256\":\"{driver_source_digest}\",\"image_verifier_source_sha256\":\"{image_verifier_source_digest}\",\"image_checkpoint_source_sha256\":\"{image_checkpoint_source_digest}\",\"image_verifier_binary_sha256\":\"{image_verifier_digest}\",\"vhs_sha256\":\"{vhs_digest}\",\"ttyd_sha256\":\"{ttyd_digest}\",\"columns\":{columns},\"rows\":{rows},\"configured_font_family\":\"{FONT_FAMILY}\",\"candidate_font_file_sha256\":\"{font_digest}\",\"fixture\":\"sealed synthetic loopback data; actual quota TUI\",\"expected_timeout\":{expected_timeout},\"get_requests\":{request_count},\"post_requests\":0,\"saved_policies\":\"Disallow\",\"secret_manifest_unchanged\":true,\"owned_children_stopped\":true,\"images\":[{image_records}],\"pixel_semantics\":\"Vision checks independent scene text in every positive PNG and rejects blank/wrong images; no full styled-cell, native Ghostty or synchronized paint claim\"}}\n"
         ),
     )?;
     Ok(())

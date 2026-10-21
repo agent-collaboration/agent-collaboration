@@ -47,7 +47,7 @@ struct DebugHostContext {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub(crate) async fn main() -> Result<(), Box<dyn std::error::Error>> {
     startup_diagnostics::enable_startup_diagnostics()?;
     let Some(options) = parse_options()? else {
         return Ok(());
@@ -69,10 +69,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .clone()
         .unwrap_or_else(|| home.join(".codex-router-debug"));
     codex_native_integration::validate_debug_directory(&debug_root, &home.join(".codex-router"))?;
+    validate_collaboration_directory(&options)?;
     match options.run_directory_admission {
         RunDirectoryAdmission::Fresh => validate_fresh_run_directory(&options.run_directory)?,
         RunDirectoryAdmission::Resume => {
-            validate_resume_run_directory(&options.run_directory, options.port)?;
+            validate_resume_run_directory(
+                &options.run_directory,
+                options.port,
+                &options.selected_collaboration_directory(),
+            )?;
             let previous = read_existing_context(&options.run_directory)?;
             validate_resume_binding(&previous, &options)?;
         }
@@ -108,6 +113,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .create(&native_directory)?;
         std::fs::DirBuilder::new().mode(0o700).create(&workspace)?;
     }
+    let instance = host_replacement::acquire_acceptance_host_instance(
+        options.host_coordination_paths(&debug_root),
+    )?;
+    validate_collaboration_directory(&options)?;
+    let collaboration = options.selected_collaboration_directory();
     prepare_peer_registry(&options)?;
     let socket = native_directory.join("app-server.sock");
     let paths = CodexPaths::from_codex_home(codex_home.clone());
@@ -119,7 +129,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // for this owned acceptance app-server, without editing the home profile.
     let mut native_arguments = vec![OsString::from("-c"), OsString::from("features.hooks=false")];
     native_arguments.extend(proof_permissions::automation_proof_startup_arguments(
-        &options.run_directory,
+        &collaboration,
     )?);
     native_arguments.extend(spec.arguments());
     let mut native = ChildCommandSpec::new(spec.executable())
@@ -128,7 +138,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (key, value) in spec.environment() {
         native = native.with_environment(key, value);
     }
-    let collaboration = options.run_directory.join("agent-communication");
     let mut launch = AppServerLaunchPlan::new(native, executable, version)
         .with_schema_directory(collaboration.clone());
     launch.prepare_schema().await;
@@ -165,8 +174,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         cursor_provider: options.cursor_provider.clone(),
         peer_registry_directory: options.peer_registry_directory.clone(),
     };
-    let instance =
-        host_replacement::acquire_acceptance_host_instance(config.coordination_paths().clone())?;
     match options.run_directory_admission {
         RunDirectoryAdmission::Fresh => write_fresh_context(&prepared)?,
         RunDirectoryAdmission::Resume => replace_resumed_context(&prepared)?,
@@ -245,16 +252,16 @@ fn validate_fresh_run_directory(run_directory: &Path) -> Result<(), Box<dyn std:
 fn validate_resume_run_directory(
     run_directory: &Path,
     port: u16,
+    service_directory: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
     validate_private_owned_directory(run_directory, "resume run directory")?;
     let canonical_root = run_directory.canonicalize()?;
     if canonical_root.parent() != Some(Path::new("/tmp").canonicalize()?.as_path()) {
         return Err("--resume-run-directory must be a direct child of /tmp".into());
     }
-    let service_directory = run_directory.join("agent-communication");
     let workspace = run_directory.join("agent-workspace");
     let native_directory = run_directory.join("native-socket");
-    validate_private_owned_directory(&service_directory, "service directory")?;
+    validate_private_owned_directory(service_directory, "service directory")?;
     validate_private_owned_directory(&workspace, "workspace directory")?;
     validate_private_owned_directory(&native_directory, "native socket directory")?;
     match std::fs::symlink_metadata(service_directory.join("service.json")) {
@@ -280,6 +287,34 @@ fn validate_resume_run_directory(
         confirm_process_absent(context.host_pid)?;
     }
     Ok(())
+}
+
+fn validate_collaboration_directory(
+    options: &launch_options::DebugHostOptions,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(directory) = &options.collaboration_directory else {
+        return Ok(());
+    };
+    let root = options
+        .router_root
+        .as_ref()
+        .ok_or("explicit Router root required")?;
+    validate_private_owned_directory(root, "collaboration Router root")?;
+    if root.as_os_str() != root.canonicalize()?.as_os_str()
+        || *directory != root.join("agent-communication")
+    {
+        return Err("collaboration directory must use the canonical Router root child".into());
+    }
+    match std::fs::symlink_metadata(directory) {
+        Ok(_) => validate_private_owned_directory(directory, "collaboration directory")?,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
+    match std::fs::symlink_metadata(directory.join("service.json")) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Ok(_) => Err("collaboration directory already has a published Host service".into()),
+        Err(error) => Err(error.into()),
+    }
 }
 
 fn validate_private_owned_directory(
@@ -394,7 +429,12 @@ fn validate_resume_binding(
     context: &DebugHostContext,
     options: &launch_options::DebugHostOptions,
 ) -> Result<(), &'static str> {
-    if context.router_root != options.router_root
+    let expected_service = options
+        .collaboration_directory
+        .clone()
+        .unwrap_or_else(|| context.run_directory.join("agent-communication"));
+    if context.service_directory != expected_service
+        || context.router_root != options.router_root
         || context.claude_provider != options.claude_provider
         || context.cursor_provider != options.cursor_provider
         || context.peer_registry_directory != options.peer_registry_directory

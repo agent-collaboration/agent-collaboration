@@ -36,6 +36,28 @@ pub enum UiTextRole {
     Secondary,
     Disabled,
     Selected,
+    Success,
+    Warning,
+    Error,
+}
+
+impl UiTextRole {
+    /// Shared semantic palette; yellow belongs only to active focus or selection.
+    pub const fn color(self) -> Color {
+        match self {
+            Self::Body => Color::White,
+            Self::Secondary => Color::Grey,
+            Self::Disabled => Color::DarkGrey,
+            Self::Selected => Color::Yellow,
+            Self::Success => Color::Green,
+            Self::Warning => Color::Rgb {
+                r: 255,
+                g: 165,
+                b: 0,
+            },
+            Self::Error => Color::Red,
+        }
+    }
 }
 
 #[derive(Props)]
@@ -48,11 +70,11 @@ pub struct UiTextProps {
 
 #[component]
 pub fn UiText(props: &UiTextProps) -> impl Into<AnyElement<'static>> {
-    let (color, weight) = match props.role {
-        UiTextRole::Body => (Color::White, Weight::Normal),
-        UiTextRole::Secondary => (Color::Grey, Weight::Normal),
-        UiTextRole::Disabled => (Color::DarkGrey, Weight::Normal),
-        UiTextRole::Selected => (Color::Yellow, Weight::Bold),
+    let color = props.role.color();
+    let weight = if props.role == UiTextRole::Selected {
+        Weight::Bold
+    } else {
+        Weight::Normal
     };
     element!(Text(content: props.content.clone(), color, weight, wrap: props.wrap.unwrap_or(TextWrap::NoWrap)))
 }

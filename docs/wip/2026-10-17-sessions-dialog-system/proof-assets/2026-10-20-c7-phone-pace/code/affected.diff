@@ -1,0 +1,184 @@
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs
+@@ -19,6 +19,11 @@
+         let model = super::super::quota_storyboard_fixture_test::fixture_model();
+         assert_eq!(model.rows[0].credit_usage_summary, "62.5k fresh");
+         assert_eq!(model.rows[0].reset_pace.semantic_label, "burn unavailable");
++        let expected_pace = if width == 32 {
++            "Unknown"
++        } else {
++            "burnunavailable"
++        };
+         let mut component = element!(QuotaStatusComponent(view_model:model,width,height));
+         let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+         tokio::pin!(frames);
+@@ -39,7 +44,7 @@
+             if pace_label.is_none() && quota_words.contains("Weekly pace") {
+                 pace_label = Some(page);
+             }
+-            if pace_value.is_none() && quota_words.replace(' ', "").contains("burnunavailable") {
++            if pace_value.is_none() && quota_words.replace(' ', "").contains(expected_pace) {
+                 pace_value = Some(page);
+             }
+             println!(
+@@ -78,7 +83,7 @@
+                 crossed_beta_start |= beta_start_visible;
+                 let has_alpha_fact = text.contains("62.5k") || quota_words.contains("99%");
+                 if (has_alpha_fact || alpha_tail)
+-                    && quota_words.replace(' ', "").contains("burnunavailable")
++                    && quota_words.replace(' ', "").contains(expected_pace)
+                 {
+                     end_back_pose = Some(backwards);
+                     break;
+@@ -135,7 +140,7 @@
+         if width == 32 {
+             let alpha_words = alpha_browse_quota_words(&end_back_frame);
+             assert!(end_back_frame.contains("62.5k") && alpha_words.contains("99%"));
+-            assert!(alpha_words.replace(' ', "").contains("burnunavailable"));
++            assert!(alpha_words.split_whitespace().any(|word| word == "Unknown"));
+         }
+         if end_back_frame == initial {
+             // Denser content can make one reverse page reach the top already.
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs
+@@ -216,6 +216,9 @@
+ #[path = "quota_ux_frame_test.rs"]
+ mod quota_ux_frame_test;
+ 
++#[path = "quota_ux_pace_test.rs"]
++mod quota_ux_pace_test;
++
+ #[path = "quota_ux_browse_scroll_test.rs"]
+ mod quota_ux_browse_scroll_test;
+ 
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs
+@@ -0,0 +1,61 @@
++//! Compact pace wording must fit without changing full Details or wider rows.
++use super::quota_ux_frame_test::phone_account_region;
++use super::*;
++
++#[tokio::test]
++async fn phone_pace_uses_whole_compact_words_and_preserves_full_details() {
++    let mut observations = Vec::new();
++    for semantic_label in ["burn unavailable", "collecting data"] {
++        let mut model = super::super::quota_storyboard_fixture_test::fixture_model();
++        model.rows[0].reset_pace.semantic_label = semantic_label;
++        model.rows[0].details.reset_pace = model.rows[0].reset_pace.clone();
++        let details = render_quota_static_capture(model.clone(), 160, false);
++        assert!(
++            quota_selected_panel_text(&details).contains(semantic_label),
++            "Details must retain the full distinct pace meaning: {details}"
++        );
++        let frame =
++            render_quota_capture_model_at(model, 32, 80, vec![provider_filter_key(KeyCode::Esc)])
++                .await;
++        let account = phone_account_region(&frame, "東京", Some("Claude"));
++        let quota = quota_column_words(&account, 22, 8);
++        println!("PHONE PACE {semantic_label} ACTUAL32:\n{frame}");
++        assert!(
++            frame
++                .lines()
++                .all(|line| unicode_width::UnicodeWidthStr::width(line) <= 32)
++        );
++        observations.push((semantic_label, quota));
++    }
++    for (semantic_label, quota) in &observations {
++        assert!(
++            quota.split_whitespace().any(|word| word == "Unknown"),
++            "narrow pace must be a whole readable word, keeping the full reason in Details; source={semantic_label}, observations={observations:?}, quota={quota}"
++        );
++    }
++}
++
++#[tokio::test]
++async fn phone_pace_wider_rows_keep_full_words_and_observable_frames() {
++    for width in [40usize, 48, 76, 120] {
++        let mut model = super::super::quota_storyboard_fixture_test::fixture_model();
++        model.rows[1].reset_pace.semantic_label = "collecting data";
++        let frame = render_quota_capture_model_at(
++            model,
++            width,
++            80,
++            vec![provider_filter_key(KeyCode::Esc)],
++        )
++        .await;
++        assert!(
++            frame.contains("unavailable") && frame.contains("collecting"),
++            "{frame}"
++        );
++        assert!(
++            frame
++                .lines()
++                .all(|line| unicode_width::UnicodeWidthStr::width(line) <= width)
++        );
++        println!("PHONE PACE UNCHANGED {width} BEGIN\n{frame}\nPHONE PACE UNCHANGED {width} END");
++    }
++}
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs
+@@ -186,15 +186,20 @@
+                     "all vertical quota facts stay in Quota: {fact}: {frame}"
+                 );
+             }
++            let expected_pace = if width == 32 {
++                "Unknown"
++            } else {
++                "burn unavailable"
++            };
+             assert!(
+-                quota.replace(' ', "").contains("burnunavailable"),
+-                "all characters of the long pace notice survive normal wrapping in the8-cell Quota group: {frame}"
++                quota.contains(expected_pace),
++                "pace words remain readable in Quota: {frame}"
+             );
+         }
+     }
+ }
+ 
+-fn phone_account_region(frame: &str, name: &str, next_name: Option<&str>) -> String {
++pub(super) fn phone_account_region(frame: &str, name: &str, next_name: Option<&str>) -> String {
+     let lines = frame.lines().collect::<Vec<_>>();
+     let start = lines
+         .iter()
+@@ -262,7 +267,12 @@
+                 let mut reached = false;
+                 for _ in 0..10 {
+                     let quota = quota_column_words(&frame, start, columns).replace(' ', "");
+-                    if quota.contains("70%") && quota.contains("burnunavailable") {
++                    let expected_pace = if width == 32 {
++                        "Unknown"
++                    } else {
++                        "burnunavailable"
++                    };
++                    if quota.contains("70%") && quota.contains(expected_pace) {
+                         reached = true;
+                         break;
+                     }
+--- before/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs
+@@ -225,6 +225,15 @@
+     let row_padding = usize::from(!compact_phone);
+     let body_width = width.saturating_sub(2 + 2 * row_padding);
+     let (account_width, status_width, quota_width) = quota_list_columns(body_width);
++    // "unavailable" needs eleven cells. Keep narrow no-estimate wording whole;
++    // Details retains the full label, including the collecting-data reason.
++    let pace_summary =
++        if compact_phone && quota_width < 11 && row.reset_pace.state == ResetPaceState::Unavailable
++        {
++            "Unknown".to_owned()
++        } else {
++            reset_pace_summary(&row.reset_pace)
++        };
+     let provider = match row.provider {
+         codex_router_core::provider::Provider::Openai => "◎ OpenAI",
+         codex_router_core::provider::Provider::Claude => "◆ Claude",
+@@ -247,7 +256,7 @@
+                         Text(content:row.reason.clone(),color:Color::Grey)
+                         codex_router_tui::FormField(label:"Weekly".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:row.weekly_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
+                         codex_router_tui::FormField(label:"5h".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:row.short_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
+-                        codex_router_tui::FormField(label:"Weekly pace".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:reset_pace_summary(&row.reset_pace),color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)}
++                        codex_router_tui::FormField(label:"Weekly pace".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:pace_summary,color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)}
+                     }
+                 }
+             }

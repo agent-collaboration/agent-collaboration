@@ -1,0 +1,74 @@
+{
+  "scope": "Two later test-only changes; product27cb/full560/default9 remain their original exact target",
+  "source": {
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90"
+  },
+  "files": [
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-handoff.json",
+      "sha256": "32c719b093f39d13b95e6dc7b94dbb3bb20a6841a955fe67e3c98ba3a7fbcab2"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-final-quality.json",
+      "sha256": "4deb1e98be818c87b2eae13e5d156709e72ad18007958f5623f3f922fbff6ab5"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-two-test-source-equivalence.json",
+      "sha256": "d3fb8f5e04114d0aa4c2c3a14f8ce8785537a55c93165773de7dd90f2d48eeec"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-eligibility-red-recorded.json",
+      "sha256": "ad559c4651386d2ce6556b0bbb9ef3f9785ab0b7a72fd05578db7a47f9ed598b"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-eligibility-red-recorded.log",
+      "sha256": "1793509e12d5a42f46e1de631528f65504a21f5c294a758d24c0226b541e0f4d"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-actual-chrome-only-red.json",
+      "sha256": "33d93b2a787fdeaad76960e25ad6511c3e2ae6accf9793f83d727c645cc1c1de"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-actual-chrome-only-red.log",
+      "sha256": "8a84f1bfa6972dec7681e79e932c18d7b691b647dec0cf9c9efc8d2d83abef60"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-final-green.log",
+      "sha256": "392c6c79c5191faa308039f56dd5e8fbcc6b03b109fb463b4793c25e05a59a45"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-lint.log",
+      "sha256": "42b2100a48b1c49d3e11bfb828cf2d84ee80f8fe89bb7384b54d389ded30fe26"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-entry-p3-size.log",
+      "sha256": "fe724c535db0d43e6fdebb8baed0ca452b1b1213beb7c24c3ea9600daefe9d4a"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-supported-page-current-quality.json",
+      "sha256": "daf62866a6cfc4a403c55cc337b10916cfd15002058edb114a4035136571438c"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-supported-page-current-focused.log",
+      "sha256": "e651f0f69d5ba41980a59879aecc5632c4d71232fe361dfb060f9a66796b2a8a"
+    },
+    {
+      "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/c7-supported-page-test-only-source-equivalence.json",
+      "sha256": "cf28e25d25191d42c9fe2ddf6a4cada4206556a83015d032cfc15351cb95ccdc"
+    }
+  ],
+  "independent_report": {
+    "path": "proof-assets/2026-10-20-c7-current-normal/test-followup/independent-recheck.md",
+    "sha256": "72c650fe5b790e6c0f69a7ef5d47540724906185c17335af00658f7357a654de"
+  },
+  "result": "P3 and separate supported-key proof gap independently VERIFIED CLOSED",
+  "limits": [
+    "Original fullCLI560/default9 remain bound to prior exact27cb source; these subsequent tests have separate focused and fitting-quality proof.",
+    "This corrects a test obligation, not product UI or data behavior. No UI replay/default artifact refresh solely for tests.",
+    "Current40 Normal and374/242 native qualifier remain failed until separately admitted name/tag-value reader is qualified. Pending/error/resize/Sessions/public/device/fresh-checkout/final acceptance remain open."
+  ]
+}

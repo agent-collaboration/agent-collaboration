@@ -1,0 +1,182 @@
+{
+  "kind": "Current age clarity visually closed at32x24; automatic run FAILED",
+  "source_manifest": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-verification/c7-help-age-32-original-review-manifest.json",
+  "source_manifest_sha256": "f357fc91b184e653cd962e9256727c2b65bd3759da407937ee50e6de4f20e137",
+  "artifacts": {
+    "quota-component-libtest": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T012440Z/bin/quota-component-libtest",
+      "sha256": "2c09fc25a65af6b7fbcdf634d00d64cd6a1dc39e72748c658f2328a7c1670bc9"
+    },
+    "codex-router": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T012440Z/bin/codex-router",
+      "sha256": "f9e841540be5d85a84df4912077ac29c72241894dd67de15b2418658a1bec255"
+    },
+    "agent-sessions": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T012440Z/bin/agent-sessions",
+      "sha256": "93e88c177f4d5eecafeb641f8f1fb05ed2b8df1ba3c604037c4fc1ffcd14c354"
+    },
+    "capture-driver": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T012440Z/bin/capture-driver",
+      "sha256": "1a16a8dd32911134e76bb637bdbce234fe54837186b85b32cd5501996151bee8"
+    },
+    "verify-tui-screen": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T012440Z/bin/verify-tui-screen",
+      "sha256": "817b0de0e92cc69420c552a779a309e1f045681d4e62949445be68cfe75d4445"
+    },
+    "quota-reset-harness": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261020T012440Z/bin/quota-reset-harness",
+      "sha256": "df8102d5cd6f3f4ae248d7f550fe2ca64eb399ba4770e979d1f0bac9cb5734aa"
+    }
+  },
+  "source_counts": {
+    "indexed": 3609,
+    "capture": 2186,
+    "build": 2320,
+    "normal": 2282
+  },
+  "cells": [
+    32,
+    24
+  ],
+  "pixels": [
+    350,
+    484
+  ],
+  "journey": "FixedNormal38includingrealkeysdraft/cancel/save/refresh62500→63000/facts/contextHelpfullidentity+Yesreturn/resetresult/return",
+  "automatic_result": {
+    "wrapper_exit": 1,
+    "driver_exit": 101,
+    "full_tape_exported": 38,
+    "positive_passed_before_failure": 26,
+    "failed_positive": "component-quota-credits-refreshed-observation:nativeøs vs0s",
+    "later_positive_unrun": 11,
+    "negative_checks_unrun": 9,
+    "Normal_receipt": false,
+    "gallery": false
+  },
+  "cleanup_effects": {
+    "at": "2026-10-20T01:28:53.701809+00:00",
+    "grid": [
+      32,
+      24
+    ],
+    "wrapper_exit": 1,
+    "driver_exit": 101,
+    "seconds": 51.308832459151745,
+    "recorded_pids": [
+      57279,
+      57287,
+      57292,
+      57318,
+      57320,
+      57465,
+      57466,
+      57467,
+      57468,
+      57469,
+      57470,
+      57471,
+      57472,
+      57473,
+      57474,
+      57475,
+      57476,
+      57477,
+      57478,
+      57479,
+      57480,
+      57481,
+      57482,
+      57483,
+      57484,
+      57485,
+      57486,
+      57487,
+      57488,
+      57489,
+      57490,
+      57491
+    ],
+    "remaining_owned_processes": [],
+    "private_profile": "/private/tmp/2026-10-tui-component-system/vhs-run-57287-0",
+    "profile_absent": true,
+    "cleanup_error_absent": true,
+    "Vsignals_orstop": false,
+    "child_exit": 0,
+    "durable_fixture_external_requests": 0,
+    "durable_fixture_persisted_writes": 0,
+    "normal_receipt_exists": false,
+    "gallery_exists": false,
+    "retained_original_layer_pairs": 1741,
+    "all_layer_hashes_verified": true,
+    "source_original_archive2311_unchanged": true
+  },
+  "changed_originals": [
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "file": "component-quota-credits-policy-boundary.png",
+      "sha256": "b92f61ed9cec53c550f6499b6dc3131bd1e889afabbe052864b1ebde642f16c2"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "file": "component-quota-credits-refreshed-observation.png",
+      "sha256": "e252922b5c75c8946c904f2662f2bfa1c2ce001158e1de7e7b44be9e97c6c3a3"
+    }
+  ],
+  "unchanged_prior_originals": [
+    "component-quota-browse",
+    "component-quota-confirm-help-identity",
+    "component-quota-confirm-help-returned",
+    "component-quota-confirm-help-top",
+    "component-quota-confirm-no-returned",
+    "component-quota-confirm-no",
+    "component-quota-confirm-yes",
+    "component-quota-credits-balance",
+    "component-quota-credits-identity",
+    "component-quota-credits-refreshed-balance",
+    "component-quota-credits-refreshed-freshness",
+    "component-quota-details-bottom",
+    "component-quota-details-top",
+    "component-quota-floor-cancelled",
+    "component-quota-floor-draft",
+    "component-quota-floor-original",
+    "component-quota-floor-saved",
+    "component-quota-help-bottom",
+    "component-quota-help-top",
+    "component-quota-next-account",
+    "component-quota-options-identity",
+    "component-quota-policy-cancelled",
+    "component-quota-policy-choice-returned",
+    "component-quota-policy-choice",
+    "component-quota-policy-draft",
+    "component-quota-policy-no-match",
+    "component-quota-policy-original",
+    "component-quota-policy-saved",
+    "component-quota-refresh-result",
+    "component-quota-reset-inventory",
+    "component-quota-reset-last-page",
+    "component-quota-reset-result-bottom",
+    "component-quota-reset-result",
+    "component-quota-reset-review",
+    "component-quota-restored-account",
+    "component-quota-returned"
+  ],
+  "unchanged_prior_count": 36,
+  "prior_original_directory": "../2026-10-20-c7-context38-reviewed",
+  "independent_ux_report": {
+    "file": "independent-ux-recheck.md",
+    "sha256": "2e6d1fe16bc162125c0089d57c13dd8c9638aea0992a1b4d1440bdce371b1c65",
+    "ageAmbiguity": "VISUALLY VERIFIED CLOSED",
+    "newVisibleSpacingHierarchyDefect": false
+  },
+  "limits": [
+    "No originalpixels modified or reconstructed",
+    "Failedrun remainsimmutable; no replay",
+    "Other5gridjobs unstarted",
+    "Later11positive/ninewrongimage checks not run in actualdriver",
+    "Pending/resize/Sessions/public/native/actualdeviceproof open",
+    "Automatic failure from native0s→øs recognition; field-only correction is being qualified",
+    "All other widths, pending/error/resize, actualdevice/provider and final delivery remain open",
+    "No wholeUI/PR completion claim"
+  ]
+}

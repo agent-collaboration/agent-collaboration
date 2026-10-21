@@ -21,15 +21,16 @@ pub struct DialogActionProps {
     #[iocraft(required)]
     pub label: String,
     pub has_focus: bool,
+    pub enabled: Option<bool>,
     pub emphasis: DialogActionEmphasis,
     pub keyboard_owner: DialogKeyboardOwner,
     pub handler: HandlerMut<'static, ()>,
 }
 
-/// Native iocraft button with the dialog host's input policy applied.
+/// Native activation semantics with dialog input scope and viewport clipping.
 #[component]
 pub fn DialogAction(props: &mut DialogActionProps, hooks: Hooks) -> impl Into<AnyElement<'static>> {
-    let enabled = hooks.dialog_input_enabled();
+    let enabled = hooks.dialog_input_enabled() && props.enabled.unwrap_or(true);
     let mut handler = props.handler.take();
     let (color, weight) = if !enabled {
         (Color::DarkGrey, Weight::Normal)
@@ -42,7 +43,7 @@ pub fn DialogAction(props: &mut DialogActionProps, hooks: Hooks) -> impl Into<An
         }
     };
     element! {
-        Button(has_focus: enabled && props.has_focus && props.keyboard_owner == DialogKeyboardOwner::Button, handler: move |_| {
+        crate::DialogButton(has_focus: enabled && props.has_focus && props.keyboard_owner == DialogKeyboardOwner::Button, handler: move |_| {
             if enabled { handler(()); }
         }) {
             Text(content: props.label.clone(), color, weight,

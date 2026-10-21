@@ -1,10 +1,19 @@
 use std::{ffi::OsString, net::Ipv4Addr, path::Path};
 
 pub fn automation_proof_startup_arguments(
-    run_directory: &Path,
+    collaboration_directory: &Path,
 ) -> Result<Vec<OsString>, Box<dyn std::error::Error>> {
-    let canonical_run_directory = run_directory.canonicalize()?;
-    let service_socket = canonical_run_directory.join("agent-communication/control.sock");
+    let parent = collaboration_directory
+        .parent()
+        .ok_or("collaboration parent absent")?
+        .canonicalize()?;
+    let service_socket = parent
+        .join(
+            collaboration_directory
+                .file_name()
+                .ok_or("collaboration name absent")?,
+        )
+        .join("control.sock");
     let service_socket = service_socket
         .to_str()
         .ok_or("acceptance service socket path is not UTF-8")?;
@@ -162,7 +171,7 @@ mod tests {
     -> Result<(), Box<dyn std::error::Error>> {
         for mode in ["fresh", "resume"] {
             let run = TestRunDirectory::create(mode)?;
-            let arguments = automation_proof_startup_arguments(&run.0)?;
+            let arguments = automation_proof_startup_arguments(&run.0.join("agent-communication"))?;
             assert_exact_permissions(&run.0, &arguments)?;
         }
         Ok(())

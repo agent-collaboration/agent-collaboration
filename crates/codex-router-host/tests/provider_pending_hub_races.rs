@@ -351,7 +351,8 @@ async fn listed_state(
         .ok_or("target omitted from provider session list")?;
     match summary {
         collaboration_protocol::ProviderSessionSummary::HostedProvider { state, .. } => Ok(state),
-        collaboration_protocol::ProviderSessionSummary::ClaudeCodeInteractive { .. } => {
+        collaboration_protocol::ProviderSessionSummary::ClaudeCodeInteractive { .. }
+        | collaboration_protocol::ProviderSessionSummary::ClaudeCodeBackground { .. } => {
             Err("expected a Router-hosted provider session".into())
         }
     }

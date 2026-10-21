@@ -1,0 +1,53 @@
+{
+  "sourceCommit": "2470bdd2a3b3d89b659eafe947dab5926bf7befc",
+  "version": "0.1.99",
+  "surface": "Quota",
+  "rendererSha256": "19a88ceb3dcb364c37fdc1e9a0c9fb572db9de2c76d4fbc4cad2fc2236bb7b80",
+  "driverSha256": "d15cd683e7bda0771b5dea46625260dd9dfd7f9e67e36fdf8aa003409c00f33d",
+  "images": [
+    {
+      "scene": "quota-browse",
+      "file": "quota-browse.jpg",
+      "sha256": "81a70cdfd2a532e2ebe628cb632ab54e9a21bf0f25aaa34383c53eec14c8eae8",
+      "bytes": 28203,
+      "viewport": "120x36",
+      "kind": "original CUA JPEG of compiled terminal UI",
+      "personallyInspectedByVerifier": true
+    },
+    {
+      "scene": "quota-details",
+      "file": "quota-details.jpg",
+      "sha256": "22b5b6df5569ee26ba62b8a935f340023e5857c63298cde58431595c44817959",
+      "bytes": 31002,
+      "viewport": "120x36",
+      "kind": "original CUA JPEG of compiled terminal UI",
+      "personallyInspectedByVerifier": true
+    }
+  ],
+  "result": "Two predeclared scenes complete; outer execution and child exit0.",
+  "lifecycle": {
+    "kind": "live-cua-fixture-lifecycle-only",
+    "surface": "quota",
+    "binary_sha256": "19a88ceb3dcb364c37fdc1e9a0c9fb572db9de2c76d4fbc4cad2fc2236bb7b80",
+    "child_exit": 0,
+    "provider_requests": 0,
+    "state_and_secrets_unchanged": true,
+    "owned_processes_stopped": true,
+    "artifact_sink_stopped": true,
+    "artifact_count": 2,
+    "last_viewport": "120 36",
+    "ui_observation": "separate-original-CUA-evidence-required",
+    "quota_fixture_scenario": "normal"
+  },
+  "fixtureOutcome": "Normal scenario; external requests0; persisted writes0; no quota released.",
+  "independentUx": {
+    "browse": "Account/Status/Quota groups remain distinct and aligned. Full Alpha name wraps at word boundaries; provider below name. Status/client/reset/compact62.5k and weekly/5h percentage/reset units remain readable. Named total/usable/census is visible; yellow marks selected account, not ordinary facts. No empty unavailable pace graphic or persistent footer in this scene.",
+    "details": "One cyan Account details title, grey Help, captured full Alpha name/tag, labelled Status/Reason, weekly/5h values and reset-pace/sample/rate facts. Single nearby Close action; no overlap, clipped identity or duplicate action group observed. Escape closes without changing selected account.",
+    "judgment": "No confirmed visible blocker in these2inspectedwide scenes for the reducedrelease screencheck. Broaderworkflows/phone/resize notinspected."
+  },
+  "limits": [
+    "Synthetic fixture accounts through real compiled rendering and input; no live-provider proof.",
+    "Original browser JPEGs preserve scaling; no crop, conversion or reconstruction.",
+    "Only Browse and Account details. Other dialogs, narrow layouts, resize and remote actions remain follow-ups."
+  ]
+}

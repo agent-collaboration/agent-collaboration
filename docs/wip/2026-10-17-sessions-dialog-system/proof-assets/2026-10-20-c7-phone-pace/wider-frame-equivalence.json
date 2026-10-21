@@ -1,0 +1,40 @@
+{
+  "kind": "Actual unchanged-width rendered-frame byte equivalence, before/after32-only code change",
+  "before": "c7-phone-pace-row-red.log",
+  "after": "c7-phone-pace-affected-green.log",
+  "frames": [
+    {
+      "columns": 40,
+      "rows": 80,
+      "beforeSha256": "20e5cb91d927f58b4fbcf5636c696b25bfa4a893b35ab143a276e723ffc6d3d2",
+      "afterSha256": "20e5cb91d927f58b4fbcf5636c696b25bfa4a893b35ab143a276e723ffc6d3d2",
+      "utf8Bytes": 3809,
+      "byteIdentical": true
+    },
+    {
+      "columns": 48,
+      "rows": 80,
+      "beforeSha256": "6dfc0d8024e8f52d9acad020b098b643fd00b9728cd4ce875e7a439d3fb6d86e",
+      "afterSha256": "6dfc0d8024e8f52d9acad020b098b643fd00b9728cd4ce875e7a439d3fb6d86e",
+      "utf8Bytes": 4765,
+      "byteIdentical": true
+    },
+    {
+      "columns": 76,
+      "rows": 80,
+      "beforeSha256": "81cf91fd97de967715f0d8fec27097f3e42bff29309f0097f255e3d759a3a761",
+      "afterSha256": "81cf91fd97de967715f0d8fec27097f3e42bff29309f0097f255e3d759a3a761",
+      "utf8Bytes": 7208,
+      "byteIdentical": true
+    },
+    {
+      "columns": 120,
+      "rows": 80,
+      "beforeSha256": "d8a02d94dcabbb3e106ab9b36e167087c26cb828cc2c62aa5f0cbb981d1b1fc5",
+      "afterSha256": "d8a02d94dcabbb3e106ab9b36e167087c26cb828cc2c62aa5f0cbb981d1b1fc5",
+      "utf8Bytes": 11060,
+      "byteIdentical": true
+    }
+  ],
+  "limits": "Real composed mock-terminal frames; not new original desktop/device screenshots. Tests exercise both no-estimate labels and preserve full Details. No unchanged-grid screenshot replay required from this record alone."
+}

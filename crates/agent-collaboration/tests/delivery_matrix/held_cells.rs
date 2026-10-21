@@ -286,7 +286,7 @@ async fn load_codex_target(
                 operation_id: None,
                 target: target.clone(),
                 working_directory: proof.workspace.clone(),
-                requested_by: requested_by.clone(),
+                requested_by: requested_by.clone().into(),
                 approver: Some(requested_by.clone().into()),
                 access: RouterAccess::WorkspaceWrite,
                 generation: None,

@@ -11,11 +11,15 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[path = "configured_inventory_native.rs"]
+pub(crate) mod native_partitions;
+
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
 #[derive(Clone, Copy)]
 pub(crate) enum ReplyScenario {
+    NativePartition(native_partitions::NativeScenario),
     ChangedEpoch,
     WrongRequestId,
     WrongPageEndpoint,
@@ -205,6 +209,9 @@ async fn reply(State(state): State<Arc<PeerState>>, Json(request): Json<Value>) 
                 .count(),
         )
     };
+    if let ReplyScenario::NativePartition(scenario) = state.scenario {
+        return Json(native_partitions::reply(&state, &request, scenario).await);
+    }
     let native_endpoint = json!({"serviceId":state.service,"endpointId":"codex-local"});
     let provider_endpoint = json!({"serviceId":state.service,"endpointId":"claude-local"});
     let result = match method.as_str() {
@@ -319,10 +326,24 @@ async fn reply(State(state): State<Arc<PeerState>>, Json(request): Json<Value>) 
             json!({"endpoint":endpoint,"observedAt":"2026-10-11T00:00:00Z","sessions":sessions,"generation":null,"nextCursor":cursor})
         }
         "provider_sessions_list" => {
-            json!({"skippedRecords":if matches!(state.scenario,ReplyScenario::ProviderSkipped){1}else{0},"endpoint":provider_endpoint,"observedAt":"2026-10-11T00:00:00Z","nextCursor":null,
+            if request
+                .pointer("/params/arguments/source")
+                .and_then(Value::as_str)
+                == Some("interactive")
+            {
+                assert_eq!(
+                    request
+                        .pointer("/params/arguments/source")
+                        .and_then(Value::as_str),
+                    Some("interactive")
+                );
+                json!({"endpoint":provider_endpoint,"observedAt":"2026-10-11T00:00:00Z","nextCursor":null,"sessions":[],"nativeCoverage":{"peer":{"kind":if request.pointer("/params/arguments/view").and_then(Value::as_str)==Some("stored") {"notRequested"}else {"complete"}},"background":{"kind":"complete"}}})
+            } else {
+                json!({"skippedRecords":if matches!(state.scenario,ReplyScenario::ProviderSkipped){1}else{0},"endpoint":provider_endpoint,"observedAt":"2026-10-11T00:00:00Z","nextCursor":null,
             "sessions":[{"target":{"endpoint":provider_endpoint,"sessionId":"provider-only-id"},"workingDirectory":"/source/provider",
-                "updatedAt":2000,"state":"idle","approver":{"endpoint":native_endpoint,"sessionId":"fixture-owner"},
+                "updatedAt":2000,"state":"idle","requestedPolicy":{"access":"write-restricted"},"approver":{"endpoint":native_endpoint,"sessionId":"fixture-owner"},
                 "createdBy":{"endpoint":native_endpoint,"sessionId":"fixture-owner"}}]})
+            }
         }
         _ => panic!("unexpected read method"),
     };

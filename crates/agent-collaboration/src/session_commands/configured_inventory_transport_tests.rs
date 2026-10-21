@@ -6,6 +6,9 @@ use crate::sessions::router_connection_registry::RouterConnectionRegistry;
 use std::{net::Ipv4Addr, path::Path, sync::Arc};
 use tokio::net::{TcpListener, TcpStream};
 
+#[path = "configured_inventory_failure_tests.rs"]
+mod failure_tests;
+
 const CERTIFICATE: &[u8] =
     include_bytes!("test_support/configured_tls_fixture/localhost-certificate.der");
 const PUBLIC_TEST_KEY: &[u8] =

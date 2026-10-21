@@ -1,0 +1,193 @@
+{
+  "scopeComplete": true,
+  "kind": "Composed exact-current CLI 11-target test scope; original whole-command timeout retained",
+  "sourceHashes": {
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "74f0f17d0eac1e30f4f8de603c0f8a583c5554f726c46b4a3f35ec6e44333259",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+    "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+    "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "211dead8a36bc741a522769dac3517344a43520353a7a862f776d5ffa99cd919",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "761adc7bd52b46a461c431daf7b23d2e8d32b056c95944f304ae519af507a593",
+    "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+    "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+    "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+    "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+    "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+    "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+    "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+    "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7"
+  },
+  "targets": [
+    {
+      "target": "unittests src/lib.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/codex_router_cli-4ffa60890832e19e)",
+      "passed": 550,
+      "failed": 0,
+      "ignored": 5
+    },
+    {
+      "target": "unittests src/main.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/codex_router-33eed01c2607ae67)",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "tests/claude_clients_debug_acceptance.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/claude_clients_debug_acceptance-3c968921e7faaa45)",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "target": "tests/cli_log_policy.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/cli_log_policy-1161116cfb859d2a)",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "tests/compiled_cli_host_acceptance.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/compiled_cli_host_acceptance-1c7d51252cc46479)",
+      "passed": 7,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "tests/debug_host_isolation.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/debug_host_isolation-8a8fe9fceddf83d8)",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "tests/debug_plaintext_cli.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/debug_plaintext_cli-69630eba3ee18b06)",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "tests/default_router_port_cutover.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/default_router_port_cutover-e89d694d95612667)",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 1
+    },
+    {
+      "target": "tests/proxy_overload_passthrough.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/proxy_overload_passthrough-9502576d4008dd8c)",
+      "passed": 1,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "tests/responses_account_recovery.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/responses_account_recovery-832d9ceed33032d0)",
+      "passed": 2,
+      "failed": 0,
+      "ignored": 0
+    },
+    {
+      "target": "codex_router_cli",
+      "passed": 0,
+      "failed": 0,
+      "ignored": 0
+    }
+  ],
+  "counts": {
+    "passed": 565,
+    "failed": 0,
+    "ignored": 7
+  },
+  "completeScopeCommandExits": [
+    0,
+    0
+  ],
+  "completedPhaseCarry": {
+    "kind": "Exact current CLI required target inventory and completed phase carry; failed parent remains timeout",
+    "sourceHashes": {
+      "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "74f0f17d0eac1e30f4f8de603c0f8a583c5554f726c46b4a3f35ec6e44333259",
+      "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+      "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+      "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+      "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+      "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "211dead8a36bc741a522769dac3517344a43520353a7a862f776d5ffa99cd919",
+      "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "761adc7bd52b46a461c431daf7b23d2e8d32b056c95944f304ae519af507a593",
+      "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+      "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+      "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+      "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+      "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+      "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+      "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+      "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7"
+    },
+    "failedParent": "tmp/tui-implementation/c7-density-p3-cli-full-third.json",
+    "failedParentSha256": "f74bec455f889527935f001f28e1a12f658e6205411326aa0978e6a49d18ae01",
+    "raw": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-cli-full-third.log",
+    "rawSha256": "7cd4bf3c888bbf973fba3ea4071f54b1f5401fc07a37ac3acd2001ed5cfb8a94",
+    "completeCurrentPhases": [
+      {
+        "target": "unittests src/lib.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/codex_router_cli-4ffa60890832e19e)",
+        "passed": 550,
+        "failed": 0,
+        "ignored": 5
+      },
+      {
+        "target": "unittests src/main.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/codex_router-33eed01c2607ae67)",
+        "passed": 0,
+        "failed": 0,
+        "ignored": 0
+      },
+      {
+        "target": "tests/claude_clients_debug_acceptance.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/claude_clients_debug_acceptance-3c968921e7faaa45)",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 1
+      },
+      {
+        "target": "tests/cli_log_policy.rs (/private/tmp/2026-10-tui-component-system/build-target/debug/deps/cli_log_policy-1161116cfb859d2a)",
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0
+      }
+    ],
+    "currentTopLevelIntegrationTargets": [
+      "claude_clients_debug_acceptance",
+      "cli_log_policy",
+      "compiled_cli_host_acceptance",
+      "debug_host_isolation",
+      "debug_plaintext_cli",
+      "default_router_port_cutover",
+      "proxy_overload_passthrough",
+      "responses_account_recovery"
+    ],
+    "pendingIntegrationTargets": [
+      "compiled_cli_host_acceptance",
+      "debug_host_isolation",
+      "debug_plaintext_cli",
+      "default_router_port_cutover",
+      "proxy_overload_passthrough",
+      "responses_account_recovery"
+    ],
+    "pendingDocTests": "codex_router_cli",
+    "totalRequiredTargetsIncludingLibBinDoc": 11,
+    "oldWholeCommandExit": -15,
+    "oldWholeCommandTimeout": true,
+    "authority": "Root38 carry actual current-source completed phases; no unrelated successful repeat"
+  },
+  "remainingIntegrationReceipt": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-remaining-targets-first.json",
+    "sha256": "d086171508923da70c0d0bf372bd5cf1c9845c78593492d6b8ff6c24fbc84919",
+    "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-remaining-targets-first.log",
+    "logSha256": "17fce2d50e56ed2965f5d382df34599540c1173d48da20c70022e14f01780dfd",
+    "seconds": 37.98554120911285,
+    "exit": 0
+  },
+  "docReceipt": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-doc-gate.json",
+    "sha256": "94e6965076f31bc1d1c9f2e03b888847db060205c470dafb69046c2f05e087fc",
+    "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-density-p3-doc-gate.log",
+    "logSha256": "c5760aab3f54220a926598b6cce76bc74fccf9bd3cb24f89b4bbc76371cdca53",
+    "seconds": 2.185622749850154,
+    "exit": 0
+  },
+  "limits": [
+    "Original whole-command timeout/-15 is NOT relabeled exit0",
+    "15 owned product/test/helper/golden inputs verified identical across phases; whole normal dependency graph belongs to fresh product-build binding",
+    "Ignored real-vendor/port journeys remain ignored, not accepted",
+    "No screenshot/physical-device/whole-PR acceptance claim"
+  ]
+}

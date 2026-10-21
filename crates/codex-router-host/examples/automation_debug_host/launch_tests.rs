@@ -138,7 +138,8 @@ fn resume_rejects_marker_for_another_root() -> Result<(), Box<dyn std::error::Er
     marker.run_directory = foreign_run.0.clone();
     std::fs::write(&marker_path, serde_json::to_vec(&marker)?)?;
 
-    let error = validate_resume_run_directory(&run.0, 18787).expect_err("foreign marker must fail");
+    let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
+        .expect_err("foreign marker must fail");
     assert!(error.to_string().contains("does not match"));
     Ok(())
 }
@@ -152,7 +153,8 @@ fn resume_rejects_invalid_context_marker() -> Result<(), Box<dyn std::error::Err
     marker.model = "not-luna".to_owned();
     std::fs::write(&marker_path, serde_json::to_vec(&marker)?)?;
 
-    let error = validate_resume_run_directory(&run.0, 18787).expect_err("invalid marker must fail");
+    let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
+        .expect_err("invalid marker must fail");
     assert!(error.to_string().contains("does not match"));
     Ok(())
 }
@@ -162,8 +164,8 @@ fn resume_rejects_live_prior_host_process() -> Result<(), Box<dyn std::error::Er
     let run = TestRunDirectory::create()?;
     run.write_context(std::process::id())?;
 
-    let error =
-        validate_resume_run_directory(&run.0, 18787).expect_err("live marker PID must fail");
+    let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
+        .expect_err("live marker PID must fail");
     assert!(error.to_string().contains("still alive"));
     Ok(())
 }
@@ -173,7 +175,7 @@ fn resume_admits_stopped_owned_private_root() -> Result<(), Box<dyn std::error::
     let run = TestRunDirectory::create()?;
     run.write_context(stopped_process_id()?)?;
 
-    validate_resume_run_directory(&run.0, 18787)?;
+    validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))?;
     Ok(())
 }
 
@@ -220,7 +222,8 @@ fn resume_rejects_symlinked_context_marker() -> Result<(), Box<dyn std::error::E
         .open(&target)?;
     symlink(&target, run.0.join("debug-host-context.json"))?;
 
-    let error = validate_resume_run_directory(&run.0, 18787).expect_err("symlink marker must fail");
+    let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
+        .expect_err("symlink marker must fail");
     assert!(error.to_string().contains("regular file"));
     Ok(())
 }
@@ -417,6 +420,7 @@ fn resume_refuses_changed_credential_root_or_provider_command()
 -> Result<(), Box<dyn std::error::Error>> {
     let run = TestRunDirectory::create()?;
     let mut options = isolated_acp_options();
+    options.run_directory = run.0.clone();
     run.write_context(stopped_process_id()?)?;
     let mut context = read_existing_context(&run.0)?;
     context.router_root = options.router_root.clone();
@@ -522,7 +526,7 @@ fn full_native_argument_order_preserves_owned_hooks_and_merged_profile_controls(
     .with_debug_profile(&profile);
     let mut arguments = vec![OsString::from("-c"), OsString::from("features.hooks=false")];
     arguments.extend(proof_permissions::automation_proof_startup_arguments(
-        &run.0,
+        &run.0.join("agent-communication"),
     )?);
     arguments.extend(spec.arguments());
 

@@ -1,0 +1,401 @@
+{
+  "kind": "partial-compiled-ui-checkpoint",
+  "productHead": "626a5653693c3e7ab6efee7d094914a569cdc687",
+  "sourceBindingDigest": "eb07ad524421f88f9b75f5fe8fbf4952808c89076c1f803ff973b6b2d734128e",
+  "captureDriverSha256": "accac3499d18653dfc843e899a64a11547a3f8cd4248709c616c355b7128c594",
+  "runtimeHarnessSha256": "889557286814e21a2f37bb28fb4b44787bbb834c40a3fa71b0de3a99876c8a4d",
+  "imageCheckerSha256": "150e8d00dc7171d4b4e4698be03e72168b02ea622f3e38ac18f11d0dbe4602c4",
+  "build": "Fresh source-digest capture-driver build after sole Swift OCR whitespace repair; product unchanged at626a5653 plus previous preserved test-only final marker. Driver actual compiler events and strict lint/controls recorded in ocr-producer-handoff.json. Original embedded runtime harness889557... held, not archival substitution. Unchanged CLI component/libtest and harness exact reused bytes with prior Cargo provenance. New final checker150e8d... independently built/qualified by paired Verifier. Old failed originals/target untouched; fresh output required; this declaration claims provenance, not UI observation.",
+  "run": {
+    "exit": 101,
+    "started_at": "2026-10-19T13:33:58.446339+00:00",
+    "observed_at": "2026-10-19T13:34:37.654561+00:00",
+    "work_seconds": 1840.0,
+    "cleanup_seconds": 90.0,
+    "work_deadline": "2026-10-19T14:04:38.446339+00:00",
+    "whole_deadline": "2026-10-19T14:06:08.446339+00:00",
+    "deadline_reached": false,
+    "driver_settled": true,
+    "stop_error": null
+  },
+  "observation": "Eight scenes completed at each of120x36 and76x30. Each grid passed eight image checks, three wrong-image controls and final read-only effect checks. The48x24 tape failed waiting for an unwrapped label before image export;48x12 did not start. Original failures and cleanup evidence retained privately.",
+  "dataAndEffects": "Actual compiled iocraft UI and real PTY input; synthetic account records and read-only fixture effects. No live-account, vendor, remote, production or native terminal-emulator claim.",
+  "inspection": "Paired Verifier personally opened every original. Lead opened all medium originals and checked the wide originals match byte-for-byte the eight wide originals already personally opened.",
+  "limits": [
+    "Only120x36 and76x30 original images retained;48x24 tape failed before PNG export,48x12 unstarted.",
+    "Both completed cases passed8positive+3negative gates and read-only/effects receipts; full32image run failed.",
+    "Actual short fixture names/providers, synthetic data; no long/CJK/native/vendor/remote/live-account claim.",
+    "Original PNGs personally opened; no reconstruction/cropping/annotation.",
+    "Lower Help/Details/list scroll and actual resize not established."
+  ],
+  "images": [
+    {
+      "file": "120x36-compact-quota-all.png",
+      "sha256": "a3adec1e006a5d2be82d8c932f03024091b8c2b333b5522fb3cc1831b7982f2d",
+      "bytes": 217768,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "title": "All accounts",
+      "journey": "Initial All/Shown browse; Up3 focuses Claude Delta.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "All4 names/providers; Account/Status/Quota aligned. Yellow Delta+chevron, cyan title, greyHelp, white ordinary text. No footer/clipping visible.",
+      "geometryAndLimits": "Browse with no active dialog. List scrolling is not established by this frame.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-provider-no-match.png",
+      "sha256": "d2d7ff5752d32b14060169fc87e348331ea7e6535cf2e66ddc5d570283ea63e1",
+      "bytes": 160949,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "title": "Provider search: no matches",
+      "journey": "Ctrl+F; Enter provider choice; type zznomatchzz.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "One inline Search, No matching choices, visible Cancel/Apply. Cyan title, greyHelp/current summary, white text, yellow Shown. Consistent field/value columns.",
+      "geometryAndLimits": "One filter dialog; one inline choice. Search remains in provider field.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-chooser.png",
+      "sha256": "bb86226df5caa96059c86198bb9f62e8f1c204da5d09592643916ee7fa3d84e8",
+      "bytes": 157813,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "title": "Unsaved provider choice",
+      "journey": "Escape no-match; choose OpenAI draft.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Draft OpenAI while Current All/Shown/4/4 unchanged. Fields aligned, Cancel/Apply visible; yellow choices and cyan title.",
+      "geometryAndLimits": "One dialog, inline choice closed, no duplicate panel or browse footer.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-help.png",
+      "sha256": "01729578c4cb5d775a6ea9a131c0d31bae26083cd2a7671cc388616d89c47ede",
+      "bytes": 219281,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "title": "Contextual Help",
+      "journey": "F1 from filter dialog.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Cyan Help title, white section headings, grey bold keys, white descriptions. Legend wraps inside keys column. Pool text ends inside right frame; earlier overflow report withdrawn after full-size reinspection. Close visible.",
+      "geometryAndLimits": "One active Help level; background browse visible. Scrollbar visible; further Help content below fold not scrolled in this scene.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-disabled-choice.png",
+      "sha256": "845d1dadbc24f33420104ffa746a628dd35db18d900b71af0a43e4e9355ffbca",
+      "bytes": 161147,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "title": "Search and choose disabled-account visibility",
+      "journey": "Close Help; choose Claude draft; Tab then open disabled choice.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Draft Claude; one inline Search with yellow selected Shown and white Hidden. Labels aligned; Cancel/Apply visible and no clipping.",
+      "geometryAndLimits": "One dialog with inline choice; background All browse inactive.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-claude.png",
+      "sha256": "0919b77b496ca85926841729e9cfcd2f0f122323a87539d962061991771c8a21",
+      "bytes": 96901,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "title": "Applied Claude filter",
+      "journey": "Choose Hidden then Apply.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Only Claude Gamma/Claude; 1/4 and Disabled Hidden. Account/Status/Quota stable, yellow focus, cyan title, greyHelp; no footer or clipped text.",
+      "geometryAndLimits": "Browse with no active dialog; selected Claude Gamma and committed Hidden filter remain visible.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-cancelled.png",
+      "sha256": "0919b77b496ca85926841729e9cfcd2f0f122323a87539d962061991771c8a21",
+      "bytes": 96901,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "title": "Cancel preserves the applied filter",
+      "journey": "Reopen filters; change draft to OpenAI; Escape discards.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Identical original bytes to Claude committed browse; Gamma only, Hidden1/4 preserved. All alignment/color observations match committed view.",
+      "geometryAndLimits": "Browse with no active dialog; selected Claude Gamma and committed Hidden filter remain visible.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "120x36-compact-quota-details.png",
+      "sha256": "d86434158a978326830422a26d15204123667230fb4e52f3e7476b249b3772fc",
+      "bytes": 148888,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "title": "Selected account Details",
+      "journey": "F4 on Claude Gamma after cancellation.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Selected account Gamma/state/reason; quota windows/reset pace aligned, cyan title, greyHelp, Close visible. No visible overflow.",
+      "geometryAndLimits": "One active Details dialog. Scrollbar and Activity section at lower fold; scrolling/reachability of lower details not established by this single image.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-all.png",
+      "sha256": "ceef63385b7a08d054c64b19e84880c26e711662c051886c51036855d3bfb072",
+      "bytes": 134510,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "title": "All accounts",
+      "journey": "Initial All/Shown browse; Up3 focuses Claude Delta.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Visible Claude Delta/Gamma and partial OpenAI Alpha; provider lines intact. Three Account/Status/Quota headings and stable selection gutter; cyan title, greyHelp, white body, yellow Delta. Quota reasons/windows wrap within column. No generic filler/footer or horizontal overflow.",
+      "geometryAndLimits": "Browse with no active dialog. List scrolling is not established by this frame.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-provider-no-match.png",
+      "sha256": "52f1a75bfc1eb7de7d1d62693033395528ef0f80067086a1d399968424a6c20f",
+      "bytes": 106102,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "title": "Provider search: no matches",
+      "journey": "Ctrl+F; Enter provider choice; type zznomatchzz.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Current summary wraps accounts onto next line inside frame. Provider search zznomatchzz and No matching choices complete. Cancel/Apply reachable; cyan title, greyHelp, yellowShown. One dialog/inline search, stable columns.",
+      "geometryAndLimits": "One active bounded filter dialog; actions visible and actually used by retained tape; no horizontal clipping seen.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-chooser.png",
+      "sha256": "32689d4583f769ab5834aa295507db642d2019c45bbcacefe624c89fd0dfcf4c",
+      "bytes": 102293,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "title": "Unsaved provider choice",
+      "journey": "Escape no-match; choose OpenAI draft.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Draft OpenAI while currentAll/Shown4/4 unchanged. Current summary wraps naturally. Field/value columns aligned, yellow choices, Help and Cancel/Apply visible; no overflow.",
+      "geometryAndLimits": "One active bounded filter dialog; actions visible and actually used by retained tape; no horizontal clipping seen.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-help.png",
+      "sha256": "6cf0fc54b06cbd6eccb2187fd4770c3fc5c50f584e1c92ec5e692196edae2c8f",
+      "bytes": 113508,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "title": "Contextual Help",
+      "journey": "F1 from filter dialog.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Account filter shortcut descriptions wrap within Help frame. Cyan title, grey bold keys and white descriptions; Close visible below content. No border overflow or unfinished empty state.",
+      "geometryAndLimits": "One active Help dialog; scrollbar indicates further content. Closed via Escape in actual tour; lower Help scroll not driven.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-disabled-choice.png",
+      "sha256": "66f7d49f0664c4b30c46c58a9d51a973a217dd3f1a1b306406bd41da9bee6219",
+      "bytes": 105411,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "title": "Search and choose disabled-account visibility",
+      "journey": "Close Help; choose Claude draft; Tab then open disabled choice.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "DraftClaude; one inline Search; yellowShown+chevron, whiteHidden. Current summary wraps inside frame. Cancel/Apply visible, no extra dialog/search/footer.",
+      "geometryAndLimits": "One active bounded filter dialog; actions visible and actually used by retained tape; no horizontal clipping seen.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-claude.png",
+      "sha256": "50656df86c3fa21af14a5bfd288c4df2290108d8918970e3258e0a1fd4a4b8a0",
+      "bytes": 79147,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "title": "Applied Claude filter",
+      "journey": "Choose Hidden then Apply.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Only Gamma/Claude remains with Hidden1/4. Three headings/gutter stable. Reason missingcredential and quota fields wrap within column; no footer/overflow. Focusyellow, titlecyan, Helpgrey.",
+      "geometryAndLimits": "Browse with no active dialog; selected Claude Gamma and committed Hidden filter remain visible.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-cancelled.png",
+      "sha256": "50656df86c3fa21af14a5bfd288c4df2290108d8918970e3258e0a1fd4a4b8a0",
+      "bytes": 79147,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "title": "Cancel preserves the applied filter",
+      "journey": "Reopen filters; change draft to OpenAI; Escape discards.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "Same visible Gamma/ClaudeHidden1/4 after draft cancellation. Stable fields/gutter/colors; no residual dialog/draft, no overflow/footer.",
+      "geometryAndLimits": "Browse with no active dialog; selected Claude Gamma and committed Hidden filter remain visible.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    },
+    {
+      "file": "76x30-compact-quota-details.png",
+      "sha256": "9fd7c63d9fa884f366fa127273d4b44eaa51b2ec83127369e80041ec6b597b0b",
+      "bytes": 96279,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "title": "Selected account Details",
+      "journey": "F4 on Claude Gamma after cancellation.",
+      "verifierPersonallyOpened": true,
+      "leadPersonallyOpened": true,
+      "leadInspectionBasis": "Exact original pixels opened directly; 120x36 originals match previously opened originals byte-for-byte.",
+      "visualReview": "SelectedGamma/state/reason wraps inside frame. Quota windows and topResetpace visible, Close reachable, scrollbar visible. Cyan title/greyHelp/white body, no horizontal overflow.",
+      "geometryAndLimits": "One active Details dialog; lowerResetpace/Activity not visible. Closed via Escape in actual tour; lower scrolling not driven.",
+      "result": "Observed original; this grid passed its checks, but the whole run failed on the 48-column tape."
+    }
+  ]
+}

@@ -177,10 +177,12 @@ impl ApiConnection {
                     ToolAnswer::Success(structured)
                 })
             }
-            ServerJsonRpcMessage::Error(error) => Err(ClientError::Rejected {
-                code: i64::from(error.error.code.0),
-                data: error.error.data,
-            }),
+            ServerJsonRpcMessage::Error(error) if error.id.as_ref() == Some(&id) => {
+                Err(ClientError::Rejected {
+                    code: i64::from(error.error.code.0),
+                    data: error.error.data,
+                })
+            }
             _ => Err(ClientError::Protocol("API answer does not match the call")),
         }
     }

@@ -13,6 +13,7 @@ pub(crate) fn observed_records(
     records: Vec<SessionPickerRecord>,
 ) -> crate::picker_runtime_status::PickerRecordsSnapshot {
     crate::picker_runtime_status::PickerRecordsSnapshot {
+        native_live_coverage: Vec::new(),
         records,
         runtime_coverage: crate::picker_runtime_status::PickerRuntimeCoverage::Available,
     }
@@ -78,6 +79,9 @@ pub(crate) fn picker_record(
         provenance: crate::sessions::SessionRowProvenance::LocalHomeCatalog,
         endpoint_label: None,
         provider_state: None,
+        native_background: None,
+        native_peer: None,
+        native_inventory_view: None,
         session_id: session_id.to_owned(),
         title: title.to_owned(),
         full_title: title.to_owned(),

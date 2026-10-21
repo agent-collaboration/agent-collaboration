@@ -34,7 +34,7 @@ pub(super) enum SessionsPickerFocus {
 }
 
 /// Pure sessions picker state. iocraft owns rendering/input, this owns behavior.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub(crate) struct SessionsPickerModel {
     pub(super) request: SessionsPickerRequest,
     pub(super) width: usize,
@@ -50,10 +50,16 @@ pub(crate) struct SessionsPickerModel {
     pub(super) search: String,
     pub(super) show_help: bool,
     pub(super) source_action: super::source_action_state::PickerSourceAction,
+    pub(super) client_action: super::client_action_state::PickerClientAction,
+    pub(super) provider_choice:
+        codex_router_tui::SearchSelectState<super::provider_filter_model::SessionFilterValue>,
     pub(super) provider_filter: super::provider_filter_model::SessionProviderFilter,
     pub(super) provider_filter_draft: Option<super::provider_filter_model::ProviderFilterDraft>,
+    pub(super) new_session: Option<super::new_session_form::NewSessionDraft>,
+    pub(super) next_client_generation: u64,
     pub(super) details_dialog: Option<super::details_dialog_state::SessionDetailsDialog>,
     pub(super) runtime_coverage: PickerRuntimeCoverage,
+    pub(super) native_live_coverage: Vec<crate::picker_runtime_status::NativeLiveCoverage>,
     focus: SessionsPickerFocus,
     pointer_window_start: Option<usize>,
     visible_indices: Vec<usize>,
@@ -88,10 +94,15 @@ impl SessionsPickerModel {
             search: String::new(),
             show_help: false,
             source_action: super::source_action_state::PickerSourceAction::default(),
+            client_action: super::client_action_state::PickerClientAction::Idle,
+            provider_choice: codex_router_tui::SearchSelectState::Closed,
             provider_filter: super::provider_filter_model::SessionProviderFilter::All,
             provider_filter_draft: None,
             details_dialog: None,
+            new_session: None,
+            next_client_generation: 0,
             runtime_coverage: PickerRuntimeCoverage::Unobserved,
+            native_live_coverage: Vec::new(),
             focus: SessionsPickerFocus::StartNew,
             pointer_window_start: None,
             visible_indices: Vec::new(),
@@ -213,17 +224,30 @@ impl SessionsPickerModel {
             && self.provider_filter_draft.is_none()
             && self.details_dialog.is_none()
         {
-            self.provider_filter_draft = Some(
-                super::provider_filter_model::ProviderFilterDraft::new(self.provider_filter),
-            );
+            self.provider_choice = codex_router_tui::SearchSelectState::Closed;
+            self.provider_filter_draft =
+                Some(super::provider_filter_model::ProviderFilterDraft::new(
+                    self.provider_filter,
+                    self.data_query(),
+                    self.runtime_view,
+                ));
         }
     }
 
     pub(super) fn apply_provider_filters(&mut self) {
+        if self.provider_choice.is_open() {
+            return;
+        }
         let Some(draft) = self.provider_filter_draft.take() else {
             return;
         };
         self.provider_filter = draft.selection;
+        self.root = draft.query.root;
+        self.provider = draft.query.provider;
+        self.source = draft.query.source;
+        self.sort = draft.query.sort;
+        self.runtime_view = draft.runtime_view;
+        self.provider_choice = codex_router_tui::SearchSelectState::Closed;
         self.pointer_window_start = None;
         self.rebuild_visible_rows();
         if self
@@ -236,6 +260,10 @@ impl SessionsPickerModel {
     }
 
     pub(super) fn open_details_dialog(&mut self) {
+        if self.focused_record().is_none() {
+            self.open_new_form();
+            return;
+        }
         if self.provider_filter_draft.is_none()
             && self.fork_confirmation.is_none()
             && matches!(
@@ -269,23 +297,24 @@ impl SessionsPickerModel {
             }
         }
         self.runtime_coverage = snapshot.runtime_coverage;
+        self.native_live_coverage = snapshot.native_live_coverage;
         self.rebuild_visible_rows();
         self.restore_focus_or_fallback(previous_index);
     }
 
     pub(crate) fn invalidate_runtime_statuses(&mut self) {
         self.runtime_coverage = PickerRuntimeCoverage::Unavailable;
-        if self
-            .request
-            .records
-            .iter()
-            .all(|record| record.runtime_status == PickerRuntimeStatus::Unknown)
-        {
+        self.native_live_coverage.clear();
+        if self.request.records.iter().all(|record| {
+            record.runtime_status == PickerRuntimeStatus::Unknown && record.provider_state.is_none()
+        }) {
             return;
         }
         let previous_index = self.focused_visible_index();
         for record in &mut self.request.records {
             record.runtime_status = PickerRuntimeStatus::Unknown;
+            record.provider_state = None;
+            record.native_peer = None;
         }
         self.rebuild_visible_rows();
         self.restore_focus_or_fallback(previous_index);
@@ -347,14 +376,7 @@ impl SessionsPickerModel {
         self.focus = SessionsPickerFocus::StartNew;
     }
 
-    pub(crate) fn focus_start_new_in_window(&mut self, window_start: usize) {
-        if self.provider_filter_draft.is_some() || self.details_dialog.is_some() {
-            return;
-        }
-        self.pointer_window_start = Some(window_start);
-        self.focus = SessionsPickerFocus::StartNew;
-    }
-
+    #[cfg(test)]
     pub(crate) fn focused_session_id(&self) -> Option<&str> {
         self.focused_record()
             .map(|record| record.session_id.as_str())
@@ -404,14 +426,8 @@ impl SessionsPickerModel {
         if self.provider_filter_draft.is_some() || self.details_dialog.is_some() {
             return None;
         }
-        if self
-            .machine_controls
-            .open_new(&self.request.router_registry)
-        {
-            None
-        } else {
-            Some(SessionsPickerOutcome::StartNewSession)
-        }
+        self.open_new_form();
+        None
     }
 
     pub(crate) fn activation_outcome_for_focus(&self) -> Option<SessionsPickerOutcome> {

@@ -1,0 +1,415 @@
+{
+  "at": "2026-10-20T08:53:04.199487+00:00",
+  "kind": "Sharedmodalfieldgapqualified; fresh76/120observationpending, priorfailuresimmutable",
+  "authority": [
+    "Root38/3e42original/12negative",
+    "Root50/Main50essential240qualifier",
+    "Root42/43knownidentityunsupportedcollectionboundary"
+  ],
+  "files": {
+    ".agents/skills/verify-codex-router/SKILL.md": "aaf048e55d4a0f74d5ef297ecbef02e14a03088a05abbd2d5d6ab3433a87b7a8",
+    ".agents/skills/verify-codex-router/references/tui-journeys.md": "b2e53794d1b6c60f55a8980da7a3ffdd9bd6224f33c1421628a8fe153a9c04a1",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test.rs": "b63808d3c7642a3568518984b15254793f4dce383cbc084ae675f13175c872b6",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixed_quota_child.py": "385a2a486a8ee37c71848c2af22d794120547630342b72ac8f780cbbca229afc",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/mod.rs": "0fc61b9ddd4db7b11b80a90508b2a10c125489a81ec3eeb0325de5f0c721bbc0",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_capture.rs": "645f27a895526dbd6d3f69a5ce5db2b44b77e714ed3da398f5bee30af7288bcc",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_observation_wait_test.rs": "2065ca848286a350023b310d5014b8b3daec00bf15dae86ccbc0263bf7f3894d",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_tape.rs": "182033ad49537b7d0d1d7447c62ce1e89004f8158831f9aa6878d458cba74e75",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_tape_test.rs": "64680200547752174c9bed15cbf4538d5150b01580535e1aa4894b91fcc0f2a6",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/run_capture.sh": "f23f9c6d1aca11bd70e30a36dfef351f8f23368d8d69532504df4a7df7f5bf98",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/run_provider_filter_capture.sh": "a060c348e99afd4cc72878b0876399033779a69173ae967e8570cb871560ee00",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift": "8662e2849a9a27da629bdbccf2e66d2cc4350590f5479462a3f8d8dc9c054ab0",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift": "fc4067ac72df7bb285579673dac7917699f6aea3f679385d86fb0ea0e0fdaf4a",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift": "19e6676819b86cf6954730ff23362363d2425dfb9c76e6d19290a9b7e73beeb9",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift": "689bf23998ae69396fc790c5bf8a59a4c5bb9e32309b27a866c29438fcf10f41",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_image.swift": "93db4aee3d7e3c76e8982d6e779809d2664631a9ad8df39c8cdda2c046bb390b",
+    "scripts/tests/test_tui_capture.py": "31a3bcc7395f7dca0ca60480a6260300c3290f7840ce2197c492dbe9cfc7b744",
+    "scripts/tests/test_tui_component_capture.py": "725a03a8c3c7a02e46e4defa62320a111aaa63978e456ae6ad9359248a2443fd",
+    "scripts/tests/test_tui_public_sessions.py": "e9682978fd15823393e5c09992fe7fa0df5ba09fa5033772878549b65e4d61f2",
+    "scripts/tests/test_tui_verification.py": "a8c89598353a45a1bff94cb8a13c7900be878b58ef5e8b4394c3deac2f1d73b7",
+    "scripts/verification/tui_capture.py": "97b742c2d2d7d2c980e163ca37f4bc348b6f6b0b23e30674be6e7cf601f42491",
+    "scripts/verification/tui_capture_lifecycle.py": "4b958e3a5b86dc940abeaa75a7f20d3380fd05da7898c65515c416fe91cfc119",
+    "scripts/verification/tui_component_capture.py": "65100af5c88881ef4db5a092d18d6852f225bdbca8dcd574e6922b2cd6739c85",
+    "scripts/verification/tui_public_sessions.py": "c1d7da680112edb1eb00f3e64a4c899bc838a59f2369c2f5976c5014c1e300ed",
+    "scripts/verification/tui_verification.py": "44aade258aaba54a4c8b888f153361e53e2d74571598c1aa6ef70d24791b3996"
+  },
+  "additional_read_holds": {},
+  "frozen_sources": {
+    ".agents/skills/verify-codex-router/SKILL.md": "aaf048e55d4a0f74d5ef297ecbef02e14a03088a05abbd2d5d6ab3433a87b7a8",
+    ".agents/skills/verify-codex-router/references/tui-journeys.md": "b2e53794d1b6c60f55a8980da7a3ffdd9bd6224f33c1421628a8fe153a9c04a1",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test.rs": "b63808d3c7642a3568518984b15254793f4dce383cbc084ae675f13175c872b6",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixed_quota_child.py": "385a2a486a8ee37c71848c2af22d794120547630342b72ac8f780cbbca229afc",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/mod.rs": "0fc61b9ddd4db7b11b80a90508b2a10c125489a81ec3eeb0325de5f0c721bbc0",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_capture.rs": "645f27a895526dbd6d3f69a5ce5db2b44b77e714ed3da398f5bee30af7288bcc",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_observation_wait_test.rs": "2065ca848286a350023b310d5014b8b3daec00bf15dae86ccbc0263bf7f3894d",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_tape.rs": "182033ad49537b7d0d1d7447c62ce1e89004f8158831f9aa6878d458cba74e75",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_tape_test.rs": "64680200547752174c9bed15cbf4538d5150b01580535e1aa4894b91fcc0f2a6",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/run_capture.sh": "f23f9c6d1aca11bd70e30a36dfef351f8f23368d8d69532504df4a7df7f5bf98",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/run_provider_filter_capture.sh": "a060c348e99afd4cc72878b0876399033779a69173ae967e8570cb871560ee00",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift": "8662e2849a9a27da629bdbccf2e66d2cc4350590f5479462a3f8d8dc9c054ab0",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift": "fc4067ac72df7bb285579673dac7917699f6aea3f679385d86fb0ea0e0fdaf4a",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift": "19e6676819b86cf6954730ff23362363d2425dfb9c76e6d19290a9b7e73beeb9",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift": "689bf23998ae69396fc790c5bf8a59a4c5bb9e32309b27a866c29438fcf10f41",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_image.swift": "93db4aee3d7e3c76e8982d6e779809d2664631a9ad8df39c8cdda2c046bb390b",
+    "scripts/tests/test_tui_capture.py": "31a3bcc7395f7dca0ca60480a6260300c3290f7840ce2197c492dbe9cfc7b744",
+    "scripts/tests/test_tui_component_capture.py": "725a03a8c3c7a02e46e4defa62320a111aaa63978e456ae6ad9359248a2443fd",
+    "scripts/tests/test_tui_public_sessions.py": "e9682978fd15823393e5c09992fe7fa0df5ba09fa5033772878549b65e4d61f2",
+    "scripts/tests/test_tui_verification.py": "a8c89598353a45a1bff94cb8a13c7900be878b58ef5e8b4394c3deac2f1d73b7",
+    "scripts/verification/tui_capture.py": "97b742c2d2d7d2c980e163ca37f4bc348b6f6b0b23e30674be6e7cf601f42491",
+    "scripts/verification/tui_capture_lifecycle.py": "4b958e3a5b86dc940abeaa75a7f20d3380fd05da7898c65515c416fe91cfc119",
+    "scripts/verification/tui_component_capture.py": "65100af5c88881ef4db5a092d18d6852f225bdbca8dcd574e6922b2cd6739c85",
+    "scripts/verification/tui_public_sessions.py": "c1d7da680112edb1eb00f3e64a4c899bc838a59f2369c2f5976c5014c1e300ed",
+    "scripts/verification/tui_verification.py": "44aade258aaba54a4c8b888f153361e53e2d74571598c1aa6ef70d24791b3996"
+  },
+  "source_scope": "25Verifierfilesonly; Mainproductsourcefreeze separate",
+  "source_handoff": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-verification/c7-shared-field-gap-rust-qualification-request.json",
+    "sha256": "90c7fb34b82d9e500b10aca534798ab474f23cec2c8204942cca56ed3ad12b87"
+  },
+  "artifacts": {
+    "capture_driver": {
+      "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/capture_driver",
+      "sha256": "9d01b6e6680ccdca02d877d813d81361047fb419714829b3ca6da6f779c86f2e",
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/deps/quota_storyboard_capture_test-c83201f93f85e092",
+      "features": [],
+      "codesign_verify_exit": 0
+    },
+    "checker": {
+      "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/checker",
+      "sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/c7-split-facts-qualified-artifacts/checker",
+      "features": [],
+      "codesign_verify_exit": 0
+    },
+    "embedded_harness": {
+      "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/embedded_harness",
+      "sha256": "14f5881ba3fc47a40b3729e8bb8c8cdc311017228543108af943719990a49df2",
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/codex-router-quota-reset-test-harness",
+      "features": [],
+      "codesign_verify_exit": 0
+    }
+  },
+  "capture_driver": {
+    "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/capture_driver",
+    "sha256": "9d01b6e6680ccdca02d877d813d81361047fb419714829b3ca6da6f779c86f2e",
+    "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/deps/quota_storyboard_capture_test-c83201f93f85e092",
+    "features": [],
+    "codesign_verify_exit": 0
+  },
+  "checker": {
+    "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/checker",
+    "sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+    "sourceExecutable": "/private/tmp/2026-10-tui-component-system/c7-split-facts-qualified-artifacts/checker",
+    "features": [],
+    "codesign_verify_exit": 0
+  },
+  "embedded_harness": {
+    "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/embedded_harness",
+    "sha256": "14f5881ba3fc47a40b3729e8bb8c8cdc311017228543108af943719990a49df2",
+    "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/codex-router-quota-reset-test-harness",
+    "features": [],
+    "codesign_verify_exit": 0
+  },
+  "driver": {
+    "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/capture_driver",
+    "sha256": "9d01b6e6680ccdca02d877d813d81361047fb419714829b3ca6da6f779c86f2e",
+    "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/deps/quota_storyboard_capture_test-c83201f93f85e092",
+    "features": [],
+    "codesign_verify_exit": 0
+  },
+  "harness": {
+    "path": "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-qualified-artifacts/embedded_harness",
+    "sha256": "14f5881ba3fc47a40b3729e8bb8c8cdc311017228543108af943719990a49df2",
+    "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/codex-router-quota-reset-test-harness",
+    "features": [],
+    "codesign_verify_exit": 0
+  },
+  "Swift_inputs": {
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_image.swift": "93db4aee3d7e3c76e8982d6e779809d2664631a9ad8df39c8cdda2c046bb390b",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift": "8662e2849a9a27da629bdbccf2e66d2cc4350590f5479462a3f8d8dc9c054ab0",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift": "fc4067ac72df7bb285579673dac7917699f6aea3f679385d86fb0ea0e0fdaf4a",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift": "19e6676819b86cf6954730ff23362363d2425dfb9c76e6d19290a9b7e73beeb9",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift": "689bf23998ae69396fc790c5bf8a59a4c5bb9e32309b27a866c29438fcf10f41"
+  },
+  "five_swift_sources": {
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_image.swift": "93db4aee3d7e3c76e8982d6e779809d2664631a9ad8df39c8cdda2c046bb390b",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift": "8662e2849a9a27da629bdbccf2e66d2cc4350590f5479462a3f8d8dc9c054ab0",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift": "fc4067ac72df7bb285579673dac7917699f6aea3f679385d86fb0ea0e0fdaf4a",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift": "19e6676819b86cf6954730ff23362363d2425dfb9c76e6d19290a9b7e73beeb9",
+    "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift": "689bf23998ae69396fc790c5bf8a59a4c5bb9e32309b27a866c29438fcf10f41"
+  },
+  "swift_qualification": "tmp/tui-verification/c7-split-facts-native-qualified-subset.json",
+  "currentSwiftQualification": {
+    "receipt": "tmp/tui-verification/c7-split-facts-apparatus-qualification.json",
+    "sha256": "4fda4d30f199aa33ad01e86dcfdf52ccd0fed9f3802f69ce9936538c7b1b7764",
+    "scope": "431pure/6realpixel/10purewrongreaders+1pixelbypass/fivehistorical48lowerfacts only; no currentproductUI orfulloldcorpus",
+    "input_hashes": {
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_image.swift": "93db4aee3d7e3c76e8982d6e779809d2664631a9ad8df39c8cdda2c046bb390b",
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_checkpoint.swift": "8662e2849a9a27da629bdbccf2e66d2cc4350590f5479462a3f8d8dc9c054ab0",
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift": "fc4067ac72df7bb285579673dac7917699f6aea3f679385d86fb0ea0e0fdaf4a",
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift": "19e6676819b86cf6954730ff23362363d2425dfb9c76e6d19290a9b7e73beeb9",
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift": "689bf23998ae69396fc790c5bf8a59a4c5bb9e32309b27a866c29438fcf10f41"
+    },
+    "checker": {
+      "path": "/private/tmp/2026-10-tui-component-system/c7-split-facts-qualified-artifacts/checker",
+      "sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/verify-current",
+      "features": [],
+      "codesign_verify_exit": 0
+    },
+    "matching_controls": 431,
+    "scratch_mutations": {
+      "old-column": {
+        "failures": "selected-forty-native-boxes,selected-forty-native-order,selected-forty-one-shared-pixel,selected-forty-touching-edge",
+        "cases": "431"
+      },
+      "old-horizontal": {
+        "failures": "selected-forty-native-boxes,selected-forty-native-order,selected-forty-one-shared-pixel,selected-forty-eight-native-blank-overlap,selected-forty-eight-reversed-blank-overlap,native-word-full-58-list-preserves-selected-identity",
+        "cases": "431"
+      },
+      "old-row": {
+        "cases": "431",
+        "failures": "selected-alpha-native-overlapping-rows,selected-alpha-native-reversed-observations,selected-forty-native-boxes,selected-forty-native-order,selected-forty-one-shared-pixel,selected-forty-touching-edge,selected-forty-eight-native-blank-overlap,selected-forty-eight-reversed-blank-overlap,native-word-full-58-list-preserves-selected-identity"
+      },
+      "weak-attribution": {
+        "cases": "431",
+        "failures": "foreign-selected-beta-cannot-borrow-alpha-facts,foreign-selected-beta-cannot-borrow-alpha-short-window,visible-account-attribution-must-fail-closed,visible-account-attribution-must-fail-closed,visible-account-attribution-must-fail-closed,visible-account-attribution-must-fail-closed"
+      },
+      "ambiguous-edge-acceptance": {
+        "failures": "help-reject-ambiguous-leading-identifier-edge,help-reject-ambiguous-trailing-identifier-edge,help-reject-ambiguous-both-identifier-edge",
+        "cases": "431"
+      },
+      "wrong-tag-value-acceptance": {
+        "cases": "431",
+        "failures": "help-exact-tag-wrong-same-length,help-tag-wrong-uppercase-value,help-tag-wrong-case-character,help-tag-internal-character"
+      },
+      "tag-casefold-acceptance": {
+        "failures": "help-tag-wrong-uppercase-value,help-tag-wrong-case-character",
+        "cases": "431"
+      },
+      "old-raster-floor-guard": {
+        "failures": "selected-forty-eight-native-blank-overlap,selected-forty-eight-reversed-blank-overlap,native-word-full-58-list-preserves-selected-identity",
+        "cases": "431"
+      },
+      "ignore-overlap-ink": {
+        "failures": "selected-forty-two-pixel-overlap,selected-forty-shares-two-pixel-columns,selected-forty-eight-ink-overlap",
+        "cases": "431"
+      },
+      "word-ingress-bypass": {
+        "failures": "native-word-space-is-not-content,native-word-empty-is-not-content,native-word-linebreak-is-not-content,native-word-nbsp-is-not-content,native-word-full-58-list-preserves-selected-identity",
+        "cases": "431"
+      }
+    },
+    "retained_checks": 5,
+    "supported_expected_outcomes": 5,
+    "known_unavailable_native_fields": [
+      "old40Help",
+      "old48FloorDraft"
+    ],
+    "known40_status": "Strictunsupported; historicalfailedaggregates/noNormal immutable; manualwholefieldwitness separate",
+    "raw_outputs": {
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-controls.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-controls.stderr": "263a369e7537b19d8fa9e061243db57d2689547f21911b32471a45847d8262c2",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-lint.stdout": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-lint.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-format.stdout": "2ce9758b9f8abd876ec3e76c589e099e8b05377b1e7ea2331e81ee80f07bdff8",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-format.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-types.stdout": "56882e01cb80173ef053c4096e4ee43e3123a15f5c0a06715f96988d48fbd91c",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/python-types.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/driver-build.stdout": "742bfdf672faaf1faad576f54b9289a9c6f03e99f40762323c37cb0ce6f065bc",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/driver-build.stderr": "71fd8c083d6930eccb61d974b1d8ca5a610bd50768d7ab2cd9840fab9cedef5d",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/driver-controls.stdout": "139aeda94848c1f4e73fadcf18174076cd864bb716ee6bcbf08c4e18acee8eae",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/driver-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/six-tape-parser.stdout": "476ce6551134eae9c1f2bae9b18949d655a7a55737a923dfbc08e905b125085a",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/six-tape-parser.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/apparatus-clippy.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/apparatus-clippy.stderr": "8b64b26d4583ff69fa905b4b15e2dcbd274958b0c18085735cea5c4683d13184",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/rustfmt-check.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/rustfmt-check.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-column-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-column-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-column-controls.stdout": "5e6c33990310b0b86a47a165ed30ad95d62841980ef98a51c921a158984568d4",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-column-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-horizontal-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-horizontal-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-horizontal-controls.stdout": "d5fef6d0a3345a6bd88186733dfa4056364f1c20a686946f0a8a8a14010d5a22",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-horizontal-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-row-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-row-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-row-controls.stdout": "95866794830d8e31765beb641126f1eb7c0e3a8dd15eb8e23dec1ca7ff218b87",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-row-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/weak-attribution-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/weak-attribution-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/weak-attribution-controls.stdout": "4efa289947545fd2c8e995be09453748a9d981b44d0d9d0799c7dd2d36266595",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/weak-attribution-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ambiguous-edge-acceptance-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ambiguous-edge-acceptance-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ambiguous-edge-acceptance-controls.stdout": "8495a5af25e10de4969e8b08973ca2b8857616a73d76fe303f849b1946db6940",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ambiguous-edge-acceptance-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/wrong-tag-value-acceptance-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/wrong-tag-value-acceptance-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/wrong-tag-value-acceptance-controls.stdout": "c9cb71e771bac7f5e3e0d6630e457b9dc32ce942e32e03f5f60e0feca72b2737",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/wrong-tag-value-acceptance-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/tag-casefold-acceptance-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/tag-casefold-acceptance-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/tag-casefold-acceptance-controls.stdout": "948ad5c760a25289e617df169e392719ac8c2a307cee0e8de44e5c8a4a53945d",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/tag-casefold-acceptance-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-raster-floor-guard-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-raster-floor-guard-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-raster-floor-guard-controls.stdout": "2324e8b61998073d5c977b6dd9857f4b74ecb567178c01e2bef9b51f8f3e6ff1",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/old-raster-floor-guard-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ignore-overlap-ink-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ignore-overlap-ink-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ignore-overlap-ink-controls.stdout": "8a27bee79b3661e3c16e30c6973982da0836279db71bf6da02cc606555127fb9",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/ignore-overlap-ink-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/word-ingress-bypass-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/word-ingress-bypass-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/word-ingress-bypass-controls.stdout": "4e6b957d7f196342ade7b0ceca1f204f66f1c0b43fc025a15b09ae90375f56f7",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/word-ingress-bypass-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/swift-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/swift-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/swift-controls.stdout": "197bd9641a9fae98fbe1d205278eedb9953ebede20f20918a6d82c7d11c5d4f9",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/swift-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-controls-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-controls-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-controls.stdout": "07f8de462953153271e9c13dd74419fab38fd9f3120bc6e578f13706f8e4fb22",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-bypass-compile.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-bypass-compile.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-bypass-red.stdout": "7f123bd791b82dbd684ed30023640c9c569fe99c9a25133e3167eac3e1fc0d0c",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/pixel-bypass-red.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-00-current48.stdout": "8f8441e1bfdf80adeb13d6aba7cc084a7a725a4a23a002d0b5406a84631a574d",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-00-current48.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-01-current48.stdout": "0b9b5fcaa17cb87af532959bc1886175db8f15a4912a269eb6a8979efe662d42",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-01-current48.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-02-current48.stdout": "bbd9f53519a809bacb90f4aeca588f60d4ad81b3beb30177cfaf22395842ea34",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-02-current48.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-03-current48.stdout": "a0726a8074be015a37b8ad936e093c1cec752f966723dd20e4001cadd9c781c1",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-03-current48.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-04-current48.stdout": "a0288fdc5491f7d53a0ce6ec171e7bb95536b7d2ca5690ccdb888f46c0da7b75",
+      "/private/tmp/2026-10-tui-component-system/c7-split-facts-apparatus-qualification/image-04-current48.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "all_groups_absent": true,
+    "no_signals": true,
+    "sources_unchanged": true,
+    "originals_unchanged": true
+  },
+  "qualification": "tmp/tui-verification/c7-shared-field-gap-rust-qualification.json",
+  "Rust_qualification": {
+    "receipt": "tmp/tui-verification/c7-shared-field-gap-rust-qualification.json",
+    "sha256": "906c563adff6f21c3e0d740cbb813d45c4ac07d89fda13f4766ab30592003508",
+    "driver_controls": {
+      "passed": 34,
+      "failed": 0,
+      "ignored": 10
+    },
+    "sixVHSparserExit": 0,
+    "all_groups_absent": true,
+    "raw_outputs": {
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/driver-build.stdout": "f632b6f3e338248ee479b38099f2d67ba4ae53ab60d88c515c4d73cba230aed6",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/driver-build.stderr": "6a9a6bd42e9047304364889bb277bf2e19e7483a431ac1d6d39b4e82e3e1f354",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/driver-controls.stdout": "fa6d0692ec1c04b492544db5e7a2c6f51020e3d8e223432d2f97a3ce44175868",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/driver-controls.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/six-tape-parser.stdout": "f217ccbf83e623a6d4070dd0644a95f3ef668eb07761b35a0fbba3abd2df91b6",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/six-tape-parser.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/apparatus-clippy.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/apparatus-clippy.stderr": "75aa2674f606781f1cd1e07035b6b102d7483d84aa93dee701fdd75234978142",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/rustfmt-check.stdout": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/private/tmp/2026-10-tui-component-system/c7-shared-field-gap-rust-qualification/rustfmt-check.stderr": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  },
+  "normal_contract": {
+    "positive_scenes": 42,
+    "runtime_wrong_images": 12,
+    "grids": [
+      [
+        48,
+        24
+      ],
+      [
+        48,
+        12
+      ],
+      [
+        40,
+        24
+      ],
+      [
+        32,
+        24
+      ],
+      [
+        76,
+        30
+      ],
+      [
+        120,
+        36
+      ]
+    ],
+    "per_job": {
+      "preflight": 50,
+      "work": 1900,
+      "cleanup": 90,
+      "whole": 2040
+    },
+    "six_disjoint_aggregate_whole": 12240,
+    "properties": "CreditP1:62.5k; reusedHeadingP2:5h99%+Weeklypace; extraforeignBetaheadingnegative",
+    "unsupported": "Old40Help/old48Floor strictunsupported/manualappearance separate; noNormalpromotion"
+  },
+  "nonignored_controls": {
+    "passed": 34,
+    "failed": 0,
+    "ignored": 10,
+    "exit": 0
+  },
+  "actualPinnedVhsSixParser": {
+    "passed": 1,
+    "failed": 0,
+    "exit": 0,
+    "six_grids": true,
+    "UI_started": false
+  },
+  "current_product_manifest": "tmp/tui-implementation/c7-density-p3-default-target-handoff.json",
+  "current_product_manifest_sha256": "b51e850414e724f6e03c54cef690d3c6897e289a2d01b2a5165417b3ac8e42b2",
+  "product_freeze": "/private/tmp/2026-10-tui-component-system/product-c7-density-p3-20261020T074923Z/c7-density-p3-product-freeze.json",
+  "product_freeze_sha256": "20883455517121ce3b423c9a6aefccfa3ee4c36c723fdbc11ec5f650cfe887a5",
+  "component_source_equivalence": {
+    "meaning": "Samee873runtime; exactlyonehelpertestsource967insteadcompiled240, no productionchange. Old565/default9retainscompiledsourcebinding.",
+    "handoff": "tmp/tui-implementation/c7-modal-crop-repair-final-handoff.json",
+    "sha256": "30ffd9fc0f99187c2f2259f33b7a1ca2e211c175abb246c36d2c10b2e55b3f46"
+  },
+  "quality": {
+    "seconds": 105.38065112475306,
+    "Python17": true,
+    "Rust33": true,
+    "sixVHSparser": true,
+    "Swift431": true,
+    "realPixel6": true,
+    "wrongReaders": 11,
+    "retainedNative5": true,
+    "all_groups_absent": true,
+    "no_signals": true,
+    "V25unchanged": true,
+    "originals_unchanged": true,
+    "Rust34": true,
+    "shared_gap_rust_seconds": 34.35117470892146,
+    "onlyThreeChangedFromPrior": [
+      ".agents/skills/verify-codex-router/references/tui-journeys.md",
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_observation_wait_test.rs",
+      "crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/quota_component_tape.rs"
+    ],
+    "remaining22Unchanged": true
+  },
+  "limits": [
+    "NoUIlaunch; all6currentNormal/personalreviewpending",
+    "Historicalfailed58.707/153.940/runtime failures remainfailed/no unruninference",
+    "KnownstrictFloor/40unsupportednotwaived; manualappearance separatelybound",
+    "Fixtureonly; no publicHost/provider/device acceptance",
+    "Consumedrequest stale2010prose superseded byRoot/Main2040/12240; newplansmustuse42/12",
+    "No product/producttest/Git/install/production writes",
+    "New76oldfailure39.351 remainsFAILED/zeroPNG/childandeffectsUNKNOWN; newimmutable76successorrequired, nooldattemptpromotion",
+    "Onlytape/waittest/referencechanged; exactfiveSwift/native0cce/Pythoninputs unchanged, prior105.381qualifiedsubsetretainedbyhash",
+    "Current32brokenunavailableword RootacceptedP3repair waitsMainafterremainingfrozencaptures; no currentvisualacceptance"
+  ]
+}

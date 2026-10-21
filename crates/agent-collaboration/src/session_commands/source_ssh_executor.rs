@@ -17,6 +17,33 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
+pub(crate) async fn inspect_local_clients(
+    context: &CliContext,
+) -> Result<(UuidIdentity, SourceReply), super::source_ssh_protocol::SourceReadError> {
+    use super::source_ssh_protocol::SourceReadError;
+    let launch = super::claude_launch_target::ClaudeLaunchTarget::resolve(context)
+        .map_err(|_| SourceReadError::Rejected(SourceRejection::SourceUnavailable))?;
+    let manifest = launch
+        .service_manifest()
+        .await
+        .map_err(|_| SourceReadError::Rejected(SourceRejection::SourceUnavailable))?;
+    let directory = super::session_launch_selection::collaboration_service_directory(context)
+        .map_err(|_| SourceReadError::Rejected(SourceRejection::SourceUnavailable))?;
+    let request = SourceRequest {
+        service_directory: directory
+            .to_string_lossy()
+            .into_owned()
+            .try_into()
+            .map_err(|_| SourceReadError::Rejected(SourceRejection::InvalidRequest))?,
+        expected_service: manifest.service_id.clone(),
+        operation: SourceOperation::ClientInventory,
+    };
+    let reply = execute_read(&request, context)
+        .await
+        .map_err(SourceReadError::Rejected)?;
+    Ok((manifest.service_id, reply))
+}
+
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum SourceEntryFailure {
     #[error("{0}")]
@@ -71,6 +98,22 @@ pub(crate) fn run_source_entry(
             Ok(())
         } else {
             Err(SourceEntryFailure::NativeExit(status))
+        }
+    } else if matches!(&request.operation, SourceOperation::NativeClaude { .. }) {
+        let result = runtime.block_on(native_claude::execute_native_claude(&request, context));
+        let rejection = result.as_ref().err().copied();
+        write_response(result)?;
+        match rejection {
+            Some(reason) => Err(SourceEntryFailure::Rejected(reason)),
+            None => Ok(()),
+        }
+    } else if matches!(&request.operation, SourceOperation::ProviderAction { .. }) {
+        let result = runtime.block_on(provider_actions::execute_provider_action(&request));
+        let rejection = result.as_ref().err().copied();
+        write_response(result)?;
+        match rejection {
+            Some(reason) => Err(SourceEntryFailure::Rejected(reason)),
+            None => Ok(()),
         }
     } else {
         let result = runtime.block_on(async {
@@ -128,18 +171,52 @@ async fn connect_expected(request: &SourceRequest) -> Result<CollaborationClient
     Ok(client)
 }
 
-async fn execute_read(
+pub(super) async fn execute_read(
     request: &SourceRequest,
     context: &CliContext,
 ) -> Result<SourceReply, SourceRejection> {
+    if matches!(
+        &request.operation,
+        SourceOperation::ProviderAction { .. } | SourceOperation::NativeClaude { .. }
+    ) {
+        return Err(SourceRejection::InvalidRequest);
+    }
     let client = connect_expected(request).await?;
     match &request.operation {
+        SourceOperation::ClientInventory => {
+            let inventory = client
+                .list_endpoints()
+                .await
+                .map_err(|_| SourceRejection::SourceUnavailable)?;
+            let launch = super::claude_launch_target::ClaudeLaunchTarget::resolve_for_service(
+                context,
+                Path::new(request.service_directory.as_str()).to_owned(),
+            )
+            .map_err(|_| SourceRejection::SourceUnavailable)?;
+            let manifest = launch
+                .service_manifest()
+                .await
+                .map_err(|_| SourceRejection::SourceUnavailable)?;
+            if manifest.service_id != request.expected_service
+                || inventory.service_epoch != manifest.service_epoch
+            {
+                return Err(SourceRejection::StaleBinding);
+            }
+            let native_claude = launch.launch_availability(context).await;
+            Ok(SourceReply::ClientInventory {
+                inventory,
+                native_claude,
+            })
+        }
         SourceOperation::Endpoints => Ok(SourceReply::Endpoints {
             inventory: client
                 .list_endpoints()
                 .await
                 .map_err(|_| SourceRejection::SourceUnavailable)?,
         }),
+        SourceOperation::ProviderInspect { binding, target } => {
+            provider_actions::inspect_stored_provider(request, binding, target).await
+        }
         SourceOperation::NativeSessions { params } => {
             verify_service(&params.endpoint, &request.expected_service)?;
             Ok(SourceReply::NativeSessions {
@@ -155,7 +232,49 @@ async fn execute_read(
                 page: client
                     .list_provider_sessions(params.clone())
                     .await
-                    .map_err(|_| SourceRejection::SourceUnavailable)?,
+                    .map_err(|error| {
+                        match super::source_inventory_failure::InventoryReadFailure::from_client(
+                            &error,
+                        ) {
+                            super::source_inventory_failure::InventoryReadFailure::Unavailable(
+                                _,
+                            ) => SourceRejection::SourceUnavailable,
+                            super::source_inventory_failure::InventoryReadFailure::Invalid {
+                                ..
+                            } => SourceRejection::InvalidRequest,
+                        }
+                    })?,
+            })
+        }
+        SourceOperation::ProviderOperationShow {
+            service_epoch,
+            operation_id,
+        } => {
+            if client.identity().service_epoch != *service_epoch {
+                return Err(SourceRejection::StaleBinding);
+            }
+            use super::source_ssh_protocol::SourceProviderOperationRead;
+            let result = match client
+                .show_provider_conversation_operation(
+                    collaboration_client::protocol::ConversationOperationShowRequest {
+                        operation_id: operation_id.clone(),
+                    },
+                )
+                .await
+            {
+                Ok(operation) => SourceProviderOperationRead::Found {
+                    operation: Box::new(operation),
+                },
+                Err(error) => match error.conversation_failure() {
+                    Some(failure) => SourceProviderOperationRead::Failed {
+                        failure: Box::new(failure),
+                    },
+                    None => return Err(SourceRejection::SourceUnavailable),
+                },
+            };
+            Ok(SourceReply::ProviderOperation {
+                operation_id: operation_id.clone(),
+                result: Box::new(result),
             })
         }
         SourceOperation::Prepare {
@@ -174,7 +293,24 @@ async fn execute_read(
                 launch: Box::new(prepared),
             })
         }
-        SourceOperation::Launch { .. } => Err(SourceRejection::InvalidRequest),
+        SourceOperation::Launch { .. }
+        | SourceOperation::ProviderAction { .. }
+        | SourceOperation::NativeClaude { .. } => Err(SourceRejection::InvalidRequest),
+    }
+}
+
+pub(super) async fn execute_client_mutation(
+    request: &SourceRequest,
+    context: &CliContext,
+) -> Result<SourceReply, SourceRejection> {
+    match request.operation {
+        SourceOperation::NativeClaude { .. } => {
+            native_claude::execute_native_claude(request, context).await
+        }
+        SourceOperation::ProviderAction { .. } => {
+            provider_actions::execute_provider_action(request).await
+        }
+        _ => Err(SourceRejection::InvalidRequest),
     }
 }
 
@@ -403,3 +539,9 @@ async fn establish_connection_at_boundary(
 #[cfg(test)]
 #[path = "source_ssh_executor_tests.rs"]
 mod tests;
+
+#[path = "source_provider_actions.rs"]
+mod provider_actions;
+
+#[path = "source_native_claude.rs"]
+mod native_claude;

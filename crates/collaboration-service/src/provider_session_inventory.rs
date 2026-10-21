@@ -5,12 +5,10 @@ use crate::collaboration_application::{
     ProviderInventoryFailure, ProviderInventoryFailureKind, ResultByteBudget,
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
-use claude_code_peer_messaging::PeerSessionStatus;
 use collaboration_protocol::{
-    ChannelDescription, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
-    HostedProviderOrigin, NativeSessionScope, NativeSessionSource, NativeSessionView,
-    ProviderSessionListParams, ProviderSessionListResult, ProviderSessionState,
-    ProviderSessionSummary, ProviderWorkingDirectory, SessionRef,
+    ChannelDescription, HostedProviderOrigin, NativeSessionScope, NativeSessionSource,
+    NativeSessionView, ProviderSessionListParams, ProviderSessionListResult, ProviderSessionState,
+    ProviderSessionSummary, UuidIdentity,
 };
 use serde::{Deserialize, Serialize};
 use session_event_model::SessionState;
@@ -23,8 +21,10 @@ struct ProviderInventoryCursor {
     scope: NativeSessionScope,
     source: NativeSessionSource,
     query: Option<String>,
-    updated_at_ms: i64,
+    sort_time_ms: i64,
     session_id: String,
+    origin: ProviderInventoryOrigin,
+    service_epoch: UuidIdentity,
     expires_at: i64,
 }
 
@@ -105,20 +105,25 @@ fn scope_matches(scope: &NativeSessionScope, cwd: &str) -> bool {
     }
 }
 
-fn cursor_after(record_time: i64, record_id: &str, cursor: &ProviderInventoryCursor) -> bool {
-    record_time < cursor.updated_at_ms
-        || (record_time == cursor.updated_at_ms && record_id > cursor.session_id.as_str())
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ProviderInventoryOrigin {
+    Managed,
+    NativePeer,
+    NativeBackground,
 }
 
-fn interactive_status(status: &PeerSessionStatus) -> ClaudeCodeInteractiveStatus {
-    match status {
-        PeerSessionStatus::Busy => ClaudeCodeInteractiveStatus::Busy,
-        PeerSessionStatus::Idle => ClaudeCodeInteractiveStatus::Idle,
-        PeerSessionStatus::Waiting => ClaudeCodeInteractiveStatus::Waiting,
-        PeerSessionStatus::Shell => ClaudeCodeInteractiveStatus::Shell,
-        PeerSessionStatus::Unreported => ClaudeCodeInteractiveStatus::Unreported,
-        PeerSessionStatus::Other(_) => ClaudeCodeInteractiveStatus::Other,
-    }
+struct ProviderInventoryRow {
+    sort_time_ms: i64,
+    session_id: String,
+    origin: ProviderInventoryOrigin,
+    summary: ProviderSessionSummary,
+}
+
+fn cursor_after(row: &ProviderInventoryRow, cursor: &ProviderInventoryCursor) -> bool {
+    row.sort_time_ms < cursor.sort_time_ms
+        || (row.sort_time_ms == cursor.sort_time_ms
+            && (row.session_id.as_str(), row.origin) > (cursor.session_id.as_str(), cursor.origin))
 }
 
 /// Pages a provider endpoint's hosted sessions, or Claude Code's live terminal sessions.
@@ -138,12 +143,6 @@ pub(crate) async fn list_provider_sessions(
         return Err(invalid(
             "Claude Code terminal discovery supports source interactive or all",
         ));
-    }
-    if is_claude
-        && matches!(params.view, NativeSessionView::Stored)
-        && matches!(params.source, NativeSessionSource::Interactive)
-    {
-        return Err(ProviderInventoryFailure::NoStoredTerminalInventory);
     }
     if params.endpoint.service_id != identity.service_id {
         return Err(failure(ProviderInventoryFailureKind::WrongService));
@@ -173,6 +172,7 @@ pub(crate) async fn list_provider_sessions(
                 .and_then(|bytes| serde_json::from_slice::<ProviderInventoryCursor>(&bytes).ok());
             let Some(cursor) = decoded.filter(|cursor| {
                 cursor.endpoint == params.endpoint
+                    && cursor.service_epoch == identity.service_epoch
                     && cursor.view == view_name(params.view)
                     && cursor.scope == params.scope
                     && cursor.source == params.source
@@ -195,65 +195,79 @@ pub(crate) async fn list_provider_sessions(
             Err(_) => return Err(failure(ProviderInventoryFailureKind::Unavailable)),
         }
     };
-    let mut rows: Vec<(i64, String, ProviderSessionSummary)> = Vec::new();
+    let mut rows: Vec<ProviderInventoryRow> = Vec::new();
     let mut skipped_records = None;
-    if is_claude && !matches!(params.view, NativeSessionView::Stored) {
-        if let Some(registry) = identity.claude_code_sessions.clone() {
-            let live = match tokio::task::spawn_blocking(move || registry.live_sessions()).await {
-                Ok(Ok(live)) => live,
-                _ => return Err(failure(ProviderInventoryFailureKind::Unavailable)),
+    let mut native_coverage = None;
+    if is_claude
+        && !(matches!(params.view, NativeSessionView::Stored)
+            && matches!(params.source, NativeSessionSource::All))
+    {
+        let observed = crate::native_claude_catalogue::read_native_catalogue(
+            identity,
+            &params.endpoint,
+            params.view,
+        )
+        .await?;
+        native_coverage = Some(observed.coverage);
+        skipped_records = observed.skipped_records;
+        for summary in observed.sessions {
+            let (sort_time_ms, name, working_directory, origin) = match &summary {
+                ProviderSessionSummary::ClaudeCodeInteractive {
+                    updated_at,
+                    name,
+                    working_directory,
+                    ..
+                } => (
+                    updated_at.saturating_mul(1000),
+                    name,
+                    working_directory,
+                    ProviderInventoryOrigin::NativePeer,
+                ),
+                ProviderSessionSummary::ClaudeCodeBackground {
+                    started_at,
+                    peer,
+                    name,
+                    working_directory,
+                    ..
+                } => (
+                    peer.as_ref()
+                        .map_or(*started_at, |peer| peer.updated_at)
+                        .saturating_mul(1000),
+                    name,
+                    working_directory,
+                    ProviderInventoryOrigin::NativeBackground,
+                ),
+                ProviderSessionSummary::HostedProvider { .. } => {
+                    return Err(invalid("managed record in native catalogue"));
+                }
             };
-            let mut skipped = live.skipped_records;
-            for session in live.sessions {
-                let session_id = String::from(session.session_id.clone());
-                let cwd = session.cwd.to_string_lossy().into_owned();
-                let target = SessionRef {
-                    endpoint: params.endpoint.clone(),
-                    session_id: session.session_id.clone(),
-                };
-                let Some(working_directory) = ProviderWorkingDirectory::try_from(cwd.clone()).ok()
-                else {
-                    skipped = skipped.saturating_add(1);
-                    continue;
-                };
-                if !scope_matches(&params.scope, &cwd)
-                    || params.query.as_ref().is_some_and(|query| {
-                        let query = query.to_lowercase();
-                        !session_id.to_lowercase().contains(&query)
-                            && !cwd.to_lowercase().contains(&query)
-                            && !session
-                                .name
-                                .as_ref()
-                                .is_some_and(|name| name.to_lowercase().contains(&query))
-                    })
-                {
-                    continue;
-                }
-                if let Some(name) = session.name.as_deref() {
-                    identity.display_names.remember(target.clone(), name);
-                } else {
-                    identity.display_names.forget(target.clone());
-                }
-                rows.push((
-                    session.updated_at.saturating_mul(1_000),
-                    session_id,
-                    ProviderSessionSummary::ClaudeCodeInteractive {
-                        origin: ClaudeCodeInteractiveOrigin::ClaudeCodeInteractive,
-                        target,
-                        name: session.name,
-                        working_directory,
-                        status: interactive_status(&session.status),
-                        started_at: session.started_at,
-                        updated_at: session.updated_at,
-                        status_updated_at: session.status_updated_at,
-                        kind: session.kind,
-                        entrypoint: session.entrypoint,
-                    },
-                ));
+            let session_id = String::from(summary.target().session_id.clone());
+            let cwd = String::from(working_directory.clone());
+            if !scope_matches(&params.scope, &cwd)
+                || params.query.as_ref().is_some_and(|query| {
+                    let query = query.to_lowercase();
+                    !session_id.to_lowercase().contains(&query)
+                        && !cwd.to_lowercase().contains(&query)
+                        && !name
+                            .as_ref()
+                            .is_some_and(|name| name.to_lowercase().contains(&query))
+                })
+            {
+                continue;
             }
-            skipped_records = Some(skipped);
-        } else {
-            return Err(failure(ProviderInventoryFailureKind::Unavailable));
+            if let Some(name) = name {
+                identity
+                    .display_names
+                    .remember(summary.target().clone(), name);
+            } else {
+                identity.display_names.forget(summary.target().clone());
+            }
+            rows.push(ProviderInventoryRow {
+                sort_time_ms,
+                session_id,
+                origin,
+                summary,
+            });
         }
     }
     for record in inventory {
@@ -286,23 +300,31 @@ pub(crate) async fn list_provider_sessions(
             continue;
         }
         let approver = record.approver;
-        rows.push((
-            record.updated_at_ms,
+        rows.push(ProviderInventoryRow {
+            sort_time_ms: record.updated_at_ms,
             session_id,
-            ProviderSessionSummary::HostedProvider {
+            origin: ProviderInventoryOrigin::Managed,
+            summary: ProviderSessionSummary::HostedProvider {
                 origin: is_claude.then_some(HostedProviderOrigin::HostedProvider),
                 target: record.target,
                 working_directory: record.working_directory,
                 updated_at: record.updated_at_ms.div_euclid(1_000),
                 state,
+                requested_policy: record.requested_policy,
                 approver,
                 created_by: record.created_by,
             },
-        ));
+        });
     }
-    rows.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    rows.sort_by(|left, right| {
+        right
+            .sort_time_ms
+            .cmp(&left.sort_time_ms)
+            .then_with(|| left.session_id.cmp(&right.session_id))
+            .then_with(|| left.origin.cmp(&right.origin))
+    });
     if let Some(cursor) = &cursor {
-        rows.retain(|(time, session_id, _)| cursor_after(*time, session_id, cursor));
+        rows.retain(|row| cursor_after(row, cursor));
     }
     let has_more = rows.len() > params.page_size as usize;
     rows.truncate(params.page_size as usize);
@@ -316,8 +338,10 @@ pub(crate) async fn list_provider_sessions(
             scope: params.scope.clone(),
             source: params.source,
             query: params.query.clone(),
-            updated_at_ms: previous.0,
-            session_id: previous.1.clone(),
+            sort_time_ms: previous.sort_time_ms,
+            session_id: previous.session_id.clone(),
+            origin: previous.origin,
+            service_epoch: identity.service_epoch.clone(),
             expires_at: chrono::Utc::now().timestamp() + 60,
         };
         let encoded = serde_json::to_vec(&cursor)
@@ -339,7 +363,8 @@ pub(crate) async fn list_provider_sessions(
     let result = ProviderSessionListResult {
         endpoint: params.endpoint,
         observed_at,
-        sessions: rows.into_iter().map(|(_, _, row)| row).collect(),
+        sessions: rows.into_iter().map(|row| row.summary).collect(),
+        native_coverage,
         skipped_records,
         next_cursor,
     };

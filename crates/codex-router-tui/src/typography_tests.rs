@@ -132,3 +132,24 @@ fn surface_header_gap_is_explicit_and_preserves_the_existing_default() {
         );
     }
 }
+
+#[test]
+fn shared_notice_roles_distinguish_success_warning_and_error_from_selection() {
+    for (role, color) in [
+        (UiTextRole::Success, Color::Green),
+        (
+            UiTextRole::Warning,
+            Color::Rgb {
+                r: 255,
+                g: 165,
+                b: 0,
+            },
+        ),
+        (UiTextRole::Error, Color::Red),
+    ] {
+        let canvas = element!(UiText(content:"Explicit notice".to_owned(),role)).render(None);
+        let style = canvas.cell(0, 0).unwrap().text_style().unwrap();
+        assert_eq!(style.color, Some(color));
+        assert_eq!(style.weight, Weight::Normal);
+    }
+}

@@ -1,0 +1,360 @@
+{
+  "at": "2026-10-20T09:07:20.075142+00:00",
+  "grid": [
+    76,
+    30
+  ],
+  "wrapper_exit": 1,
+  "driver_exit": 101,
+  "driver_exit_receipt": {
+    "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/driver-exit.json",
+    "sha256": "4cf085712725a290394691c944fe7724ecc7c940b85c1ceba00c00b347f97bc2"
+  },
+  "seconds": 50.80364983389154,
+  "recorded_pids": [
+    10624,
+    10632,
+    10637,
+    10659,
+    10661,
+    10867,
+    10868
+  ],
+  "remaining_owned_processes": [],
+  "private_profile": "/private/tmp/2026-10-tui-component-system/vhs-run-10632-0",
+  "profile_absent": true,
+  "cleanup_error_absent": true,
+  "Vsignals_orstop": false,
+  "child_exit": 0,
+  "durable_fixture_external_requests": 0,
+  "durable_fixture_persisted_writes": 0,
+  "fixture_finished": "QUOTA_COMPONENT_FIXTURE_FINISHED scenario=Normal released=false external_requests=0 persisted_writes=0",
+  "normal_receipt_exists": false,
+  "gallery_exists": false,
+  "actual_gallery_path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/component-gallery-manifest.json",
+  "retained_original_layer_pairs": 1979,
+  "all_layer_hashes_verified": true,
+  "archive_index_unchanged": true,
+  "V25_original_archive_unchanged": true,
+  "original_fullindex_product_hold_released_after_intake": true,
+  "images": [
+    {
+      "checkpoint": "component-quota-browse-credit-window",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse-credit-window.png",
+      "sha256": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-heading",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse-pace-heading.png",
+      "sha256": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-value",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse-pace-value.png",
+      "sha256": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-browse-page-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse-page-returned.png",
+      "sha256": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-browse",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse.png",
+      "sha256": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-confirm-help-identity.png",
+      "sha256": "e3e4801c9058e787f3a0478e2930fabd6a0ba7034e7813ae2fe6b252b2a08b66",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-confirm-help-returned.png",
+      "sha256": "0b03d1b323507c275060a11fc6d89cef30504e0609feaebf08f238c7809c5169",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-confirm-help-top.png",
+      "sha256": "f775497adc625f2bcd028295f0b1bf55364153f0d10fffa92c7f8736e0faf062",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-confirm-no-returned.png",
+      "sha256": "1b8912d9a760be58dc806ed59cdacd884f1762a520534be54bc3fb811c0cc609",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-confirm-no.png",
+      "sha256": "4b0a564d79035230c6708d59879de5941d1415e10d7faad558e37e3e4c9f48ff",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-confirm-yes.png",
+      "sha256": "0b03d1b323507c275060a11fc6d89cef30504e0609feaebf08f238c7809c5169",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-credits-balance.png",
+      "sha256": "5e8dc5fec0a69b69c80dc91bc99a0a4937a9377a005350897788074fe1cbb7aa",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-credits-identity.png",
+      "sha256": "3675e2693cb8dc4ab2cf87f3568fd81ae670fa613c3b38fa9dff1a0a875775a7",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-credits-policy-boundary.png",
+      "sha256": "7ea5abd68954f8f4017b580fc48306c3777ccb5727e9e270ec2b425fe2c714e8",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-credits-refreshed-balance.png",
+      "sha256": "19f367f26325d4dbe2a6b8afc59b4252417e1d2cf627f57b49a2c382f52c7037",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-credits-refreshed-freshness.png",
+      "sha256": "19f367f26325d4dbe2a6b8afc59b4252417e1d2cf627f57b49a2c382f52c7037",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-credits-refreshed-observation.png",
+      "sha256": "3744cd2f86304708187997b248db1911492dd98a2a8946b341cfb26a30da7616",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-details-bottom.png",
+      "sha256": "2715e790a932673e44c6aa9e09c446f7d565e5f548d6234caab7984d2142fa2c",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-details-top.png",
+      "sha256": "ed7574ac2c08c067e132ba3bfaa68b32c7920c959f0f9b8bfa33503e6e63c962",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-floor-cancelled.png",
+      "sha256": "b9a5062144d79fbee0afdfb0b71e78c55c2b339712831a810cf18da6276d35e2",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-floor-draft.png",
+      "sha256": "059ff3d1004f63f1189a164d2ba11f75b99e4c1306b236016f1d36886eb5af33",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-floor-original.png",
+      "sha256": "b9a5062144d79fbee0afdfb0b71e78c55c2b339712831a810cf18da6276d35e2",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-floor-saved.png",
+      "sha256": "934ab784c44326a19fb5db1874039fc0cb046b16693b9add96c985538b4c2952",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-help-bottom.png",
+      "sha256": "1179e8454d88b4f6c09487b905ef1305bafd8c4279e4110acd6898650d7ac33a",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-help-top.png",
+      "sha256": "b64c7de188f503122e2af8cb0fafb23ee84e550a64ea383ec7f9e6afba260c3d",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-next-account.png",
+      "sha256": "32ef43f4539f00ccc189e5171819532552a44d8e02db54cc56bad2169bde1a39",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-options-identity.png",
+      "sha256": "4e03268b226fc58e76f65015803397982f9e93f767fd2478589abe963ae18703",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-cancelled.png",
+      "sha256": "effa7926f7cf62c163cc9a34971bbbd59b24368bba5b537353e71a235d1e394e",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-choice-returned.png",
+      "sha256": "effa7926f7cf62c163cc9a34971bbbd59b24368bba5b537353e71a235d1e394e",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-choice.png",
+      "sha256": "fc282e66741d71e029ebc16a6ce9171f1d936644a769d348f98fcdc1b370b660",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-draft.png",
+      "sha256": "2bb04e07f64be67013699f13d865dc02c90315347f89bd710974688d98fe7462",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-no-match.png",
+      "sha256": "eb62f2e0eb63bb7d39d54f3c321348e45d400c15e80f3ea6c69e9bc03f6394b3",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-original.png",
+      "sha256": "effa7926f7cf62c163cc9a34971bbbd59b24368bba5b537353e71a235d1e394e",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-policy-saved.png",
+      "sha256": "2bb04e07f64be67013699f13d865dc02c90315347f89bd710974688d98fe7462",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-refresh-result.png",
+      "sha256": "412ef686369409ace7228a0f0ab365c7af683b1ceb27c048e5533bf53d72db1e",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-reset-inventory.png",
+      "sha256": "4e03268b226fc58e76f65015803397982f9e93f767fd2478589abe963ae18703",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-reset-last-page.png",
+      "sha256": "19bb3db9d2f345b97705812b43be598f42a656cb90d71f2885a14e191338f825",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-reset-result-bottom.png",
+      "sha256": "a6f3a895e9de6f7fe2eb571d98a8487da75dc62379a11a664e0e1f7569d2cb02",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-reset-result.png",
+      "sha256": "546d476b8b15a3bd404e053eb79a7c577f9e65b70c7563d78ae3e5d4e16298e7",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-reset-review.png",
+      "sha256": "4e03268b226fc58e76f65015803397982f9e93f767fd2478589abe963ae18703",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-restored-account.png",
+      "sha256": "ab0b1e3b0041b3e91ace19a69c43178538cbc31b26e1aa098ec3c1f9e1749783",
+      "width": 790,
+      "height": 582
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-returned.png",
+      "sha256": "805d44fda90ff9eb52ba281f26850fcaf8c15a104b89598f31396308c5f3a00e",
+      "width": 790,
+      "height": 582
+    }
+  ],
+  "automatic_results": [
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse-credit-window.image-observation.json",
+      "sha256": "9ddf99d230f80c6fdfe4dbc7db6ddaa3f2ce6be6f02aca5fa46edb44eca2f201",
+      "checkpoint": "component-quota-browse-credit-window",
+      "negative": false,
+      "missing": [
+        "visible selected account is missing or ambiguous"
+      ],
+      "unexpected": []
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/observation-76x30/quota-component-normal-76x30/component-quota-browse.image-observation.json",
+      "sha256": "e3fd07167359489673aa57ff2e85d1c0ebbfb35e6296239cd18fc17a4296ca6f",
+      "checkpoint": "component-quota-browse",
+      "negative": false,
+      "missing": [],
+      "unexpected": []
+    }
+  ],
+  "limits": [
+    "Original images and actual native checks only; personal review still pending",
+    "No Host/provider/device/public acceptance; external fixture ports synthetic"
+  ]
+}

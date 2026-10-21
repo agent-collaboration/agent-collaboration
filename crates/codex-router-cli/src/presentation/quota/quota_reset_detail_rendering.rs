@@ -24,7 +24,16 @@ pub(super) struct ResetDetailDocument {
     pub(super) sections: Vec<ResetDetailSection>,
 }
 
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub(super) enum ResetSectionRole {
+    Content,
+    Inventory,
+    Decision,
+    Result,
+}
+
 pub(super) struct ResetDetailSection {
+    role: ResetSectionRole,
     pub(super) title: StyledText,
     pub(super) rows: Vec<ResetDetailRow>,
 }
@@ -43,8 +52,8 @@ pub(super) enum ResetDetailRow {
         marker_color: Color,
     },
     Choices {
-        no_label: String,
-        yes_label: String,
+        no_label: StyledText,
+        yes_label: StyledText,
     },
     Spacer,
 }
@@ -111,10 +120,11 @@ pub(super) fn render_reset_panel(
     let account = document
         .account
         .map(|text| render_styled_text(text, inner_width));
+    let mut choices = None;
     let sections = document
         .sections
         .into_iter()
-        .map(|section| render_section(section, inner_width))
+        .map(|section| render_section(section, inner_width, false, &mut choices))
         .collect::<Vec<_>>();
 
     element! {
@@ -140,10 +150,10 @@ pub(super) fn render_reset_panel_content(
     snapshot: &ResetWorkflowSnapshot,
     target: &ResetPaneTarget,
     width: usize,
-    height: usize,
     inventory_page_start: usize,
     inventory_page_size: usize,
     spinner_tick: usize,
+    mut confirmation_choices: Option<AnyElement<'static>>,
 ) -> AnyElement<'static> {
     let document = reset_detail_document(
         snapshot,
@@ -152,15 +162,29 @@ pub(super) fn render_reset_panel_content(
         inventory_page_size,
         quota_spinner_tick(spinner_tick),
     );
-    let title = (snapshot.phase() == WorkflowPhase::Result)
-        .then(|| render_styled_text(document.title, width.saturating_sub(2)));
+    let title = (snapshot.phase() == WorkflowPhase::Result).then(|| {
+        element!(Text(
+            content: document.title.content,
+            color: document.title.color,
+            weight: document.title.weight,
+            wrap: TextWrap::Wrap,
+        ))
+        .into_any()
+    });
     let sections = document
         .sections
         .into_iter()
-        .map(|section| render_section(section, width.saturating_sub(2)))
+        .map(|section| {
+            render_section(
+                section,
+                width.saturating_sub(2),
+                true,
+                &mut confirmation_choices,
+            )
+        })
         .collect::<Vec<_>>();
     element! {
-        View(width: width as u32, height: height as u32, flex_direction: FlexDirection::Column, overflow: Overflow::Hidden) {
+        View(width: width as u32,max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
             #(title)
             #(sections)
         }
@@ -168,36 +192,54 @@ pub(super) fn render_reset_panel_content(
     .into_any()
 }
 
-fn render_section(section: ResetDetailSection, width: usize) -> AnyElement<'static> {
-    let title: AnyElement<'static> =
-        element!(UiHeading(content: section.title.content, level: UiHeadingLevel::Section))
-            .into_any();
+fn render_section(
+    section: ResetDetailSection,
+    width: usize,
+    natural: bool,
+    choices: &mut Option<AnyElement<'static>>,
+) -> AnyElement<'static> {
+    let reveal = natural && section.role == ResetSectionRole::Inventory;
+    let decision = natural && section.role == ResetSectionRole::Decision;
+    let show_title = !(decision || natural && section.role == ResetSectionRole::Result);
+    let title = show_title.then(|| {
+        if natural && section.role == ResetSectionRole::Inventory {
+            element!(Text(content: section.title.content, color: Color::White, weight: Weight::Bold, wrap: TextWrap::Wrap)).into_any()
+        } else {
+            element!(UiHeading(content: section.title.content, level: UiHeadingLevel::Section)).into_any()
+        }
+    });
     let rows = section
         .rows
         .into_iter()
-        .map(|row| render_detail_row(row, width))
+        .map(|row| render_detail_row(row, width, natural, choices))
         .collect::<Vec<_>>();
     element! {
         View(
             width: 100pct,
             flex_direction: FlexDirection::Column,
-            margin_top: 1,
+            margin_top: if decision {0}else {1},
         ) {
-            #(title)
-            #(rows)
+            codex_router_tui::FocusReveal(has_focus:reveal) {#(title) #(rows)}
         }
     }
     .into_any()
 }
 
-fn render_detail_row(row: ResetDetailRow, width: usize) -> AnyElement<'static> {
+fn render_detail_row(
+    row: ResetDetailRow,
+    width: usize,
+    natural: bool,
+    choices: &mut Option<AnyElement<'static>>,
+) -> AnyElement<'static> {
     match row {
+        ResetDetailRow::Text(text) if natural=>element!(Text(content:text.content,color:text.color,weight:text.weight,wrap:TextWrap::Wrap)).into_any(),
         ResetDetailRow::Text(text) => render_styled_text(text, width),
         ResetDetailRow::Field {
             label,
             value,
             value_color,
         } => {
+            if natural {return element!(codex_router_tui::FormField(label,label_width:DETAIL_LABEL_WIDTH as u16,stacked:width<52) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into_any();}
             let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH);
             element! {
                 View(width: 100pct) {
@@ -215,18 +257,27 @@ fn render_detail_row(row: ResetDetailRow, width: usize) -> AnyElement<'static> {
             description,
             marker_color,
         } => {
+            if natural && width<56 {
+                return element! {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+                    View(column_gap:1,flex_shrink:0.0_f32) {
+                        Text(content:marker,color:marker_color,wrap:TextWrap::NoWrap)
+                        Text(content:id_hint,color:Color::White,wrap:TextWrap::NoWrap)
+                    }
+                    Text(content:description,color:Color::White,wrap:TextWrap::Wrap)
+                }}.into_any();
+            }
             let description_width = width
                 .saturating_sub(CREDIT_MARKER_WIDTH)
                 .saturating_sub(CREDIT_ID_WIDTH);
             element! {
-                View(width: 100pct) {
+                View(width: 100pct,column_gap:if natural {2}else {0}) {
                     View(width: CREDIT_MARKER_WIDTH as u32) {
-                        Text(content: fit_line(&marker, CREDIT_MARKER_WIDTH), color: marker_color, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+                        Text(content: if natural {marker}else {fit_line(&marker, CREDIT_MARKER_WIDTH)}, color: marker_color, weight: Weight::Bold, wrap: TextWrap::NoWrap)
                     }
                     View(width: CREDIT_ID_WIDTH as u32) {
-                        Text(content: fit_line(&id_hint, CREDIT_ID_WIDTH), color: Color::White, wrap: TextWrap::NoWrap)
+                        Text(content: if natural {id_hint}else {fit_line(&id_hint, CREDIT_ID_WIDTH)}, color: Color::White, wrap: TextWrap::NoWrap)
                     }
-                    Text(content: fit_line(&description, description_width), color: Color::White, wrap: TextWrap::NoWrap)
+                    View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {Text(content: if natural {description}else {fit_line(&description, description_width)}, color: Color::White, wrap: if natural {TextWrap::Wrap}else {TextWrap::NoWrap})}
                 }
             }
             .into_any()
@@ -234,13 +285,19 @@ fn render_detail_row(row: ResetDetailRow, width: usize) -> AnyElement<'static> {
         ResetDetailRow::Choices {
             no_label,
             yes_label,
-        } => element! {
+        } => {
+            if let Some(controls)=choices.take() {return controls;}
+            element! {
+            View(width:100pct,flex_direction:FlexDirection::Column) {
+            codex_router_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:codex_router_tui::UiTextRole::Warning,wrap:TextWrap::Wrap)
             View(width: 100pct, column_gap: 4) {
-                Text(content: no_label, color: Color::Yellow, weight: Weight::Bold, wrap: TextWrap::NoWrap)
-                Text(content: yes_label, color: Color::Yellow, weight: Weight::Bold, wrap: TextWrap::NoWrap)
+                Text(content: no_label.content, color: no_label.color, weight: no_label.weight, wrap: TextWrap::NoWrap)
+                Text(content: yes_label.content, color: yes_label.color, weight: yes_label.weight, wrap: TextWrap::NoWrap)
+            }
             }
         }
-        .into_any(),
+        .into_any()
+        },
         ResetDetailRow::Spacer => element! { Text(content: "") }.into_any(),
     }
 }
@@ -291,6 +348,7 @@ fn reset_detail_document(
 fn inspection_sections(snapshot: &ResetWorkflowSnapshot, spinner: &str) -> Vec<ResetDetailSection> {
     let activities = snapshot.activities();
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Checking live eligibility"),
         rows: vec![
             activity_field("Weekly usage", &activities.inspection_live_usage, spinner),
@@ -333,7 +391,7 @@ fn inspected_sections(
             value_color: if inspection_eligible {
                 Color::Green
             } else {
-                Color::Yellow
+                codex_router_tui::UiTextRole::Warning.color()
             },
         });
         if weekly.provenance == ResetValueProvenance::PreviousLiveRefreshing {
@@ -351,10 +409,12 @@ fn inspected_sections(
 
     vec![
         ResetDetailSection {
+            role: ResetSectionRole::Content,
             title: heading("Live eligibility"),
             rows: eligibility_rows,
         },
         ResetDetailSection {
+            role: ResetSectionRole::Inventory,
             title: heading(credit_section_title(
                 inventory_page_start,
                 inventory_page_size,
@@ -425,6 +485,7 @@ fn credit_rows(
     if saved_credit_count(&target.saved_reset_credits)
         .is_some_and(|saved_count| saved_count != inventory.len())
     {
+        rows.push(ResetDetailRow::Spacer);
         rows.push(warning_text(format!(
             "Saved count differs: {} saved, {} live.",
             target.saved_reset_credits,
@@ -435,9 +496,7 @@ fn credit_rows(
 }
 
 fn confirmation_sections(snapshot: &ResetWorkflowSnapshot) -> Vec<ResetDetailSection> {
-    let mut rows = vec![warning_text(
-        "This consumes one scarce reset credit and cannot be undone.",
-    )];
+    let mut rows = Vec::new();
     if let Some(weekly) = snapshot.live_weekly() {
         rows.push(ResetDetailRow::Field {
             label: "Weekly remaining".to_owned(),
@@ -463,25 +522,44 @@ fn confirmation_sections(snapshot: &ResetWorkflowSnapshot) -> Vec<ResetDetailSec
     }
     rows.push(ResetDetailRow::Spacer);
     rows.push(ResetDetailRow::Choices {
-        no_label: if snapshot.confirmation_selection() == ConfirmationSelection::No {
-            "[No]".to_owned()
-        } else {
-            "No".to_owned()
+        no_label: StyledText {
+            content: if snapshot.confirmation_selection() == ConfirmationSelection::No {
+                "[No]".to_owned()
+            } else {
+                "No".to_owned()
+            },
+            color: if snapshot.confirmation_selection() == ConfirmationSelection::No {
+                Color::Yellow
+            } else {
+                Color::White
+            },
+            weight: Weight::Bold,
         },
-        yes_label: if snapshot.yes_enabled()
-            && snapshot.confirmation_selection() == ConfirmationSelection::Yes
-        {
-            "[Yes]".to_owned()
-        } else if snapshot.yes_enabled() {
-            "Yes".to_owned()
-        } else {
-            "Yes disabled".to_owned()
+        yes_label: StyledText {
+            content: if snapshot.yes_enabled()
+                && snapshot.confirmation_selection() == ConfirmationSelection::Yes
+            {
+                "[Yes]".to_owned()
+            } else if snapshot.yes_enabled() {
+                "Yes".to_owned()
+            } else {
+                "Yes disabled".to_owned()
+            },
+            color: if !snapshot.yes_enabled() {
+                Color::Grey
+            } else if snapshot.confirmation_selection() == ConfirmationSelection::Yes {
+                Color::Yellow
+            } else {
+                Color::White
+            },
+            weight: Weight::Bold,
         },
     });
     if let Some(reason) = snapshot.disabled_yes_reason() {
         rows.push(muted_text(disabled_reason(reason)));
     }
     vec![ResetDetailSection {
+        role: ResetSectionRole::Decision,
         title: heading("Confirm reset credit"),
         rows,
     }]
@@ -493,6 +571,7 @@ fn revalidation_sections(
 ) -> Vec<ResetDetailSection> {
     let activities = snapshot.activities();
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Rechecking live eligibility"),
         rows: vec![
             activity_field("Weekly usage", &activities.revalidation_live_usage, spinner),
@@ -509,12 +588,13 @@ fn revalidation_sections(
 
 fn committing_sections(spinner: &str) -> Vec<ResetDetailSection> {
     vec![ResetDetailSection {
+        role: ResetSectionRole::Content,
         title: heading("Reset request sent"),
         rows: vec![
             ResetDetailRow::Field {
                 label: "Provider".to_owned(),
                 value: format!("{spinner} waiting for a definitive result"),
-                value_color: Color::Yellow,
+                value_color: codex_router_tui::UiTextRole::Secondary.color(),
             },
             ResetDetailRow::Spacer,
             muted_text("The request will not be retried automatically."),
@@ -526,7 +606,7 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
     let (title, summary, assurance, color) = match result {
         Some(WorkflowResult::Known(KnownConsumeOutcome::Reset { windows_reset })) => (
             "Success — reset completed",
-            format!("Provider confirmed {windows_reset} quota windows reset."),
+            format!("Provider confirmed {windows_reset} quota {} reset.",if *windows_reset == 1 {"window"}else {"windows"}),
             "One reset credit was consumed.".to_owned(),
             Color::Green,
         ),
@@ -534,19 +614,19 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
             "Definitive provider result",
             "Provider reports nothing to reset.".to_owned(),
             "The provider returned a definitive response.".to_owned(),
-            Color::Yellow,
+            codex_router_tui::UiTextRole::Warning.color(),
         ),
         Some(WorkflowResult::Known(KnownConsumeOutcome::NoCredit)) => (
             "Definitive provider result",
             "Provider reports no reset credit.".to_owned(),
             "The provider returned a definitive response.".to_owned(),
-            Color::Yellow,
+            codex_router_tui::UiTextRole::Warning.color(),
         ),
         Some(WorkflowResult::Known(KnownConsumeOutcome::AlreadyRedeemed)) => (
             "Definitive provider result",
             "Provider reports credit already redeemed.".to_owned(),
             "The provider returned a definitive response.".to_owned(),
-            Color::Yellow,
+            codex_router_tui::UiTextRole::Warning.color(),
         ),
         Some(WorkflowResult::OutcomeUnknown(reason)) => (
             "Outcome unknown — do not retry",
@@ -558,7 +638,7 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
             "Not consumed",
             format!("Reset refused before consume: {}.", reason.message()),
             "No consume request was sent. No reset credit was consumed.".to_owned(),
-            Color::Yellow,
+            codex_router_tui::UiTextRole::Warning.color(),
         ),
         None => (
             "Result unavailable",
@@ -575,6 +655,7 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
         },
         account: None,
         sections: vec![ResetDetailSection {
+            role: ResetSectionRole::Result,
             title: heading("Result"),
             rows: vec![
                 normal(summary),
@@ -588,7 +669,7 @@ fn result_document(result: Option<&WorkflowResult>) -> ResetDetailDocument {
                 muted_text(
                     "Saved quota may remain stale until the normal quota refresh updates it.",
                 ),
-                accent_text("Return to quota status."),
+                muted_text("Return to quota status."),
             ],
         }],
     }

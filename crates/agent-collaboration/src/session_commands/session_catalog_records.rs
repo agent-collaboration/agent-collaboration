@@ -5,8 +5,8 @@ use super::{
     format_recency_at_ms, normalize_path, session_context_from_cwd, truncate_end,
 };
 use collaboration_client::protocol::{
-    ChannelDescription, ClaudeCodeInteractiveStatus, EndpointDescription, EndpointRef,
-    NativeSessionSource, ProviderKind, ProviderSessionState, ProviderSessionSummary, SessionRef,
+    ChannelDescription, EndpointDescription, EndpointRef, NativeSessionSource, ProviderKind,
+    ProviderSessionState, ProviderSessionSummary, SessionRef,
 };
 use collaboration_client::session_catalog::{
     SessionHistorySource, StoredSessionRecord, read_session_conversation_history,
@@ -24,11 +24,12 @@ pub(crate) enum SessionPickerIdentity {
     LocalCodex(String),
     HostedCodex(SessionRef),
     HostedProvider(SessionRef),
+    NativeClaude(SessionRef),
 }
 
 impl SessionPickerIdentity {
     pub(crate) fn is_provider(&self) -> bool {
-        matches!(self, Self::HostedProvider(_))
+        matches!(self, Self::HostedProvider(_) | Self::NativeClaude(_))
     }
 }
 
@@ -49,6 +50,9 @@ pub(crate) struct SessionPickerRecord {
     pub(crate) machine_display_label: Option<String>,
     pub(crate) endpoint_label: Option<String>,
     pub(crate) provider_state: Option<ProviderSessionState>,
+    pub(crate) native_background: Option<NativeBackgroundRecord>,
+    pub(crate) native_peer: Option<collaboration_client::protocol::NativeClaudePeerObservation>,
+    pub(crate) native_inventory_view: Option<crate::picker_runtime_status::NativeCatalogueView>,
     pub(crate) session_id: String,
     pub(crate) title: String,
     pub(crate) full_title: String,
@@ -76,6 +80,10 @@ pub(crate) struct SessionPickerRecord {
     pub(crate) runtime_status: PickerRuntimeStatus,
 }
 
+#[path = "native_catalogue_record.rs"]
+mod native_catalogue_record;
+use native_catalogue_record::{NativeBackgroundRecord, native_peer_runtime_status};
+
 enum SessionPathSpace {
     InvokingMachine,
     SourceMachine,
@@ -88,12 +96,87 @@ pub(crate) struct SessionConversationPreview {
 }
 
 impl SessionPickerRecord {
+    pub(crate) fn native_restore_eligible(&self) -> bool {
+        !self.native_background.as_ref().is_some_and(|job| {
+            matches!(
+                job.state,
+                collaboration_client::protocol::NativeClaudeBackgroundState::Unknown { .. }
+            ) && self.native_peer.is_none()
+        })
+    }
+    pub(crate) fn with_native_inventory_view(
+        mut self,
+        view: crate::picker_runtime_status::NativeCatalogueView,
+    ) -> Self {
+        self.native_inventory_view = Some(view);
+        if view == crate::picker_runtime_status::NativeCatalogueView::Stored {
+            self.runtime_status = if self
+                .native_background
+                .as_ref()
+                .is_some_and(|job| job.state.is_terminal())
+            {
+                PickerRuntimeStatus::NotLoaded
+            } else {
+                PickerRuntimeStatus::Unknown
+            };
+        }
+        self
+    }
+
+    /// Only the qualified Stored → Loaded observation corroborates an existing row.
+    /// In-stream repeats, conflicting directories and handles remain invalid.
+    pub(crate) fn corroborate_native_loaded(&mut self, mut live: Self) -> Result<(), &'static str> {
+        use crate::picker_runtime_status::NativeCatalogueView;
+        if !matches!(self.identity, SessionPickerIdentity::NativeClaude(_))
+            || self.identity != live.identity
+            || self.native_inventory_view != Some(NativeCatalogueView::Stored)
+            || live.native_inventory_view != Some(NativeCatalogueView::Loaded)
+            || self.cwd != live.cwd
+            || self.source_context != live.source_context
+            || matches!((&self.native_background,&live.native_background),(Some(stored),Some(current)) if stored.job_handle!=current.job_handle)
+        {
+            return Err("conflicting native inventory observation");
+        }
+        if live.native_background.is_none() {
+            live.native_background = self.native_background.clone();
+        }
+        live.created_at_ms = self.created_at_ms;
+        live.created = self.created.clone();
+        *self = live;
+        Ok(())
+    }
+
+    pub(crate) fn validate_native_summary(
+        summary: &ProviderSessionSummary,
+        view: crate::picker_runtime_status::NativeCatalogueView,
+    ) -> bool {
+        use crate::picker_runtime_status::NativeCatalogueView;
+        if collaboration_client::protocol::UuidIdentity::try_from(String::from(
+            summary.target().session_id.clone(),
+        ))
+        .is_err()
+        {
+            return false;
+        }
+        match summary {
+            ProviderSessionSummary::ClaudeCodeInteractive { .. } => {
+                view == NativeCatalogueView::Loaded
+            }
+            ProviderSessionSummary::ClaudeCodeBackground { state, peer, .. } => {
+                view == NativeCatalogueView::Stored || state.is_loaded() || peer.is_some()
+            }
+            ProviderSessionSummary::HostedProvider { .. } => false,
+        }
+    }
+
     pub(crate) fn client_provider_family(&self) -> SessionProviderFamily {
         match self.identity {
             SessionPickerIdentity::LocalCodex(_) | SessionPickerIdentity::HostedCodex(_) => {
                 SessionProviderFamily::Codex
             }
-            SessionPickerIdentity::HostedProvider(_) => self.provider_family,
+            SessionPickerIdentity::HostedProvider(_) | SessionPickerIdentity::NativeClaude(_) => {
+                self.provider_family
+            }
         }
     }
 
@@ -106,6 +189,18 @@ impl SessionPickerRecord {
         if !self.identity.is_provider() {
             return self;
         }
+        if let SessionPickerIdentity::NativeClaude(target) = &self.identity {
+            self.provider_family = if target == summary.target()
+                && target.endpoint == endpoint.endpoint
+                && String::from(target.endpoint.endpoint_id.clone()) == "claude-local"
+                && summary.is_native_claude()
+            {
+                SessionProviderFamily::External(ProviderKind::ClaudeCode)
+            } else {
+                SessionProviderFamily::Unclassified
+            };
+            return self;
+        }
         let mut kinds = endpoint
             .channels
             .iter()
@@ -115,7 +210,17 @@ impl SessionPickerRecord {
             });
         let kind = kinds.next();
         let consistent = summary.target().endpoint == endpoint.endpoint
-            && matches!(&self.identity, SessionPickerIdentity::HostedProvider(target) if target == summary.target())
+            && match (&self.identity, summary) {
+                (
+                    SessionPickerIdentity::HostedProvider(target),
+                    ProviderSessionSummary::HostedProvider { .. },
+                )
+                | (
+                    SessionPickerIdentity::NativeClaude(target),
+                    ProviderSessionSummary::ClaudeCodeInteractive { .. },
+                ) => target == summary.target(),
+                _ => false,
+            }
             && kinds.next().is_none()
             && !endpoint
                 .channels
@@ -193,6 +298,9 @@ impl SessionPickerRecord {
             provenance: SessionRowProvenance::LocalHomeCatalog,
             endpoint_label: None,
             provider_state: None,
+            native_background: None,
+            native_peer: None,
+            native_inventory_view: None,
             session_id: record.session_id.clone(),
             title: display_title,
             explicit_name: record.name.clone(),
@@ -270,6 +378,43 @@ impl SessionPickerRecord {
         endpoint_label: &str,
         path_space: SessionPathSpace,
     ) -> Self {
+        let native_background = match summary {
+            ProviderSessionSummary::ClaudeCodeBackground {
+                job_handle,
+                state,
+                status,
+                ..
+            } => Some(NativeBackgroundRecord {
+                job_handle: job_handle.clone(),
+                state: state.clone(),
+                status: *status,
+            }),
+            _ => None,
+        };
+        let native_peer = match summary {
+            ProviderSessionSummary::ClaudeCodeBackground { peer, .. } => peer.clone(),
+            ProviderSessionSummary::ClaudeCodeInteractive {
+                name,
+                status,
+                started_at,
+                updated_at,
+                status_updated_at,
+                kind,
+                entrypoint,
+                ..
+            } => Some(
+                collaboration_client::protocol::NativeClaudePeerObservation {
+                    name: name.clone(),
+                    status: *status,
+                    started_at: *started_at,
+                    updated_at: *updated_at,
+                    status_updated_at: *status_updated_at,
+                    kind: kind.clone(),
+                    entrypoint: entrypoint.clone(),
+                },
+            ),
+            ProviderSessionSummary::HostedProvider { .. } => None,
+        };
         let (
             target,
             working_directory,
@@ -288,7 +433,7 @@ impl SessionPickerRecord {
             } => (
                 target,
                 working_directory,
-                *updated_at,
+                Some(*updated_at),
                 Some(*state),
                 None,
                 None,
@@ -305,24 +450,33 @@ impl SessionPickerRecord {
             } => (
                 target,
                 working_directory,
-                *updated_at,
+                Some(*updated_at),
                 None,
                 name.clone(),
                 Some(*started_at),
-                match status {
-                    ClaudeCodeInteractiveStatus::Busy => PickerRuntimeStatus::Active,
-                    ClaudeCodeInteractiveStatus::Idle | ClaudeCodeInteractiveStatus::Shell => {
-                        PickerRuntimeStatus::Idle
-                    }
-                    ClaudeCodeInteractiveStatus::Waiting => PickerRuntimeStatus::Blocked,
-                    ClaudeCodeInteractiveStatus::Unreported
-                    | ClaudeCodeInteractiveStatus::Other => PickerRuntimeStatus::Unknown,
-                },
+                native_peer_runtime_status(*status),
+            ),
+            ProviderSessionSummary::ClaudeCodeBackground {
+                target,
+                working_directory,
+                name,
+                started_at,
+                state,
+                peer,
+                ..
+            } => (
+                target,
+                working_directory,
+                peer.as_ref().map(|peer| peer.updated_at),
+                None,
+                name.clone(),
+                Some(*started_at),
+                NativeBackgroundRecord::runtime_status(state, peer.as_ref()),
             ),
         };
         let session_id = String::from(target.session_id.clone());
         let cwd = String::from(working_directory.clone());
-        let updated_at_ms = updated_at_seconds.saturating_mul(1_000);
+        let updated_at_ms = updated_at_seconds.map(|seconds| seconds.saturating_mul(1_000));
         let name = name.and_then(|name| {
             let name = name.trim();
             (!name.is_empty()).then(|| name.to_owned())
@@ -332,9 +486,18 @@ impl SessionPickerRecord {
             .clone()
             .unwrap_or_else(|| format!("{endpoint_label} session · {context}"));
         Self {
-            identity: SessionPickerIdentity::HostedProvider(target.clone()),
+            identity: match summary {
+                ProviderSessionSummary::HostedProvider { .. } => {
+                    SessionPickerIdentity::HostedProvider(target.clone())
+                }
+                ProviderSessionSummary::ClaudeCodeInteractive { .. }
+                | ProviderSessionSummary::ClaudeCodeBackground { .. } => {
+                    SessionPickerIdentity::NativeClaude(target.clone())
+                }
+            },
             provider_family: match summary {
-                ProviderSessionSummary::ClaudeCodeInteractive { .. } => {
+                ProviderSessionSummary::ClaudeCodeInteractive { .. }
+                | ProviderSessionSummary::ClaudeCodeBackground { .. } => {
                     SessionProviderFamily::External(ProviderKind::ClaudeCode)
                 }
                 ProviderSessionSummary::HostedProvider { .. } => {
@@ -346,16 +509,19 @@ impl SessionPickerRecord {
             provenance: SessionRowProvenance::ObservedProvider,
             endpoint_label: Some(endpoint_label.to_owned()),
             provider_state,
+            native_background,
+            native_peer,
+            native_inventory_view: None,
             session_id,
             title: title.clone(),
             full_title: title,
             explicit_name: name,
-            recency: format_recency_at_ms(Some(updated_at_ms)),
+            recency: format_recency_at_ms(updated_at_ms),
             created: created_at_seconds.map_or_else(
                 || "-".to_owned(),
                 |value| format_recency_at_ms(Some(value.saturating_mul(1_000))),
             ),
-            recency_at_ms: Some(updated_at_ms),
+            recency_at_ms: updated_at_ms,
             created_at_ms: created_at_seconds.map(|value| value.saturating_mul(1_000)),
             branch: "-".to_owned(),
             persisted_branch: String::new(),

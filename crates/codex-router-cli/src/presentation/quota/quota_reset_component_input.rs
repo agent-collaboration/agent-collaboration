@@ -4,9 +4,7 @@ use super::quota_provider_filter_rendering::*;
 use super::quota_provider_filters::*;
 use super::quota_reset_keyboard_interaction::*;
 use super::quota_reset_presentation_model::*;
-use super::quota_status_component::{
-    NARROW_QUOTA_WIDTH, SIDECAR_QUOTA_WIDTH, current_unix_seconds, try_send_reset_intent,
-};
+use super::quota_status_component::{NARROW_QUOTA_WIDTH, SIDECAR_QUOTA_WIDTH};
 use super::quota_status_view_model::QuotaStatusAccountViewModel;
 use super::responsive_quota_layout::*;
 use crate::quota_reset::reset_session_supervisor::{
@@ -103,7 +101,7 @@ pub(super) fn handle_quota_reset_key(context: QuotaResetKeyContext<'_>) {
             let current_options = account_options.read().clone();
             let current_reset_target = reset_target.read().clone();
             let details_content_height = current_options.as_ref().map_or_else(
-                || selected_detail_height(focused_index.is_some()),
+                || selected_detail_height(focused_index.is_some(), interaction_mode),
                 |options| {
                     account_options_content_height(
                         options,
@@ -181,4 +179,25 @@ pub(super) fn handle_quota_reset_key(context: QuotaResetKeyContext<'_>) {
         }
         ResetKeyAction::None => {}
     }
+}
+
+pub(super) fn try_send_reset_intent(
+    sender: Option<&ResetIntentSender>,
+    intent: ResetSessionIntent,
+) -> bool {
+    if let Some(sender) = sender {
+        return sender.send_now(intent).is_ok();
+    }
+    false
+}
+
+pub(super) fn forced_quota_exit_key(code: &KeyCode, modifiers: KeyModifiers) -> bool {
+    (matches!(code, KeyCode::Char('c' | 'd')) && modifiers.contains(KeyModifiers::CONTROL))
+        || matches!(code, KeyCode::Char('\u{3}' | '\u{4}'))
+}
+
+pub(super) fn current_unix_seconds() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |duration| duration.as_secs())
 }

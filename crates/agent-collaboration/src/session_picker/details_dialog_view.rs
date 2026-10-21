@@ -1,6 +1,6 @@
 //! Shared dialog chrome with session-owned, captured Details actions.
 use super::super::details_dialog_state::{ClipboardRequestStatus, SessionDetailsTarget};
-use super::super::session_id_clipboard::SessionIdCopier;
+use super::super::session_id_clipboard::SessionClipboardWriter;
 use super::*;
 use codex_router_tui::{
     DialogAction, DialogFrame, DialogKeyboardOwner, DialogMargins, DialogPresentation, UiText,
@@ -14,15 +14,18 @@ pub(super) fn render_details_dialog(
     selected_conversation: Option<&SessionConversationPreview>,
     width: u16,
     height: u16,
-    copier: SessionIdCopier,
+    copier: SessionClipboardWriter,
 ) -> AnyElement<'static> {
     let Some(dialog) = model.details_dialog.as_ref() else {
         return element!(View).into_any();
     };
-    let title = match &dialog.target {
-        SessionDetailsTarget::Session(record) => format!("Session details · {}", record.title),
-        SessionDetailsTarget::NewSession => "New session details".to_owned(),
-    };
+    let title = "Session details".to_owned();
+    let context = vec![
+        super::super::session_dialog_context::render_session_context(
+            &dialog.record().title,
+            Some(&dialog.record().session_id),
+        ),
+    ];
     let expected_target = dialog.target.clone();
     let actions = dialog.actions().iter().map(|action| {
         let action = *action;
@@ -36,29 +39,26 @@ pub(super) fn render_details_dialog(
                 }
             })).into_any()
     }).collect::<Vec<_>>();
-    let content_width = usize::from(width)
-        .saturating_sub(4)
-        .min(90)
-        .saturating_sub(4);
+    let ((_, frame_width), _) =
+        DialogPresentation::default().resolve(width.saturating_sub(4), height.saturating_sub(2));
+    let content_width = usize::from(frame_width.saturating_sub(4));
     let content = match &dialog.target {
         SessionDetailsTarget::Session(record) => {
             render_details(record, content_width, selected_conversation, Size::Auto)
         }
-        SessionDetailsTarget::NewSession => {
-            render_start_new_details(model, content_width, START_NEW_DETAILS_HEIGHT)
-        }
     };
     let notice = match dialog.clipboard_status {
         ClipboardRequestStatus::Idle => None,
-        ClipboardRequestStatus::Sent => Some("Copy requested"),
-        ClipboardRequestStatus::Failed => Some("Could not copy session ID"),
+        ClipboardRequestStatus::Sent => Some(("Copy requested", UiTextRole::Secondary)),
+        ClipboardRequestStatus::Failed => Some(("Could not copy", UiTextRole::Error)),
     };
     element! {
-        DialogFrame(width, height, title, help_action: Some(super::super::picker_help_view::help_action(model_state)),
-            presentation: if model.width < NARROW_PICKER_WIDTH { DialogPresentation::FullScreen } else { DialogPresentation::Framed { maximum_width: 100, maximum_height: 28 } },
-            margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, keyboard_scroll: true, actions) {
+        DialogFrame(width, height, title, context, help_action: Some(super::super::picker_help_view::help_action(model_state)),
+            presentation: DialogPresentation::default(),
+            margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, scroll_keys: codex_router_tui::DialogScrollKeys::Navigation, actions) {
+            #(notice.map(|(content, role)| element!(UiText(content, role))))
+            #(dialog.inspection_notice().map(|notice|element!(UiText(content:notice.to_owned(),role:UiTextRole::Secondary))))
             #(content)
-            #(notice.map(|notice| element!(UiText(content: notice, role: UiTextRole::Secondary))))
             #(super::super::source_action_view::source_error(model))
         }
     }.into_any()

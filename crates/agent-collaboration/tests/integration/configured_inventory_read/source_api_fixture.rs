@@ -29,16 +29,48 @@ pub(crate) struct SourceApiFixture {
     recorder: recorded_api_listener::RecordedApiListener,
 }
 
+enum SourceProviderFixture {
+    CodexOnly,
+    ManagedOnly,
+    ManagedAndNative(Vec<serde_json::Value>),
+}
+
 impl SourceApiFixture {
     pub(crate) async fn start(service: &str, model: &str) -> Self {
         Self::start_with_provider(service, model, false).await
     }
 
-    pub(super) async fn start_with_provider(
+    pub(crate) async fn start_with_provider(
         service: &str,
         model: &str,
         include_provider: bool,
     ) -> Self {
+        Self::start_fixture(
+            service,
+            model,
+            if include_provider {
+                SourceProviderFixture::ManagedOnly
+            } else {
+                SourceProviderFixture::CodexOnly
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn start_with_native_jobs(
+        service: &str,
+        model: &str,
+        jobs: Vec<serde_json::Value>,
+    ) -> Self {
+        Self::start_fixture(
+            service,
+            model,
+            SourceProviderFixture::ManagedAndNative(jobs),
+        )
+        .await
+    }
+
+    async fn start_fixture(service: &str, model: &str, providers: SourceProviderFixture) -> Self {
         let root = tempfile::Builder::new()
             .prefix("sel-mcp-")
             .tempdir_in("/tmp")
@@ -83,7 +115,7 @@ impl SourceApiFixture {
                 codex_home: source_data,
             })
             .unwrap();
-        if include_provider {
+        if !matches!(providers, SourceProviderFixture::CodexOnly) {
             use collaboration_client::protocol::{
                 ProviderRequestedPolicy, RouterAccess, SessionRef,
             };
@@ -128,6 +160,23 @@ impl SourceApiFixture {
                     "runtime":{"provider":"claudeCode","runtimeName":"fixture"},"capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]}]
             })).unwrap()).unwrap();
         }
+        if let SourceProviderFixture::ManagedAndNative(jobs) = providers {
+            use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
+            let output = directory.join("native-output.json");
+            std::fs::write(&output, serde_json::to_vec(&jobs).unwrap()).unwrap();
+            let executable = directory.join("native-list-fixture");
+            std::fs::write(&executable,format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",serde_json::to_string(&output).unwrap())).unwrap();
+            std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let peers = directory.join("native-peers");
+            std::fs::create_dir(&peers).unwrap();
+            identity = identity
+                .with_claude_background_jobs(std::sync::Arc::new(
+                    NativeClaudeJobReader::for_executable(executable),
+                ))
+                .with_claude_code_sessions(std::sync::Arc::new(ClaudeCodeSessionRegistry::new(
+                    peers,
+                )));
+        }
         let listener = tokio::net::TcpListener::bind((std::net::Ipv4Addr::LOCALHOST, 0))
             .await
             .unwrap();
@@ -157,10 +206,11 @@ impl SourceApiFixture {
             format!("http://{address}/mcp"),
             shutdown.clone(),
         )
-        .await;
+        .await
+        .expect("start owned API observer");
         Self {
             _root: root,
-            url: recorder.url.clone(),
+            url: recorder.url.clone().expect("TCP fixture publishes a URL"),
             direct_api_url: format!("http://{address}/mcp"),
             endpoint,
             shutdown,
@@ -212,6 +262,41 @@ impl SourceApiFixture {
         self.recorder.call_count(method)
     }
 
+    pub(crate) fn publish_native_peer(&self, session: &str, directory: &str) {
+        self.publish_native_peer_with_status(session, directory, Some("busy"));
+    }
+
+    pub(crate) fn fail_native_jobs_after_history(&self) {
+        let directory = self._root.path();
+        let output = directory.join("native-output.json");
+        let count = directory.join("native-read-count");
+        std::fs::write(&count, "0").unwrap();
+        std::fs::write(directory.join("native-list-fixture"),format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\np={}\nn=int(open(p).read())\nopen(p,'w').write(str(n+1))\nif n: sys.exit(7)\nprint(open({}).read())\n",serde_json::to_string(&count).unwrap(),serde_json::to_string(&output).unwrap())).unwrap();
+    }
+
+    pub(crate) fn publish_native_peer_with_status(
+        &self,
+        session: &str,
+        directory: &str,
+        status: Option<&str>,
+    ) {
+        let peers = self._root.path().join("native-peers");
+        let pid = std::process::id();
+        let mut peer = serde_json::json!({
+            "pid":pid,"sessionId":session,"cwd":directory,"name":"Real peer fixture",
+            "startedAt":1790162100000_i64,"updatedAt":1790162200000_i64,"statusUpdatedAt":1790162200000_i64,
+            "kind":"interactive","entrypoint":"cli","peerProtocol":1,"messagingSocketPath":peers.join("peer.sock")
+        });
+        if let Some(status) = status {
+            peer["status"] = serde_json::json!(status);
+        }
+        std::fs::write(
+            peers.join(format!("{pid}.json")),
+            serde_json::to_vec(&peer).unwrap(),
+        )
+        .unwrap();
+    }
+
     pub(crate) fn loader(&self) -> SessionsPickerRecordLoader {
         session_picker_record_loader(
             CliContext::new(Vec::new()),
@@ -222,7 +307,10 @@ impl SourceApiFixture {
 
     pub(crate) async fn finish(self) {
         self.shutdown.cancel();
-        self.recorder.finish().await;
+        self.recorder
+            .finish()
+            .await
+            .expect("settle owned API observer");
         tokio::time::timeout(Duration::from_secs(2), self.task)
             .await
             .unwrap()

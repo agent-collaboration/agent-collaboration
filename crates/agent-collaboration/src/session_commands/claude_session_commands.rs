@@ -4,7 +4,7 @@ use super::{
     CliContext, SessionsCommand, SessionsCommandError, SessionsFormat,
     claude_launch_target::ClaudeLaunchTarget,
 };
-use std::{ffi::OsString, io::Write};
+use std::io::Write;
 
 pub(super) fn run_claude_sessions_command<W: Write>(
     stdout: &mut W,
@@ -17,7 +17,8 @@ pub(super) fn run_claude_sessions_command<W: Write>(
     }
     let session_id = command.id.as_deref();
     if command.dry_run {
-        return write_claude_dry_run(stdout, &launch_target, session_id, &command.codex_args);
+        let arguments = launch_target.launch_arguments(session_id, &command.codex_args);
+        return write_claude_dry_run(stdout, arguments.as_slice());
     }
 
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -100,12 +101,10 @@ fn write_claude_session_table<W: Write>(
 
 fn write_claude_dry_run<W: Write>(
     stdout: &mut W,
-    launch_target: &ClaudeLaunchTarget,
-    session_id: Option<&str>,
-    passthrough_arguments: &[OsString],
+    arguments: &[std::ffi::OsString],
 ) -> Result<(), SessionsCommandError> {
     write!(stdout, "claude").map_err(SessionsCommandError::Stdout)?;
-    for argument in launch_target.launch_arguments(session_id, passthrough_arguments) {
+    for argument in arguments {
         write!(stdout, " {}", argument.to_string_lossy()).map_err(SessionsCommandError::Stdout)?;
     }
     writeln!(stdout).map_err(SessionsCommandError::Stdout)

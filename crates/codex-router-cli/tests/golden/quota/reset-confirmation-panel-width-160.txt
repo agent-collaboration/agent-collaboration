@@ -3,11 +3,11 @@
 │ alpha  [alpha-tag]                                                                                                                                           │
 │                                                                                                                                                              │
 │ Confirm reset credit                                                                                                                                         │
-│ This consumes one scarce reset credit and cannot be undone.                                                                                                  │
 │ Weekly remaining    0%                                                                                                                                       │
 │ Credit              [abcd…wxyz] Weekly recovery                                                                                                              │
 │ Expires             2030-03-17 00:00 +00:00                                                                                                                  │
 │                                                                                                                                                              │
+│ 1 credit. Cannot undo.                                                                                                                                       │
 │ [No]    Yes                                                                                                                                                  │
 │                                                                                                                                                              │
 │                                                                                                                                                              │

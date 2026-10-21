@@ -25,7 +25,7 @@ async fn cli_dispatches_provider_session_list_by_endpoint_channel() {
         json!({
             "pid":process_id,"sessionId":"interactive-session","peerProtocol":1,
             "messagingSocketPath":root.path().join("secret-peer.sock"),
-            "cwd":root.path(),"name":"Interactive fixture","status":"idle",
+            "cwd":root.path(),"name":"Interactive fixture","status":"busy",
         "startedAt":1_790_162_100_123_i64,"updatedAt":1_790_162_494_441_i64,"kind":"interactive","entrypoint":"cli"
         })
         .to_string(),
@@ -158,17 +158,48 @@ async fn cli_dispatches_provider_session_list_by_endpoint_channel() {
     );
     assert_eq!(interactive_result["result"]["page"]["skippedRecords"], 0);
     assert!(!String::from_utf8_lossy(&interactive.stdout).contains("secret-peer.sock"));
-    let rejected = run("claude-local", "stored", Some("interactive"))
+    let peer_path = root
+        .path()
+        .join("claude-fixture-registry")
+        .join(format!("{process_id}.json"));
+    let mut idle_peer: Value = serde_json::from_slice(&std::fs::read(&peer_path).unwrap()).unwrap();
+    idle_peer["status"] = json!("idle");
+    std::fs::write(&peer_path, serde_json::to_vec(&idle_peer).unwrap()).unwrap();
+    let active_idle = run("claude-local", "active", Some("interactive"))
         .output()
         .await
-        .expect("source rejection");
-    assert_eq!(rejected.status.code(), Some(4));
-    let error: Value = serde_json::from_slice(&rejected.stdout).expect("error JSON");
-    assert_eq!(error["error"]["code"], -32050);
+        .unwrap();
+    assert!(active_idle.status.success());
+    let active_idle: Value = serde_json::from_slice(&active_idle.stdout).unwrap();
+    assert_eq!(
+        active_idle["result"]["page"]["records"],
+        json!([]),
+        "idle is not working/busy evidence"
+    );
+    let loaded_idle = run("claude-local", "loaded", Some("interactive"))
+        .output()
+        .await
+        .unwrap();
+    assert!(loaded_idle.status.success());
+    let loaded_idle: Value = serde_json::from_slice(&loaded_idle.stdout).unwrap();
+    assert_eq!(
+        loaded_idle["result"]["page"]["records"][0]["status"],
+        "idle"
+    );
+    let history = run("claude-local", "stored", Some("interactive"))
+        .output()
+        .await
+        .expect("native history");
     assert!(
-        error["error"]["data"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("--view active"))
+        history.status.success(),
+        "{}",
+        String::from_utf8_lossy(&history.stderr)
+    );
+    let history: Value = serde_json::from_slice(&history.stdout).unwrap();
+    assert_eq!(history["result"]["page"]["records"], json!([]));
+    assert_eq!(
+        history["result"]["page"]["nativeCoverage"],
+        json!({"peer":{"kind":"notRequested"},"background":{"kind":"unavailable","reason":"readUnavailable"}})
     );
     let missing_native_source = run("codex-local", "stored", None)
         .output()

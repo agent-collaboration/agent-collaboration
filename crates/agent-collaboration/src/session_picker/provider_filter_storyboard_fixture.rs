@@ -48,13 +48,14 @@ pub(super) fn provider_filter_storyboard_request() -> std::io::Result<SessionsPi
     let claude_gamma = SessionPickerRecord::from_provider_summary(&claude_gamma, "Claude Gamma")
         .with_provider_endpoint(
             &claude_gamma,
-            &provider_endpoint(claude_endpoint.clone(), ProviderKind::ClaudeCode)?,
+            &provider_endpoint(claude_endpoint, ProviderKind::ClaudeCode)?,
         );
+    let native_claude_endpoint = fixture_endpoint("claude-local")?;
     let claude_delta = ProviderSessionSummary::ClaudeCodeInteractive {
         origin: ClaudeCodeInteractiveOrigin::ClaudeCodeInteractive,
         target: SessionRef {
-            endpoint: claude_endpoint.clone(),
-            session_id: "claude-delta"
+            endpoint: native_claude_endpoint.clone(),
+            session_id: "00000000-0000-4000-8000-000000000014"
                 .to_owned()
                 .try_into()
                 .map_err(std::io::Error::other)?,
@@ -74,7 +75,7 @@ pub(super) fn provider_filter_storyboard_request() -> std::io::Result<SessionsPi
     let claude_delta = SessionPickerRecord::from_provider_summary(&claude_delta, "Claude Delta")
         .with_provider_endpoint(
             &claude_delta,
-            &provider_endpoint(claude_endpoint, ProviderKind::ClaudeCode)?,
+            &provider_endpoint(native_claude_endpoint, ProviderKind::ClaudeCode)?,
         );
     let cursor_endpoint = fixture_endpoint("cursor-fixture")?;
     let cursor_echo = managed_summary(cursor_endpoint.clone(), SHARED_SESSION, observed_seconds)?;
@@ -141,6 +142,9 @@ fn managed_summary(
             .map_err(std::io::Error::other)?,
         updated_at: observed_seconds,
         state: ProviderSessionState::Idle,
+        requested_policy: collaboration_client::protocol::ProviderRequestedPolicy {
+            access: collaboration_client::protocol::RouterAccess::WriteRestricted,
+        },
         approver: creator.clone(),
         created_by: creator,
     })
@@ -181,4 +185,95 @@ fn provider_endpoint(
             capabilities,
         }],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::provider_filter_storyboard_request;
+    use crate::presentation::session_picker::{
+        picker_model::SessionsPickerModel,
+        provider_filter_model::{SessionProviderFamily, SessionProviderFilter},
+    };
+    use crate::sessions::SessionPickerIdentity;
+    use collaboration_client::protocol::ProviderKind;
+
+    #[test]
+    fn storyboard_fixture_keeps_native_and_managed_claude_in_the_same_partition() {
+        let request = provider_filter_storyboard_request().expect("valid synthetic inventory");
+        assert_eq!(request.records.len(), 6);
+        let mut model = SessionsPickerModel::new(request, 120);
+        model.open_provider_filters();
+        model.provider_filter_draft.as_mut().unwrap().selection = SessionProviderFilter::ClaudeCode;
+        model.apply_provider_filters();
+        let mut visible_titles = (0..model.visible_record_len())
+            .map(|index| {
+                model
+                    .visible_record_at(index)
+                    .unwrap()
+                    .endpoint_label
+                    .as_deref()
+                    .unwrap()
+            })
+            .collect::<Vec<_>>();
+        visible_titles.sort_unstable();
+        assert_eq!(visible_titles, ["Claude Delta", "Claude Gamma"]);
+        let records = &model.request.records;
+        let gamma = records
+            .iter()
+            .find(|record| record.endpoint_label.as_deref() == Some("Claude Gamma"))
+            .unwrap();
+        let delta = records
+            .iter()
+            .find(|record| record.endpoint_label.as_deref() == Some("Claude Delta"))
+            .unwrap();
+        let lookalike = records
+            .iter()
+            .find(|record| record.endpoint_label.as_deref() == Some("Claude-lookalike Zeta"))
+            .unwrap();
+        assert!(
+            matches!(&gamma.identity, SessionPickerIdentity::HostedProvider(target)
+            if String::from(target.endpoint.endpoint_id.clone()) == "claude-fixture")
+        );
+        assert!(
+            matches!(&delta.identity, SessionPickerIdentity::NativeClaude(target)
+            if String::from(target.endpoint.endpoint_id.clone()) == "claude-local"
+                && String::from(target.session_id.clone()) == "00000000-0000-4000-8000-000000000014")
+        );
+        assert_eq!(
+            gamma.client_provider_family(),
+            SessionProviderFamily::External(ProviderKind::ClaudeCode)
+        );
+        assert_eq!(
+            delta.client_provider_family(),
+            SessionProviderFamily::External(ProviderKind::ClaudeCode)
+        );
+        assert_eq!(
+            lookalike.client_provider_family(),
+            SessionProviderFamily::Unclassified
+        );
+        assert_eq!(
+            records
+                .iter()
+                .filter(|record| record.client_provider_family() == SessionProviderFamily::Codex)
+                .count(),
+            2
+        );
+        assert_eq!(
+            records
+                .iter()
+                .filter(|record| record.client_provider_family()
+                    == SessionProviderFamily::External(ProviderKind::Cursor))
+                .count(),
+            1
+        );
+        assert_eq!(
+            records
+                .iter()
+                .filter(
+                    |record| record.client_provider_family() == SessionProviderFamily::Unclassified
+                )
+                .count(),
+            1
+        );
+    }
 }

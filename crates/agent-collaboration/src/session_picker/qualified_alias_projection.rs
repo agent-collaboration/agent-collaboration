@@ -30,7 +30,11 @@ pub(super) fn qualified_alias_labels(
         if !source_snapshot_matches(source, Some(binding), snapshot) {
             continue;
         }
-        for endpoint in binding.endpoints.keys() {
+        for endpoint in binding
+            .endpoints
+            .keys()
+            .chain(binding.native_claude_endpoint.iter())
+        {
             let group = groups.entry(endpoint.clone()).or_insert_with(|| {
                 EndpointAliasQualification::Matching {
                     binding: binding.clone(),

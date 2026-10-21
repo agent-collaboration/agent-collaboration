@@ -1,0 +1,26 @@
+{
+  "start": "2026-10-20T05:30:10.866836+00:00",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "-p",
+    "codex-router-cli",
+    "--lib",
+    "initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids",
+    "--",
+    "--nocapture"
+  ],
+  "expectedExit": 101,
+  "timeout": false,
+  "signals": [],
+  "testSourceSha256": "ef7897680bbf7f8ac4a785534e06700e08333121c267c6dc2fcda89b2164b0eb",
+  "pid": 84602,
+  "exit": 101,
+  "psExit": 0,
+  "remainingGroup": [],
+  "seconds": 30.376957125030458,
+  "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-actual-chrome-only-red.log",
+  "finish": "2026-10-20T05:30:41.244284+00:00"
+}

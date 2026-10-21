@@ -36,9 +36,7 @@ fn runtime_picker_preserves_native_subagent_classification() {
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 
-#[path = "../../tests/fake_api_support/mod.rs"]
-mod fake_api_support;
-use fake_api_support::{FakeCollaborationApi, FakeReply};
+use crate::sessions::fake_api_support::{FakeCollaborationApi, FakeReply};
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 
@@ -276,127 +274,6 @@ async fn stored_metadata_is_preserved_while_runtime_status_is_refreshed() {
 }
 
 #[tokio::test]
-async fn provider_inventory_reaches_picker_as_a_qualified_read_only_row() {
-    let provider_page = json!({
-        "endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},
-        "observedAt":"2026-09-07T00:00:00Z",
-        "sessions":[{
-            "origin":"hostedProvider",
-            "target":{"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"first"},
-            "workingDirectory":"/repo","updatedAt":3,"state":"requiresAction",
-            "approver":{"kind":"human","humanId":"owner"},
-            "createdBy":{"endpoint":endpoint(),"sessionId":"creator"}
-        }],"nextCursor":null
-    });
-    let (mut client, peer) = connect_fixture(vec![
-        ("endpoints_list", inventory_with_provider()),
-        ("provider_sessions_list", provider_page),
-    ])
-    .await;
-    let (native_endpoint, rows) = load_provider_records(&mut client)
-        .await
-        .expect("provider rows");
-    let requests = peer.await.expect("peer");
-    assert_eq!(
-        native_endpoint.expect("native endpoint"),
-        serde_json::from_value(endpoint()).unwrap()
-    );
-    assert_eq!(rows.len(), 1);
-    assert!(matches!(
-        rows[0].identity,
-        SessionPickerIdentity::HostedProvider(_)
-    ));
-    assert!(rows[0].title.contains("Claude fixture"));
-    assert_eq!(rows[0].runtime_status, PickerRuntimeStatus::Blocked);
-    assert_eq!(requests[1]["arguments"]["source"], "all");
-}
-
-#[tokio::test]
-async fn hosted_refresh_keeps_equal_provider_and_codex_ids_as_two_rows() {
-    use collaboration_client::protocol::{
-        EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-        SessionRef,
-    };
-    use collaboration_service::{ProviderOperationStore, ProviderSessionRecord, ServiceIdentity};
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
-
-    let root = tempfile::Builder::new()
-        .prefix("provider-picker-")
-        .tempdir_in("/tmp")
-        .expect("service root");
-    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
-        .expect("private root");
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"shared-id"
-    }))
-    .expect("provider target");
-    let creator: SessionRef = serde_json::from_value(json!({
-        "endpoint":endpoint(),"sessionId":"creator"
-    }))
-    .expect("creator");
-    let store = Arc::new(Mutex::new(
-        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
-            .await
-            .expect("store"),
-    ));
-    store
-        .lock()
-        .await
-        .record_session(&ProviderSessionRecord {
-            target: target.clone(),
-            working_directory: ProviderWorkingDirectory::try_from("/repo/project-a".to_owned())
-                .expect("cwd"),
-            requested_policy: ProviderRequestedPolicy {
-                access: RouterAccess::WriteRestricted,
-            },
-            created_by: creator.clone().into(),
-            approver: creator.into(),
-            updated_at_ms: 3_000,
-        })
-        .await
-        .expect("provider record");
-    let descriptions: Vec<EndpointDescription> = inventory_with_provider()["endpoints"]
-        .as_array()
-        .expect("descriptions")
-        .iter()
-        .cloned()
-        .map(|entry| serde_json::from_value(entry).expect("description"))
-        .collect();
-    let identity = ServiceIdentity::new(SERVICE, EPOCH)
-        .expect("identity")
-        .with_endpoints(descriptions)
-        .expect("endpoints")
-        .with_provider_operation_store(store);
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        root.path(),
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
-    let codex = runtime_record(
-        "shared-id",
-        "Codex row",
-        "/repo/project-a",
-        &json!({"source":"cli"}),
-    );
-    let rows = PickerRuntimeInventory::default()
-        .refresh(Some(root.path()), vec![codex], false)
-        .await
-        .records;
-    assert_eq!(rows.len(), 2);
-    assert!(
-        rows.iter()
-            .any(|row| matches!(row.identity, SessionPickerIdentity::HostedCodex(_)))
-    );
-    assert!(
-        rows.iter()
-            .any(|row| matches!(row.identity, SessionPickerIdentity::HostedProvider(_)))
-    );
-    served.stop().await.expect("collaboration API stops");
-}
-
-#[tokio::test]
 async fn unavailable_service_retains_remembered_rows_without_stale_active_claims() {
     // Arrange: an earlier successful runtime-only row; now the service cannot be reached.
     let mut row = runtime_record("remembered", "Remembered", "/repo", &json!({}));
@@ -407,7 +284,10 @@ async fn unavailable_service_retains_remembered_rows_without_stale_active_claims
     // Act
     let missing =
         std::env::temp_dir().join(format!("missing-picker-service-{}", std::process::id()));
-    let snapshot = inventory.refresh(Some(&missing), vec![], false).await;
+    let snapshot = inventory
+        .refresh(Some(&missing), vec![], false)
+        .await
+        .unwrap();
     assert_eq!(
         snapshot.runtime_coverage,
         crate::picker_runtime_status::PickerRuntimeCoverage::Unavailable
@@ -476,7 +356,7 @@ async fn unavailable_service_clears_remembered_provider_state() {
         serde_json::from_value(json!({
             "origin":"hostedProvider",
             "target":{"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"provider-one"},
-            "workingDirectory":"/repo","updatedAt":3,"state":"requiresAction",
+            "workingDirectory":"/repo","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},
             "approver":{"kind":"human","humanId":"owner"},
             "createdBy":{"endpoint":endpoint(),"sessionId":"creator"}
         }))
@@ -487,7 +367,10 @@ async fn unavailable_service_clears_remembered_provider_state() {
     };
     let missing =
         std::env::temp_dir().join(format!("missing-provider-picker-{}", std::process::id()));
-    let snapshot = inventory.refresh(Some(&missing), vec![], false).await;
+    let snapshot = inventory
+        .refresh(Some(&missing), vec![], false)
+        .await
+        .unwrap();
     assert_eq!(snapshot.records.len(), 1);
     assert_eq!(snapshot.records[0].provider_state, None);
     assert_eq!(
@@ -502,7 +385,7 @@ async fn local_picker_never_reuses_provider_rows() {
         serde_json::from_value(json!({
             "origin":"hostedProvider",
             "target":{"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":"shared-id"},
-            "workingDirectory":"/repo","updatedAt":3,"state":"idle",
+            "workingDirectory":"/repo","updatedAt":3,"state":"idle","requestedPolicy":{"access":"write-restricted"},
             "approver":{"kind":"human","humanId":"owner"},
             "createdBy":{"endpoint":endpoint(),"sessionId":"creator"}
         }))
@@ -512,7 +395,7 @@ async fn local_picker_never_reuses_provider_rows() {
     let mut inventory = PickerRuntimeInventory {
         remembered: vec![provider],
     };
-    let snapshot = inventory.refresh(None, vec![codex], false).await;
+    let snapshot = inventory.refresh(None, vec![codex], false).await.unwrap();
     assert_eq!(snapshot.records.len(), 1);
     assert!(matches!(
         snapshot.records[0].identity,
@@ -531,7 +414,7 @@ async fn remembered_runtime_rows_refresh_age_labels_from_their_timestamps() {
         remembered: vec![row],
     };
 
-    let snapshot = inventory.refresh(None, vec![], false).await;
+    let snapshot = inventory.refresh(None, vec![], false).await.unwrap();
     assert_eq!(
         snapshot.runtime_coverage,
         crate::picker_runtime_status::PickerRuntimeCoverage::LocalOnly
@@ -577,3 +460,6 @@ fn hosted_display_attribution_is_separate_from_actual_runtime_observation() {
         SessionPickerIdentity::HostedCodex(_)
     ));
 }
+
+#[path = "provider_picker_inventory_tests.rs"]
+mod provider_partitions;

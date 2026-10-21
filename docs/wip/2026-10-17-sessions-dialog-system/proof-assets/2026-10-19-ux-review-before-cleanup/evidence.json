@@ -1,0 +1,1470 @@
+{
+  "kind": "original-compiled-ui-before-clarity-corrections",
+  "recordedAt": "2026-10-19T17:36:40.164197+00:00",
+  "verdict": "UX FAILED",
+  "images": [
+    {
+      "file": "wide/component-quota-browse.png",
+      "sha256": "76c73f249432b73462830c96763a7453304bbb7d401dc957e96a516940cfb1b6",
+      "bytes": 142175,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "browse",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Full CJK/long OpenAI name wraps cleanly; aligned columns and selection.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-next-account.png",
+      "sha256": "1471948cf8e41742bf56e91aa8615bc0e390cab59f1666258b73bb13d019fe4e",
+      "bytes": 140880,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "next-account",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Claude selection changes visibly; complete name readable.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-restored-account.png",
+      "sha256": "76c73f249432b73462830c96763a7453304bbb7d401dc957e96a516940cfb1b6",
+      "bytes": 142175,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "restored-account",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "OpenAI selection restored.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-details-top.png",
+      "sha256": "9cdb32b32aa4a87479e9ab8854dddb22302fd1c9be249ac7d5d806bf9d278996",
+      "bytes": 169646,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "details-top",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Complete selected CJK identity and upper details readable; body scroll visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-details-bottom.png",
+      "sha256": "166cba20013f54779a430bf8989d554ee2864f1c44e0a7cf925329aa4572bc42",
+      "bytes": 161238,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "details-bottom",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Final Activity clients/guards/reset/note alpha detail visible after body scroll; Close/header retained; runtime wrong-top-image negative rejects top view.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-help-top.png",
+      "sha256": "4115ef703bc9afa75907087ad50e882079559da7861d9c1a2b2b294f4bc2a135",
+      "bytes": 180342,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "help-top",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Help browse shortcut guidance is readable contextual Help; no persistent browse footer introduced.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-help-bottom.png",
+      "sha256": "811a97a08cdf525e9d7e1584f2a7a4e9ebbcc9ef05db5580a5ab3441dd54ba22",
+      "bytes": 188322,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "help-bottom",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Final Existing forced-exit rules still apply instruction visible after body scroll; header/Close retained; runtime wrong-top-image negative rejects top view.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-floor-original.png",
+      "sha256": "92585357b6069792a60757da27b63921a6423077207729b465e0e05546b75d6f",
+      "bytes": 119184,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "floor-original",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Current disabled0%, editableFloor0%, CancelSave visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-floor-draft.png",
+      "sha256": "f7ea07202d26986e2d4a51f88e32e117f97e0dc47de19830ac01a2665429d5f1",
+      "bytes": 119094,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "floor-draft",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "DraftFloor1% visible while Current remains0%.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-floor-cancelled.png",
+      "sha256": "92585357b6069792a60757da27b63921a6423077207729b465e0e05546b75d6f",
+      "bytes": 119184,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "floor-cancelled",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened cancelledFloor0% visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-floor-saved.png",
+      "sha256": "5c4200c380a3aca69856fbd817f3533e3ce2300fadc2ed63d1d9274ff8b53358",
+      "bytes": 116718,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "floor-saved",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened saved Current1% and Floor1% visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-options-identity.png",
+      "sha256": "ce1e928d7c75309807bb60a0e63a166d474be20b383eae30afaabdc7a146673b",
+      "bytes": 168302,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "options-identity",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Complete account identity/tag and Resets selected.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-reset-inventory.png",
+      "sha256": "ce1e928d7c75309807bb60a0e63a166d474be20b383eae30afaabdc7a146673b",
+      "bytes": 168302,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "reset-inventory",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Live eligibility5%, credits7, voucher1, discrepancy notice visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-reset-last-page.png",
+      "sha256": "e7025b9a19f5d6f84a0008fb8028d9919986509ae94c0b2ab8c1edae725299f5",
+      "bytes": 162576,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "reset-last-page",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Last page voucher7 and7\u20137of7 visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-credits-identity.png",
+      "sha256": "754f444b7e919761aee82552a922dd53c8fee8273b581b5689575f29303285e4",
+      "bytes": 163998,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "credits-identity",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Complete account identity, Credits selected, available62,500.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-credits-balance.png",
+      "sha256": "e9c3ddf5e2edaac69c0ea64e847acbc3db24759390f2085a49b6df6b16b87216",
+      "bytes": 163818,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "credits-balance",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Body scrolled; available62,500/fresh/UsageDisallow/floorwarning/actions visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-original.png",
+      "sha256": "5ce2a6566b7b88bd71435397a4b499a82d24d6cbb813453fc7f33fb69d7c3eae",
+      "bytes": 159321,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-original",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Collapsed UsageDisallow field with Save.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-choice.png",
+      "sha256": "b3aaf929b67382dc8f63b526aff1203d371d16decbad422ddb0ae2196f7e9b64",
+      "bytes": 141052,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-choice",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Expanded actual Search field; Allow focused, Disallow visible, Select action.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-no-match.png",
+      "sha256": "be48112c2c5d0d9d2df23e4b545a8a66e29f025f947cc906988245090c42a464",
+      "bytes": 151441,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-no-match",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Queryzznomatchzz and No matching choices visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-choice-returned.png",
+      "sha256": "5ce2a6566b7b88bd71435397a4b499a82d24d6cbb813453fc7f33fb69d7c3eae",
+      "bytes": 159321,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-choice-returned",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "EmptyEnter+Escape retains collapsed UsageDisallow.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-draft.png",
+      "sha256": "98198aac29fab926a94df15ecd87b23e7234c29ac04d9ae1fa07a82fc790f72f",
+      "bytes": 158237,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-draft",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Draft collapsed UsageAllow with Save.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-cancelled.png",
+      "sha256": "5ce2a6566b7b88bd71435397a4b499a82d24d6cbb813453fc7f33fb69d7c3eae",
+      "bytes": 159321,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-cancelled",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened cancelled UsageDisallow.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-policy-saved.png",
+      "sha256": "98198aac29fab926a94df15ecd87b23e7234c29ac04d9ae1fa07a82fc790f72f",
+      "bytes": 158237,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "policy-saved",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened saved UsageAllow.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-refresh-result.png",
+      "sha256": "d3bf39b91b98a1b839c4304f2d7d81f90235fa39dd4a559e94e91bbe8187710a",
+      "bytes": 171195,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "refresh-result",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Actual Credit balance refreshed completion notice; no claim provider value changed.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-reset-review.png",
+      "sha256": "ce1e928d7c75309807bb60a0e63a166d474be20b383eae30afaabdc7a146673b",
+      "bytes": 168302,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "reset-review",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "InspectedResets Review with live eligibility and voucher1.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-confirm-no.png",
+      "sha256": "19ca8beb1c708b7a45597e06811c0170287b4e7100193d373d91c5cb5341ed35",
+      "bytes": 159812,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "confirm-no",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Actual selected [No] yellow; ordinary Yes white. Bracketed body state is distinct from grey secondary Cancel/No/Yes and bold white primary Confirm in one horizontal action row. Enter cancelled selectedNo, corroborated by next original; no productclarity violation identified here. Tab/pointer focus not observed.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-confirm-no-returned.png",
+      "sha256": "c66b391caea5172c3267c40aeb97279a4efcda978428fe594ccb872f0be19924",
+      "bytes": 133687,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "confirm-no-returned",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "No returns Browse-owned Resets with Inspect, no Confirm overlay.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-confirm-yes.png",
+      "sha256": "7654789884b5936d57612ee026a9a4698cfa4b0c649a8721fbd8ada0bc5e4b4d",
+      "bytes": 159890,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "confirm-yes",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Actual ordinary No white; selected [Yes] yellow after Right. Body state distinct from grey secondary Cancel/No/Yes and bold white Confirm. Enter reaches recorded success. Duplicate state/action nouns are a potential usability preference, not a concrete R4/U5 finding; no controls removed or redesign proposed. DisabledYes not in this normal scenario.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-reset-result.png",
+      "sha256": "db7f615c924b9101c07e65acd9b3c4b77c4eb9e429f2e78ce50f6bcc89ab0b1b",
+      "bytes": 159643,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "reset-result",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Success/reset completed and one consumed reset; synthetic port result only.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "wide/component-quota-returned.png",
+      "sha256": "76c73f249432b73462830c96763a7453304bbb7d401dc957e96a516940cfb1b6",
+      "bytes": 142175,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "viewport": {
+        "columns": 120,
+        "rows": 36,
+        "pixel_width": 1226,
+        "pixel_height": 698
+      },
+      "scene": "returned",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Browse restored with no dialog overlay; selection retained.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-browse.png",
+      "sha256": "b2cf683c606d8cb231aef55e8e48ae58e8f9f68d58c89c93fe1cce658debf9ca",
+      "bytes": 122775,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "browse",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Selected CJK OpenAI full name wraps in Account column; provider below, Status and Quota remain in their columns. Original selection/restoration visible; no conditional column shift.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-next-account.png",
+      "sha256": "7232e541480e9525798b006fb09cd69f544c6843aa40ac066f68a4485e5b4860",
+      "bytes": 121017,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "next-account",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Claude selected with full name wrapping onto Beta Full Name; provider remains below and Status/Quota columns stable.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-restored-account.png",
+      "sha256": "b2cf683c606d8cb231aef55e8e48ae58e8f9f68d58c89c93fe1cce658debf9ca",
+      "bytes": 122775,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "restored-account",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Selected CJK OpenAI full name wraps in Account column; provider below, Status and Quota remain in their columns. Original selection/restoration visible; no conditional column shift.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-details-top.png",
+      "sha256": "7fe15ba83291d828155895a50ab8c448518be1acfcbf5295e75040f7b00217a9",
+      "bytes": 118327,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "details-top",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Complete CJK account name visible on selected-account line; available/alpha detail wrap beneath. Header/Help/Close retained, body scroll visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-details-bottom.png",
+      "sha256": "460765c9f3d078254db2428b1f92bd6bd4a93966a796437c29f8f8845d8b7818",
+      "bytes": 105226,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "details-bottom",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Final Activity clients/guards/reset/note alpha detail visible after body scroll; Close/header retained; runtime wrong-top-image negative rejects top view.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-help-top.png",
+      "sha256": "f4a29c701fbf3dfa74507fd44182ab3cc5646e193f406696dc4eaaf32d6af0d2",
+      "bytes": 105369,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "help-top",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Help browse shortcut guidance is readable contextual Help; no persistent browse footer introduced.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-help-bottom.png",
+      "sha256": "e2928d26ed90e1af07e7d237b4acbba0b7fcc636a317041492038294437a3109",
+      "bytes": 105011,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "help-bottom",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Final forced-exit instruction wraps across two body lines and is fully visible; header/Close retained, actual wrong-top negative rejected.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-floor-original.png",
+      "sha256": "b26014ae42a95624d7080cc0f7b444ecc1fa4bbf8a3cc5914d74d6d49465df4d",
+      "bytes": 98302,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "floor-original",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Current disabled0%, editableFloor0%, CancelSave visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-floor-draft.png",
+      "sha256": "359c5fb11e288d37dcd2333c2bbeafcd18db6057091f1b806de6c7c4b02f8bff",
+      "bytes": 98183,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "floor-draft",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "DraftFloor1% visible while Current remains0%.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-floor-cancelled.png",
+      "sha256": "b26014ae42a95624d7080cc0f7b444ecc1fa4bbf8a3cc5914d74d6d49465df4d",
+      "bytes": 98302,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "floor-cancelled",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened cancelledFloor0% visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-floor-saved.png",
+      "sha256": "71b11880b4dfb3873c9f16f479f26205a50469a4c2cab1ac392294e36f032445",
+      "bytes": 95800,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "floor-saved",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened saved Current1% and Floor1% visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-options-identity.png",
+      "sha256": "035b60c45101dba8b077909ba1a0c4d2e9e7c2ff6d99ce012753164a46c6e7da",
+      "bytes": 109144,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "options-identity",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Complete CJK account identity visible and tag wraps to next line above Resets/Credits; header/Help/actions retained.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-reset-inventory.png",
+      "sha256": "99a1ab7ab523ddb12279cca6dbcf541b110d1b73f16f61fa9eee1d7165a1841f",
+      "bytes": 129053,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "reset-inventory",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Live5% eligible/credits7 and first voucher readable; inventory description wraps; discrepancy notice and CancelReview visible. Next/id text closely adjacent but distinct, no concrete requirement violation identified.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-reset-last-page.png",
+      "sha256": "29664cae99c050961a93650ca752abd3c7dcfb7cbce9d75fa5d97c220d64a956",
+      "bytes": 122679,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "reset-last-page",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "7\u20137of7 and voucher7 description visible with wrapping; warning and CancelReview retained.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-credits-identity.png",
+      "sha256": "154f381a544cd3c100d984c64fb19beef6f9b0a6ba8862bd8ee4788364051c9b",
+      "bytes": 114315,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "credits-identity",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Complete CJK identity/tag plus Credits tab and actual available62,500 visible. Lower credit policy body is outside this identity view and shown separately.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-credits-balance.png",
+      "sha256": "70e84b65298db52750fdbb41effc69537d286fe5edf2631958364ad56ef83b95",
+      "bytes": 121270,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "credits-balance",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Scrolled body shows exact62,500/fresh/UsageDisallow and explanatory text, header/actions retained; lower floor warning needs another body position and is visible in editor views.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-original.png",
+      "sha256": "824f7671c54bdc299b962735143c36848c4f41c888ad5bb760a6410e911f1d36",
+      "bytes": 121560,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-original",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Collapsed UsageDisallow field with Save.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-choice.png",
+      "sha256": "dbe1869fc7614c1f6a6090619ab51c2c8344a7534d12983496f7985131142168",
+      "bytes": 111417,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-choice",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Expanded actual Search field; Allow focused, Disallow visible, Select action.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-no-match.png",
+      "sha256": "45e2415f0920bad0a0036946fe9cd179ca82a4b878752ec6f1dfd6186683343f",
+      "bytes": 114666,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-no-match",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Queryzznomatchzz and No matching choices visible.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-choice-returned.png",
+      "sha256": "824f7671c54bdc299b962735143c36848c4f41c888ad5bb760a6410e911f1d36",
+      "bytes": 121560,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-choice-returned",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "EmptyEnter+Escape retains collapsed UsageDisallow.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-draft.png",
+      "sha256": "bf53b12adccb22bb1708b2d7560e3d53dad7511edc77d8adf9775ec701225f3d",
+      "bytes": 120635,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-draft",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Draft collapsed UsageAllow with Save.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-cancelled.png",
+      "sha256": "824f7671c54bdc299b962735143c36848c4f41c888ad5bb760a6410e911f1d36",
+      "bytes": 121560,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-cancelled",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened cancelled UsageDisallow.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-policy-saved.png",
+      "sha256": "bf53b12adccb22bb1708b2d7560e3d53dad7511edc77d8adf9775ec701225f3d",
+      "bytes": 120635,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "policy-saved",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Reopened saved UsageAllow.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-refresh-result.png",
+      "sha256": "6d63b69cfce5ff9885e3711b1d25ddd850591cb2f630e4aedf838f8824d71155",
+      "bytes": 130183,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "refresh-result",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Credit balance refreshed completion notice and retained UsageAllow visible in scrolled body; no provider freshness/value-change claim.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-reset-review.png",
+      "sha256": "99a1ab7ab523ddb12279cca6dbcf541b110d1b73f16f61fa9eee1d7165a1841f",
+      "bytes": 129053,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "reset-review",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "InspectedResets Review with live eligibility and voucher1.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-confirm-no.png",
+      "sha256": "16b66fddc370211c65111754b79cca8f012fde7d98157610d9e72797c1c7b448",
+      "bytes": 120206,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "confirm-no",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Actual [No] yellow/ordinaryYes white, warning wraps without overflow, voucher/expiry readable. Bodychoice above one greysecondaryCancelNoYes/boldwhiteConfirm action row. ActualEnterCancel path corroborated nextimage; Tab/pointer focus unobserved.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-confirm-no-returned.png",
+      "sha256": "93421925f4b812f81f1337496b4b4e60470b333bbe3271cb4f28abc899089d89",
+      "bytes": 112703,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "confirm-no-returned",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "No returns Browse-owned Resets with Inspect, no Confirm overlay.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-confirm-yes.png",
+      "sha256": "f1a3ef710853c359e0a8ffcdff1f7fdc475ce4149a37adf76bf8bf9d9b2dabd3",
+      "bytes": 120254,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "confirm-yes",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "ActualNo white/[Yes] yellow afterRight, wrapped warning/voucher readable, one horizontal CancelNoYesConfirm actionrow. Enter reaches success; no disabledYes claim.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-reset-result.png",
+      "sha256": "b84419a9ea287a6f5132243c7e1f01cfef4e4ac36695a792f955d79128a1003d",
+      "bytes": 109655,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "reset-result",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Success/reset completed plus Provider confirmed1quota windowsreset visible. Lower consumed-credit/result guidance lies below this top view and is NOT visually proven here; final-body result-scroll remains open.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    },
+    {
+      "file": "medium/component-quota-returned.png",
+      "sha256": "b2cf683c606d8cb231aef55e8e48ae58e8f9f68d58c89c93fe1cce658debf9ca",
+      "bytes": 122775,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "viewport": {
+        "columns": 76,
+        "rows": 30,
+        "pixel_width": 790,
+        "pixel_height": 582
+      },
+      "scene": "returned",
+      "componentSha256": "88fcb40c573ed4384f5c7f3778ae85ebfc5ded35de710548109fc33e53f02a73",
+      "sourceHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "runtimeVerifierOpened": true,
+      "uxVerifierOpened": true,
+      "leadOpened": true,
+      "runtimeObservation": "Browse restored with no dialog overlay; selection retained.",
+      "uxVerdict": "FAILED overall UX; see seven accepted findings. Mechanical checks do not establish clarity.",
+      "limits": "In-memory component model/synthetic external ports; no actual provider, persisted storage, public entry, narrower grid, pending or resize proof."
+    }
+  ],
+  "ownerAnnotations": [
+    {
+      "file": "owner-annotation-1.jpg",
+      "sha256": "78584be031c6868da4b879b3408c774598de0b35b3616a86edef605b01b946cf",
+      "role": "Owner-supplied annotation of earlier UI; viewport unknown, not a fresh capture or proof of iPhone execution."
+    },
+    {
+      "file": "owner-annotation-2.jpg",
+      "sha256": "fd125705eaee5b0a82525e23c64311093aab379be64cfdd97ec6f5007c359c4c",
+      "role": "Owner-supplied annotation of earlier UI; viewport unknown, not a fresh capture or proof of iPhone execution."
+    }
+  ],
+  "reviews": {
+    "runtime": "Paired runtime Verifier opened all60normal originals; existing compact36 separately retained.",
+    "ux": "Separate fresh UX Verifier01a1552c personally opened all96originals and2ownerannotations; seven findings admitted by Lead.",
+    "lead": "Opened all30medium originals, both repaired wide NoYes originals; other28 wide SHA-identical to all28 previously personally opened originals."
+  },
+  "limits": [
+    "Synthetic records/effect ports; not real provider/storage/public-entry acceptance.",
+    "Wide/medium mechanical30+6 subsets passed; later48x24 failed and48x12 normal tour unrun.",
+    "Phone32/40 and actual iPhone terminal unobserved; owner phone-viewer annotations are not device execution proof.",
+    "HTML browser rendering unverified; original image bytes independently inspected."
+  ]
+}

@@ -27,8 +27,8 @@ fn large_inventory_visible_budget_preserves_literal_row_contract() {
     let mut model = SessionsPickerModel::new(large_picker_request(1000), 120);
     assert_eq!(
         session_visible_row_budget(&model, 30),
-        7,
-        "top window includes outlined New row and more-below marker"
+        9,
+        "top budget includes the header focus slot with zero physical height, eight session rows, and more-below marker"
     );
     model.handle_key(SessionsPickerKey::MoveLast);
     assert_eq!(

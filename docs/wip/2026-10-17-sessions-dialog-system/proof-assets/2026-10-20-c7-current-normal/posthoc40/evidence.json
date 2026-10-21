@@ -1,0 +1,998 @@
+{
+  "at": "2026-10-20T06:00:08.910372+00:00",
+  "authority": "Rootd6 screenshot plus full human identity inspection alternative; acceptance remains Root-owned",
+  "target": "immutable product27cb / original40x24 failed runtime, not a rerun",
+  "original_manifest": {
+    "path": "tmp/tui-verification/c7-lower42-job-2-original-review-manifest.json",
+    "sha256": "4ec9781e9f92f7ae31e8e33ce9d6847c3387c632c7cba28ab17fcfd7c635ec3f",
+    "personal_original_count": 42
+  },
+  "strict_audit": {
+    "path": "tmp/tui-verification/c7-strict-unaffected-raw-edge-qualification.json",
+    "sha256": "bf0e77e69489219be6681ff8044b7229744c3265e4e55d2aef0e69a1f0401618",
+    "checker": {
+      "path": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/verify-current",
+      "sha256": "c31a5c960d00ce278f27ef09aa92770cf198442d0b83e3751cc412aa99c2c723"
+    },
+    "all_42_checkpoint_outcomes": {
+      "positive_supported": 41,
+      "full_identity_unsupported": 1
+    },
+    "wrong_images_rejected": 11,
+    "additional_help_top_full_identity": "UNSUPPORTED/rejected",
+    "rows": [
+      {
+        "checkpoint": "component-quota-browse",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-205-current2.stdout",
+        "raw_sha256": "763fb305d87d88052a8c0a7b0bb935ede2fa2e85c1376b203de2ae1d97c4f1a4",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-browse-credit-window",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-credit-window.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-206-current2.stdout",
+        "raw_sha256": "c75221fc4e89c0676910d66e32282d141b15c815ae916a2aea28c61d9168808e",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-browse-pace-heading",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-pace-heading.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-207-current2.stdout",
+        "raw_sha256": "00b34d090218b61a7b11fb471ab9f1e9b27bb9ab84a4431caf9a5323d14359d1",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-browse-pace-value",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-pace-value.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-208-current2.stdout",
+        "raw_sha256": "52309b905edf4c4332a1ccaec6f2d8ad138b4b5601e94bafc9a1bc8c51a7c03e",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-browse-page-returned",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-page-returned.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-209-current2.stdout",
+        "raw_sha256": "82026bd916e9af7ff845f8521bb9d6c4d1fea44db72b8e34f1732449365c6abd",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-next-account",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-next-account.png",
+        "sha256": "69c807d9e133f0f5fa89497c8488b8ac56864568931bac05864fbe0f62aab848",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-210-current2.stdout",
+        "raw_sha256": "2ab8fa2708679ae2dcaaa721af073d332cbce654818ee1affd7973ebdacf185b",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-restored-account",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-restored-account.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-211-current2.stdout",
+        "raw_sha256": "8586a29eefa052763641f775d3f928c03d06ef997d8bf743af78cb7011800e36",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-details-top",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-details-top.png",
+        "sha256": "3b72c180de9104cdd5c4e29736f940e1022f36a6c9ee33bd772ec143c1d78801",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-212-current2.stdout",
+        "raw_sha256": "d3a8ded27d1c0010d274474adfd67a96a6ab6a8a7344c5c1299e283e0761b08e",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-details-bottom",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-details-bottom.png",
+        "sha256": "b3d9b0c55a0eaa873b1f35a26fe1cd43ace7410aae524eaacc2d1d7c3e41484a",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-213-current2.stdout",
+        "raw_sha256": "7fcb3251c203bc3801f5163144066bf25abf87aa894e63b98cd034b13d13ffdd",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-help-top",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-help-top.png",
+        "sha256": "a0c586bc844d5620e4f5ccc494763ea31f508d2f6e05ab0d433d30070cdc6822",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-214-current2.stdout",
+        "raw_sha256": "d1964ca6ed3858118cbe29c851d4a4f60940d628cbae20c3c9e1bf4232107b5c",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-help-bottom",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-help-bottom.png",
+        "sha256": "d4f1fe04e644a6a04785b3bd53f7145843125a53b3c61cf354d8b19fd8d02c85",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-215-current2.stdout",
+        "raw_sha256": "ed842310b62b7e81422ffe371da1f82a3e10e75c91c90953a7277232315856d2",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-floor-original",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-original.png",
+        "sha256": "793360453e7e2b03fcf7bf9695dfa8be596d742ce298ebd8a424a498690d5a6c",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-216-current2.stdout",
+        "raw_sha256": "c74a193812bc59461dd40af1b0151100bd8bd3e8c50e7fb8b5bb8ac2e6ca9255",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-floor-draft",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-draft.png",
+        "sha256": "1d6909eb1847738e7840784cf121937dd7c4d4b6e17c5415145c7abf96e3735b",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-217-current2.stdout",
+        "raw_sha256": "1d94c08e2f8eb5d3d2c03f7a725a94e239a995c669c62a51011262874928143c",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-floor-cancelled",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-cancelled.png",
+        "sha256": "793360453e7e2b03fcf7bf9695dfa8be596d742ce298ebd8a424a498690d5a6c",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-218-current2.stdout",
+        "raw_sha256": "4ecbe381c0f75d3509afc4033b397072adeaaaed8049d3848376dcfd257ebd19",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-floor-saved",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-saved.png",
+        "sha256": "2df068449c42ccc14200829f7f3e66a1f054c2dbbe27a75483f58b744384a9b1",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-219-current2.stdout",
+        "raw_sha256": "b44ebb74bfa4fb9222b5d2f52e57f6d96d5146e37cfdececd6c020b7073beeea",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-options-identity",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-options-identity.png",
+        "sha256": "952a8c22725d05e2182ad674cccc8e3ddd6ae5bed7ede74ff1ac48c8362ba2b6",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-220-current2.stdout",
+        "raw_sha256": "a8c1476131cc9f35bdf93135cc3571e04ee8feabf291746537e8cf4ce30fd8d8",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-reset-inventory",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-inventory.png",
+        "sha256": "1005e0b25e237e28d8c14432d3ee362cc1a0d35c10a15846022f9af7fb6f2f84",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-221-current2.stdout",
+        "raw_sha256": "c6380953747c450c6bad6b79e148693fee42b675b7ecf134a698dba2a3ee9693",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-reset-last-page",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-last-page.png",
+        "sha256": "f456139a250a73e6a150622982f065daef3e789e546528c43a46a752b7cbeea2",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-222-current2.stdout",
+        "raw_sha256": "6ddcb419356dbe97e6c22f7e3ba4b00d28a59a72ac7e1217545ade0034a8319c",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-identity",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-identity.png",
+        "sha256": "61bbc4413d2452366930463b3dfa2291f61ea136952d7b222ef8d8ff828ea769",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-223-current2.stdout",
+        "raw_sha256": "ef3620a586265802a77e5a870b52910d5321139472509e305d1a77f152496e67",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-balance",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-balance.png",
+        "sha256": "ed09d38a86a268b91db8bb9b6b0d0912b1160d33b5c012e8f57a784e6384f742",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-224-current2.stdout",
+        "raw_sha256": "4072fdeab4a5876508f909f8ce4c07d13d3bfa330f7b206dc19774443a8bb21c",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-original",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-original.png",
+        "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-225-current2.stdout",
+        "raw_sha256": "6c5b9ea55668db8e85271d42cbe6f39cdce4f1b15a6ee351d00ea8fd1dae83f3",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-choice",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-choice.png",
+        "sha256": "d880baaef7a58bbf04f3118cd19be8ccb5e279eb2aa1d238e8e80d59b23052e9",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-226-current2.stdout",
+        "raw_sha256": "403eb447df29f14193a9310a281eeeef213f233c18338e5642ece85f5b707e84",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-no-match",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-no-match.png",
+        "sha256": "c00150527a24040b82a853e96293b138a51825ee6571d9201d0eaebf2ed9a732",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-227-current2.stdout",
+        "raw_sha256": "7c1a54549bac5660ff2074c9bc0e2339337ba1f911235628530627013f1c1872",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-choice-returned",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-choice-returned.png",
+        "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-228-current2.stdout",
+        "raw_sha256": "c61a800b276b3b12348b5e2c564f205dc0275dd2ba90dd366168a0d2f34bf873",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-draft",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-draft.png",
+        "sha256": "06fbdeba87f4b3fa2320bb60c7e2efb13da46fba638e0afa3e810b2c5ed57978",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-229-current2.stdout",
+        "raw_sha256": "9d98a2bea5481fdf03b215b748b540019bb4ce9b7b9157da2c5a74e3b4edaf12",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-cancelled",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-cancelled.png",
+        "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-230-current2.stdout",
+        "raw_sha256": "c120f36a4e1003c26950a211c1f9b280708ea5528495a18ee106adf425462fbe",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-saved",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-saved.png",
+        "sha256": "06fbdeba87f4b3fa2320bb60c7e2efb13da46fba638e0afa3e810b2c5ed57978",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-231-current2.stdout",
+        "raw_sha256": "22a0ab91c294946786f13776965eeea6ea1bd01b9fc628b06752882eec8bed50",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-refresh-result",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-refresh-result.png",
+        "sha256": "4e90f65079063ddf1e4d1fa2b21b7d81c88a3eead3974333acb128b855580079",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-232-current2.stdout",
+        "raw_sha256": "6833105855760a0b3e3138253f3cb8a18ef7499a5a2c4c0bcc5daa4711e6b1ef",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-refreshed-balance",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-balance.png",
+        "sha256": "548bc2c367b33ac27bf5c9b6fd1af18b03e2f849b50103f922cdd975d37df854",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-233-current2.stdout",
+        "raw_sha256": "df133815220e5833fa524c0a69916d6ec2a044a0602e1b7d251133c04583d305",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-refreshed-freshness",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-freshness.png",
+        "sha256": "548bc2c367b33ac27bf5c9b6fd1af18b03e2f849b50103f922cdd975d37df854",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-234-current2.stdout",
+        "raw_sha256": "edda7b2ab884f79a35950e514edda65f9cebac280f5fedd237f4da7571c04b48",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-refreshed-observation",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-observation.png",
+        "sha256": "548bc2c367b33ac27bf5c9b6fd1af18b03e2f849b50103f922cdd975d37df854",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-235-current2.stdout",
+        "raw_sha256": "3c7561bfda469562741125ec9275e7f52daf646674bb39c74b369540e7bd9c19",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-policy-boundary",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-policy-boundary.png",
+        "sha256": "2bd1aa34169f8a5958773e2c8babd524da02c4611bc70563bb4c9f50f9cd3b93",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-236-current2.stdout",
+        "raw_sha256": "8a2500fa0d9bbb1d540bfaade4872cd5c15adf2204a168bd87274946a3dcf3b1",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-reset-review",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-review.png",
+        "sha256": "1005e0b25e237e28d8c14432d3ee362cc1a0d35c10a15846022f9af7fb6f2f84",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-237-current2.stdout",
+        "raw_sha256": "77ec71162dc33da0053cc297cf5e2a50e7a11380ecb67bd397c06fb57f233ac1",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-no",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-no.png",
+        "sha256": "84085fec9ccb1c4df252ff6f6296a20bdda9ce008516de7457cf864a64140969",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-238-current2.stdout",
+        "raw_sha256": "bc824bcc60303fd3531361299c35ed472f9f57c3eef9069ed870cc939913c142",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-no-returned",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-no-returned.png",
+        "sha256": "46a5adc5c11441673f6f42f351d43b234cd5efcd797bfbc7a5e19398e474adfe",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-239-current2.stdout",
+        "raw_sha256": "ade63c66cc12666116f44722025e105dcf717eedc8b1d4e912b151a8605e0cb6",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-yes",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-yes.png",
+        "sha256": "66a5fe9e1c7a55efb5cef6e67e78324729c5ef76935ec272b02bdf1ddc208a33",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-240-current2.stdout",
+        "raw_sha256": "1b01136299da64926b04f2f0a7d798d8ca2554863ea2a6cee45ae236dd8e1fde",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-help-top",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-top.png",
+        "sha256": "c087bcf9ba85802ba856ca6a3a1b2fe56f66fb5a3f2dfcd68c85202321c7f34f",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-241-current2.stdout",
+        "raw_sha256": "6bbeb1e09e9354b0afc03c8f5ee0f40b2bf0c0e5c7572a89989d7edafaf5d101",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-help-identity",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-identity.png",
+        "sha256": "29b9057f605467f014878695f1c33e77e6ad11d1b55ca343c119853c1411c7a9",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "UNSUPPORTED automatic full identity; manually witnessed complete source-bound name/tag/delimiters",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-242-current2.stdout",
+        "raw_sha256": "a934c6857d39ff5973785e27851dc326665b71c3c6aaad65381f9adedc0366bd",
+        "missing": [
+          "東京 OpenAI Research Account Alpha Long Name [alpha-tag]"
+        ],
+        "unexpected": [],
+        "properties": {
+          "title_and_close": "SUPPORTED: only full identity marker missing",
+          "complete_account_name_tag_and_delimiters": "MANUAL WITNESS ONLY, exact original field",
+          "native_full_identity": "UNSUPPORTED/rejected"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-help-returned",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-returned.png",
+        "sha256": "66a5fe9e1c7a55efb5cef6e67e78324729c5ef76935ec272b02bdf1ddc208a33",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-243-current2.stdout",
+        "raw_sha256": "4ff29726e5bc63351c414ae435bbfc1bfc355b02936b34dd6b5ee176b69a8fdb",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-reset-result",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result.png",
+        "sha256": "daca2146865495ef302b089e5eb1f52cf26025038a5278fecb0ac1e3501097be",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-244-current2.stdout",
+        "raw_sha256": "353af085c08a9d7225ef7e6c0d140f870f16b46e5fe533961e7c8adbbec9e441",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-reset-result-bottom",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result-bottom.png",
+        "sha256": "d0876f1227fb987d3093a27b20518bc8343384feed6f4a535eef6b7c53f4b6c9",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-245-current2.stdout",
+        "raw_sha256": "b5d64bc705097c25ddfb61940e0da77da0177fe60b7a21496f4aa15123e2f9d2",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-returned",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-returned.png",
+        "sha256": "4955e2bba4a4bd2b2e595d768b8151be8fe4a08e2eb4b5b96ad97fd8930bdef2",
+        "posthoc_exit": 0,
+        "expected_exit": 0,
+        "status": "SUPPORTED automatic positive",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-246-current2.stdout",
+        "raw_sha256": "5c7d173daa406e3ddae06f7cf21494f4c6201a6bef44e5d6cdad3eec408d717e",
+        "missing": [],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "SUPPORTED"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-saved",
+        "image": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixtures/blank-startup.png",
+        "sha256": "6ae243f2abf888105888c767a2f7875ed7482d2bc9310092901bcacf3bb7ae77",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-247-current2.stdout",
+        "raw_sha256": "c3e9321e350a2b3538db038141ed5ba231f57b652d62d20681f435f6d8a53d9d",
+        "missing": [
+          "Credit usage",
+          "Use credits Allow",
+          "Cancel",
+          "Save"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-policy-saved",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-cancelled.png",
+        "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-248-current2.stdout",
+        "raw_sha256": "922d6b736144e5bcd5ed02a7680476dfae1a95cf2b51e5e2dca576a2d1ff72aa",
+        "missing": [
+          "Use credits Allow"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-floor-saved",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-cancelled.png",
+        "sha256": "793360453e7e2b03fcf7bf9695dfa8be596d742ce298ebd8a424a498690d5a6c",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-249-current2.stdout",
+        "raw_sha256": "c3f43bad545c21f2ee6690d2e407d06559133aae28b89e6634c391c3fb3202cb",
+        "missing": [
+          "Current 1%"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-floor-saved",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-draft.png",
+        "sha256": "1d6909eb1847738e7840784cf121937dd7c4d4b6e17c5415145c7abf96e3735b",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-250-current2.stdout",
+        "raw_sha256": "fcba8958dcd09ca7a7ce096d6d1a87a4319ca7d80191028bf67af217701eb6bd",
+        "missing": [
+          "Current 1%"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-credits-refreshed-balance",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-balance.png",
+        "sha256": "ed09d38a86a268b91db8bb9b6b0d0912b1160d33b5c012e8f57a784e6384f742",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-251-current2.stdout",
+        "raw_sha256": "4f2b3c38708e41c870436999fc8ffffd95e4d5758956b94b984b96d46bc68bd2",
+        "missing": [
+          "63,000"
+        ],
+        "unexpected": [
+          "62,500"
+        ],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-returned",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result.png",
+        "sha256": "daca2146865495ef302b089e5eb1f52cf26025038a5278fecb0ac1e3501097be",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-252-current2.stdout",
+        "raw_sha256": "0439bbe2e296b628ae34537b72e1813bab6c22f246f11c1c9a463222b04b0a1f",
+        "missing": [],
+        "unexpected": [
+          "Reset result",
+          "Success"
+        ],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-help-bottom",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-help-top.png",
+        "sha256": "a0c586bc844d5620e4f5ccc494763ea31f508d2f6e05ab0d433d30070cdc6822",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-253-current2.stdout",
+        "raw_sha256": "bbcc8cd055688f2e5f0a75b27bfe5e87f1c114a1d024f98e85539394e5d8348d",
+        "missing": [
+          "Exit Quota unless a reset is being applied."
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-details-bottom",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-details-top.png",
+        "sha256": "3b72c180de9104cdd5c4e29736f940e1022f36a6c9ee33bd772ec143c1d78801",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-254-current2.stdout",
+        "raw_sha256": "b4d153eb51146101de4e8262fe7db8b4564582c34db6eceecb1a5058ecb75e99",
+        "missing": [
+          "note"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-reset-result-bottom",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-yes.png",
+        "sha256": "66a5fe9e1c7a55efb5cef6e67e78324729c5ef76935ec272b02bdf1ddc208a33",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-255-current2.stdout",
+        "raw_sha256": "4fd03dea9d837cf1c8a1d77ca2f85f58c6e4209eab038cfe1d6c71b83b1e1273",
+        "missing": [
+          "Reset result",
+          "Return to quota status.",
+          "Close"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-browse-credit-window",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-next-account.png",
+        "sha256": "69c807d9e133f0f5fa89497c8488b8ac56864568931bac05864fbe0f62aab848",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-256-current2.stdout",
+        "raw_sha256": "9affae54c610dd723d909418bc62d010289c1867d20e7dd9fbb78427012a22e1",
+        "missing": [
+          "62.5k",
+          "99%",
+          "captured Alpha account; foreign selected Beta",
+          "visible selected account is missing or ambiguous"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-browse-pace-value",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result.png",
+        "sha256": "daca2146865495ef302b089e5eb1f52cf26025038a5278fecb0ac1e3501097be",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "WRONG IMAGE REJECTED",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-257-current2.stdout",
+        "raw_sha256": "dd2781d58b4a2f520d91fe03ce0004630599b6b00b1ba0f7cb0cce39a4bcd12d",
+        "missing": [
+          "burn unavailable",
+          "visible selected account is missing or ambiguous"
+        ],
+        "unexpected": [],
+        "properties": {
+          "declared_checkpoint_markers": "NEGATIVE REJECTION"
+        }
+      },
+      {
+        "checkpoint": "component-quota-confirm-help-identity",
+        "image": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-top.png",
+        "sha256": "c087bcf9ba85802ba856ca6a3a1b2fe56f66fb5a3f2dfcd68c85202321c7f34f",
+        "posthoc_exit": 1,
+        "expected_exit": 1,
+        "status": "UNSUPPORTED automatic full identity; manually witnessed complete source-bound name/tag/delimiters",
+        "raw_output": "/private/tmp/2026-10-tui-component-system/c7-strict-unaffected-raw-edge-qualification/image-258-current2.stdout",
+        "raw_sha256": "d43d15cb35d996bda9874a8eed2af720892f1bf508c309e431d4837fd90a21eb",
+        "missing": [
+          "東京 OpenAI Research Account Alpha Long Name [alpha-tag]"
+        ],
+        "unexpected": [],
+        "properties": {
+          "title_and_close": "SUPPORTED: only full identity marker missing",
+          "complete_account_name_tag_and_delimiters": "MANUAL WITNESS ONLY, exact original field",
+          "native_full_identity": "UNSUPPORTED/rejected"
+        }
+      }
+    ]
+  },
+  "manual_full_identity": {
+    "path": "tmp/tui-verification/c7-current40-manual-full-identity-witness.json",
+    "sha256": "e828f8d5f2324d9eae6e606ba610736d5c51ff522dc159503c2503451f58db7f",
+    "images": [
+      {
+        "checkpoint": "component-quota-confirm-help-top",
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-top.png",
+        "sha256": "c087bcf9ba85802ba856ca6a3a1b2fe56f66fb5a3f2dfcd68c85202321c7f34f",
+        "pixels": [
+          432,
+          484
+        ],
+        "viewport_cells": [
+          40,
+          24
+        ],
+        "manual_witness": "SAME paired Verifier personally reopened exact original on 2026-10-20 in current turn",
+        "account_field_name_lines": [
+          "東京 OpenAI",
+          "Research Account",
+          "Alpha Long Name"
+        ],
+        "account_field_tag": "[alpha-tag]",
+        "complete_name": "東京 OpenAI Research Account Alpha Long Name",
+        "tag_value": "alpha-tag",
+        "leading_delimiter": "[",
+        "trailing_delimiter": "]",
+        "manual_wrong_target_comparison": {
+          "lalpha-tag": "REJECT: actual first tag value character a, no leading l",
+          "alpha-tagl": "REJECT: actual last tag value character g, no trailing l",
+          "alpha-tax": "REJECT: actual last tag value character g, not x"
+        },
+        "automatic_full_identity": "UNSUPPORTED; strict rejection retained. Posthoc per-property strict outcomes pending qualifier, not inferred."
+      },
+      {
+        "checkpoint": "component-quota-confirm-help-identity",
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-identity.png",
+        "sha256": "29b9057f605467f014878695f1c33e77e6ad11d1b55ca343c119853c1411c7a9",
+        "pixels": [
+          432,
+          484
+        ],
+        "viewport_cells": [
+          40,
+          24
+        ],
+        "manual_witness": "SAME paired Verifier personally reopened exact original on 2026-10-20 in current turn",
+        "account_field_name_lines": [
+          "東京 OpenAI",
+          "Research Account",
+          "Alpha Long Name"
+        ],
+        "account_field_tag": "[alpha-tag]",
+        "complete_name": "東京 OpenAI Research Account Alpha Long Name",
+        "tag_value": "alpha-tag",
+        "leading_delimiter": "[",
+        "trailing_delimiter": "]",
+        "manual_wrong_target_comparison": {
+          "lalpha-tag": "REJECT: actual first tag value character a, no leading l",
+          "alpha-tagl": "REJECT: actual last tag value character g, no trailing l",
+          "alpha-tax": "REJECT: actual last tag value character g, not x"
+        },
+        "automatic_full_identity": "UNSUPPORTED; strict rejection retained. Posthoc per-property strict outcomes pending qualifier, not inferred."
+      }
+    ]
+  },
+  "causal_controls": {
+    "old-column": {
+      "cases": "402",
+      "failures": "selected-forty-native-boxes,selected-forty-native-order,selected-forty-one-shared-pixel,selected-forty-touching-edge",
+      "native_original_red": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-credit-window.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "missing": [
+          "visible selected account is missing or ambiguous"
+        ]
+      }
+    },
+    "old-horizontal": {
+      "failures": "selected-forty-native-boxes,selected-forty-native-order,selected-forty-one-shared-pixel",
+      "cases": "402",
+      "native_original_red": {
+        "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-credit-window.png",
+        "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+        "missing": [
+          "visible selected account is missing or ambiguous"
+        ]
+      }
+    },
+    "old-row": {
+      "failures": "selected-alpha-native-overlapping-rows,selected-alpha-native-reversed-observations,selected-forty-native-boxes,selected-forty-native-order,selected-forty-one-shared-pixel,selected-forty-touching-edge",
+      "cases": "402"
+    },
+    "weak-attribution": {
+      "cases": "402",
+      "failures": "foreign-selected-beta-cannot-borrow-alpha-facts,visible-account-attribution-must-fail-closed,visible-account-attribution-must-fail-closed,visible-account-attribution-must-fail-closed,visible-account-attribution-must-fail-closed"
+    },
+    "ambiguous-edge-acceptance": {
+      "failures": "help-reject-ambiguous-leading-identifier-edge,help-reject-ambiguous-trailing-identifier-edge,help-reject-ambiguous-both-identifier-edge",
+      "cases": "402"
+    },
+    "wrong-tag-value-acceptance": {
+      "cases": "402",
+      "failures": "help-exact-tag-wrong-same-length,help-tag-wrong-uppercase-value,help-tag-wrong-case-character,help-tag-internal-character"
+    },
+    "tag-casefold-acceptance": {
+      "failures": "help-tag-wrong-uppercase-value,help-tag-wrong-case-character",
+      "cases": "402"
+    }
+  },
+  "runtime_status": "FAILED historical driver101; child0/zeroeffects/independentcleanup remain unchanged",
+  "normal_receipt": false,
+  "automatic_42_11_pass": false,
+  "requirement_composition": "Offer strict supported properties plus SHA-bound manual complete identity to Root; no automated ambiguity fallback",
+  "limits": [
+    "Strict native fullidentity remains unsupported on both40Help images",
+    "Posthoc checks are fresh retained-image observations; they do not rewrite historicalunrun statuses or generate a Normalreceipt",
+    "No new40 UI run, OCRmode, candidate fallback, value rewrite or reconstructedpixels",
+    "Pending/error/live resize/Sessions/public/native/device/final acceptance remain open"
+  ]
+}

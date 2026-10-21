@@ -92,77 +92,18 @@ pub(super) async fn load_runtime_records(
     Ok((endpoint, rows))
 }
 
+#[path = "provider_picker_inventory.rs"]
+mod provider_picker_inventory;
+
+#[cfg(test)]
 async fn load_provider_records(
     client: &mut CollaborationClient,
-) -> Result<(Option<EndpointRef>, Vec<SessionPickerRecord>), ClientError> {
-    let inventory = client.list_endpoints().await?;
-    let native_endpoint = match bind_native_inventory(
-        &inventory,
-        client.identity(),
-        &client.identity().service_id,
-        NativeEndpointSelector::UniqueNative,
-        NativeSessionView::Stored,
-    ) {
-        Ok(binding) => Some(binding.endpoint),
-        // Native attribution is optional for this independent provider read. Ambiguity must
-        // not choose an arbitrary native source, or hide otherwise valid provider sessions.
-        Err(
-            NativeBindingRejection::EndpointUnavailable | NativeBindingRejection::AmbiguousEndpoint,
-        ) => None,
-        Err(_) => return Err(ClientError::Protocol("invalid native inventory binding")),
-    };
-    let providers = inventory
-        .endpoints
-        .into_iter()
-        .filter(|entry| {
-            entry
-                .channels
-                .iter()
-                .any(|channel| matches!(channel, ChannelDescription::ExternalProvider { .. }))
-        })
-        .collect::<Vec<_>>();
-    let mut rows = Vec::new();
-    for provider in providers {
-        let mut cursor = None;
-        let mut seen_cursors = BTreeSet::new();
-        loop {
-            let page = client
-                .list_provider_sessions(ProviderSessionListParams {
-                    endpoint: provider.endpoint.clone(),
-                    view: NativeSessionView::Stored,
-                    scope: NativeSessionScope::Any,
-                    source: NativeSessionSource::All,
-                    query: None,
-                    page_size: 100,
-                    cursor,
-                })
-                .await?;
-            for summary in page.sessions {
-                if rows.len() >= MAX_RUNTIME_ROWS {
-                    return Err(ClientError::Protocol(
-                        "provider picker inventory exceeded bounds",
-                    ));
-                }
-                let label = String::from(provider.label.clone());
-                rows.push(
-                    SessionPickerRecord::from_provider_summary(&summary, &label)
-                        .with_provider_endpoint(&summary, &provider),
-                );
-            }
-            match page.next_cursor {
-                Some(next) if seen_cursors.insert(next.clone()) && seen_cursors.len() <= 64 => {
-                    cursor = Some(next)
-                }
-                Some(_) => {
-                    return Err(ClientError::Protocol(
-                        "provider picker cursor did not converge",
-                    ));
-                }
-                None => break,
-            }
-        }
-    }
-    Ok((native_endpoint, rows))
+) -> Result<provider_picker_inventory::ProviderPickerRecords, ClientError> {
+    provider_picker_inventory::read_provider_records(
+        client,
+        tokio::time::Instant::now() + std::time::Duration::from_secs(5),
+    )
+    .await
 }
 
 async fn selected_generation(
@@ -183,7 +124,16 @@ async fn selected_generation(
         NativeEndpointSelector::Exact(endpoint),
         NativeSessionView::Loaded,
     )
-    .map_err(|_| ClientError::Protocol("invalid native inventory binding"))?;
+    .map_err(|reason| match reason {
+        NativeBindingRejection::EndpointUnavailable
+        | NativeBindingRejection::RuntimeUnavailable => {
+            ClientError::Transport(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "native runtime unavailable",
+            ))
+        }
+        _ => ClientError::Protocol("invalid native inventory binding"),
+    })?;
     let NativeInventoryContext::Runtime(generation) = binding.context else {
         return Err(ClientError::Protocol("runtime generation unavailable"));
     };
@@ -273,20 +223,26 @@ impl PickerRuntimeInventory {
         directory: Option<&Path>,
         stored: Vec<SessionPickerRecord>,
         include_empty_sessions: bool,
-    ) -> PickerRecordsSnapshot {
+    ) -> Result<PickerRecordsSnapshot, crate::presentation::session_picker::SourceInventoryRejection>
+    {
         if directory.is_none() {
             self.remembered.retain(|row| !row.identity.is_provider());
         }
         let (provider_result, native_result) = if let Some(directory) = directory {
             let metadata = stored.clone();
             let providers = async {
-                let mut client = CollaborationClient::connect(
-                    directory,
-                    "sessions-picker-providers",
-                    env!("CARGO_PKG_VERSION"),
+                let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(5);
+                let mut client = tokio::time::timeout_at(
+                    deadline,
+                    CollaborationClient::connect(
+                        directory,
+                        "sessions-picker-providers",
+                        env!("CARGO_PKG_VERSION"),
+                    ),
                 )
-                .await?;
-                load_provider_records(&mut client).await
+                .await
+                .map_err(|_| ClientError::Timeout)??;
+                provider_picker_inventory::read_provider_records(&mut client, deadline).await
             };
             let native = async {
                 let mut client = CollaborationClient::connect(
@@ -299,14 +255,20 @@ impl PickerRuntimeInventory {
                 load_runtime_records(&mut client, &metadata, include_empty_sessions).await
             };
             let deadline = std::time::Duration::from_secs(5);
-            let (providers, native) = tokio::join!(
-                tokio::time::timeout(deadline, providers),
-                tokio::time::timeout(deadline, native)
-            );
-            (
-                providers.ok().and_then(Result::ok),
-                native.ok().and_then(Result::ok),
-            )
+            let (providers, native) =
+                tokio::join!(providers, tokio::time::timeout(deadline, native));
+            let native = native.unwrap_or(Err(ClientError::Timeout));
+            for result in [providers.as_ref().map(|_| ()), native.as_ref().map(|_| ())] {
+                if let Err(error) = result
+                    && matches!(
+                        super::source_inventory_failure::InventoryReadFailure::from_client(error),
+                        super::source_inventory_failure::InventoryReadFailure::Invalid { .. }
+                    )
+                {
+                    return Err(crate::presentation::session_picker::SourceInventoryRejection::InvalidInventory);
+                }
+            }
+            (providers.ok(), native.ok())
         } else {
             (None, None)
         };
@@ -316,8 +278,12 @@ impl PickerRuntimeInventory {
             .or_else(|| {
                 provider_result
                     .as_ref()
-                    .and_then(|(endpoint, _)| endpoint.as_ref())
+                    .and_then(|(endpoint, _, _)| endpoint.as_ref())
             });
+        let native_live_coverage = provider_result
+            .as_ref()
+            .map(|(_, _, coverage)| coverage.clone())
+            .unwrap_or_default();
         let provider_inventory_available = provider_result.is_some();
         let mut combined: BTreeMap<SessionPickerIdentity, SessionPickerRecord> = self
             .remembered
@@ -354,7 +320,7 @@ impl PickerRuntimeInventory {
                     self.remembered.push(row);
                 }
             }
-            if let Some((_, providers)) = provider_result {
+            if let Some((_, providers, _)) = provider_result {
                 combined.retain(|identity, _| !identity.is_provider());
                 for row in providers {
                     combined.insert(row.identity.clone(), row.clone());
@@ -369,10 +335,11 @@ impl PickerRuntimeInventory {
                 }
             }
         }
-        PickerRecordsSnapshot {
+        Ok(PickerRecordsSnapshot {
+            native_live_coverage,
             records: combined.into_values().collect(),
             runtime_coverage,
-        }
+        })
     }
 }
 

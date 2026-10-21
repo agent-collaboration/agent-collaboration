@@ -24,8 +24,9 @@ fn reset_operation_scenarios() -> Vec<(&'static str, ResetWorkflowSnapshot, &'st
     };
 
     let mut committing = completed_inspection_activities();
-    committing.revalidation_live_usage =
-        OperationActivity::Succeeded(crate::quota_reset::reset_session_supervisor::test_live_usage_success(0));
+    committing.revalidation_live_usage = OperationActivity::Succeeded(
+        crate::quota_reset::reset_session_supervisor::test_live_usage_success(0),
+    );
     committing.revalidation_credit_inventory =
         OperationActivity::Succeeded(OperationSuccess::CreditInventory {
             credit_count: 1,
@@ -215,9 +216,9 @@ fn completed_inspection_activities() -> WorkflowActivities {
         ),
         inspection_credit_inventory: OperationActivity::Succeeded(
             OperationSuccess::CreditInventory {
-            credit_count: 1,
-            usable_credit_count: 1,
-        },
+                credit_count: 1,
+                usable_credit_count: 1,
+            },
         ),
         ..WorkflowActivities::default()
     }
@@ -225,8 +226,9 @@ fn completed_inspection_activities() -> WorkflowActivities {
 
 fn unknown_result_activities() -> WorkflowActivities {
     let mut activities = completed_inspection_activities();
-    activities.revalidation_live_usage =
-        OperationActivity::Succeeded(crate::quota_reset::reset_session_supervisor::test_live_usage_success(0));
+    activities.revalidation_live_usage = OperationActivity::Succeeded(
+        crate::quota_reset::reset_session_supervisor::test_live_usage_success(0),
+    );
     activities.revalidation_credit_inventory =
         OperationActivity::Succeeded(OperationSuccess::CreditInventory {
             credit_count: 1,
@@ -256,6 +258,65 @@ fn test_credit_inventory() -> Vec<ResetCreditDisplayRecord> {
     }]
 }
 
+#[test]
+fn reset_inventory_count_warning_has_one_blank_row_only_when_present() {
+    let snapshot = ResetWorkflowSnapshot::test_snapshot(
+        WorkflowPhase::Inspected,
+        ConfirmationSelection::No,
+        completed_inspection_activities(),
+        None,
+        Some(test_live_weekly(9)),
+        test_credit_inventory(),
+        None,
+    );
+    for width in [48usize, 120] {
+        let mismatched = test_reset_target();
+        let mut matching = test_reset_target();
+        matching.saved_reset_credits = "1 reset".to_owned();
+        let render = |target: &ResetPaneTarget| {
+            super::quota_reset_detail_rendering::render_reset_panel_content(
+                &snapshot, target, width, 0, 4, 0, None,
+            )
+            .render(None)
+        };
+        let warning_canvas = render(&mismatched);
+        let warning_frame = warning_canvas.to_string();
+        let warning_rows = warning_frame.lines().collect::<Vec<_>>();
+        let warning_row = warning_rows
+            .iter()
+            .position(|line| line.contains("Saved count differs:"))
+            .expect("disagreement keeps the existing warning");
+        println!("WARNING SPACING {width}:\n{warning_frame}");
+        assert!(warning_row >= 2);
+        assert!(
+            warning_rows[warning_row - 1].trim().is_empty()
+                && !warning_rows[warning_row - 2].trim().is_empty(),
+            "exactly one blank row separates inventory from its warning: {warning_frame}"
+        );
+        let column = warning_rows[warning_row].find("Saved").unwrap();
+        assert_eq!(
+            warning_canvas
+                .cell(column, warning_row)
+                .unwrap()
+                .text_style()
+                .unwrap()
+                .color,
+            Some(Color::Rgb {
+                r: 255,
+                g: 165,
+                b: 0
+            }),
+            "warning is orange; yellow is reserved for focus"
+        );
+        let matching_frame = render(&matching).to_string();
+        assert!(!matching_frame.contains("Saved count differs:"));
+        assert_eq!(
+            matching_frame.lines().collect::<Vec<_>>(),
+            warning_rows[..warning_row - 1],
+            "an agreeing count adds neither the warning nor its spacer"
+        );
+    }
+}
 
 #[test]
 fn account_options_resets_reserve_inventory_and_short_eligibility_rows() {
@@ -324,18 +385,23 @@ fn reset_options_result_content_keeps_outcome_title() {
         WorkflowPhase::Result,
         ConfirmationSelection::No,
         unknown_result_activities(),
-        Some(WorkflowResult::OutcomeUnknown(ConsumeUnknownReason::Transport)),
+        Some(WorkflowResult::OutcomeUnknown(
+            ConsumeUnknownReason::Transport,
+        )),
         None,
         Vec::new(),
         None,
     );
 
     let frame = super::quota_reset_detail_rendering::render_reset_panel_content(
-        &snapshot, &target, 56, 16, 0, 4, 0,
+        &snapshot, &target, 56, 0, 4, 0, None,
     )
     .render(None)
     .to_string();
 
     assert!(frame.contains("Outcome unknown — do not retry"), "{frame}");
-    assert!(frame.contains("The credit may have been consumed"), "{frame}");
+    assert!(
+        frame.contains("The credit may have been consumed"),
+        "{frame}"
+    );
 }

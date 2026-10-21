@@ -49,7 +49,7 @@ async fn sessions_help_phone_shows_filter_context_before_general_navigation() {
         frame.contains("Session filters"),
         "current dialog context must be visible: {frame}"
     );
-    assert!(frame.contains("Choose provider draft"), "{frame}");
+    assert!(frame.contains("Move field focus"), "{frame}");
 }
 
 #[tokio::test]
@@ -60,7 +60,9 @@ async fn sessions_help_preserves_provider_draft_and_blocks_background_keys() {
         36,
         vec![
             ctrl_key('f'),
+            key(KeyCode::Enter),
             key(KeyCode::Down),
+            key(KeyCode::Enter),
             key(KeyCode::F(1)),
             key(KeyCode::Down),
             key(KeyCode::Enter),
@@ -71,11 +73,11 @@ async fn sessions_help_preserves_provider_draft_and_blocks_background_keys() {
     )
     .await;
     assert!(
-        frame.contains("Draft: Codex"),
+        frame.contains("Codex ▾"),
         "Help close must restore draft: {frame}"
     );
     assert!(
-        frame.contains("Current: All providers"),
+        frame.contains("Filters · All providers"),
         "Help must not apply draft: {frame}"
     );
     assert!(
@@ -363,59 +365,54 @@ async fn owner_feedback_atomic_paste_advances_the_real_source_query_once() {
 
 #[tokio::test]
 async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() {
-    let canvases = element! { SessionsPickerComponent(request: picker_request(), width: 120usize, height: 36usize) }
-        .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(vec![
-            ctrl_key('f'), key(KeyCode::Tab), ctrl_key('d'),
-        ]))).collect::<Vec<_>>().await;
-    let canvas = canvases.last().unwrap();
-    let text = canvas.to_string();
-    let (row, line) = text
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("Apply") && line.contains("Cancel"))
-        .unwrap();
-    let column = line.chars().position(|character| character == 'A').unwrap();
-    let style = canvas.cell(column, row).unwrap().text_style().unwrap();
-    assert_eq!(style.color, Some(Color::Yellow));
-    assert_eq!(style.weight, Weight::Bold);
-    assert!(
-        style.underline,
-        "focused Apply must differ from selected radio: {text}"
-    );
-    let (row, line) = text
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("Session client provider"))
-        .unwrap();
-    let column = line.chars().position(|character| character == 'S').unwrap();
-    let style = canvas.cell(column, row).unwrap().text_style().unwrap();
-    assert_eq!(style.color, Some(Color::White));
-    assert_eq!(style.weight, Weight::Bold);
-    let (row, line) = text
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("○ Codex"))
-        .unwrap();
-    let offset = line.find("Codex").unwrap();
-    let column = line.get(..offset).unwrap().chars().count();
-    let style = canvas.cell(column, row).unwrap().text_style().unwrap();
-    assert_eq!(
-        style.color,
-        Some(Color::White),
-        "an available choice is body text: {text}"
-    );
-    let (row, line) = text
-        .lines()
-        .enumerate()
-        .find(|(_, line)| line.contains("● All providers"))
-        .unwrap();
-    let column = line.chars().position(|character| character == '●').unwrap();
-    let style = canvas.cell(column, row).unwrap().text_style().unwrap();
-    assert_eq!(
-        style.color,
-        Some(Color::Yellow),
-        "selection survives action focus: {text}"
-    );
+    for choices_open in [false, true] {
+        let mut events = vec![ctrl_key('f')];
+        if choices_open {
+            events.push(key(KeyCode::Enter));
+        } else {
+            events.extend((0..6).map(|_| key(KeyCode::Tab)));
+        }
+        events.push(ctrl_key('d'));
+        let canvases=element!(SessionsPickerComponent(request:picker_request(),width:120usize,height:36usize))
+            .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(events))).collect::<Vec<_>>().await;
+        let canvas = canvases.last().unwrap();
+        let text = canvas.to_string();
+        let locate = |label: &str| {
+            let (row, line) = text
+                .lines()
+                .enumerate()
+                .find(|(_, line)| {
+                    line.contains(label) && !(label == "Codex" && line.contains("Thi"))
+                })
+                .unwrap_or_else(|| panic!("missing {label}: {text}"));
+            let byte = line.find(label).unwrap();
+            (
+                unicode_width::UnicodeWidthStr::width(
+                    line.get(..byte)
+                        .expect("matched text starts at UTF-8 boundary"),
+                ),
+                row,
+            )
+        };
+        if !choices_open {
+            let (column, row) = locate("Apply");
+            let style = canvas.cell(column, row).unwrap().text_style().unwrap();
+            assert_eq!(style.color, Some(Color::Yellow));
+            assert_eq!(style.weight, Weight::Bold);
+            assert!(style.underline, "{text}");
+            let (column, row) = locate("Client");
+            let style = canvas.cell(column, row).unwrap().text_style().unwrap();
+            assert_eq!(style.color, Some(Color::White));
+            assert_eq!(style.weight, Weight::Normal);
+        } else {
+            let (column, row) = locate("Codex");
+            let style = canvas.cell(column, row).unwrap().text_style().unwrap();
+            assert_eq!(style.color, Some(Color::White), "available choice: {text}");
+            let (column, row) = locate("❯ All providers");
+            let style = canvas.cell(column, row).unwrap().text_style().unwrap();
+            assert_eq!(style.color, Some(Color::Yellow), "selected choice: {text}");
+        }
+    }
 }
 
 #[tokio::test]

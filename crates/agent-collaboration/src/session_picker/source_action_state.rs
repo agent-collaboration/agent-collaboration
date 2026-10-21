@@ -1,11 +1,7 @@
 //! One immutable read-only source preparation; picker focus cannot retarget it.
-use super::{
-    PickerSourceContext, SessionsPickerOutcome,
-    picker_machine_controls::{MachineChoicePurpose, PickerMachineStage},
-    picker_model::SessionsPickerModel,
-};
+use super::{PickerSourceContext, SessionsPickerOutcome, picker_model::SessionsPickerModel};
 use crate::sessions::{
-    RouterRegistryRead, SessionActionSelection, SessionPickerIdentity, SessionRowProvenance,
+    SessionActionSelection, SessionPickerIdentity, SessionRowProvenance,
     router_connection_registry::{RouterConnectionProfile, RouterConnectionTransport},
     source_ssh_protocol::{
         PreparedSourceLaunch, PreparedSourceSession, SourceNativeOptions, SourceReadError,
@@ -65,23 +61,14 @@ impl SessionsPickerModel {
         if self.source_action.pending.is_some() {
             return true;
         }
-        let PickerMachineStage::Choosing {
-            purpose: MachineChoicePurpose::NewSession,
-            focus,
-            ..
-        } = self.machine_controls.stage
+        let Some(PickerSourceContext::ConfiguredHosted(profile)) = self
+            .new_session
+            .as_ref()
+            .map(|draft| &draft.selected_source)
         else {
             return false;
         };
-        if focus == 0 {
-            return false;
-        }
-        let RouterRegistryRead::Ready(registry) = &self.request.router_registry else {
-            return false;
-        };
-        let Some(profile) = registry.routers.get(focus - 1).cloned() else {
-            return false;
-        };
+        let profile = profile.clone();
         if !matches!(profile.transport, RouterConnectionTransport::Ssh(_)) {
             return false;
         }
@@ -169,7 +156,12 @@ impl SessionsPickerModel {
         {
             return false;
         }
-        let selection = confirmation.selection.clone();
+        let super::picker_fork_confirmation::ForkLaunchTarget::Codex(selection) =
+            &confirmation.launch_target
+        else {
+            return false;
+        };
+        let selection = selection.clone();
         let source_directory = Some(confirmation.directory_label.clone());
         self.begin_source_selection(&selection, true, source_directory)
     }

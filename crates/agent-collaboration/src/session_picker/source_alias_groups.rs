@@ -160,7 +160,13 @@ impl SourceAliasGroups {
         let snapshot = snapshots
             .iter()
             .find(|(context, _, _)| context == source)
-            .map(|(_, binding, snapshot)| (binding.clone(), snapshot.runtime_coverage));
+            .map(|(_, binding, snapshot)| {
+                (
+                    binding.clone(),
+                    snapshot.runtime_coverage,
+                    snapshot.native_live_coverage.clone(),
+                )
+            });
         for alias in &group.aliases {
             if let Some(item) = progress
                 .iter_mut()
@@ -173,7 +179,7 @@ impl SourceAliasGroups {
                 continue;
             }
             snapshots.retain(|(context, _, _)| context != alias);
-            if let Some((binding, coverage)) = &snapshot
+            if let Some((binding, coverage, native_coverage)) = &snapshot
                 && binding.as_ref() == Some(&group.binding)
             {
                 // The representative owns the rows; aliases contribute only verified labels.
@@ -181,6 +187,7 @@ impl SourceAliasGroups {
                     alias.clone(),
                     binding.clone(),
                     PickerRecordsSnapshot {
+                        native_live_coverage: native_coverage.clone(),
                         records: Vec::new(),
                         runtime_coverage: *coverage,
                     },
