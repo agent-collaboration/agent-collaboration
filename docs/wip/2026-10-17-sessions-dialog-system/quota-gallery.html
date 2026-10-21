@@ -18,19 +18,26 @@
 <ex-document id="quota-gallery">
 <h1>Sessions and Quota: screenshot review</h1>
 <p>Original compiled terminal captures, with their observed build and result. Use the gallery to compare sizes and open pictures fullscreen. Narrow width and short height are the approved phone proxy.</p>
-<ex-callout tone="risk" title="Release verification in progress">
-The current 0.1.99 Sessions Browse and Details originals are first in the gallery. Their two-scene observation is valid; the planned four-scene aggregate failed because New and search were not captured. Current Quota observation and final CI remain pending. Earlier pictures retain their historical build labels. Wider provider and narrow/resize checks are follow-up work under the owner's later release decision.
+<ex-callout tone="note" title="What the current pictures prove">
+Four original 0.1.99 screenshots show Browse and Details for both screens on one Mac. An independent verifier and the Lead inspected them. They exercise real compiled UI with synthetic records. The Sessions four-scene tour remains failed/partial; only its two actual scenes count. These pictures do not prove live-provider, remote, all-menu, narrow or resize behavior. <a href="proof-assets/2026-10-21-release-0.1.99/evidence.json">Exact scope and evidence</a> · <a href="release-follow-ups.md">Accepted follow-ups</a>.
 </ex-callout>
 
-<h2 id="sessions">Earlier Sessions evidence</h2>
-<p><strong>Earlier compiled captures · 120×36.</strong> Browse, Details, New, Fork, searchable choices, Filters and Help are below. All 20 image checks and three wrong-image controls passed. An independent verifier opened and hash-checked every original and found no confirmed visible P0–P3 issue in this bounded set.</p>
-<p>These use synthetic session records through the real UI and input loop, rendered by fixture harness <code>144801f2…</code>. They do not prove installed-client actions. <a href="proof-assets/2026-10-20-sessions-wide/evidence.json">Exact evidence and limits</a> · <a href="proof-assets/2026-10-20-sessions-wide/independent-ux.md">Independent visual review</a>.</p>
+<h2 id="sessions">Release screen check</h2>
+<p>The first four figures are current 0.1.99 originals at 120×36. Quota shows full account names with provider labels, compact balances, and separate Account, Status and Quota groups. Sessions shows the fixed selection gutter and captured Details facts and actions. Full-browser scaling is preserved; use the gallery's fullscreen view to inspect the text.</p>
 <h2 id="screenshots">Screenshot gallery</h2>
 <p>Start with the 0.1.99 originals. Filter by screen, view or observed build; earlier captures remain available with their original identities.</p>
-<ex-gallery id="quota-evidence" label="Sessions and Quota screenshots" selected="release-sessions-browse" filters="surface tags build">
+<ex-gallery id="quota-evidence" label="Sessions and Quota screenshots" selected="release-quota-browse" filters="surface tags build">
   <script type="application/json" data-gallery-filters>
     [{"field":"surface","label":"Screen","icon":"terminal"},{"field":"tags","label":"View","icon":"file"},{"field":"build","label":"Observed build","icon":"package"}]
   </script>
+  <figure id="release-quota-browse" data-surface="Quota" data-screen="Release Quota Browse" data-state="Browse" data-viewport="120×36" data-tags="Browse" data-build="0.1.99 / 2470bdd2 fixture">
+    <img src="proof-assets/2026-10-21-release-0.1.99/quota-browse.jpg" alt="Original 0.1.99 compiled Quota Browse at 120 by 36" loading="lazy">
+    <figcaption><strong>0.1.99 · Quota Browse · 120×36.</strong> The full synthetic account name wraps, provider sits below it, and the balance reads 62.5k. Weekly and five-hour values remain in the Quota group. <a href="proof-assets/2026-10-21-release-0.1.99/quota-browse.jpg">Original JPEG</a> · <a href="proof-assets/2026-10-21-release-0.1.99/quota-evidence.json">Build, hashes and limits</a>.</figcaption>
+  </figure>
+  <figure id="release-quota-details" data-surface="Quota" data-screen="Release Account details" data-state="Details" data-viewport="120×36" data-tags="Dialog" data-build="0.1.99 / 2470bdd2 fixture">
+    <img src="proof-assets/2026-10-21-release-0.1.99/quota-details.jpg" alt="Original 0.1.99 compiled Account details at 120 by 36" loading="lazy">
+    <figcaption><strong>0.1.99 · Account details · 120×36.</strong> Captured full name and tag, labelled status/reason and quota windows, then reset-pace facts and a single Close action. The independent verifier observed no overlap or missing identity in this scene. <a href="proof-assets/2026-10-21-release-0.1.99/quota-details.jpg">Original JPEG</a>.</figcaption>
+  </figure>
   <figure id="release-sessions-browse" data-surface="Sessions" data-screen="Release Sessions Browse" data-state="Browse" data-viewport="120×36" data-tags="Browse" data-build="0.1.99 / 8bd2f0b6 fixture">
     <img src="proof-assets/2026-10-21-release-0.1.99/sessions-browse.jpg" alt="Original 0.1.99 compiled Sessions Browse at 120 by 36" loading="lazy">
     <figcaption><strong>0.1.99 · Sessions Browse · 120×36.</strong> Original browser screenshot of the real compiled UI with six synthetic sessions. The name and metadata columns retain a fixed selection gutter. Full-browser scaling is preserved. <a href="proof-assets/2026-10-21-release-0.1.99/sessions-browse.jpg">Original JPEG</a> · <a href="proof-assets/2026-10-21-release-0.1.99/sessions-evidence.json">Build, hashes and limits</a>.</figcaption>
@@ -157,6 +164,17 @@ The current 0.1.99 Sessions Browse and Details originals are first in the galler
   </figure>
 </ex-gallery>
 
+<ex-presentation id="release-walkthrough" title="0.1.99 release screen check" description="Four original compiled screenshots and their explicit observation limits.">
+  <ex-step to="release-quota-browse">Full account names and provider labels, compact balances and the preserved three groups.</ex-step>
+  <ex-step to="release-quota-details">Captured account facts and quota windows remain separate from the Close action.</ex-step>
+  <ex-step to="release-sessions-browse">Session titles and metadata align across selected and unselected rows.</ex-step>
+  <ex-step to="release-sessions-details">Captured identity, directory and conversation precede one action group. Provider dispatch is outside this scene's proof.</ex-step>
+</ex-presentation>
+<details><summary>Earlier Sessions evidence and its original scope</summary>
+<h3>Earlier Sessions evidence</h3>
+<p><strong>Earlier compiled captures · 120×36.</strong> Browse, Details, New, Fork, searchable choices, Filters and Help are below. All 20 image checks and three wrong-image controls passed. An independent verifier opened and hash-checked every original and found no confirmed visible P0–P3 issue in this bounded set.</p>
+<p>These use synthetic session records through the real UI and input loop, rendered by fixture harness <code>144801f2…</code>. They do not prove installed-client actions. <a href="proof-assets/2026-10-20-sessions-wide/evidence.json">Exact evidence and limits</a> · <a href="proof-assets/2026-10-20-sessions-wide/independent-ux.md">Independent visual review</a>.</p>
+</details>
 <ex-presentation id="sessions-walkthrough" title="Earlier Sessions review" description="Earlier original captures of Browse, Details, New, Filters and Fork." variations>
   <ex-step to="sessions-browse-120x36">Browse uses one selection gutter and aligned session metadata. New, Details and Help are in the title row.</ex-step>
   <ex-step to="sessions-codex-details-120x36">Details separates captured identity and facts from Copy, Fork and Resume.</ex-step>
@@ -199,11 +217,11 @@ Cancel  Review
   </tbody>
 </table>
 
-<h2 id="evidence">Verification status</h2>
+<h2 id="evidence">Earlier verification status</h2>
 <table>
   <thead><tr><th>Boundary</th><th>Observed result</th></tr></thead>
   <tbody>
-    <tr><td>Current Sessions 120×36</td><td>20 image checks and three wrong-image controls passed; all 20 originals independently opened and hash-checked. Child exit 0, provider requests 0, state/secrets unchanged and owned cleanup complete.</td></tr>
+    <tr><td>Earlier Sessions 120×36</td><td>20 image checks and three wrong-image controls passed; all 20 originals independently opened and hash-checked. Child exit 0, provider requests 0, state/secrets unchanged and owned cleanup complete.</td></tr>
     <tr><td>Latest Quota code</td><td>573 passed · 0 failed · 7 ignored; 13 copied-default checks passed. Strict Clippy, formatting and file-size checks passed. This includes the requested warning spacer.</td></tr>
     <tr><td>Combined current capture</td><td>Failed in the first Quota field-association reader after the Sessions tour passed. Ten later tours were not run. Quota effects are unknown without its successful tour receipt; owned cleanup is complete.</td></tr>
     <tr><td>Independent return-state source review</td><td>No confirmed P0–P3 finding in the bounded two-file repair. This does not establish its final screenshots.</td></tr>
@@ -212,7 +230,7 @@ Cancel  Review
   </tbody>
 </table>
 <p><a href="proof.html#c7-phone-pace-current">Original journeys and evidence</a> · <a href="owner-feedback.md">Feedback checklist</a> · <a href="work-receipt.md">Work receipt</a></p>
-<p>Pending: narrower and shorter Sessions captures, live provider actions, corrected reset-return/warning pictures, current Quota Filters and pending/error/disabled states, live resize, both-machine public paths, reproduction, final review and current-head CI.</p>
+<p>The older table retains its original build and failure boundaries. Additional dialogs, narrow/short views, resize and live provider/two-machine proof remain follow-up work. Current-head CI is tracked on the pull request.</p>
 <p>Reusable drivers and permanent regressions stay in their permanent homes. One-run wrappers, packaging helpers and run history stay under <code>tmp/</code>. <a href="proof-assets/2026-10-20-c7-phone-pace/verification-maintenance.md">Maintenance receipt</a>.</p>
 <p>Presentation binding: Demistify <code>v1</code>, documentation release <code>1.9.3</code>. <a href="proof-assets/2026-10-20-gallery-component/release.json">Recorded release and unchanged image hashes</a>. Browser rendering remains unverified after the direct-file URL policy refusal.</p>
 </ex-document>

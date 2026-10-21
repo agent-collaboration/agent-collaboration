@@ -6,13 +6,13 @@ Canonical checklist for this redesign. Origin: this owner conversation, 2026-10-
 
 The owner subsequently asked to release the Quota/Sessions version now and continue Sessions improvements in follow-ups. The current release gate is passing CI on the final head and one independent verifier inspecting original compiled Quota and Sessions screens on one Mac. This replaces the earlier all-provider/two-machine release prerequisite; it does not turn unobserved flows into passing results.
 
-**Release is still pending.** Current `main` has released 0.1.98. This branch is integrated with that main and prepares **0.1.99**. The last published CI failed in terminal integration. The implementation owner is correcting obsolete screen-title and pointer-coordinate expectations, while the verifier corrects a complete-title matching defect and prepares current original screenshots.
+**0.1.99 release capture checkpoint.** The branch is integrated with the current 0.1.98 main and prepares 0.1.99. The local harness passes 54 tests with 12 ignored; strict lint/format checks and 512 native reader controls pass. The real one-Mac screen check is complete for Browse and Details on both screens. Hosted CI and publication are separate live GitHub gates; this document does not cache their final status.
 
 - [x] Integrated current main and advanced the candidate to 0.1.99.
-- [ ] Pass current-head CI, including terminal integration.
-- [ ] Independently inspect both current compiled screens on one Mac; publish original screenshots, transcript, artifact identity and limits in the gallery.
-- [ ] Complete the affected source/proof recheck, update the PR description, and verify final PR state.
-- [ ] Merge and publish the matching signed release and verified Homebrew distribution. Production processes and live configuration remain untouched.
+- [x] Independently inspected four original compiled screenshots: Quota Browse/Account details and Sessions Browse/Session details. [Gallery](quota-gallery.html), [evidence and limits](proof-assets/2026-10-21-release-0.1.99/evidence.json).
+- [x] Retained the failed/partial four-scene Sessions tour honestly. Its two actual scenes count; New/search were not observed. The two-scene Quota run completed with zero external effects and owned cleanup.
+- [x] Corrected and independently rechecked the complete-title reader and current terminal action acknowledgements without dropping effect assertions.
+- Release conditions remain current-head CI, final PR state, then the matching signed release and Homebrew distribution. Production processes and live configuration remain untouched.
 
 [Follow-up scope and passing conditions](release-follow-ups.md) preserves the deferred obligations. Prior checkpoint results below retain their original scope and are not current release acceptance.
 
