@@ -1,0 +1,1174 @@
+{
+  "kind": "Personal review of every original from actual current48x12 Normal42/11 pass",
+  "at": "2026-10-20T04:48:43.133745+00:00",
+  "packet": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/c7-current-phone-producer-handoff.json",
+  "packet_sha256": "346f876f570d6b8fba94c04a434ff16c0498c7eb962521727280e6570c0eb3bf",
+  "source": {
+    "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/repository",
+    "head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+    "current_source_holds": 2313,
+    "compiled_component_inputs": 2284,
+    "compiled_test_source": "96c7f917, separately bound additiveobserver8f11295b; runtime unchanged"
+  },
+  "build": {
+    "quota-component-libtest": "27cbcfac401131b7330c12e9e4d5ca4c2bd97797f8c6514d414681c7ff7405aa",
+    "codex-router": "7c58652cf5e7258538de3353bf96bb21c1add6bd0c0a5292034eac9b2f744864",
+    "agent-sessions": "93e88c177f4d5eecafeb641f8f1fb05ed2b8df1ba3c604037c4fc1ffcd14c354",
+    "capture-driver": "f78e76fc97ca60af83bbdbe4cc5bcf06fcc08f5629225580f726fd411c518403",
+    "verify-tui-screen": "8eb89398cebddad0a89fb247ded2fcf4e76c0b06837b3185e66ca7628f638caa",
+    "quota-reset-harness": "0e34c877bf42be9ad3321bc6d40d42e4e3d7574f791cb2462f55f568f5c02db4"
+  },
+  "execution": "tmp/tui-verification/c7-lower42-normal-job-0-execution.json",
+  "independent_cleanup": "tmp/tui-verification/c7-lower42-normal-job-0-cleanup.json",
+  "result": "Scoped mechanical PASS42positive/11wrong images, wrapper0/driver0/child0; independent personal review complete, Root acceptance remains open",
+  "effects": "Normal releasedfalse external0 persisted0; 58 recordedPIDs/groups/profile absent;1827raw-layerpairs independently hashverified; noVsignals",
+  "personal_view_count": 42,
+  "all_originals_personally_reviewed": true,
+  "blocking_findings": [],
+  "cold_ux_notes": [
+    "After No-cancel, Options Resets has captured identity and Inspect action but empty body; source intentionally has no explanation without active target. Keep visible for independent taste review, do not hide in gallery.",
+    "Lower credit/pace images scroll selected name offscreen; image-alone attribution is limited to measured same-child Alpha continuity and exact return."
+  ],
+  "limits": [
+    "One current compiled synthetic48x12 fixture only; other5grids/pending/error/resize/Sessions/public/native/phonehardware remain unobserved",
+    "All42original PNGs viewed individually without conversion/reconstruction; typed acceptance does not establish whole product UX",
+    "Risk warning is yellow plain text; only actual selected No/Yes is underlined, no duplicated option line"
+  ],
+  "images": [
+    {
+      "checkpoint": "component-quota-browse",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Whole Account/Status/Quota headers; full selected Tokyo/OpenAI/Research/Account/Alpha/Long/Name yellow in its column; 83% visible, frame intact.",
+      "screen": "Quota",
+      "dialog": "browse",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "browse",
+      "personal_original_view": true,
+      "observation": "Whole Account/Status/Quota headers; full selected Tokyo/OpenAI/Research/Account/Alpha/Long/Name yellow in its column; 83% visible, frame intact.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-browse-credit-window",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-credit-window.png",
+      "sha256": "3154cd75ac4e46931c1c718cdd7407cd8b5b2c2762d035563fe3aa074c69dedc",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Page1 exposes Credits62.5k, fresh, 5h and99%; selected name/gutter offscreen. Attribution relies on same-child ordered Alpha paging and exact return, not this image alone.",
+      "screen": "Quota",
+      "dialog": "browse-credit-window",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "browse-credit-window",
+      "personal_original_view": true,
+      "observation": "Page1 exposes Credits62.5k, fresh, 5h and99%; selected name/gutter offscreen. Attribution relies on same-child ordered Alpha paging and exact return, not this image alone.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-heading",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-pace-heading.png",
+      "sha256": "7e124097dcbd380bfeffcbccd1655c9ce22ab0615e302c3eaf2a6b271b3d7f70",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Page2 exposes Weekly pace heading and meter; fixed headers and frame remain. Selected name offscreen; continuity limitation retained.",
+      "screen": "Quota",
+      "dialog": "browse-pace-heading",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "browse-pace-heading",
+      "personal_original_view": true,
+      "observation": "Page2 exposes Weekly pace heading and meter; fixed headers and frame remain. Selected name offscreen; continuity limitation retained.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-value",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-pace-value.png",
+      "sha256": "1b80917fcceaf1ceeda32716c8288e1a72d7c42a48fdf8b383fb794aa04e3f77",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Page3 exposes complete burn unavailable, with unselected Claude row below. Alpha name/gutter offscreen; exact ordered same-child/return continuity required.",
+      "screen": "Quota",
+      "dialog": "browse-pace-value",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "browse-pace-value",
+      "personal_original_view": true,
+      "observation": "Page3 exposes complete burn unavailable, with unselected Claude row below. Alpha name/gutter offscreen; exact ordered same-child/return continuity required.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-browse-page-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-browse-page-returned.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Top page return visually matches initial Alpha identity/focus and83% frame.",
+      "screen": "Quota",
+      "dialog": "browse-page-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "browse-page-returned",
+      "personal_original_view": true,
+      "observation": "Top page return visually matches initial Alpha identity/focus and83% frame.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-next-account.png",
+      "sha256": "f5ade57e2d4e7561c7f0b10ecfe22c8da0cbf4314460e7eda36da8ed435a2f95",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Full Claude Research Account Beta Full Name is yellow beside its sole gutter; other columns readable.",
+      "screen": "Quota",
+      "dialog": "next-account",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "next-account",
+      "personal_original_view": true,
+      "observation": "Full Claude Research Account Beta Full Name is yellow beside its sole gutter; other columns readable.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-restored-account.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Full Alpha name and gutter restored; initial geometry retained.",
+      "screen": "Quota",
+      "dialog": "restored-account",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "restored-account",
+      "personal_original_view": true,
+      "observation": "Full Alpha name and gutter restored; initial geometry retained.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-details-top.png",
+      "sha256": "41bc44997a14fdd653c4417791e7452b876f643015a2338e64ec5f8ea91387ec",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Account details title/Help, compact ellipsized name plus complete alpha-tag, Status available and Reason alpha detail; Close visible.",
+      "screen": "Quota",
+      "dialog": "details-top",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "details-top",
+      "personal_original_view": true,
+      "observation": "Account details title/Help, compact ellipsized name plus complete alpha-tag, Status available and Reason alpha detail; Close visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-details-bottom.png",
+      "sha256": "804c5025383f5be41731363c8575aedda371b15404a2b9e33aa9e429deab817a",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Details bottom exposes reset2available and note alpha detail; Close remains visible.",
+      "screen": "Quota",
+      "dialog": "details-bottom",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "details-bottom",
+      "personal_original_view": true,
+      "observation": "Details bottom exposes reset2available and note alpha detail; Close remains visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-help-top.png",
+      "sha256": "3baca93cf3052e56e37ac235f3f33b425b1568601f7ef3c030a039cd20dddead",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Quota Help and Current quota/Pool counts visible; remaining counts require scrolling in this short body.",
+      "screen": "Quota",
+      "dialog": "help-top",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "help-top",
+      "personal_original_view": true,
+      "observation": "Quota Help and Current quota/Pool counts visible; remaining counts require scrolling in this short body.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-help-bottom.png",
+      "sha256": "f9a1b7d7349064390bcccf3ee1efbfde8e135fe140b75e1b03ab16c7afd71438",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Full Exit Quota unless a reset is being applied clause is readable in one viewport; Close visible.",
+      "screen": "Quota",
+      "dialog": "help-bottom",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "help-bottom",
+      "personal_original_view": true,
+      "observation": "Full Exit Quota unless a reset is being applied clause is readable in one viewport; Close visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-original.png",
+      "sha256": "49fc85cf97f90e47e994c8a4ff275449dcc83a47ffa57bfac6174ffea4efcde4",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Weekly floor shows active0%, guidance0%disables/maximum15%, Cancel and Save.",
+      "screen": "Quota",
+      "dialog": "floor-original",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "floor-original",
+      "personal_original_view": true,
+      "observation": "Weekly floor shows active0%, guidance0%disables/maximum15%, Cancel and Save.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-draft.png",
+      "sha256": "02e1329361a88b832753b97fb2a97e5f8326c08c15d5a78c89ecfa553da5d97a",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Weekly floor shows active draft1% with same tag/actions and unchanged guidance.",
+      "screen": "Quota",
+      "dialog": "floor-draft",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "floor-draft",
+      "personal_original_view": true,
+      "observation": "Weekly floor shows active draft1% with same tag/actions and unchanged guidance.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-cancelled.png",
+      "sha256": "49fc85cf97f90e47e994c8a4ff275449dcc83a47ffa57bfac6174ffea4efcde4",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Cancel/reopen returns active0%.",
+      "screen": "Quota",
+      "dialog": "floor-cancelled",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "floor-cancelled",
+      "personal_original_view": true,
+      "observation": "Cancel/reopen returns active0%.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-floor-saved.png",
+      "sha256": "2ab2b27091beba76f531c0f26c498d5b73ebe9588a599d7d5bedc727dc7f673c",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Saved/reopened Current1% is distinct from active Floor1%; actions retained.",
+      "screen": "Quota",
+      "dialog": "floor-saved",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "floor-saved",
+      "personal_original_view": true,
+      "observation": "Saved/reopened Current1% is distinct from active Floor1%; actions retained.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-options-identity.png",
+      "sha256": "3e7220b7b68b313c1d943cea8bc200358f564d5834caf703652daa40cafc2996",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Initial Options Resets exposes Reset credits live1-1of7 and next[voucher-1] before manual scrolling; Cancel/Review visible.",
+      "screen": "Quota",
+      "dialog": "options-identity",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "options-identity",
+      "personal_original_view": true,
+      "observation": "Initial Options Resets exposes Reset credits live1-1of7 and next[voucher-1] before manual scrolling; Cancel/Review visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-inventory.png",
+      "sha256": "18dea418e19c7df80eca970ddd4f7619a05b2c82069ad5ed290dead566ab3927",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Saved count differs2resets saved7live message is fully readable; Cancel/Review visible.",
+      "screen": "Quota",
+      "dialog": "reset-inventory",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "reset-inventory",
+      "personal_original_view": true,
+      "observation": "Saved count differs2resets saved7live message is fully readable; Cancel/Review visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-last-page.png",
+      "sha256": "17fe90bf652ef511e570a82dee11a3b6f05831b5d7d4f3e3806440aeb81fcdc0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Last page exposes exact[voucher-7] and complete Synthetic reset voucher7 title; actions visible.",
+      "screen": "Quota",
+      "dialog": "reset-last-page",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "reset-last-page",
+      "personal_original_view": true,
+      "observation": "Last page exposes exact[voucher-7] and complete Synthetic reset voucher7 title; actions visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-identity.png",
+      "sha256": "463736d6d200ffed5d26f25fd5409c337cfeacc87fa820826f16f9d8cb857d0a",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Initial Options Credits exposes Use credits Disallow before manual scroll; Close/Resets/Refresh/Edit actions fit.",
+      "screen": "Quota",
+      "dialog": "credits-identity",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "credits-identity",
+      "personal_original_view": true,
+      "observation": "Initial Options Credits exposes Use credits Disallow before manual scroll; Close/Resets/Refresh/Edit actions fit.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-balance.png",
+      "sha256": "9ae720bb3e0e9e1ee18473d75a04896ce4d1075578d06fa685e3f343184600c0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Initial Status Available62,500 readable with captured tag and all actions.",
+      "screen": "Quota",
+      "dialog": "credits-balance",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "credits-balance",
+      "personal_original_view": true,
+      "observation": "Initial Status Available62,500 readable with captured tag and all actions.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-original.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Collapsed Credit usage shows active Disallow and Cancel/Save.",
+      "screen": "Quota",
+      "dialog": "policy-original",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-original",
+      "personal_original_view": true,
+      "observation": "Collapsed Credit usage shows active Disallow and Cancel/Save.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-choice.png",
+      "sha256": "26ac8446613b35c0f86815aea5a67430fee73f7d3e50a10a39fe9322e45aaa12",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Expanded choice exposes Disallow and selected Allow with yellow gutter; Cancel/Select visible.",
+      "screen": "Quota",
+      "dialog": "policy-choice",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-choice",
+      "personal_original_view": true,
+      "observation": "Expanded choice exposes Disallow and selected Allow with yellow gutter; Cancel/Select visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-no-match.png",
+      "sha256": "37792089c11c6ad16af21b3f476cd258686136c32bf4090f908c2fdb50f151c3",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Exact queryzznomatchzz and No matching choices visible; Select visibly disabled, Cancel enabled.",
+      "screen": "Quota",
+      "dialog": "policy-no-match",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-no-match",
+      "personal_original_view": true,
+      "observation": "Exact queryzznomatchzz and No matching choices visible; Select visibly disabled, Cancel enabled.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-choice-returned.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Choice cancellation returns collapsed Disallow.",
+      "screen": "Quota",
+      "dialog": "policy-choice-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-choice-returned",
+      "personal_original_view": true,
+      "observation": "Choice cancellation returns collapsed Disallow.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-draft.png",
+      "sha256": "d81a4e69f65fdd1ef6647873e5c5b8de9a3064d2c7801eec3e61bc0aa6d1f2e1",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Collapsed unsaved Allow draft is active and Save available.",
+      "screen": "Quota",
+      "dialog": "policy-draft",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-draft",
+      "personal_original_view": true,
+      "observation": "Collapsed unsaved Allow draft is active and Save available.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-cancelled.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Cancel/reopen restores committed Disallow.",
+      "screen": "Quota",
+      "dialog": "policy-cancelled",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-cancelled",
+      "personal_original_view": true,
+      "observation": "Cancel/reopen restores committed Disallow.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-policy-saved.png",
+      "sha256": "d81a4e69f65fdd1ef6647873e5c5b8de9a3064d2c7801eec3e61bc0aa6d1f2e1",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Save/reopen retains committed Allow.",
+      "screen": "Quota",
+      "dialog": "policy-saved",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "policy-saved",
+      "personal_original_view": true,
+      "observation": "Save/reopen retains committed Allow.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-refresh-result.png",
+      "sha256": "64999ad9920a9442710661daa58f9acc8d324fb98651b1288193351d2b168ee4",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Green Credit balance refreshed message; all actions visible.",
+      "screen": "Quota",
+      "dialog": "refresh-result",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "refresh-result",
+      "personal_original_view": true,
+      "observation": "Green Credit balance refreshed message; all actions visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-refreshed-balance.png",
+      "sha256": "9a3b5e5a336f080b8b217fdc2dd2d5392c4b974f17f962e1e790f4aae0426be0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Post-refresh Status Available63,000 differs from initial62,500.",
+      "screen": "Quota",
+      "dialog": "credits-refreshed-balance",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "credits-refreshed-balance",
+      "personal_original_view": true,
+      "observation": "Post-refresh Status Available63,000 differs from initial62,500.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-refreshed-freshness.png",
+      "sha256": "f8b1a8ab49a4d4648b8ea39be30638e481f50fdb986b8f83ccb7a9073b450753",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Freshness label and green Fresh visible.",
+      "screen": "Quota",
+      "dialog": "credits-refreshed-freshness",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "credits-refreshed-freshness",
+      "personal_original_view": true,
+      "observation": "Freshness label and green Fresh visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-refreshed-observation.png",
+      "sha256": "5c4e14cc54cdaa0ebfe415d561a1bcbaeeea36d0897d61d386773c9fe3ec4a2c",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Observation checked0sago is complete and readable.",
+      "screen": "Quota",
+      "dialog": "credits-refreshed-observation",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "credits-refreshed-observation",
+      "personal_original_view": true,
+      "observation": "Observation checked0sago is complete and readable.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-credits-policy-boundary.png",
+      "sha256": "d6df15328a8ab988657da399cbf1242d8f7a90b9535995fc5a22f0d1d1c20f2d",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Credit usage subsection boundary is visible with top identity/actions; selected policy value belongs to separate scenes.",
+      "screen": "Quota",
+      "dialog": "credits-policy-boundary",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "credits-policy-boundary",
+      "personal_original_view": true,
+      "observation": "Credit usage subsection boundary is visible with top identity/actions; selected policy value belongs to separate scenes.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-review.png",
+      "sha256": "18dea418e19c7df80eca970ddd4f7619a05b2c82069ad5ed290dead566ab3927",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Reset review returns Options Resets; complete saved/live mismatch notice and Review visible.",
+      "screen": "Quota",
+      "dialog": "reset-review",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "reset-review",
+      "personal_original_view": true,
+      "observation": "Reset review returns Options Resets; complete saved/live mismatch notice and Review visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-no.png",
+      "sha256": "03db283f328c823ead0a9567e4630b122c2eea002c84122a38f3dd97e9971f75",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Confirm reset has readable1credit Cannot undo warning, one No/Yes choice, only No yellow/underlined, separate Cancel/Confirm.",
+      "screen": "Quota",
+      "dialog": "confirm-no",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "confirm-no",
+      "personal_original_view": true,
+      "observation": "Confirm reset has readable1credit Cannot undo warning, one No/Yes choice, only No yellow/underlined, separate Cancel/Confirm.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-no-returned.png",
+      "sha256": "478f13f13039b9132e4fe34341756ddf0fb687845323349ddaea68bcce9b2da0",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; After No cancellation, Options Resets displays captured tag and Close/Credits/Inspect actions; body is empty. Source Browse/no-active-target branch supplies no explanation; retain as cold-UX review note.",
+      "screen": "Quota",
+      "dialog": "confirm-no-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "confirm-no-returned",
+      "personal_original_view": true,
+      "observation": "After No cancellation, Options Resets displays captured tag and Close/Credits/Inspect actions; body is empty. Source Browse/no-active-target branch supplies no explanation; retain as cold-UX review note.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-yes.png",
+      "sha256": "a02ca730a737b4dbd44f5b4609499ea14553be1c30c2c261608eeffd439dddb3",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Only Yes is yellow/underlined; No neutral; warning and separate Cancel/Confirm intact.",
+      "screen": "Quota",
+      "dialog": "confirm-yes",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "confirm-yes",
+      "personal_original_view": true,
+      "observation": "Only Yes is yellow/underlined; No neutral; warning and separate Cancel/Confirm intact.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-help-top.png",
+      "sha256": "651808e3a1642712fdcc9c540c295b65a57ed57d5f03d81e2449edf1cca943b8",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Contextual Help Selected account begins full CJK/Latin Account field; suffix below short viewport.",
+      "screen": "Quota",
+      "dialog": "confirm-help-top",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "confirm-help-top",
+      "personal_original_view": true,
+      "observation": "Contextual Help Selected account begins full CJK/Latin Account field; suffix below short viewport.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-help-identity.png",
+      "sha256": "b6ba993681d74def2344647d195a9135b636facc8b2a197ba48ac107033ad52e",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; One-row scroll exposes entire Tokyo OpenAI Research Account Alpha Long Name[alpha-tag] field; Close visible.",
+      "screen": "Quota",
+      "dialog": "confirm-help-identity",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "confirm-help-identity",
+      "personal_original_view": true,
+      "observation": "One-row scroll exposes entire Tokyo OpenAI Research Account Alpha Long Name[alpha-tag] field; Close visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-confirm-help-returned.png",
+      "sha256": "a02ca730a737b4dbd44f5b4609499ea14553be1c30c2c261608eeffd439dddb3",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Returning Help preserves nondefault Yes selection and warning/actions.",
+      "screen": "Quota",
+      "dialog": "confirm-help-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "confirm-help-returned",
+      "personal_original_view": true,
+      "observation": "Returning Help preserves nondefault Yes selection and warning/actions.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-result.png",
+      "sha256": "b4c3599e0cdd554019bee11254d54e532a5601c073274ddd36293172efee4628",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Green Success reset completed is complete; result title/tag and Close visible.",
+      "screen": "Quota",
+      "dialog": "reset-result",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "reset-result",
+      "personal_original_view": true,
+      "observation": "Green Success reset completed is complete; result title/tag and Close visible.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-reset-result-bottom.png",
+      "sha256": "5ecb92210c259e97fe252b5464717311f3262ce0241dc3ec12f9f4fa151ffa5d",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Bottom result exposes complete Return to quota status sentence and Close.",
+      "screen": "Quota",
+      "dialog": "reset-result-bottom",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "reset-result-bottom",
+      "personal_original_view": true,
+      "observation": "Bottom result exposes complete Return to quota status sentence and Close.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/phone-first-observation/quota-component-normal-48x12/component-quota-returned.png",
+      "sha256": "672f2403ea853a14b42891e050b5c9da84ef208517aa60d8142aff79bfd9fd71",
+      "pixels": [
+        514,
+        252
+      ],
+      "cells": [
+        48,
+        12
+      ],
+      "personal_review": "Viewed original bytes; Normal browse restores Alpha name/gutter,83%, headers and initial geometry.",
+      "screen": "Quota",
+      "dialog": "returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "journey": "returned",
+      "personal_original_view": true,
+      "observation": "Normal browse restores Alpha name/gutter,83%, headers and initial geometry.",
+      "automatic_image_oracle": "PASS",
+      "result": "Scoped original personally inspected; no delivery acceptance",
+      "limits": "Compiled synthetic component only; scroll-limited identity is explicitly named where applicable"
+    }
+  ],
+  "recorded_pid_count": 58
+}

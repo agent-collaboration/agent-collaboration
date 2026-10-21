@@ -30,14 +30,22 @@ flowchart TD
   H --> B[Browse surface: existing headers and passive sidecars]
   H --> F[DialogFrame: placement, size policy and chrome]
   F --> T[SurfaceHeader: one title and Help]
+  F --> K[Captured account or session context]
   F --> V[DialogBodyViewport: one intrinsic content tree and capped scroll]
   F --> A[Dialog action row: shared ordering, wrapping and focus]
   V --> C[Caller body: form, Details, editor or Help]
   C --> SS[SearchSelect: inline query and stable-key choice]
+  SS --> DB[DialogButton: one activation primitive]
+  A --> DB
+  DB --> I[UseDialogInteraction: scope and visible pointer band]
+  V -->|publishes visible band| I
   B --> R[SelectableRow: permanent gutter and content column]
 ```
 
 Extend the existing shared crate instead of a parallel screen framework. `DialogFrame` retains fixed header/action siblings and composes a `DialogBodyViewport` whose in-flow body contributes natural width and height. It uses iocraft layout and public draw hooks to measure natural content and actual viewport; it owns clamped scroll offset and local scroll keys/wheel. It does not discover options, interpret domain keys, load accounts or launch processes. `SurfaceHeader`, semantic typography and `DialogAction` remain shared foundations.
+
+Dialog input policy belongs to the existing shared viewport/interaction boundary. Painting a clipped body does not by itself restrict a native button's hit rectangle. One shared DialogButton therefore uses the existing scoped, clipping-aware local-event helper while retaining the pinned native activation contract: one child supplies layout, mouse Down activates, and focused Enter/Space activates for non-Release key events. It does not add an event dispatcher, a focus model or a second renderer, and does not depend on parent/child callback order. DialogAction and SearchSelect compose it; the New Client/Machine and Fork destination fields use the same primitive. Custom local listeners use the same helper. All scoped callers cut over together, with no parallel raw-button path. The small activation adapter costs a pinned behavior contract to maintain, but removes duplicated clipping decisions and avoids modifying the library. It owns presentation/input policy only; captured action identity, eligibility and effects remain with the caller.
+
 
 The new body viewport is justified by R3: current iocraft0.9.2 ScrollView positions its content absolutely at100% width and expects a fixed viewport, so it cannot contribute intrinsic width to its parent. An auto frame around that component collapses to header/action width. A separate caller-computed text geometry path or hidden second render would violate U2/U6. The chosen viewport keeps one non-shrinking in-flow content tree, clipped by a flex/min-height-zero cap; relative displacement changes its visible offset without removing intrinsic sizing. Public hooks notify only when measured dimensions change. All geometry remains iocraft/Taffy work.
 
@@ -110,25 +118,29 @@ Subtract saturated margins from the terminal bounds. Both default axes use a per
 
 Actions use one shared row with gaps and flex wrapping. Label/value fields and row gutters are Views, not strings containing spaces. Quota preserves the existing three-column information grouping: Account, Status/counts and Quota. Name/provider share the first column; state, active clients, reset credits and balance/freshness share the middle; routing reason, Weekly,5h and pace share the last. One column-width decision serves headings and all account rows; names wrap rather than retaining the fixed13/17-cell allocation. Status and usage fields stay in their groups at narrow widths, accepting additional vertical wrapping rather than moving them into a full-width metadata line. The earlier full-width-name/side-by-side-window mockup is superseded. Currency/unit semantics come from existing observations. Compact decimal formatter uses bounded readable significant digits and suffixes; Details groups digits and trims only redundant trailing fractional zeros, preserving every meaningful digit. Existing numeric/domain decisions still consume exact source types.
 
+Caller-owned captured context is a fixed sibling of the scrolling body. It renders display identity without becoming a new source of account/session truth. Short bodies do not flex-grow: a non-shrinking gap separates content and actions, while spare space in a sized frame follows the action group. Physical space determines usable padding without bypassing independent percentage/clamp sizing.
+
+Interactive Quota browse below 48 physical columns uses compact density at the existing screen/list/row owners: remove their three horizontal padding pairs and the inner list border, recovering eight cells while retaining the outer frame, scrollbar reservation, fixed two-cell selector gutter and intergroup gaps. One paired header/row allocation accounts for those actual Views; the header reserves the same trailing scrollbar cell as the body. At 32 columns the data groups receive 10/7/8 cells; at 40 they receive 13/9/11. The density is derived from current physical width and does not select another renderer or introduce a persisted preference.48+ widths, static mode and passive sidecars retain their established geometry. Long content wraps vertically within its original group and remains scrollable; geometry alone is not a readability verdict.
+
 ### Quota counters and glyph meanings
 
-Quota presentation owns one glyph vocabulary with separate mappings for the header census and the account-row Status cell, both explained in contextual Help. R10 keeps their meanings distinct: the census projects AccountAvailability, while the row status follows existing quota_state_text precedence (preferred-next first, then stale/unknown freshness, then available/held/blocked), including existing credential-unavailable overrides. A preferred ★ is routing preference, never the browse-focus marker or a new availability class. Held remains a row word/state, not a renamed reserve count. Keep a typed projection of these existing distinctions at the Quota presentation boundary; do not infer them by parsing formatted strings. Shared text/layout primitives render it; generic dialog code never decides what account availability means. Counters derive from the existing typed report and observations at the projection boundary, not by parsing the already formatted route/freshness strings. The static text mode keeps its existing readable output.
+Quota presentation owns readable header summaries and the existing account-row status vocabulary, explained in contextual Help. The later owner clarity correction supersedes opaque glyph-only census strips; row symbols and reset-credit glyphs remain optional contextual aids. R10 keeps their meanings distinct: the census projects AccountAvailability, while the row status follows existing quota_state_text precedence (preferred-next first, then stale/unknown freshness, then available/held/blocked), including existing credential-unavailable overrides. A preferred ★ is routing preference, never the browse-focus marker or a new availability class. Held remains a row word/state, not a renamed reserve count. Keep a typed projection of these existing distinctions at the Quota presentation boundary; do not infer them by parsing formatted strings. Shared text/layout primitives render it; generic dialog code never decides what account availability means. Counters derive from the existing typed report and observations at the projection boundary, not by parsing the already formatted route/freshness strings. The static text mode keeps its existing readable output.
 
-| Count or state | Proposed glyph | Meaning retained |
+| Count or state | Readable header or row aid | Meaning retained |
 | --- | --- | --- |
-| Total accounts | Σ | Entire pool account count, distinct from the filtered shown/total count. |
-| Usable census | ✓ | Existing Usable account classification, not preferred-next. |
-| Reserve | ◇ | Existing Reserve classification; not usable or selected. |
-| Blocked | ⊘ | Existing Blocked classification. |
-| Excluded | × | Existing Excluded classification; not quota exhaustion. |
-| Unknown availability | ? | Existing Unknown classification, in the pool-count group. |
-| Serving clients | ⇄ | Existing aggregate active-client count. |
-| Fresh / stale / unknown freshness | ● / ◷ / ? | Observation freshness, in a separate operational group. Unknown freshness is not unknown availability. |
-| Reset credits | ↻ | Available reset credits for the account; unknown remains explicit. |
+| Total accounts | Accounts | Entire pool account count, distinct from the filtered shown/total count. |
+| Usable census | Usable | Existing Usable account classification, not preferred-next. |
+| Reserve | Reserve | Existing Reserve classification; not usable or selected. |
+| Blocked | Blocked | Existing Blocked classification. |
+| Excluded | Excluded | Existing Excluded classification; not quota exhaustion. |
+| Unknown availability | Pool unknown | Existing Unknown classification, in the pool-count group. |
+| Serving clients | Clients | Existing aggregate active-client count. |
+| Fresh / stale / unknown freshness | Fresh / Stale / Data unknown | Observation freshness, in a separate operational group. Unknown freshness is not unknown availability. |
+| Reset credits | ↻ (optional) | Available reset credits for the account; an explicit count and reset label is also valid. Unknown remains explicit. |
 | Row preferred / available / held / blocked | ★ / ✓ / ◇ / ⊘ with row-specific Help | Preserve the existing row-status vocabulary, separate from header availability counts. Ordinary text remains when it fits. |
 | Row stale / unknown | ◷ / ? with row-specific Help | Preserve freshness-derived status and its existing precedence; never replace it with an availability-only symbol. |
 
-Wide headers show glyph, short readable label and count (for example `✓ usable 4`), with ` · ` separators between counters. Measure the actual terminal-cell budget: collapse labels for a counter group before truncating counts, preserve glyph/count and spaced dots, then allow the existing group to wrap if necessary. A row reset-credit count uses `↻ 2`; Details and Help retain its full meaning. Use short stable text glyphs, not emoji or an external icon font. Keep Responses/other route band, degraded/credential-availability notices, provider names, Weekly/5h and credit units readable as text. Counter colors use ordinary/secondary roles; yellow remains focus/selection. The Help legend supplies full meanings, Details uses readable labels, and the HTML proposal supplies accessible labels as an additional browser affordance. Terminal correctness must not depend on hover. Actual terminal/font width and selected/unselected alignment remain proof obligations; no Unicode width is inferred from the HTML appearance.
+Wide headers show short readable labels and counts with spaced middle dots. At constrained widths, the same typed projection produces compact named summaries retaining total, usable and nonzero problem counts; it does not fall back to an unexplained symbol strip. Contextual Help renders every current count, including zeros and separately labelled availability/freshness unknowns, from that same projection. Measure the actual terminal-cell budget and wrap without truncating a retained count. A row reset-credit count may use `↻ 2` or a readable `2 resets`. Do not prepend a redundant glyph to an already labelled count when it forces the unit onto another line. Details and Help retain the full meaning. Use short stable text glyphs, not emoji or an external icon font. Keep Responses/other route band, degraded/credential-availability notices, provider names, Weekly/5h and credit units readable as text. Counter colors use ordinary/secondary roles; yellow remains focus/selection. The Help legend supplies full meanings, Details uses readable labels, and the HTML proposal supplies accessible labels as an additional browser affordance. Terminal correctness must not depend on hover. Actual terminal/font width and selected/unselected alignment remain proof obligations; no Unicode width is inferred from the HTML appearance.
 
 ## Trace to owners and proof seams
 
@@ -288,3 +300,5 @@ The new adapter is read-only and injected at the same Host composition boundary 
 | U15/U16 · R15/R16 · E4/E5/E6 | Native adapter → existing Host/service → typed protocol/client → existing picker/source actions | Distinct native job/peer/managed facts; independent known availability; invalid rejection; exact captured actions/no retry | Real bounded command + native JSON decoder, actual Host/MCP with peer/managed store, local/configured read→render→action; actual native vendor on both selected machines |
 
 Shared Router composition was selected by the owner over a TUI-only scanner: it keeps MCP and TUI consistent, at the cost of one coordinated read-contract extension and its consumers. The maintainers bear that adapter/schema coverage cost. Reopen only if the supported native public read cannot establish native job identity without a prompt; never compensate with fabricated peer fields or direct session-file scanning. All original UI, Quota, preservation and proof rows remain required.
+
+The narrow no-estimate pace row uses whole “Unknown” when compact-phone Quota width is below eleven cells. The typed state and full Details reasons remain unchanged; wider rows retain their existing presentation. The adopted phone check uses narrow-width and short-height desktop viewports, with actual hardware outside scope.

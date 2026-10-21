@@ -17,6 +17,7 @@
 <ex-document id="proposal">
 <h1>Sessions and Quota — one dialog system</h1>
 <p>A single reusable dialog component, applied consistently. Start a session in one form. Inspect an existing session in one dialog. Choose a machine inside that form.</p>
+<ex-callout tone="changed" title="Later clarity corrections supersede these counter examples"><p>This initial interactive layout prototype retains the earlier symbol-heavy counter illustration. The current design uses readable named summaries and intentional dialog grouping, as recorded in the <a href="ux-correction-brief.md">adopted clarity correction</a> and <a href="../../specs/2026-10-17-tui-component-system/specification.md">current specification</a>. Inspect <a href="proof.html#c7-corrected-wide">actual compiled pictures and open findings</a> for implementation progress. Phone and iPhone behavior remain unverified.</p></ex-callout>
 <ex-callout tone="planned" title="Proposal, not the running app"><p>The terminal views below are interactive HTML prototypes with invented session data. They are not screenshots or proof of an iocraft implementation. Development is underway; these prototypes remain illustrative. Compiled screenshot evidence will be presented separately. The proposal is based on <code>origin/main</code> at <code>ffced1c1</code>.</p></ex-callout>
 <h2 id="try-it">Try the shared component</h2>
 <p>Switch the content and terminal size. The same header, frame, body, action row, focus treatment and spacing apply to every example. Select <strong>Show component regions</strong> to see the reusable parts.</p>
@@ -79,7 +80,7 @@
 <tr><td></td><td>Credit balance and freshness</td><td>Pace</td></tr>
 </tbody></table>
 <p>The earlier mockup moved the name across the whole row and put usage windows side by side. That arrangement is withdrawn. This revision keeps the current grouping, adds the requested provider label, improves column allocation, and uses concise counters. At narrow widths text wraps within its existing column; fewer accounts may fit vertically, with scrolling retaining all information.</p>
-<h3 id="quota-glyphs">Compact counters, with a shared legend</h3>
+<h3 id="quota-glyphs">Historical compact-counter proposal — superseded</h3>
 <p>The five numbered items in the owner's screenshot become <strong>Σ total, ✓ usable, ◇ reserve, ⊘ blocked, × excluded</strong>. Operational counters use ⇄ active clients, ● fresh, ◷ stale and ? unknown. Counts stay distinct; yellow remains selection/focus. Wide headers teach the symbols with short readable labels; compact headers keep glyph and count. Spaced middle dots separate counters. Contextual Help retains the full legend without another explanatory row.</p>
 <table><thead><tr><th>Position in screenshot</th><th>Proposed counter</th><th>Meaning</th></tr></thead><tbody>
 <tr><td>1</td><td>Σ 7</td><td>Seven accounts in the entire pool</td></tr><tr><td>2</td><td>✓ 4</td><td>Four usable accounts</td></tr><tr><td>3</td><td>◇ 1</td><td>One reserve account</td></tr><tr><td>4</td><td>⊘ 1</td><td>One blocked account</td></tr><tr><td>5</td><td>× 1</td><td>One excluded account</td></tr>

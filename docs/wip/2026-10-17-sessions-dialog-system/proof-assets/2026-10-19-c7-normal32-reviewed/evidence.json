@@ -1,0 +1,730 @@
+{
+  "kind": "Actual compiled Quota 32x24 complete scene export; failed automatic image run; acceptance OPEN",
+  "source_manifest": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-verification/c7-go-normal-32-original-review-manifest.json",
+  "source_manifest_sha256": "1b3d2085ded5873af00f7abc373be53c5b575fb7297b24b433d41cb637ab12ae",
+  "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c plus preserved dirty source",
+  "product_freeze_sha256": "1f811aeffad1b5c5b7ef1b97139aaa11e15d7e13f0b8403ec5afbd7d0ac3fee5",
+  "source_index_count": 3528,
+  "artifacts": {
+    "quota-component-libtest": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261019T234545Z/bin/quota-component-libtest",
+      "sha256": "ba9275a19355f42eeb8d7ed7dfe7f1f3a3979356fd535028386773882f0f2893"
+    },
+    "codex-router": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261019T234545Z/bin/codex-router",
+      "sha256": "7a6d8e9c268f91bdb57d24e1950ffe3009ccf9ca387b40fe9213b2f191bdabbc"
+    },
+    "agent-sessions": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261019T234545Z/bin/agent-sessions",
+      "sha256": "93e88c177f4d5eecafeb641f8f1fb05ed2b8df1ba3c604037c4fc1ffcd14c354"
+    },
+    "capture-driver": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261019T234545Z/bin/capture-driver",
+      "sha256": "aff0e5380a4c3c30bfbd0a5d3468169398a2bc22ee2056537a04a9f7e5febf91"
+    },
+    "verify-tui-screen": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261019T234545Z/bin/verify-tui-screen",
+      "sha256": "373b3c2af6d7cdd3b9a45101faa1afad64cf8a1c2ab53c3e1e2f9c83e82eef5f"
+    },
+    "quota-reset-harness": {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-current-phone-20261019T234545Z/bin/quota-reset-harness",
+      "sha256": "da2e1caf329ef03b016e65ad150368fe322ca17425e41d0f4bf3b7f3db45bdb4"
+    }
+  },
+  "viewport_cells": [
+    32,
+    24
+  ],
+  "pixels": [
+    350,
+    484
+  ],
+  "journey": "Existingnormalcomponentfixture full31orderedtape actualkeys/draftcancel/save/refresh/resetNoYes/result/return",
+  "run_result": {
+    "wrapper_exit": 1,
+    "driver_exit": 101,
+    "failed_oracle": "component-quota-next-account fullClaudeResearchAccountBetaFullName missing dueflatrecognizedlinesinterleaving",
+    "first_browse_oracle": "passed",
+    "later_positive_checks": 29,
+    "later_positive_checks_status": "notrun",
+    "eight_negative_images": "notrun",
+    "Normal_receipt": false,
+    "gallery": false
+  },
+  "effects_cleanup": {
+    "child_exit": 0,
+    "durable_fixture_external_requests": 0,
+    "durable_fixture_persisted_writes": 0,
+    "recorded_pids": [
+      43493,
+      43505,
+      43510,
+      43523,
+      43525,
+      43746,
+      43747
+    ],
+    "remaining_owned_processes": [],
+    "profile_absent": true,
+    "cleanup_error_absent": true,
+    "retained_original_layer_pairs": 1454,
+    "all_layer_hashes_verified": true,
+    "source_original_archive2305_unchanged": true
+  },
+  "lead_review": {
+    "all_originals_opened": 31,
+    "complete_selected_name_visible": true,
+    "full_reset_success_visible": true,
+    "acceptance": "open"
+  },
+  "independent_ux_review": {
+    "originals_personally_opened": 31,
+    "report": "independent-ux-review.md",
+    "sha256": "7bcf3d25be1e9f85d206908a98c974a8724281b60174316d6f14846d50610562",
+    "P2": [
+      "Inventory range caption clips",
+      "Decision identity silently abbreviated"
+    ],
+    "evidence_gaps": [
+      "Full captured-name Help and unchanged return",
+      "Post-refresh balance",
+      "Credits fact/policy group separator"
+    ],
+    "P3_optional": "Credits actions wrap Edit alone, permitted byR4; not a contract defect",
+    "acceptance": "open"
+  },
+  "independent_source_audit": {
+    "finding": "P2: fitting label-only row status discarded; accepted and assigned to Main",
+    "scope": "bounded read-only Quota/shared and documented DX; no commands run; not wholePR readiness"
+  },
+  "limits": [
+    "Failedrun remainsfailed, no overallUX/Normalpass",
+    "Originalcorpusall31personallyopened, notautomatedlater29/eightverification",
+    "Allother5grids/pending/resize/Sessions/publicproviders/native/device remainopen",
+    "No product/name-lossdefectinferred fromOCR",
+    "Raw1454layerpairs separatefrom31composedsceneoriginals",
+    "Browser rendering of this HTML remains unverified after the established browser access refusal."
+  ],
+  "original_images": [
+    {
+      "checkpoint": "component-quota-browse",
+      "file": "component-quota-browse.png",
+      "sha256": "a927b8eaff8c60600c99b692df4820a92eebf804f291c8a8031bc85b46b4f16c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002336+00:00",
+        "original_opened": true,
+        "observation": "Whole selected Tokyo/OpenAI name words and provider visible in accountcolumn; bottom charts are box glyphs and weekly/long labels wrap densely. Cyan outerframe complete.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "file": "component-quota-confirm-no-returned.png",
+      "sha256": "02f198b376fd8c1cf6b791dd5d307c7f776a5bfa39c84ef9ab72759a532c7993",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002433+00:00",
+        "original_opened": true,
+        "observation": "No returnsOptionsResets noresult, Inspectactionpresent.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "file": "component-quota-confirm-no.png",
+      "sha256": "68dbf0b48448c444d8c8d738ae35428917b1e783ac51fb71c4e2a41052868aa5",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002435+00:00",
+        "original_opened": true,
+        "observation": "OneNo/Yesgroup; Noyellowunderlined, risk1creditCannotundo visible, capturedtag, Cancel/Confirm distinct.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "file": "component-quota-confirm-yes.png",
+      "sha256": "ecc82a34c5f4bb998df2b7f8bf2d7f7b3f0fec3dc3a9d8c5614a3e9bf95950b7",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002437+00:00",
+        "original_opened": true,
+        "observation": "OneNo/Yesgroup; Yesyellowunderlined andNowhite; risk/capturedtag/actionsvisible.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "file": "component-quota-credits-balance.png",
+      "sha256": "1406572bae6cc60ae029554ffaf69f45920b7603a9a02741488307bff93eebc2",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002438+00:00",
+        "original_opened": true,
+        "observation": "Detailed62,500 exactfullamount inStatus view; sameframeascreditsidentityat32.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "file": "component-quota-credits-identity.png",
+      "sha256": "1406572bae6cc60ae029554ffaf69f45920b7603a9a02741488307bff93eebc2",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002440+00:00",
+        "original_opened": true,
+        "observation": "FullOptionsCredits/tag/tabs/detailed62,500 visible; CloseResetsRefreshrow withEditonownline (groupingreviewitem).",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "file": "component-quota-details-bottom.png",
+      "sha256": "e8aba9efcbbe8a7cd44c4389602fc07ff12fdfdc4c77edb780286133125261e1",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002442+00:00",
+        "original_opened": true,
+        "observation": "Bottomguards/reset/notevisible underfixedheader/context/Close; scrollpositiondiffers.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "file": "component-quota-details-top.png",
+      "sha256": "1a0277d1a51db7aaeaa182b5e2a54d58c4d55d9d82e3dde2c6e393d0447b0640",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002443+00:00",
+        "original_opened": true,
+        "observation": "Fixed Accountdetails/Help/capturedprefix+tag; status/reason/quota data visible; Closepinned.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "file": "component-quota-floor-cancelled.png",
+      "sha256": "3522c40fb12fc2400c130d6e29e88637b88c09c1339a9d1a3d5dea4a8e4c9bba",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002444+00:00",
+        "original_opened": true,
+        "observation": "CancelrestoresCurrentdisabled0/Floor0.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "file": "component-quota-floor-draft.png",
+      "sha256": "9ba450132dcaa1bebe8a4d24d542acd0e9adce9421374c2acf57f165bce92730",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002446+00:00",
+        "original_opened": true,
+        "observation": "Currentdisabled0 remains whileFloor1 yellowdraft, visiblewarninginstructions.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "file": "component-quota-floor-original.png",
+      "sha256": "3522c40fb12fc2400c130d6e29e88637b88c09c1339a9d1a3d5dea4a8e4c9bba",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002447+00:00",
+        "original_opened": true,
+        "observation": "Currentdisabled0 vs draftFloor0 readable; Cancel/Save separated frombody.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "file": "component-quota-floor-saved.png",
+      "sha256": "6c1f39b0320bf81176876a826a57d4019ef209cf79f813d94556dfc21aa08dac",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002449+00:00",
+        "original_opened": true,
+        "observation": "BothCurrent1 andFloor1 visible, provingdistinctsaved/draftfields visually.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "file": "component-quota-help-bottom.png",
+      "sha256": "e1410fe36ab4c962c4ffaa3502979dd9c4853daf1f934e263ea221ce499c735b",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002450+00:00",
+        "original_opened": true,
+        "observation": "Actualfinalhelp Ctrl+C/Ctrl+D forcedexitguidance visible withfixedheader/Close.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "file": "component-quota-help-top.png",
+      "sha256": "1b11b6d40198d196c06d0caf9b0323580aacb4db5daf59457333551f8902d054",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002451+00:00",
+        "original_opened": true,
+        "observation": "Cyan QuotaHelp withcurrentquota/pool/counts/Data; noopaqueglyphheader; Closepinned.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "file": "component-quota-next-account.png",
+      "sha256": "d8f657a417ce9c638543fb302591526589bb54f8282870d1a9ed93e2d0b51136",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002453+00:00",
+        "original_opened": true,
+        "observation": "Selected yellowgutter and full Claude / Research / Account / Beta Full / Name visiblypresent inaccountcolumn; adjacentbeta/detail/clients OCR interleave is diagnostic issue, notname-loss.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "file": "component-quota-options-identity.png",
+      "sha256": "5ca95b5800c817e309d682281a49bf4d1fa8eefe40b4f370fb01c5106c4f7faa",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002454+00:00",
+        "original_opened": true,
+        "observation": "FullOptionsResetsheader/tag/liveeligibility5eligible visible; Cancel/Reviewpinned.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "file": "component-quota-policy-cancelled.png",
+      "sha256": "3f8ddb45be9b6c02cbc97a174237d2ca737257cb7c3cdfea197a3926df8a98da",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002455+00:00",
+        "original_opened": true,
+        "observation": "ReopenaftercancelshowsDisallow.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "file": "component-quota-policy-choice-returned.png",
+      "sha256": "3f8ddb45be9b6c02cbc97a174237d2ca737257cb7c3cdfea197a3926df8a98da",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002456+00:00",
+        "original_opened": true,
+        "observation": "Aftercancelchooser closedDisallowrestored.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "file": "component-quota-policy-choice.png",
+      "sha256": "374b01b61abf2a5f565357e4090d697f7720fea03de73224269bf77565b461e2",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002458+00:00",
+        "original_opened": true,
+        "observation": "Usecredits inlineoptions; Allowgutter selected whilechoosing; Cancel/Select; warningbottompartial.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "file": "component-quota-policy-draft.png",
+      "sha256": "e116404c1da51e72b0d97eadc7c40fe47d7cb2697e70969ce75f17b6d712c91b",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002459+00:00",
+        "original_opened": true,
+        "observation": "Allowdraft visible withfloorwarning andCancel/Save.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "file": "component-quota-policy-no-match.png",
+      "sha256": "0563b63af1f92e08dcd16774f39735f91870d9ba7b0585d9dbc17e53f205e525",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002460+00:00",
+        "original_opened": true,
+        "observation": "Fullqueryzznomatchzz/No matchingchoices visible; Selectdimdisabled; fixedCancel.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "file": "component-quota-policy-original.png",
+      "sha256": "3f8ddb45be9b6c02cbc97a174237d2ca737257cb7c3cdfea197a3926df8a98da",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002463+00:00",
+        "original_opened": true,
+        "observation": "Creditusage/context/currentDisallow; floor1warning whole; Cancel/Savefixed.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "file": "component-quota-policy-saved.png",
+      "sha256": "e116404c1da51e72b0d97eadc7c40fe47d7cb2697e70969ce75f17b6d712c91b",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002464+00:00",
+        "original_opened": true,
+        "observation": "ReopenaftersaveshowsAllow.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "file": "component-quota-refresh-result.png",
+      "sha256": "205804e22a0b09ea9a17c06a14924d12c8fbff9e269e3f4b7720f8c04da1d7f8",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002466+00:00",
+        "original_opened": true,
+        "observation": "FullgreenCreditbalance/refreshed. wrapsunderfloorwarning withfullcaption/tag; amount/policyabovefold, groupingEditalone.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "file": "component-quota-reset-inventory.png",
+      "sha256": "cc3a2338d25bc456b7d6eb28a995d6c156737627627a040df3a9ec1d8f9a8c04",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002467+00:00",
+        "original_opened": true,
+        "observation": "voucher1/nonexpiry andsaved2vs7livewarning visible, 6morebelow; inventoryheadingoffscreenatbottom.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "file": "component-quota-reset-last-page.png",
+      "sha256": "f90e12f77e0a9265ce5e3a7324c07c5e58d9ae1085c07c6ca96864dca2175c98",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002469+00:00",
+        "original_opened": true,
+        "observation": "Stable[voucher-7] andSyntheticresetvoucher7 visible; rangeheading clipped after7– at rightboundary (UXreviewitem).",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "file": "component-quota-reset-result-bottom.png",
+      "sha256": "e6eea1658add794003db5b51e260bc158661dcddf28a7bde800dffee5a56a7fd",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002470+00:00",
+        "original_opened": true,
+        "observation": "FullReturntoquotastatus. greybodyguidance distinctClose; savedstalenoticevisible.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "file": "component-quota-reset-result.png",
+      "sha256": "869a23e8aaf2b8decc4bc2abb2e9a11329a88ca2964e72e47f97469a90937afb",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002471+00:00",
+        "original_opened": true,
+        "observation": "CompletegreenSuccess—reset/completed nowwraps, providerconfirmed1window/resetcreditconsumed, fullcaption/tag/Close.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "file": "component-quota-reset-review.png",
+      "sha256": "cc3a2338d25bc456b7d6eb28a995d6c156737627627a040df3a9ec1d8f9a8c04",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002472+00:00",
+        "original_opened": true,
+        "observation": "Reviewreachablewithsaved2vs7livewarning andvoucher1.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "file": "component-quota-restored-account.png",
+      "sha256": "a927b8eaff8c60600c99b692df4820a92eebf804f291c8a8031bc85b46b4f16c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002474+00:00",
+        "original_opened": true,
+        "observation": "Full selected Tokyo/OpenAIname restoredvisibly, samecompleteframe.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "file": "component-quota-returned.png",
+      "sha256": "a927b8eaff8c60600c99b692df4820a92eebf804f291c8a8031bc85b46b4f16c",
+      "pixels": [
+        350,
+        484
+      ],
+      "cells": [
+        32,
+        24
+      ],
+      "verifier_personal_review": {
+        "at": "2026-10-19T23:51:40.002475+00:00",
+        "original_opened": true,
+        "observation": "FullselectedbrowseTokyo/OpenAIaccount restoredvisibly afterresult; framecomplete.",
+        "result": "bounded visual observation; strict run failed and automatedlaterchecks unrun",
+        "limits": "32×24 static compiled fixture; notall6/pending/resize/provider/device/acceptance"
+      }
+    }
+  ]
+}

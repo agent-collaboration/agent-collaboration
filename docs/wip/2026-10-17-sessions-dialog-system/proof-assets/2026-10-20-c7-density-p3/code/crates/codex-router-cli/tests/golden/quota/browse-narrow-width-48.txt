@@ -1,0 +1,48 @@
+╭──────────────────────────────────────────────╮
+│ Quota status                    Details Help │
+│ Pool-wide: responses  Accounts 1 · Usable 1  │
+│ All · Disabled: Shown · 1/1 ▾                │
+│ ┌──────────────────────────────────────────┐ │
+│ │    Account       Status    Quota         │ │
+│ │  ❯ ssdev         available safest        │ │
+│ │    ◎ OpenAI      1 client  quota         │ │
+│ │                  2 resets  Weekly        │ │
+│ │                  Credits   █████         │ │
+│ │                  unknown   83% left      │ │
+│ │                            reset 7d      │ │
+│ │                            5h            │ │
+│ │                            █████         │ │
+│ │                            99% left      │ │
+│ │                            reset 5h      │ │
+│ │                            Weekly pace   │ │
+│ │                            □□□□□□□│□□□   │ │
+│ │                            □□□□  1.00x   │ │
+│ │                            reset pace    │ │
+│ │                            healthy       │ │
+│ └──────────────────────────────────────────┘ │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+│                                              │
+╰──────────────────────────────────────────────╯

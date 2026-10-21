@@ -1,0 +1,44 @@
+{
+  "kind": "original compiled phone-width diagnosis; not UX acceptance",
+  "source": {
+    "head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+    "dirty_snapshot": true,
+    "capture_source_digest": "1399784bfbd1546cf297bd9a9e7ec565473743ebdee4f2ba7f290a8c3a97cf81",
+    "plan_sha256": "6466566bdf02759726bf0747b51430c584ca472d6cdfccacd462f171c8fcb0c7"
+  },
+  "build": {
+    "component_sha256": "f2348f04442c15f771a8169b87507ac22244f2da5e18d9ccb1c1e4be2f24c5e5",
+    "driver_sha256": "e1f39b6fee7bad2c4b8a7dd9706614cc8208d0bfe691908224db894bfe4b580c",
+    "profile": "default debug libtest, real QuotaStatusComponent"
+  },
+  "image": {
+    "file": "component-quota-browse.png",
+    "sha256": "647d65b0fe6969f3798479dd16842dc7513a3984b09122bc9d8bf34d5ce305bd",
+    "pixel_dimensions": [
+      350,
+      484
+    ],
+    "terminal_columns": 32,
+    "terminal_rows": 24,
+    "original_bytes_unchanged": true
+  },
+  "journey": "Start real compiled normal Quota component; first browse; Screenshot; graceful Ctrl+C; child exits normally; original PNG exported by VHS.",
+  "result": {
+    "driver_exit": 0,
+    "test_passed": 1,
+    "test_failed": 0,
+    "elapsed_seconds": 3.576226375,
+    "normal_journey_complete": false,
+    "external_requests": 0,
+    "persisted_writes": 0,
+    "recorded_pids_absent": 4,
+    "browser_profile_absent": true
+  },
+  "root_review": "Original personally opened. Account and Status headings split; long account names, clients, resets and Credits fragment across neighboring columns. Geometry fits but readability fails.",
+  "limits": [
+    "One original browse frame only; normal31/eight negatives not run.",
+    "Desktop32x24 is not an actual iPhone terminal.",
+    "No native provider, remote Router, pending or resize acceptance.",
+    "SVG outlines annotate the HTML; original PNG is unchanged."
+  ]
+}

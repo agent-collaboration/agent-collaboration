@@ -1,0 +1,583 @@
+{
+  "kind": "preliminary-compiled-c7-wide-feedback-not-acceptance",
+  "at": "2026-10-19T18:57:07.938278+00:00",
+  "archiveHead": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+  "componentSha256": "46e32478cd657f9356146a546f1c2f5f57f95229f5479a0ec3eaf6e762c166dd",
+  "run": {
+    "driver": 4071,
+    "exit": 101,
+    "outerExit": 1,
+    "normalChildExit": 0,
+    "originals": 31,
+    "externalRequests": 0,
+    "persistedWrites": 0
+  },
+  "failure": {
+    "scene": "floor-original",
+    "expected": "Weekly floor",
+    "recognized": "Weeklyfloor",
+    "kind": "OCR boundary mismatch; title visibly present. No run pass."
+  },
+  "review": {
+    "lead": "Personally opened every31original",
+    "separateUxVerifier": "Personally opened every31original; six admitted defects visually corrected wide-only, hierarchy partial; surface integrity unresolved."
+  },
+  "remaining": [
+    "Duplicate interactive account identity in Floor and Details; distinguish status/reason",
+    "Cyan non-action guidance and repeated Result heading in result",
+    "Outer surface bottom border absent/top clipping; cause unproven",
+    "Positive pointer selection case failsphase3; cause unproven",
+    "Strict product Clippy argument count failure",
+    "Medium/narrow/phone,actualresize,pending/disabled/error,Sessions,public/provider/two-machine and actualiPhone proof"
+  ],
+  "limits": [
+    "Compiled real iocraft/input/PTY with synthetic account records/effect ports",
+    "Original PNG bytes retained unchanged; red boxes are HTML overlays only",
+    "HTML browser rendering remains unverified"
+  ],
+  "images": [
+    {
+      "file": "component-quota-browse.png",
+      "sha256": "0665532975165337521b0c90a0715078776716faca30b2d566e83d7d5c11288b",
+      "bytes": 141638,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "browse",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Named counters replace opaque glyph strips; long names/providers remain readable. Outer bottom frame is absent."
+    },
+    {
+      "file": "component-quota-next-account.png",
+      "sha256": "110fbb7334af0dcfaa06b1dfb85076a9e57eebf0ac202b39930a229757e1d79b",
+      "bytes": 140330,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "next-account",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-restored-account.png",
+      "sha256": "0665532975165337521b0c90a0715078776716faca30b2d566e83d7d5c11288b",
+      "bytes": 141638,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "restored-account",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-details-top.png",
+      "sha256": "d15e3670b963d39c4da18ee1ac30d9b64455b8e1dfdcb5836d363b62a073bcf3",
+      "bytes": 165747,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "details-top",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Context remains, but account repeats and status/reason are a dense bold line."
+    },
+    {
+      "file": "component-quota-details-bottom.png",
+      "sha256": "50dd9137f2a968902b48e96c4b165ac58aa4a5d8c13d01efd15d8d2cc625f5d8",
+      "bytes": 151870,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "details-bottom",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-help-top.png",
+      "sha256": "0df14c1d2b3b75565e365e2127b27e03f022fe54dbccae6ae5ef9a2bbe2f8714",
+      "bytes": 155858,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "help-top",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Current pool/data counts are visible with distinct labels, including zero values."
+    },
+    {
+      "file": "component-quota-help-bottom.png",
+      "sha256": "2c074b57db422d6b13a991718dbfe06d6b40f3201b3b37895721abab910c0a4a",
+      "bytes": 187860,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "help-bottom",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-floor-original.png",
+      "sha256": "02784c85e03038237d08867e91593c8ccdbdb4753619a7754e0eb1404003821c",
+      "bytes": 128178,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "floor-original",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Actions near fields; duplicate account identity remains. OCR joined the visible heading Weekly floor."
+    },
+    {
+      "file": "component-quota-floor-draft.png",
+      "sha256": "32f502583bcac2a87d5c3817e9e4d492080d4b45777e591412ba86b98d16b5a6",
+      "bytes": 128036,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "floor-draft",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-floor-cancelled.png",
+      "sha256": "02784c85e03038237d08867e91593c8ccdbdb4753619a7754e0eb1404003821c",
+      "bytes": 128178,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "floor-cancelled",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-floor-saved.png",
+      "sha256": "42d27b812f4c818485ccff01e8d512acf79e7b864468aed44a19965aa8bf542b",
+      "bytes": 125781,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "floor-saved",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-options-identity.png",
+      "sha256": "95967eb8e06cf7ccadf79f0d06cf38f85ac9061505999a24fc0f4bbe63531912",
+      "bytes": 150518,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "options-identity",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-reset-inventory.png",
+      "sha256": "afdee04dd23bc4a691197d3b287159e2ed20b97e42bde133fcf3da1699fbd3e8",
+      "bytes": 162878,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "reset-inventory",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-reset-last-page.png",
+      "sha256": "04ff18da58727ceec3931f90a9d4e97075d490a9838d3f25f6dd2ef991457742",
+      "bytes": 157169,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "reset-last-page",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-credits-identity.png",
+      "sha256": "c4e39234a74a11b068d675139c6b7799d5468873e3fbbae1141f6a2836ac846b",
+      "bytes": 143751,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "credits-identity",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-credits-balance.png",
+      "sha256": "a24959b1ecee111fb8d32779a74d9f7258666494f2de10cab19dba9c68052ee3",
+      "bytes": 153709,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "credits-balance",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-policy-original.png",
+      "sha256": "f8283712ff055e0c19f79aa07c705ad9af251a329ddcddc5ba5880afe3e22b9c",
+      "bytes": 131694,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-original",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "One task title and concise fields; account context, separate warning and actions."
+    },
+    {
+      "file": "component-quota-policy-choice.png",
+      "sha256": "af683fb870fa16ab6313a8856e4486d02da8b06170f8475c1ec4648d6001a0ef",
+      "bytes": 133771,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-choice",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-policy-no-match.png",
+      "sha256": "8defdaf93b86309db44cf5b178255df074ed66454923cca905e8889c564df653",
+      "bytes": 134558,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-no-match",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Field/query/result together; Select visibly disabled. Narrow layout remains unverified."
+    },
+    {
+      "file": "component-quota-policy-choice-returned.png",
+      "sha256": "f8283712ff055e0c19f79aa07c705ad9af251a329ddcddc5ba5880afe3e22b9c",
+      "bytes": 131694,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-choice-returned",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-policy-draft.png",
+      "sha256": "ca2939558a1a33a62a911c86b85e6ed5658687b83dc43b363c7ebb2f38e7f6aa",
+      "bytes": 130538,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-draft",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-policy-cancelled.png",
+      "sha256": "f8283712ff055e0c19f79aa07c705ad9af251a329ddcddc5ba5880afe3e22b9c",
+      "bytes": 131694,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-cancelled",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-policy-saved.png",
+      "sha256": "ca2939558a1a33a62a911c86b85e6ed5658687b83dc43b363c7ebb2f38e7f6aa",
+      "bytes": 130538,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "policy-saved",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-refresh-result.png",
+      "sha256": "041dae74069af113652422aadd1bc14bc2ff506fbde74dae193f267e2c847283",
+      "bytes": 159155,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "refresh-result",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Green success differs from yellow warning."
+    },
+    {
+      "file": "component-quota-reset-review.png",
+      "sha256": "afdee04dd23bc4a691197d3b287159e2ed20b97e42bde133fcf3da1699fbd3e8",
+      "bytes": 162878,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "reset-review",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    },
+    {
+      "file": "component-quota-confirm-no.png",
+      "sha256": "3827501922236487a990f281322f45439e19a99d75f88b98dc25eb4a720d8b9a",
+      "bytes": 133743,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "confirm-no",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "One No/Yes group; No selected, short irreversible warning and separate final actions. Pointer proof remains open."
+    },
+    {
+      "file": "component-quota-confirm-no-returned.png",
+      "sha256": "65dc5e1c110d4dea3b6e80390b0785d1d1e3deb188cd0818d8c1f324426e724a",
+      "bytes": 115745,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "confirm-no-returned",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Routine landing prose removed; existing Inspect remains."
+    },
+    {
+      "file": "component-quota-confirm-yes.png",
+      "sha256": "38428bd4b5870187388e0b2f84523620cb5fbbc9203ef0de771401689024995d",
+      "bytes": 133926,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "confirm-yes",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "One No/Yes group; Yes selected; account context stays visible. Pointer proof remains open."
+    },
+    {
+      "file": "component-quota-reset-result.png",
+      "sha256": "3d89353c5c55166694319901239995b30db5a92f92ae6f0d7a422eccea105fdf",
+      "bytes": 149643,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "reset-result",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Full result information retained; redundant Result heading and cyan non-action guidance still need cleanup."
+    },
+    {
+      "file": "component-quota-reset-result-bottom.png",
+      "sha256": "3d89353c5c55166694319901239995b30db5a92f92ae6f0d7a422eccea105fdf",
+      "bytes": 149643,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "reset-result-bottom",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "At this wide size the complete result already fits; same result/lower guidance visible."
+    },
+    {
+      "file": "component-quota-returned.png",
+      "sha256": "0665532975165337521b0c90a0715078776716faca30b2d566e83d7d5c11288b",
+      "bytes": 141638,
+      "pixels": [
+        1226,
+        698
+      ],
+      "viewport": [
+        120,
+        36
+      ],
+      "scene": "returned",
+      "leadOpened": true,
+      "uxVerifierOpened": true,
+      "observation": "Original inspected; preliminary wide-only evidence, not whole-run or product acceptance."
+    }
+  ],
+  "planSha256": "0f9db2cf5de769bd65feefb7d192c3d1e2f7e3ff48b56837e56cf56eb1c640c5",
+  "sourceBindingSha256": "1674de03ed68a55fb3728ff32bbbdfb283f70e59c1baff13e5a95324c99b3d20",
+  "sourceBindingEncoding": "UTF-8 Python json.dumps(source, sort_keys=True, separators=(comma,colon)), default ensure_ascii",
+  "captureInputCount": 2172,
+  "captureDriverSha256": "0b25cacab033962398e1e4e4729c9a164977b381c322a5f915bd84af276faa7a",
+  "imageCheckerSha256": "cd8f8fb7f90912dd26477e40a9aa6f1b67abe5edf6f11ef74279b99278d8b149",
+  "buildProfile": {
+    "opt_level": "0",
+    "debuginfo": "line-tables-only",
+    "debug_assertions": true,
+    "overflow_checks": true,
+    "test": true,
+    "features": [
+      "default"
+    ]
+  }
+}

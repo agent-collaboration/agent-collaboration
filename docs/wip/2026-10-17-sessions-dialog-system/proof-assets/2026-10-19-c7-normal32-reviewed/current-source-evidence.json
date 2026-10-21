@@ -1,0 +1,108 @@
+{
+  "kind": "Current bounded source/test proof; appearance and delivery remain open",
+  "sourceHashes": {
+    "crates/codex-router-cli/src/presentation/quota/quota_status_symbols.rs": "d2e19be000ea0c35b0e05610562b7b4aa2b99a49e2b084581ed8270d07166749",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "560c0c03a2c3166248ab4da173c5b4da0f01560e053619d98aafa3bd36a6df6d",
+    "crates/codex-router-cli/src/presentation/quota/quota_dialog_context.rs": "d55a9ad0651909e4c5f476a4e84470e89d8fb336d18408302a4d19b927643239",
+    "crates/codex-router-cli/src/presentation/quota/quota_reset_detail_rendering.rs": "69875ee6f782afc82466cd22bb018ff92975974b824ec2e4c81f023b4c702cc8",
+    "crates/codex-router-cli/src/presentation/quota/quota_help_rendering.rs": "94c52a0c9d5288565ef14b4a01b285e470ea3fb034f08793a4a48d76d9bedcd0",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "dff7fd26d93e5fc53eac6cef0b5192535cbcd565b2996aac918f83438a35ecd2",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_inventory_caption_test.rs": "0efa68ab7a23a7b2233653e1cb0d0d4b5487a2ba32b076569cd85ba3f06d0091",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_identity_test.rs": "eccd586655f7a6debc9936448c3732ab093e616efb823db4beaf4ea4917997bb",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_help_test.rs": "a6c9e80d358e04de17bc2d534953df0a575cb487b00ad277dee8fabe12d52529",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_form_test.rs": "a4694a08b7b2ff18e1e180b6153d061089abdf1f62deabb994063080ae850349",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_reset_test.rs": "83d22c1501e1e25fe4335887623cae1ee39d3b92370de511d0c5a526ab357efc",
+    "crates/codex-router-cli/src/presentation/quota/quota_storyboard_fixture_test.rs": "501f769363a6b36170a9b30f5a48e8de194d29ca6aacb48e287bd35c88545e1b",
+    "crates/codex-router-cli/src/presentation/quota/quota_storyboard_observation_test.rs": "3148fa5285313bc0f0528b8e66de32162c42e455da76554c5ce78fc83d660dcc",
+    "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "28e4febe23d902add94152f8b5f93d8f593add2f4b90cf0af2be7eddbc7d378f"
+  },
+  "qualitySteps": [
+    {
+      "kind": "fullCliTests",
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support"
+      ],
+      "exit": 0,
+      "seconds": 68.96,
+      "log": "tmp/tui-implementation/c7-context-after-lint-fullCliTests.log",
+      "capSeconds": 360,
+      "counts": {
+        "passed": 555,
+        "failed": 0,
+        "ignored": 7
+      },
+      "targets": 11
+    },
+    {
+      "kind": "allTargetCliClippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 8.24,
+      "log": "tmp/tui-implementation/c7-context-after-lint-allTargetCliClippy.log",
+      "capSeconds": 180
+    },
+    {
+      "kind": "format",
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit": 0,
+      "seconds": 4.34,
+      "log": "tmp/tui-implementation/c7-context-settled-format.log"
+    },
+    {
+      "kind": "fileSize",
+      "command": [
+        "python3",
+        "scripts/tooling/check-rust-file-size.py"
+      ],
+      "exit": 0,
+      "seconds": 0.14,
+      "log": "tmp/tui-implementation/c7-context-settled-fileSize.log"
+    }
+  ],
+  "independentReview": {
+    "report": "independent-code-recheck.md",
+    "sha256": "6ce82f7601d8bf417daee182df0986e9fd756b58ede6bc6d33ca200f8fc78234",
+    "statusP2": "VERIFIED CLOSED",
+    "newConfirmedDefects": 0,
+    "commandsExecutedByReviewer": false,
+    "scope": "bounded affected source/test recheck, not wholePRREADY"
+  },
+  "decidingCausalEvidence": [
+    "c7-status-label-boundary-red.log",
+    "c7-status-label-mounted-all-red.log",
+    "c7-context-caption-help-red.log",
+    "c7-refreshed-fixture-contrast-top-red.log"
+  ],
+  "limitations": [
+    "No current screenshot acceptance implied",
+    "Synthetic reset/refresh fixtures do not prove actual provider effects",
+    "Fresh-machine DX reproduction, actual device/provider, different-lineage coverage, current-headCI and finalwhole review remain open",
+    "31 originals in this folder depict earlier234545 candidate, not this newer source"
+  ]
+}

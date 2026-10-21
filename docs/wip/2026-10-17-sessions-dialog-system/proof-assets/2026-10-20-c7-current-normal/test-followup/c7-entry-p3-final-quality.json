@@ -1,0 +1,95 @@
+[
+  {
+    "start": "2026-10-20T05:31:17.002621+00:00",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "-p",
+      "codex-router-cli",
+      "--lib",
+      "initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids",
+      "--",
+      "--nocapture"
+    ],
+    "expectedExit": 0,
+    "timeout": false,
+    "signals": [],
+    "testSourceSha256": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90",
+    "pid": 84634,
+    "exit": 0,
+    "psExit": 0,
+    "remainingGroup": [],
+    "seconds": 30.228553000371903,
+    "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-final-green.log",
+    "finish": "2026-10-20T05:31:47.231665+00:00"
+  },
+  {
+    "start": "2026-10-20T05:31:47.285776+00:00",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--offline",
+      "-p",
+      "codex-router-cli",
+      "--features",
+      "keychain-test-support",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "expectedExit": 0,
+    "timeout": false,
+    "signals": [],
+    "testSourceSha256": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90",
+    "pid": 84648,
+    "exit": 0,
+    "psExit": 0,
+    "remainingGroup": [],
+    "seconds": 30.799418916925788,
+    "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-lint.log",
+    "finish": "2026-10-20T05:32:18.085689+00:00"
+  },
+  {
+    "start": "2026-10-20T05:32:18.128450+00:00",
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "expectedExit": 0,
+    "timeout": false,
+    "signals": [],
+    "testSourceSha256": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90",
+    "pid": 84717,
+    "exit": 0,
+    "psExit": 0,
+    "remainingGroup": [],
+    "seconds": 4.65259962528944,
+    "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-format.log",
+    "finish": "2026-10-20T05:32:22.781164+00:00"
+  },
+  {
+    "start": "2026-10-20T05:32:22.825324+00:00",
+    "command": [
+      "python3",
+      "scripts/tooling/check-rust-file-size.py"
+    ],
+    "expectedExit": 0,
+    "timeout": false,
+    "signals": [],
+    "testSourceSha256": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90",
+    "pid": 84722,
+    "exit": 0,
+    "psExit": 0,
+    "remainingGroup": [],
+    "seconds": 0.20971995778381824,
+    "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-size.log",
+    "finish": "2026-10-20T05:32:23.035087+00:00"
+  }
+]

@@ -1,0 +1,809 @@
+{
+  "kind": "partial-compiled-component-proof",
+  "complete": false,
+  "images": [
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-browse.png",
+      "sha256": "323bd063c7c032e0f90856101093289bb15dac1228c8072029a795c65fe170fb",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-browse",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-browse-credit-window.png",
+      "sha256": "311db48c47607751c7125dc67d5aa4d6e34ae987436ca923a11cbfb148a18aaf",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-browse-credit-window",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-browse-pace-heading.png",
+      "sha256": "d5989974faf729ad6a422c242cae7c67d6e3ee039842d77cfb76ad91d4717a1f",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-browse-pace-heading",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-browse-pace-value.png",
+      "sha256": "b89385754c69908177de79bfeac76ecf4f9ebe55ffbd3ae415b25292c71f292f",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-browse-pace-value",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-browse-page-returned.png",
+      "sha256": "323bd063c7c032e0f90856101093289bb15dac1228c8072029a795c65fe170fb",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-browse-page-returned",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-next-account.png",
+      "sha256": "0b1a2e49c7460e04783a59632ca16d1e0a409c504be3063073b43ed7e7ee503c",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-next-account",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-restored-account.png",
+      "sha256": "323bd063c7c032e0f90856101093289bb15dac1228c8072029a795c65fe170fb",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-restored-account",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-details-top.png",
+      "sha256": "41bc44997a14fdd653c4417791e7452b876f643015a2338e64ec5f8ea91387ec",
+      "screen": "Quota status",
+      "dialog": "Account details",
+      "journey": "component-quota-details-top",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-details-bottom.png",
+      "sha256": "804c5025383f5be41731363c8575aedda371b15404a2b9e33aa9e429deab817a",
+      "screen": "Quota status",
+      "dialog": "Account details",
+      "journey": "component-quota-details-bottom",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-help-top.png",
+      "sha256": "3baca93cf3052e56e37ac235f3f33b425b1568601f7ef3c030a039cd20dddead",
+      "screen": "Quota status",
+      "dialog": "Quota Help",
+      "journey": "component-quota-help-top",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-help-bottom.png",
+      "sha256": "f9a1b7d7349064390bcccf3ee1efbfde8e135fe140b75e1b03ab16c7afd71438",
+      "screen": "Quota status",
+      "dialog": "Quota Help",
+      "journey": "component-quota-help-bottom",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-floor-original.png",
+      "sha256": "49fc85cf97f90e47e994c8a4ff275449dcc83a47ffa57bfac6174ffea4efcde4",
+      "screen": "Quota status",
+      "dialog": "Weekly floor",
+      "journey": "component-quota-floor-original",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-floor-draft.png",
+      "sha256": "02e1329361a88b832753b97fb2a97e5f8326c08c15d5a78c89ecfa553da5d97a",
+      "screen": "Quota status",
+      "dialog": "Weekly floor",
+      "journey": "component-quota-floor-draft",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-floor-cancelled.png",
+      "sha256": "49fc85cf97f90e47e994c8a4ff275449dcc83a47ffa57bfac6174ffea4efcde4",
+      "screen": "Quota status",
+      "dialog": "Weekly floor",
+      "journey": "component-quota-floor-cancelled",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-floor-saved.png",
+      "sha256": "2ab2b27091beba76f531c0f26c498d5b73ebe9588a599d7d5bedc727dc7f673c",
+      "screen": "Quota status",
+      "dialog": "Weekly floor",
+      "journey": "component-quota-floor-saved",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-options-identity.png",
+      "sha256": "3e7220b7b68b313c1d943cea8bc200358f564d5834caf703652daa40cafc2996",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Resets",
+      "journey": "component-quota-options-identity",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-reset-inventory.png",
+      "sha256": "18dea418e19c7df80eca970ddd4f7619a05b2c82069ad5ed290dead566ab3927",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Resets",
+      "journey": "component-quota-reset-inventory",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-reset-last-page.png",
+      "sha256": "17fe90bf652ef511e570a82dee11a3b6f05831b5d7d4f3e3806440aeb81fcdc0",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Resets",
+      "journey": "component-quota-reset-last-page",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-credits-identity.png",
+      "sha256": "463736d6d200ffed5d26f25fd5409c337cfeacc87fa820826f16f9d8cb857d0a",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-credits-identity",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-credits-balance.png",
+      "sha256": "9ae720bb3e0e9e1ee18473d75a04896ce4d1075578d06fa685e3f343184600c0",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-credits-balance",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-original.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-original",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-choice.png",
+      "sha256": "26ac8446613b35c0f86815aea5a67430fee73f7d3e50a10a39fe9322e45aaa12",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-choice",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-no-match.png",
+      "sha256": "37792089c11c6ad16af21b3f476cd258686136c32bf4090f908c2fdb50f151c3",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-no-match",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-choice-returned.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-choice-returned",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-draft.png",
+      "sha256": "d81a4e69f65fdd1ef6647873e5c5b8de9a3064d2c7801eec3e61bc0aa6d1f2e1",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-draft",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-cancelled.png",
+      "sha256": "955f3ee77d0f383df5416bb444d30fa08b8cb1a587d50fc638231aa74cfaef36",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-cancelled",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-policy-saved.png",
+      "sha256": "d81a4e69f65fdd1ef6647873e5c5b8de9a3064d2c7801eec3e61bc0aa6d1f2e1",
+      "screen": "Quota status",
+      "dialog": "Credit usage",
+      "journey": "component-quota-policy-saved",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-refresh-result.png",
+      "sha256": "64999ad9920a9442710661daa58f9acc8d324fb98651b1288193351d2b168ee4",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-refresh-result",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-credits-refreshed-balance.png",
+      "sha256": "9a3b5e5a336f080b8b217fdc2dd2d5392c4b974f17f962e1e790f4aae0426be0",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-credits-refreshed-balance",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-credits-refreshed-freshness.png",
+      "sha256": "f8b1a8ab49a4d4648b8ea39be30638e481f50fdb986b8f83ccb7a9073b450753",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-credits-refreshed-freshness",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-credits-refreshed-observation.png",
+      "sha256": "5c4e14cc54cdaa0ebfe415d561a1bcbaeeea36d0897d61d386773c9fe3ec4a2c",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-credits-refreshed-observation",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-credits-policy-boundary.png",
+      "sha256": "d6df15328a8ab988657da399cbf1242d8f7a90b9535995fc5a22f0d1d1c20f2d",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Credits",
+      "journey": "component-quota-credits-policy-boundary",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-reset-review.png",
+      "sha256": "18dea418e19c7df80eca970ddd4f7619a05b2c82069ad5ed290dead566ab3927",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Resets",
+      "journey": "component-quota-reset-review",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-confirm-no.png",
+      "sha256": "03db283f328c823ead0a9567e4630b122c2eea002c84122a38f3dd97e9971f75",
+      "screen": "Quota status",
+      "dialog": "Confirm reset",
+      "journey": "component-quota-confirm-no",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-confirm-no-returned.png",
+      "sha256": "478f13f13039b9132e4fe34341756ddf0fb687845323349ddaea68bcce9b2da0",
+      "screen": "Quota status",
+      "dialog": "Options \u00b7 Resets",
+      "journey": "component-quota-confirm-no-returned",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-confirm-yes.png",
+      "sha256": "a02ca730a737b4dbd44f5b4609499ea14553be1c30c2c261608eeffd439dddb3",
+      "screen": "Quota status",
+      "dialog": "Confirm reset",
+      "journey": "component-quota-confirm-yes",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-confirm-help-top.png",
+      "sha256": "651808e3a1642712fdcc9c540c295b65a57ed57d5f03d81e2449edf1cca943b8",
+      "screen": "Quota status",
+      "dialog": "Quota Help",
+      "journey": "component-quota-confirm-help-top",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-confirm-help-identity.png",
+      "sha256": "b6ba993681d74def2344647d195a9135b636facc8b2a197ba48ac107033ad52e",
+      "screen": "Quota status",
+      "dialog": "Quota Help",
+      "journey": "component-quota-confirm-help-identity",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. Exact full name and tag value share the measured Account field; OCR does not prove the appearance of its one leading/trailing decoration. Personal original-image inspection must verify literal tag brackets; raw OCR is unchanged."
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-confirm-help-returned.png",
+      "sha256": "a02ca730a737b4dbd44f5b4609499ea14553be1c30c2c261608eeffd439dddb3",
+      "screen": "Quota status",
+      "dialog": "Confirm reset",
+      "journey": "component-quota-confirm-help-returned",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-reset-result.png",
+      "sha256": "b4c3599e0cdd554019bee11254d54e532a5601c073274ddd36293172efee4628",
+      "screen": "Quota status",
+      "dialog": "Reset result",
+      "journey": "component-quota-reset-result",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-reset-result-bottom.png",
+      "sha256": "5ecb92210c259e97fe252b5464717311f3262ce0241dc3ec12f9f4fa151ffa5d",
+      "screen": "Quota status",
+      "dialog": "Reset result",
+      "journey": "component-quota-reset-result-bottom",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x12/quota-component-normal-48x12/component-quota-returned.png",
+      "sha256": "323bd063c7c032e0f90856101093289bb15dac1228c8072029a795c65fe170fb",
+      "screen": "Quota status",
+      "dialog": "browse",
+      "journey": "component-quota-returned",
+      "viewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "source_head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+      "component_sha256": "e873c3a6873eb4852e1d7bc12455989de9067fe26f354783f134ecb7dda23228",
+      "driver_sha256": "cda300af1a257fa0b8d3747e2f8731a56355195ea3e5a5c322804070e06bd8e1",
+      "checker_sha256": "0cce6b79f08a3e3126051879ea97cd8aa6c797200e4932ca7980a6102dcf993c",
+      "source_sha256": "7980995c6760f2c4525fb7e42f2ad5cfc9c5ccd419a3eeb47bdfd4ddb9d009dd",
+      "result": "Scene/receipt checks passed; personal visual and independent cleanup review pending",
+      "visual_inspection": "pending",
+      "limits": "Synthetic external ports/model; real compiled UI/input/PTY. Not provider/storage/public-entry acceptance. "
+    }
+  ],
+  "pending": [
+    "personal original image inspection",
+    "pending scenarios/resize",
+    "public/provider observations"
+  ]
+}

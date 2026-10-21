@@ -1,0 +1,88 @@
+--- before/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs
++++ after/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs
+@@ -102,6 +102,41 @@
+     }
+ }
+ 
++#[test]
++fn actual_dialog_crop_rejects_missing_modal_bottom_with_background_facts() {
++    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n╰──────────────────────────────────╯";
++    assert!(
++        std::panic::catch_unwind(|| actual_dialog_text(frame, "Quota Help")).is_err(),
++        "a modal without its bottom must not borrow Use credits/Disallow from the outer frame"
++    );
++}
++
++#[test]
++fn actual_dialog_crop_rejects_mismatched_modal_bottom_with_background_facts() {
++    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n│  ╰───────────────────────╯       │\n╰──────────────────────────────────╯";
++    assert!(
++        std::panic::catch_unwind(|| actual_dialog_text(frame, "Quota Help")).is_err(),
++        "a displaced bottom is not the modal's boundary"
++    );
++}
++
++#[test]
++fn actual_dialog_crop_keeps_modal_content_without_background_facts() {
++    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│   ╭──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n│   ╰──────────────────────╯       │\n╰──────────────────────────────────╯";
++    let dialog = actual_dialog_text(frame, "Quota Help");
++    assert!(dialog.contains("Quota Help") && dialog.contains("Close"));
++    assert!(!dialog.contains("Use credits") && !dialog.contains("Disallow"));
++}
++
++#[test]
++fn actual_dialog_crop_preserves_cjk_overwritten_top_left_corner() {
++    // The second wide glyph covers the modal's left corner at column four.
++    let frame = "╭──────────────────────────────────╮\n│ Use credits Disallow              │\n│東京──────────────────────╮       │\n│   │ Quota Help           │       │\n│   │ Close                │       │\n│   ╰──────────────────────╯       │\n╰──────────────────────────────────╯";
++    let dialog = actual_dialog_text(frame, "Quota Help");
++    assert!(dialog.contains("Quota Help") && dialog.contains("Close"));
++    assert!(!dialog.contains("Use credits") && !dialog.contains("Disallow"));
++}
++
+ pub(in crate::presentation::quota) fn actual_dialog_text(frame: &str, title: &str) -> String {
+     let lines = frame.lines().collect::<Vec<_>>();
+     let title_row = lines
+@@ -122,20 +157,30 @@
+             .expect("found title is a UTF-8 boundary"),
+     );
+     let title_end = title_start + unicode_width::UnicodeWidthStr::width(title);
+-    // A wide underlay glyph can occupy the top-left corner's canvas cell.
+-    // The nearest complete bottom border still gives the actual modal bounds;
+-    // never fall back to the outer frame and admit background row text.
+-    let (bottom, left, right) = (title_row + 1..lines.len())
++    // Bind the nearest top border before looking below the title. A wide
++    // underlay glyph can cover its left corner; the contiguous horizontal
++    // border ending at the top-right corner still fixes that cell's column.
++    let (top, left, right) = (0..title_row)
++        .rev()
+         .find_map(|row| {
+-            let left = column_of(lines[row], '╰')?;
+-            let right = column_of(lines[row], '╯')?;
+-            (left < title_start && right >= title_end).then_some((row, left, right))
+-        })
+-        .expect("complete modal bottom border encloses its title");
+-    let top = (0..title_row)
+-        .rev()
+-        .find(|row| column_of(lines[*row], '╮') == Some(right))
+-        .expect("modal top-right corner matches its bottom border");
++            let corner_offset = lines[row].find('╮')?;
++            let right = column_of(lines[row], '╮')?;
++            let horizontal_cells = lines[row]
++                .get(..corner_offset)?
++                .chars()
++                .rev()
++                .take_while(|character| *character == '─')
++                .count();
++            let left = right.checked_sub(horizontal_cells + 1)?;
++            (horizontal_cells > 0 && left < title_start && right >= title_end)
++                .then_some((row, left, right))
++        })
++        .expect("modal top border independently encloses its title");
++    let bottom = (title_row + 1..lines.len())
++        .find(|row| {
++            column_of(lines[*row], '╰') == Some(left) && column_of(lines[*row], '╯') == Some(right)
++        })
++        .expect("modal bottom border matches its independently bound top");
+     lines[top + 1..bottom]
+         .iter()
+         .map(|line| {

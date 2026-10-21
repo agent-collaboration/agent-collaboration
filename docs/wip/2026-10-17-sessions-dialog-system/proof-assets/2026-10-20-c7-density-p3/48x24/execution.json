@@ -1,0 +1,41 @@
+{
+  "start": "2026-10-20T08:10:06.805750+00:00",
+  "independent_intake_seconds": 0.9192090407013893,
+  "index": 0,
+  "grid": [
+    48,
+    24
+  ],
+  "plan": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/c7-current-48x24-component-plan.json",
+  "plan_sha256": "2740a348c87aaf5643e0ce793869e551a3631d0968db748c9a94552d24d57997",
+  "command": [
+    "/Users/shravansunder/.local/bin/uv",
+    "run",
+    "--offline",
+    "--no-project",
+    "--with",
+    "pydantic==2.14.1",
+    "--python",
+    "3.13",
+    "python",
+    "-B",
+    "-m",
+    "scripts.verification.tui_component_capture",
+    "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/c7-current-48x24-component-plan.json"
+  ],
+  "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/repository",
+  "output": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-density-p3-all-six-20261020T080738Z/observation-48x24",
+  "budget": {
+    "preflightSeconds": 50,
+    "workSeconds": 1900,
+    "cleanupSeconds": 90,
+    "wholeSeconds": 2040
+  },
+  "timeout": false,
+  "V_stop_requested": false,
+  "V_signals": [],
+  "wrapper_pid": 3821,
+  "exit": 1,
+  "finish": "2026-10-20T08:11:02.504796+00:00",
+  "seconds": 55.69884524960071
+}

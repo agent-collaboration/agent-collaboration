@@ -1,0 +1,26 @@
+{
+  "start": "2026-10-20T05:24:17.789493+00:00",
+  "command": [
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "-p",
+    "codex-router-cli",
+    "--lib",
+    "initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids",
+    "--",
+    "--nocapture"
+  ],
+  "expectedExit": 101,
+  "timeout": false,
+  "signals": [],
+  "testSourceSha256": "7b59b2e0eed11795cfb8bdc1753438912de4181cda89ee456a626edbe3665016",
+  "pid": 84306,
+  "exit": 101,
+  "psExit": 0,
+  "remainingGroup": [],
+  "seconds": 0.9472152921371162,
+  "log": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-eligibility-red-recorded.log",
+  "finish": "2026-10-20T05:24:18.736754+00:00"
+}

@@ -1,0 +1,38 @@
+{
+  "kind": "Two test-only differences; unchanged product27cb runtime and actual compiled test snapshots preserved",
+  "authority": "Root9a supported-page additive proof and Rootbf/c0 P3 correction before nextfreeze; no product/default/UI rebuild solely for tests",
+  "productManifest": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-normal-options-default-target-handoff.json",
+  "productManifestSha256": "5f245f3ccffa8f6d4cce4eb2da5922b4f909c0935168099a45982700a8c05ed3",
+  "componentSha256": "27cbcfac401131b7330c12e9e4d5ca4c2bd97797f8c6514d414681c7ff7405aa",
+  "compiledSourceInputs": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-inputs-before.json",
+  "compiledSourceInputsSha256": "d814a5e6b1f207f90b3ca8aa42a73829051c2c377fb2f30b5fc9b64e137fc441",
+  "unchangedInputs": 2282,
+  "differences": [
+    {
+      "path": "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "compiledSourceSha256": "96c7f917f269f84c0a7bdea12872475328dd921064fa69ba8617fab90059a294",
+      "currentSha256": "8f11295be1b42259f3e208aab5683c48940986068ed547e85b2e29e28b3513ed",
+      "compiledSourceSnapshot": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "exactReversalVerified": true,
+      "reversal": "Remove only additive supported-page observer"
+    },
+    {
+      "path": "crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs",
+      "compiledSourceSha256": "ad0313011dd7419c1d194a7c03760e7ef4535cd8e05daa0d7b7dbe249e802d47",
+      "currentSha256": "950475ab4901b5d890d8ee20196664190da7aaeb3d026f53d249977f4961ec90",
+      "compiledSourceSnapshot": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs",
+      "exactReversalVerified": true,
+      "reversal": "Remove actual eligibility/voucher/cancel chrome-only witnesses and Cancel fixture response; restore original voucher-only assertion; remove local test predicates"
+    }
+  ],
+  "currentP3Quality": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-entry-p3-final-quality.json",
+    "sha256": "4deb1e98be818c87b2eae13e5d156709e72ad18007958f5623f3f922fbff6ab5"
+  },
+  "sourceHashesHeld": true,
+  "limits": [
+    "Current captured product does not contain either subsequent test change; exact compiled source bytes are separately copied and not relabeled.",
+    "Original fullCLI560/default9 results retain their original compiled-source scope; current test corrections have separate focused and applicable quality results.",
+    "No runtime/product/fixture-entry data behavior changed; no original-image or Root acceptance claim."
+  ]
+}

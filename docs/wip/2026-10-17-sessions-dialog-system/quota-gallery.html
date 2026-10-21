@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sessions and Quota — screenshot review</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="quota-gallery">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Component system</a>
+    <a href="quota-gallery.html">Screenshots</a>
+    <a href="proof.html">Proof archive</a>
+  </nav>
+</ex-nav>
+<ex-document id="quota-gallery">
+<h1>Sessions and Quota: screenshot review</h1>
+<p>Original compiled terminal captures, with their observed build and result. Use the gallery to compare sizes and open pictures fullscreen. Narrow width and short height are the approved phone proxy.</p>
+<ex-callout tone="risk" title="Not merge-ready">
+These original captures precede the latest owner corrections: the shared value-column indentation, Copy path, sentence-case action wording, and orange warnings with yellow reserved for focus/selection are now implemented and pass scoped source tests. Replacement compiled pictures are still pending. The captured builds and earlier reviews remain identified below; they do not establish completion of these corrections. Narrow/short and live-provider proof remain incomplete.
+</ex-callout>
+
+<h2 id="sessions">Sessions</h2>
+<p><strong>Current compiled captures · 120×36.</strong> Browse, Details, New, Fork, searchable choices, Filters and Help are below. All 20 image checks and three wrong-image controls passed. An independent verifier opened and hash-checked every original and found no confirmed visible P0–P3 issue in this bounded set.</p>
+<p>These use synthetic session records through the real UI and input loop, rendered by fixture harness <code>144801f2…</code>. They do not prove installed-client actions. <a href="proof-assets/2026-10-20-sessions-wide/evidence.json">Exact evidence and limits</a> · <a href="proof-assets/2026-10-20-sessions-wide/independent-ux.md">Independent visual review</a>.</p>
+<h2 id="screenshots">Screenshot gallery</h2>
+<p>Start with Sessions. Filter by screen, view or observed build; each image keeps its original viewport and result. The nine retained Quota examples are from earlier builds.</p>
+<ex-gallery id="quota-evidence" label="Sessions and Quota screenshots" selected="sessions-browse-120x36" filters="surface tags build">
+  <script type="application/json" data-gallery-filters>
+    [{"field":"surface","label":"Screen","icon":"terminal"},{"field":"tags","label":"View","icon":"file"},{"field":"build","label":"Observed build","icon":"package"}]
+  </script>
+  <figure id="sessions-browse-120x36" data-surface="Sessions" data-screen="Sessions Browse" data-state="Browse" data-viewport="120×36" data-tags="Browse" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-all.png" alt="Sessions · Browse · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Browse · 120×36 · renderer <code>144801f2…</code>.</strong> Six attributable sessions, fixed selection gutter and aligned title/metadata. Header actions are New, Details and Help. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-all.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-codex-details-120x36" data-surface="Sessions" data-screen="Sessions Codex Details" data-state="Codex Details" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-codex-details.png" alt="Sessions · Codex Details · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Codex Details · 120×36 · renderer <code>144801f2…</code>.</strong> Captured identity, full session ID, directory and conversation are separate from Close, Copy, Fork and Resume. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-codex-details.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-fork-120x36" data-surface="Sessions" data-screen="Sessions Fork" data-state="Fork" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-fork.png" alt="Sessions · Fork · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Fork · 120×36 · renderer <code>144801f2…</code>.</strong> Captured source and destination remain explicit before Cancel or Fork. This is a synthetic prompt, not a dispatched provider action. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-fork.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-fork-choice-120x36" data-surface="Sessions" data-screen="Sessions Fork destination" data-state="Fork destination" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-fork-choice.png" alt="Sessions · Fork destination · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Fork destination · 120×36 · renderer <code>144801f2…</code>.</strong> Destination choices expand inside the existing Fork dialog; no nested dialog. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-fork-choice.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-new-120x36" data-surface="Sessions" data-screen="Sessions New session" data-state="New session" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new.png" alt="Sessions · New session · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · New session · 120×36 · renderer <code>144801f2…</code>.</strong> One form shows Client, Machine and Directory before Cancel or Start. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-new-machine-120x36" data-surface="Sessions" data-screen="Sessions New: machine choice" data-state="New: machine choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new-machine.png" alt="Sessions · New: machine choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · New: machine choice · 120×36 · renderer <code>144801f2…</code>.</strong> Searchable machine choices expand inline while the other form fields remain visible. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new-machine.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-new-no-match-120x36" data-surface="Sessions" data-screen="Sessions New: no matching machine" data-state="New: no matching machine" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new-no-match.png" alt="Sessions · New: no matching machine · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · New: no matching machine · 120×36 · renderer <code>144801f2…</code>.</strong> The query and no-match result stay together; Select is disabled and Cancel remains available. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new-no-match.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-new-returned-120x36" data-surface="Sessions" data-screen="Sessions New: choice cancelled" data-state="New: choice cancelled" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new-returned.png" alt="Sessions · New: choice cancelled · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · New: choice cancelled · 120×36 · renderer <code>144801f2…</code>.</strong> Returning from the choice preserves the Client, Machine and Directory form. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-new-returned.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-machine-120x36" data-surface="Sessions" data-screen="Sessions Browse machine choice" data-state="Browse machine choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-machine-sources.png" alt="Sessions · Browse machine choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Browse machine choice · 120×36 · renderer <code>144801f2…</code>.</strong> A named current/default machine is shown with Cancel and Select. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-machine-sources.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-client-no-match-120x36" data-surface="Sessions" data-screen="Sessions Filters: no matching client" data-state="Filters: no matching client" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-client-no-match.png" alt="Sessions · Filters: no matching client · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Filters: no matching client · 120×36 · renderer <code>144801f2…</code>.</strong> The client query and no-match state remain in the filter dialog; Select is disabled. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-client-no-match.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-filters-120x36" data-surface="Sessions" data-screen="Sessions Filters" data-state="Filters" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-chooser.png" alt="Sessions · Filters · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Filters · 120×36 · renderer <code>144801f2…</code>.</strong> Client, Folder, Model provider, Source, Runtime and Sort have aligned labels and values; folder scope is retained. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-chooser.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-help-120x36" data-surface="Sessions" data-screen="Sessions Help" data-state="Help" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-help.png" alt="Sessions · Help · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Help · 120×36 · renderer <code>144801f2…</code>.</strong> One Help body groups keyboard guidance with a Close action. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-help.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-claude-120x36" data-surface="Sessions" data-screen="Sessions Claude filter applied" data-state="Claude filter applied" data-viewport="120×36" data-tags="Browse" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-claude.png" alt="Sessions · Claude filter applied · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Claude filter applied · 120×36 · renderer <code>144801f2…</code>.</strong> Both managed Claude Gamma and native Claude Delta remain attributable; the lookalike is excluded. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-claude.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-filter-cancelled-120x36" data-surface="Sessions" data-screen="Sessions Filter draft cancelled" data-state="Filter draft cancelled" data-viewport="120×36" data-tags="Browse" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-cancelled.png" alt="Sessions · Filter draft cancelled · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Filter draft cancelled · 120×36 · renderer <code>144801f2…</code>.</strong> The applied Claude view is unchanged after cancellation. This original is byte-identical to the preceding scene. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-cancelled.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-claude-details-120x36" data-surface="Sessions" data-screen="Sessions Claude Details" data-state="Claude Details" data-viewport="120×36" data-tags="Dialog" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-details.png" alt="Sessions · Claude Details · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Claude Details · 120×36 · renderer <code>144801f2…</code>.</strong> Captured identity, ID, endpoint and path are visible. Actions are explicitly unchecked; this does not establish provider capability. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-details.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-folder-choice-120x36" data-surface="Sessions" data-screen="Sessions Folder choice" data-state="Folder choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-folder-choice.png" alt="Sessions · Folder choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Folder choice · 120×36 · renderer <code>144801f2…</code>.</strong> Folder scope remains available; unavailable Checkout has an explicit CLI-only reason. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-folder-choice.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-model-provider-choice-120x36" data-surface="Sessions" data-screen="Sessions Model provider choice" data-state="Model provider choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-model-provider-choice.png" alt="Sessions · Model provider choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Model provider choice · 120×36 · renderer <code>144801f2…</code>.</strong> The focused choice is yellow and ordinary options remain white. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-model-provider-choice.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-source-choice-120x36" data-surface="Sessions" data-screen="Sessions Source choice" data-state="Source choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-source-choice.png" alt="Sessions · Source choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Source choice · 120×36 · renderer <code>144801f2…</code>.</strong> Unavailable source options carry an explanation rather than appearing actionable. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-source-choice.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-runtime-choice-120x36" data-surface="Sessions" data-screen="Sessions Runtime choice" data-state="Runtime choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-runtime-choice.png" alt="Sessions · Runtime choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Runtime choice · 120×36 · renderer <code>144801f2…</code>.</strong> All, Active, Idle and Blocked appear inline in the filter dialog. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-runtime-choice.png">Original image</a></figcaption>
+  </figure>
+  <figure id="sessions-sort-choice-120x36" data-surface="Sessions" data-screen="Sessions Sort choice" data-state="Sort choice" data-viewport="120×36" data-tags="Choice" data-build="144801f2 fixture">
+    <img src="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-sort-choice.png" alt="Sessions · Sort choice · original compiled 120 by 36 capture" loading="lazy">
+    <figcaption><strong>Sessions · Sort choice · 120×36 · renderer <code>144801f2…</code>.</strong> Updated and Created use the same inline choice and Cancel/Select actions. <a href="proof-assets/2026-10-20-sessions-wide/120x36/compact-sessions-sort-choice.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-browse-32x24" data-surface="Quota" data-screen="Quota" data-state="Browse" data-viewport="32×24" data-tags="Browse" data-build="593">
+    <img src="proof-assets/2026-10-20-c7-phone-pace/32x24/component-quota-browse.png" alt="32×24 — narrow width: unchanged original compiled Quota screen" loading="lazy">
+    <figcaption><strong>Quota · 32×24 · observed build <code>593</code>.</strong> Narrow browse. The pace-word repair passed 42 image checks and 12 wrong-image controls; independent visual review closed that defect. <a href="proof-assets/2026-10-20-c7-phone-pace/32x24/component-quota-browse.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-browse-40x24" data-surface="Quota" data-screen="Quota" data-state="Browse" data-viewport="40×24" data-tags="Browse" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/40x24/component-quota-browse.png" alt="40×24 — compact width: unchanged original compiled Quota screen" loading="lazy">
+    <figcaption><strong>Quota · 40×24 · observed build <code>e873</code>.</strong> Compact browse. Independent visual review found no confirmed visible defect; the automatic Floor identity check failed. <a href="proof-assets/2026-10-20-c7-density-p3/40x24/component-quota-browse.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-resets-48x12" data-surface="Quota" data-screen="Reset options" data-state="Inspected" data-viewport="48×12" data-tags="Dialog" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/48x12/component-quota-options-identity.png" alt="48×12 — short height: unchanged original compiled Quota screen" loading="lazy">
+    <figcaption><strong>Reset options · 48×12 · observed build <code>e873</code>.</strong> Short-height reset inventory. The Normal journey passed 42 image checks and 12 wrong-image controls; independently inspected. <a href="proof-assets/2026-10-20-c7-density-p3/48x12/component-quota-options-identity.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-browse-48x24" data-surface="Quota" data-screen="Quota" data-state="Browse" data-viewport="48×24" data-tags="Browse" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/48x24/component-quota-browse.png" alt="48×24 — compact terminal: unchanged original compiled Quota screen" loading="lazy">
+    <figcaption><strong>Quota · 48×24 · observed build <code>e873</code>.</strong> Compact browse. Independent visual review found no confirmed visible defect; the automatic Floor identity check failed. <a href="proof-assets/2026-10-20-c7-density-p3/48x24/component-quota-browse.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-browse-76x30" data-surface="Quota" data-screen="Quota" data-state="Browse" data-viewport="76×30" data-tags="Browse" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/76x30/component-quota-browse.png" alt="76×30 — medium terminal: unchanged original compiled Quota screen" loading="lazy">
+    <figcaption><strong>Quota · 76×30 · observed build <code>e873</code>.</strong> Medium browse. Independently inspected; the automatic selected-name reader failed. This is retained original evidence, not a successful Normal run. <a href="proof-assets/2026-10-20-c7-density-p3/76x30/component-quota-browse.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-browse-120x36" data-surface="Quota" data-screen="Quota" data-state="Browse" data-viewport="120×36" data-tags="Browse" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-browse.png" alt="120×36 — wide terminal: unchanged original compiled Quota screen" loading="lazy">
+    <figcaption><strong>Quota · 120×36 · observed build <code>e873</code>.</strong> Wide browse. Complete account names, providers and the three information groups are visible. The automatic selected-name reader failed. <a href="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-browse.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-credits-120x36" data-surface="Quota" data-screen="Credit usage" data-state="Editing" data-viewport="120×36" data-tags="Dialog" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-policy-original.png" alt="Credit usage: displayed balance, editable value, warning and actions: original compiled 120 by 36 screenshot" loading="lazy">
+    <figcaption><strong>Credit usage · 120×36 · observed build <code>e873</code>.</strong> Displayed balance, editable policy, warning and actions use separate groups. <a href="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-policy-original.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-confirm-120x36" data-surface="Quota" data-screen="Reset confirmation" data-state="Yes selected" data-viewport="120×36" data-tags="Dialog" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-confirm-yes.png" alt="Reset confirmation: account, credit, risk and explicit choice: original compiled 120 by 36 screenshot" loading="lazy">
+    <figcaption><strong>Reset confirmation · 120×36 · observed build <code>e873</code>.</strong> Captured account, credit, risk and explicit confirmation choice. Synthetic fixture effects; no real credit is consumed. <a href="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-confirm-yes.png">Original image</a></figcaption>
+  </figure>
+  <figure id="quota-resets-120x36" data-surface="Quota" data-screen="Reset options" data-state="Inspected" data-viewport="120×36" data-tags="Dialog" data-build="e873">
+    <img src="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-options-identity.png" alt="Reset options: meaningful inventory before Review: original compiled 120 by 36 screenshot" loading="lazy">
+    <figcaption><strong>Reset options · 120×36 · observed build <code>e873</code>.</strong> Live eligibility and reset inventory. Owner-requested blank row above the yellow saved/live-count warning is pending replacement capture. <a href="proof-assets/2026-10-20-c7-density-p3/120x36/component-quota-options-identity.png">Original image</a></figcaption>
+  </figure>
+</ex-gallery>
+
+<ex-presentation id="sessions-walkthrough" title="Sessions review" description="Current original captures of Browse, Details, New, Filters and Fork." variations>
+  <ex-step to="sessions-browse-120x36">Browse uses one selection gutter and aligned session metadata. New, Details and Help are in the title row.</ex-step>
+  <ex-step to="sessions-codex-details-120x36">Details separates captured identity and facts from Copy, Fork and Resume.</ex-step>
+  <ex-step to="sessions-new-120x36">New is a single Client, Machine and Directory form before Start.</ex-step>
+  <ex-step to="sessions-new-machine-120x36">Choice fields expand inline with search; they do not open a nested dialog.</ex-step>
+  <ex-step to="sessions-filters-120x36">All six filters remain, including folder scope.</ex-step>
+  <ex-step to="sessions-fork-120x36">Fork states its source and destination. This capture stops before provider dispatch.</ex-step>
+</ex-presentation>
+<h2 id="quota">Retained Quota evidence</h2>
+<p>The Quota pictures keep their original <code>593</code> or <code>e873</code> identities. They are not replacement captures for the latest reset-return and warning-spacing changes.</p>
+<ex-presentation id="quota-walkthrough" title="Quota review" description="Browse, policy, confirmation and reset inventory from original captures." variations>
+  <ex-step to="quota-browse-120x36">Read the account name, provider and aligned quota groups. Switch to a narrower variation to compare.</ex-step>
+  <ex-step to="quota-credits-120x36">Displayed balance, editable policy, warning and actions have separate roles.</ex-step>
+  <ex-step to="quota-confirm-120x36">Review the captured account and explicit confirmation choice.</ex-step>
+  <ex-step to="quota-resets-120x36">Inspect eligibility and the reset inventory. The next build adds the requested blank row before the yellow warning.</ex-step>
+</ex-presentation>
+
+<h2 id="glyph-proposal">Meaningful icons — proposal</h2>
+<p>Glyphs accompany readable text only when they add a useful cue. A typed semantic enum owns each meaning and its mapping; screens do not scatter literal symbols. The existing typed quota-status projection remains the source of row status. Optional glyphs yield space before their labels do.</p>
+<p>This text sketch illustrates the proposed icons and requested spacing. It is not a captured screen.</p>
+<ex-pre><script type="text/plain">
+Live eligibility
+Weekly remaining   5% · eligible
+Usable credits     7
+
+↻ Reset credits · live · 1–1 of 7
+◆ next  [voucher-1]  available
+6 more credits below
+
+⚠ Saved count differs: 2 saved · 7 live.
+
+Cancel  Review
+</script></ex-pre>
+<table>
+  <thead><tr><th>Meaning</th><th>Proposed cue</th><th>Use</th></tr></thead>
+  <tbody>
+    <tr><td>Reset credits</td><td>↻ with its label</td><td>Identifies the reset-credit group.</td></tr>
+    <tr><td>Warning</td><td>⚠ with its message</td><td>Separates a meaningful discrepancy from inventory facts.</td></tr>
+    <tr><td>Ordinary facts and actions</td><td>Readable text</td><td>No decorative icon for eligibility headings, numbers, Cancel or Review.</td></tr>
+  </tbody>
+</table>
+
+<h2 id="evidence">Verification status</h2>
+<table>
+  <thead><tr><th>Boundary</th><th>Observed result</th></tr></thead>
+  <tbody>
+    <tr><td>Current Sessions 120×36</td><td>20 image checks and three wrong-image controls passed; all 20 originals independently opened and hash-checked. Child exit 0, provider requests 0, state/secrets unchanged and owned cleanup complete.</td></tr>
+    <tr><td>Latest Quota code</td><td>573 passed · 0 failed · 7 ignored; 13 copied-default checks passed. Strict Clippy, formatting and file-size checks passed. This includes the requested warning spacer.</td></tr>
+    <tr><td>Combined current capture</td><td>Failed in the first Quota field-association reader after the Sessions tour passed. Ten later tours were not run. Quota effects are unknown without its successful tour receipt; owned cleanup is complete.</td></tr>
+    <tr><td>Independent return-state source review</td><td>No confirmed P0–P3 finding in the bounded two-file repair. This does not establish its final screenshots.</td></tr>
+    <tr><td>Retained 32×24 Normal capture</td><td>42 image checks and 12 wrong-image controls passed on build 593. Independent review closed its pace-word defect.</td></tr>
+    <tr><td>Latest live resize attempt</td><td>Failed before the editor opened. One of four planned images was captured; remaining scenes were not run. Owned cleanup passed and fixture external effects were zero.</td></tr>
+  </tbody>
+</table>
+<p><a href="proof.html#c7-phone-pace-current">Original journeys and evidence</a> · <a href="owner-feedback.md">Feedback checklist</a> · <a href="work-receipt.md">Work receipt</a></p>
+<p>Pending: narrower and shorter Sessions captures, live provider actions, corrected reset-return/warning pictures, current Quota Filters and pending/error/disabled states, live resize, both-machine public paths, reproduction, final review and current-head CI.</p>
+<p>Reusable drivers and permanent regressions stay in their permanent homes. One-run wrappers, packaging helpers and run history stay under <code>tmp/</code>. <a href="proof-assets/2026-10-20-c7-phone-pace/verification-maintenance.md">Maintenance receipt</a>.</p>
+<p>Presentation binding: Demistify <code>v1</code>, documentation release <code>1.9.3</code>. <a href="proof-assets/2026-10-20-gallery-component/release.json">Recorded release and unchanged image hashes</a>. Browser rendering remains unverified after the direct-file URL policy refusal.</p>
+</ex-document>
+</body>
+</html>

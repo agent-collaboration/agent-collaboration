@@ -1,0 +1,24 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Quota status                                                                             Clients unknown · Fresh 1 · Stale 0 · Data unknown 0  Details  Help │
+│ Pool-wide: responses  Accounts 1 · Usable 1 · Reserve 0 · Blocked 0 · Pool unknown 0 · Excluded 0                                                            │
+│ Filters ▾  Provider: All · Disabled: Shown · 1/1 accounts                                                                                                    │
+│ ┌──────────────────────────────────────────────────────────────────────────────────────────┐  ┌────────────────────────────────────────────────────────────┐ │
+│ │    Account                          Status                 Quota                         │  │ Selected account                                           │ │
+│ │  ❯ ssdev                            ✓ available            safest quota                  │  │ ssdev                                                      │ │
+│ │    ◎ OpenAI                         1 client               Weekly                        │  │ Status      available                                      │ │
+│ │                                     2 resets               █████ 83% left reset 7d       │  │ Reason      safest quota                                   │ │
+│ │                                     Credits unknown        5h                            │  │ Quota windows                                              │ │
+│ │                                                            █████ 99% left reset 5h       │  │ weekly      ████ 83% left, reset 7d                        │ │
+│ │                                                            Weekly pace                   │  │ 5h          █████ 99% left, reset 5h                       │ │
+│ │                                                            □□□□□□□│□□□□□□□  1.00x        │  │                                                            │ │
+│ │                                                            reset pace healthy            │  │ Reset pace                                                 │ │
+│ │                                                                                          │  │ weekly      □□□□□□□│□□□□□□□  1.00x reset pace healthy      │ │
+│ │                                                                                          │  │ sample      sample fresh 14s                               │ │
+│ │                                                                                          │  │ rate        0.10%/h                                        │ │
+│ │                                                                                          │  │ conn        0.05%/h/conn                                   │ │
+│ │                                                                                          │  │ 5h          □□□□□□□│■■■■■■■  runs out 2d 16h               │ │
+│ │                                                                                          │  │                                                            │ │
+│ │                                                                                          │  │ Activity                                                   │ │
+│ │                                                                                          │  │ clients     1 client                                       │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────┘  └────────────────────────────────────────────────────────────┘ │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

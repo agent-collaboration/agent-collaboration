@@ -1,0 +1,59 @@
+{
+  "kind": "original compiled32-column density comparison; bounded visual correction only",
+  "source": {
+    "head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+    "digest": "2418c6f347709c33d3df1e82856a2128bf730c5bdc7f3877baf40592e16c4f67",
+    "post_run_require_target_passed": true,
+    "packet_sha256": "ea28dfd707294c8c4fe2de846137d782702647a4b90256ddd3c8e2b8ef2ee36e",
+    "plan_sha256": "27e05ef3434144c2763c710b4e3f081e6e38db124a160d448fd72f57fa3d3c4a"
+  },
+  "dirty_snapshot": true,
+  "build": {
+    "component": "2c3f553f167ba6965dfd715f26906e2f97efc59f96d76be693370ef9c2981d64",
+    "driver": "e1f39b6fee7bad2c4b8a7dd9706614cc8208d0bfe691908224db894bfe4b580c",
+    "embedded_harness": "1bcb05c04c6eada569e58a78befa3ad45b40a456cd36ad3c4ffdd955469352fc",
+    "checker": "0dd2bd28ccce3626ec19578c2264ee9bb0f29021316cb90cfc4f6614e4acf4b0"
+  },
+  "image": {
+    "file": "component-quota-browse.png",
+    "sha256": "a927b8eaff8c60600c99b692df4820a92eebf804f291c8a8031bc85b46b4f16c",
+    "pixels": [
+      350,
+      484
+    ],
+    "terminal": [
+      32,
+      24
+    ],
+    "unchanged_original": true
+  },
+  "journey": "Compiled normal Quota component first browse; original screenshot; graceful Ctrl+C and normal child exit.",
+  "result": {
+    "driver_exit": 0,
+    "test_passed": 1,
+    "test_failed": 0,
+    "seconds": 3.6481979,
+    "child_exit": 0,
+    "fixture_external_requests": 0,
+    "fixture_persisted_writes": 0,
+    "diagnostic_complete": false,
+    "normal31_receipt_exists": false,
+    "original_count": 1,
+    "cleanup_passed": true,
+    "recorded_pids_absent": [
+      33081,
+      33086,
+      33101,
+      33103
+    ],
+    "profile_absent": true
+  },
+  "independent_ux": "Same independent UX verifier personally opened baseline and repaired original. Visible heading, fitting-name-word and numeric-token fragmentation corrected. Tall Quota group/lower content and next account still need real scrolling proof.",
+  "root_review": "Personally opened original, compared with647d65b0 baseline; accepts only observed first-frame fragmentation correction.",
+  "limits": [
+    "Partial diagnostic only; no normal31/eight-negative completion.",
+    "Desktop32x24 does not establish actual iPhone operation.",
+    "No pointer/keyboard/scroll/resize/provider/two-machine acceptance from this image.",
+    "All original quota fields and three semantic groups remain; lower content requires scrolling."
+  ]
+}

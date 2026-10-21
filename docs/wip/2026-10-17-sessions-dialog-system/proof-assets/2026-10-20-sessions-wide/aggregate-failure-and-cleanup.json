@@ -1,0 +1,349 @@
+{
+  "at": "2026-10-20T12:22:50.248098+00:00",
+  "execution": {
+    "start": "2026-10-20T12:20:11.911543+00:00",
+    "packet": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/static-both-run-packet.json",
+    "packet_sha256": "fe01939749bd3ba6ae47e7eedef3d8a75adee0b1a6b5201098a95a0dbfd53611",
+    "plan": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/static-both-capture-plan.json",
+    "plan_sha256": "f1c25cf6da40fed32af3f835bb41af22d402bb70c2395f39025204049e553bb8",
+    "repository": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/repository",
+    "command": [
+      "/Users/shravansunder/.local/bin/uv",
+      "run",
+      "--offline",
+      "--no-project",
+      "--with",
+      "pydantic==2.14.1",
+      "--python",
+      "3.13",
+      "python",
+      "-B",
+      "-m",
+      "scripts.verification.tui_capture",
+      "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/static-both-capture-plan.json"
+    ],
+    "output": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both",
+    "budget": {
+      "preflight": 50,
+      "wrapperWork": 8040,
+      "wrapperCleanup": 90,
+      "wrapperWhole": 8130,
+      "independentCleanup": 90,
+      "whole": 8270
+    },
+    "timeout": false,
+    "stop_requested": false,
+    "signals": [],
+    "first_Sessions20_available": true,
+    "wrapper_pid": 47137,
+    "wrapper_deadline": "2026-10-20T14:35:41.914304+00:00",
+    "first_Sessions20_at": "2026-10-20T12:20:33.950166+00:00",
+    "exit": 1,
+    "seconds": 40.689209166914225,
+    "finish": "2026-10-20T12:20:52.601089+00:00"
+  },
+  "driver": {
+    "exit": 101,
+    "pid": 47143,
+    "started_at": "2026-10-20T12:20:13.302424+00:00",
+    "observed_at": "2026-10-20T12:20:52.361721+00:00",
+    "work_seconds": 8040.0,
+    "cleanup_seconds": 90.0,
+    "work_deadline": "2026-10-20T14:34:13.302424+00:00",
+    "whole_deadline": "2026-10-20T14:35:43.302424+00:00",
+    "deadline_reached": false,
+    "driver_settled": true,
+    "stop_error": null
+  },
+  "result": "FAILED aggregate on firstQuota120x36 chooser native fieldassociation; Sessions120x36PASS20+3, remaining10toursUNRUN",
+  "png_count": 20,
+  "originals": [
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-claude.png",
+      "sha256": "e8a2ed09dd707882a12f15a646b78f241c4117b71bf915645cd710c6f83d8ce9",
+      "bytes": 66014,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new-no-match.png",
+      "sha256": "4146ef4d82b9554f6816f3487d4bb6721482c7aef160b807ce3c318a52842c40",
+      "bytes": 96379,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-machine-sources.png",
+      "sha256": "69b27c926ae0b08a79ea0373fede2ca2e1a1e95697ef9a7182a24ea24f1a3578",
+      "bytes": 28919,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-runtime-choice.png",
+      "sha256": "54cc6104aa751397779bcebdb7b637bbdc5893d9621c603baf0298833410b2f7",
+      "bytes": 98547,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-folder-choice.png",
+      "sha256": "930ae648e59401838d74d3df0b117b0956fb2ceac04fe04c9cd7192880b55628",
+      "bytes": 100081,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-fork.png",
+      "sha256": "81fc5c0ec96404515e691d633019b32db2ebe63253ff9e32dc22c8e000150833",
+      "bytes": 44565,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-help.png",
+      "sha256": "813c8895cc8ef1c6a98cb5fe496a5196808f18e63232adf449ecf3d54587affa",
+      "bytes": 139807,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-cancelled.png",
+      "sha256": "e8a2ed09dd707882a12f15a646b78f241c4117b71bf915645cd710c6f83d8ce9",
+      "bytes": 66014,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-model-provider-choice.png",
+      "sha256": "017b12df532095fa889608ae72d5f26c5d0a8ac121d9386cd9c60101af6756a1",
+      "bytes": 105210,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new.png",
+      "sha256": "e9d0e3663039e9773ae30de8b52fbb1ee3537f4dd2403b1301a261560ed0c454",
+      "bytes": 93805,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-fork-choice.png",
+      "sha256": "6ecaf7f790663874176ae8834c8a8ca2f9d90ad86ffc2056ed34826fa9c7f1b6",
+      "bytes": 46232,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-all.png",
+      "sha256": "9c61e3b6ddca91fc59048590b04979869857a29219d5354b2b9e7776e81a499a",
+      "bytes": 124742,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-client-no-match.png",
+      "sha256": "dd449d6836f024ed4537f83538cf75c25430b3bbc91882dfbcd774f09a2a29b7",
+      "bytes": 109603,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-codex-details.png",
+      "sha256": "69bc2dbbf7213f9fc5ebaedf07a874c383e6bf9a81c4735269b847dd3096dccf",
+      "bytes": 123849,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-details.png",
+      "sha256": "6a2145543b10d32ccc0182335319603a485c6d4a19a56a34a5c692677f9be709",
+      "bytes": 118726,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new-returned.png",
+      "sha256": "6b0df34e62e78efa708d5c5acb79bc29d6abb92ac7bf3884202a9d9da5ff8f69",
+      "bytes": 94407,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-sort-choice.png",
+      "sha256": "a1bbd3afeffe646a0c8f36d7aea26eafc3e181418b124ecba817d1259c0fe660",
+      "bytes": 95606,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-source-choice.png",
+      "sha256": "bc5260bac5a01324cfaa7a3042653c7060faf2ac8d0574a0c6906dbd4f717c9c",
+      "bytes": 110639,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new-machine.png",
+      "sha256": "67cae83768adc4d823cd68ca42331079d9f1b9d84ae4cdbe393365c0dc1c6300",
+      "bytes": 95948,
+      "width": 1226,
+      "height": 698
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-chooser.png",
+      "sha256": "50682a54f0d5e42088ac218468965ca0e8461bb93f4234e522ac624cf7ff1c40",
+      "bytes": 105643,
+      "width": 1226,
+      "height": 698
+    }
+  ],
+  "filter_receipt_count": 1,
+  "recorded_pids": [
+    47137,
+    47143,
+    47148,
+    47163,
+    47164,
+    47210,
+    47211,
+    47212,
+    47213,
+    47214,
+    47215,
+    47216,
+    47217,
+    47218,
+    47219,
+    47220,
+    47221,
+    47222,
+    47223,
+    47224,
+    47225,
+    47226,
+    47227,
+    47228,
+    47229,
+    47230,
+    47231,
+    47232,
+    47236,
+    47250,
+    47251,
+    47285,
+    47286,
+    47291
+  ],
+  "pid_files": {
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/quota-child.pid": 47251,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/compact-quota-all.image-verifier.pid": 47285,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/quota-wrapper.pid": 47250,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/compact-quota-chooser.image-verifier.pid": 47291,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/compact-quota-provider-no-match.image-verifier.pid": 47286,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/ttyd.pid": 47236,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-client-no-match.image-verifier.pid": 47219,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-claude.image-verifier.pid": 47222,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-help.image-verifier.pid": 47221,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/quota-child.pid": 47164,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-source-choice.image-verifier.pid": 47227,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-folder-choice.image-verifier.pid": 47225,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new-returned.image-verifier.pid": 47217,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/reject-compact-sessions-claude-blank-startup.image-verifier.pid": 47230,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new.image-verifier.pid": 47214,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/quota-wrapper.pid": 47163,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-machine-sources.image-verifier.pid": 47218,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/reject-compact-sessions-claude-compact-sessions-all.image-verifier.pid": 47231,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new-no-match.image-verifier.pid": 47216,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-codex-details.image-verifier.pid": 47211,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-new-machine.image-verifier.pid": 47215,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/reject-compact-sessions-cancelled-compact-sessions-chooser.image-verifier.pid": 47232,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-cancelled.image-verifier.pid": 47223,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-fork-choice.image-verifier.pid": 47213,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-model-provider-choice.image-verifier.pid": 47226,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-chooser.image-verifier.pid": 47220,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-runtime-choice.image-verifier.pid": 47228,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/ttyd.pid": 47148,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-sort-choice.image-verifier.pid": 47229,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-all.image-verifier.pid": 47210,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-fork.image-verifier.pid": 47212,
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/compact-sessions-details.image-verifier.pid": 47224
+  },
+  "checked_group_ids": [
+    47137,
+    47143,
+    47148,
+    47163,
+    47164,
+    47210,
+    47211,
+    47212,
+    47213,
+    47214,
+    47215,
+    47216,
+    47217,
+    47218,
+    47219,
+    47220,
+    47221,
+    47222,
+    47223,
+    47224,
+    47225,
+    47226,
+    47227,
+    47228,
+    47229,
+    47230,
+    47231,
+    47232,
+    47236,
+    47250,
+    47251,
+    47285,
+    47286,
+    47291
+  ],
+  "ps_exit": 0,
+  "remaining_owned_processes": [],
+  "browser_profiles": {
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/quota-compact-120x36/browser-temp.directory": {
+      "path": "/private/tmp/2026-10-tui-component-system/vhs-run-47143-1",
+      "exists": false
+    },
+    "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/browser-temp.directory": {
+      "path": "/private/tmp/2026-10-tui-component-system/vhs-run-47143-0",
+      "exists": false
+    }
+  },
+  "archive_entries_unchanged": 4318,
+  "current_archive_frozen27_unchanged": true,
+  "normal_child_exit": 0,
+  "provider_requests": "UNKNOWN/no successful per-tourreceipt; driver reaches provider.finish empty check before nativeoracles",
+  "state_and_secrets": "UNKNOWN/no successful per-tourreceipt; driverreaches fixture.assert_read_only before nativeoracles",
+  "no_signals_by_V": true,
+  "no_timeout_by_V": true,
+  "cleanup_seconds": 0.5002271658740938,
+  "limits": [
+    "20genuinecurrentoriginals arepartialvisualproof; noaggregate/currentwholeUIacceptance",
+    "Failednativeoracle mustbediagnosed; no weakenedreader or unchangedretry",
+    "Normalchildexit known iffilepresent; zeroeffects absence/presence mustbeexplicit, notinferredfromprocesscleanup",
+    "Initialcollectorresult string misidentified failingtour; correctedfromactualdriverstdout+receipt/nativeJSON beforehandoff."
+  ],
+  "tour_status": {
+    "sessions120x36": "PASS20positive3negative/normalchild0/receipt0effects",
+    "quota120x36": "FAILEDnativecompact-quota-chooser DisabledaccountsShownmissing,9originals/child0/noFilterReceipt",
+    "later10tours": "UNRUN"
+  },
+  "total_png_count": 29,
+  "png_count_scope": "Sessions original subset; total includes9Quota originals",
+  "Sessions_effects": {
+    "provider_requests": 0,
+    "state_and_secrets_unchanged": true,
+    "child_exit": 0,
+    "receipt": "/private/tmp/2026-10-tui-component-system/sessions-c7-canonical-native-static-both-20261020T121819Z/observation-static-both/sessions-compact-120x36/filter-receipt.json",
+    "receipt_sha256": "fd523509e1c027ab31970109f02db317b0812b28b3c1ba5cfb0273e5d30f14fa"
+  }
+}
