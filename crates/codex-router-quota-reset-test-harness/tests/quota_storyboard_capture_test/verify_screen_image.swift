@@ -129,18 +129,24 @@ struct VerifyScreenImage {
     let handler = VNImageRequestHandler(url: URL(fileURLWithPath: arguments[2]), options: [:])
     do {
       if checkpoint == .componentQuotaConfirmHelpTop
-        || checkpoint == .componentQuotaConfirmHelpIdentity || checkpoint == .componentQuotaFloorDraft
-        || [.componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-          .componentQuotaBrowsePaceValue].contains(checkpoint)
+        || checkpoint == .componentQuotaConfirmHelpIdentity
+        || checkpoint == .componentQuotaFloorDraft
+        || [
+          .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
+          .componentQuotaBrowsePaceValue,
+        ].contains(checkpoint)
       {
         let languages = ["ja-JP", "en-US"]
         let supported = try request.supportedRecognitionLanguages()
         guard languages.allSatisfy({ supported.contains($0) }) else {
           throw NSError(
             domain: "VerifyScreenImage", code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "Native Japanese and English recognition unavailable"])
+            userInfo: [
+              NSLocalizedDescriptionKey: "Native Japanese and English recognition unavailable"
+            ])
         }
-        request.recognitionLanguages = checkpoint == .componentQuotaFloorDraft
+        request.recognitionLanguages =
+          checkpoint == .componentQuotaFloorDraft
           ? languages : ["en-US", "ja-JP"]
         request.automaticallyDetectsLanguage = checkpoint != .componentQuotaFloorDraft
       }
@@ -169,20 +175,26 @@ struct VerifyScreenImage {
     } else {
       measurements = []
     }
-    let needsSelectedAccount = [.componentQuotaNextAccount, .componentQuotaBrowseCreditWindow,
-      .componentQuotaBrowsePaceHeading, .componentQuotaBrowsePaceValue].contains(checkpoint)
+    let needsSelectedAccount = [
+      .componentQuotaNextAccount, .componentQuotaBrowseCreditWindow,
+      .componentQuotaBrowsePaceHeading, .componentQuotaBrowsePaceValue,
+    ].contains(checkpoint)
     let accountWords = needsSelectedAccount ? recognizedWordRegions(request.results ?? []) : []
-    let accountPixels = needsSelectedAccount
+    let accountPixels =
+      needsSelectedAccount
       ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])) : nil
     let selectedName = accountPixels.flatMap { pixels in
-      selectedAccountName(wordRegions: accountWords, pixelWidth: pixels.width,
+      selectedAccountName(
+        wordRegions: accountWords, pixelWidth: pixels.width,
         hasGutter: { pixels.selectedAccountGutter(beside: $0, header: $1) },
         hasSelectedText: { pixels.yellowPixels(in: $0.bounds) >= 8 },
         hasBlankOverlap: { pixels.selectedWordOverlapIsBlank($0, $1) })
     }
-    let compactPace = checkpoint == .componentQuotaBrowsePaceValue
+    let compactPace =
+      checkpoint == .componentQuotaBrowsePaceValue
       ? accountPixels.flatMap { pixels in
-        compactPaceFieldMatches(words: accountWords, pixelWidth: pixels.width,
+        compactPaceFieldMatches(
+          words: accountWords, pixelWidth: pixels.width,
           pixelHeight: pixels.height, selectedName: selectedName)
       } : nil
     let observation = observe(
@@ -193,12 +205,12 @@ struct VerifyScreenImage {
             ["close", "inspect"].contains(normalizedMarkerText($0.text))
           }
         : checkpoint == .componentQuotaCreditsRefreshedObservation
-        || checkpoint == .componentQuotaPolicyChoice
-        ? regions.filter {
-          normalizedMarkerText($0.text).hasPrefix(
-            checkpoint == .componentQuotaPolicyChoice ? "credit usage" : "options")
-            || normalizedMarkerText($0.text).contains("[alpha-tag]")
-        } + recognizedWordRegions(request.results ?? []) : regions,
+          || checkpoint == .componentQuotaPolicyChoice
+          ? regions.filter {
+            normalizedMarkerText($0.text).hasPrefix(
+              checkpoint == .componentQuotaPolicyChoice ? "credit usage" : "options")
+              || normalizedMarkerText($0.text).contains("[alpha-tag]")
+          } + recognizedWordRegions(request.results ?? []) : regions,
       choiceFocusMeasurements: measurements,
       selectedAccountName: selectedName,
       compactPaceField: compactPace,
@@ -209,7 +221,8 @@ struct VerifyScreenImage {
             let words = recognizedWordRegions(request.results ?? [])
             let actions = words.filter { normalizedMarkerText($0.text) == "select" }
             guard actions.count == 1, let action = actions.first,
-              pixels.enabledTextPixels(in: action.bounds) >= 8 else { return nil }
+              pixels.enabledTextPixels(in: action.bounds) >= 8
+            else { return nil }
             let focused = words.filter {
               ["allow", "disallow"].contains(normalizedMarkerText($0.text))
                 && pixels.selectedNameGutter(beside: $0)
@@ -225,14 +238,18 @@ struct VerifyScreenImage {
       selectedFloorDraft: checkpoint == .componentQuotaFloorDraft
         ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])).flatMap { pixels in
           let context = regions.filter {
-            normalizedMarkerText($0.text).range(of: #"^[0-9]+%$"#,
+            normalizedMarkerText($0.text).range(
+              of: #"^[0-9]+%$"#,
               options: .regularExpression) == nil
           }
-          return selectedFloorDraftValue(context + recognizedPercentRegions(request.results ?? []),
+          return selectedFloorDraftValue(
+            context + recognizedPercentRegions(request.results ?? []),
             selectedText: { pixels.yellowPixels(in: $0.bounds) >= 8 })
         } : nil,
-      selectedRowVisible: [.componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-        .componentQuotaBrowsePaceValue].contains(checkpoint)
+      selectedRowVisible: [
+        .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
+        .componentQuotaBrowsePaceValue,
+      ].contains(checkpoint)
         ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])).flatMap {
           $0.accountSelectorVisible(in: recognizedWordRegions(request.results ?? []))
         } : false)
@@ -246,18 +263,34 @@ struct VerifyScreenImage {
   static func observe(
     checkpoint: ScreenCheckpoint, recognizedLines: [String], regions: [ScreenTextRegion] = [],
     choiceFocusMeasurements: [ChoiceFocusMeasurement] = [], selectedAccountName: String? = nil,
-    compactPaceField: Bool? = nil, selectedDecision: String? = nil, selectedFloorDraft: String? = nil, selectedRowVisible: Bool? = false
+    compactPaceField: Bool? = nil, selectedDecision: String? = nil,
+    selectedFloorDraft: String? = nil, selectedRowVisible: Bool? = false
   )
     -> ScreenImageObservation
   {
     let recognizedText = normalizedMarkerText(recognizedLines.joined(separator: "\n"))
-    let fieldPairs = checkpoint == .componentQuotaConfirmNoReturned
+    var fieldPairs =
+      checkpoint == .componentQuotaConfirmNoReturned
       ? idleReturnFieldPairs(regions)
       : checkpoint == .compactQuotaChooser || checkpoint == .compactSessionsChooser
         || checkpoint == .componentQuotaFloorSaved || checkpoint == .componentQuotaCreditsIdentity
         || checkpoint.rawValue.hasPrefix("component-quota-policy-")
-      ? measuredFieldPairs(regions)
-      : []
+        ? measuredFieldPairs(regions)
+        : []
+    if checkpoint.rawValue.hasPrefix("compact-sessions-details") {
+      fieldPairs = sessionsDetailsPairs(regions)
+    } else if checkpoint == .compactSessionsNewNoMatch {
+      fieldPairs = sessionsChoiceQueryPairs(regions, title: "new session", field: "machine")
+    } else if checkpoint == .compactSessionsClientNoMatch {
+      fieldPairs = sessionsChoiceQueryPairs(regions, title: "session filters", field: "client")
+    } else if checkpoint == .compactSessionsFolderChoice {
+      fieldPairs = sessionsChoiceQueryPairs(
+        regions, title: "session filters", field: "folder",
+        expectedQuery: "checkout", noMatch: false)
+    } else if checkpoint == .compactQuotaProviderNoMatch {
+      fieldPairs = sessionsChoiceQueryPairs(
+        regions, title: "account filters", field: "account provider")
+    }
     let fieldMarkers = [
       "account provider openai", "disabled accounts shown", "use credits allow",
       "use credits disallow", "current 1%", "client codex", "eligibility not checked",
@@ -270,16 +303,20 @@ struct VerifyScreenImage {
     var missingMarkers = checkpoint.requiredMarkers.filter {
       let marker = normalizedMarkerText($0)
       if checkpoint == .componentQuotaOptionsIdentity, marker == "initial reset task fact" {
-        return recognizedText.range(of: #"\b(?:checking reset eligibility|live eligibility|reset credits)\b|\[voucher-[0-9]+\]"#,
+        return recognizedText.range(
+          of:
+            #"\b(?:checking reset eligibility|live eligibility|reset credits)\b|\[voucher-[0-9]+\]"#,
           options: .regularExpression) == nil
       }
       if checkpoint == .componentQuotaCreditsIdentity, marker == "initial credit task fact" {
-        return !recognizedText.contains("credit balance") && !fieldPairs.contains("use credits disallow")
+        return !recognizedText.contains("credit balance")
+          && !fieldPairs.contains("use credits disallow")
       }
       if checkpoint == .componentQuotaBrowsePaceValue, marker == "burn unavailable" {
         if let compactPaceField { return !compactPaceField }
         // Wider body wrapping may split a word; retain every letter and order.
-        return recognizedText.range(of: #"\bburn\s+u\s*n\s*a\s*v\s*a\s*i\s*l\s*a\s*b\s*l\s*e\b"#,
+        return recognizedText.range(
+          of: #"\bburn\s+u\s*n\s*a\s*v\s*a\s*i\s*l\s*a\s*b\s*l\s*e\b"#,
           options: .regularExpression) == nil
       }
       if checkpoint == .componentQuotaFloorDraft, marker == "1%" {
@@ -341,7 +378,8 @@ struct VerifyScreenImage {
           ["weekly floor", "weeklyfloor"].contains(normalizedMarkerText($0))
         }
       }
-      if fieldMarkers.contains(marker) {
+      if fieldMarkers.contains(marker) || marker.hasPrefix("details ") || marker.hasPrefix("field ")
+      {
         return !fieldPairs.contains(marker)
       }
       if (checkpoint == .compactQuotaHiddenChoice && marker == "› hidden")
@@ -402,17 +440,25 @@ struct VerifyScreenImage {
         missingMarkers.append("exact count " + expectedCount)
       }
     }
-    if [.componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-      .componentQuotaBrowsePaceValue].contains(checkpoint),
-      selectedAccountName.map(normalizedMarkerText) == "claude research account beta full name" {
+    if [
+      .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
+      .componentQuotaBrowsePaceValue,
+    ].contains(checkpoint),
+      selectedAccountName.map(normalizedMarkerText) == "claude research account beta full name"
+    {
       // A wide next-account frame can retain Alpha's unselected facts. The
       // captured lower-content journey belongs to Alpha, never selected Beta.
       missingMarkers.append("captured Alpha account; foreign selected Beta")
     }
-    if [.componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-      .componentQuotaBrowsePaceValue].contains(checkpoint),
-      selectedRowVisible == nil || (selectedRowVisible == true
-        && selectedAccountName.map(compactHelpIdentity) != compactHelpIdentity("東京 OpenAI Research Account Alpha Long Name")) {
+    if [
+      .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
+      .componentQuotaBrowsePaceValue,
+    ].contains(checkpoint),
+      selectedRowVisible == nil
+        || (selectedRowVisible == true
+          && selectedAccountName.map(compactHelpIdentity)
+            != compactHelpIdentity("東京 OpenAI Research Account Alpha Long Name"))
+    {
       missingMarkers.append("visible selected account is missing or ambiguous")
     }
     let unexpectedMarkers = checkpoint.forbiddenMarkers.filter {

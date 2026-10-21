@@ -63,6 +63,50 @@ SESSION_CHECKPOINT_STATES = (
     "runtime-choice",
     "sort-choice",
 )
+SESSION_DETAILS_POSES: dict[tuple[int, int], tuple[tuple[str, int], ...]] = {
+    (32, 24): (("details-title", 0), ("details", 4), ("details-path", 6)),
+    (40, 24): (("details-title", 0), ("details", 3), ("details-path", 5)),
+    (48, 12): (
+        ("details-title", 1),
+        ("details-identity", 5),
+        ("details-state", 7),
+        ("details-path", 8),
+    ),
+    (48, 24): (("details-title", 0), ("details", 3)),
+    (76, 30): (("details", 2),),
+    (120, 36): (("details", 0),),
+}
+SESSION_DETAILS_FIELDS = (
+    "details context claude gamma [000.0011]",
+    "details title claude gamma session · project-a",
+    "details path /repo/project-a",
+    "details session id 00000000-0000-4000-8000-000000000011",
+    "details endpoint claude gamma",
+    "details state idle",
+)
+
+
+def session_checkpoint_states(columns: int, rows: int) -> tuple[str, ...]:
+    poses = SESSION_DETAILS_POSES[(columns, rows)]
+    return tuple(
+        expanded
+        for state in SESSION_CHECKPOINT_STATES
+        for expanded in ([name for name, _ in poses] if state == "details" else [state])
+    )
+
+
+def session_details_required_fields(checkpoint: str) -> set[str]:
+    suffix = checkpoint.removeprefix("compact-sessions-")
+    indices = {
+        "details-title": (0, 1),
+        "details-path": (0, 2),
+        "details-identity": (0, 3),
+        "details-state": (0, 4, 5),
+        "details": (0, 3, 4, 5),
+    }.get(suffix, ())
+    return {SESSION_DETAILS_FIELDS[index] for index in indices}
+
+
 QUOTA_CHECKPOINT_STATES = (
     "all",
     "provider-no-match",
@@ -577,7 +621,7 @@ def checkpoint_dialog(state: str) -> str:
         return "machines"
     if state == "chooser" or state.endswith(("choice", "no-match")):
         return "filters"
-    if state == "details" or state.endswith("-details"):
+    if state.startswith("details") or state.endswith("-details"):
         return "details"
     return "contextual-help" if state == "help" else "browse"
 

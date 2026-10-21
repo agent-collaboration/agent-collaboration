@@ -362,6 +362,7 @@ def run_component_capture(plan: ComponentPlan) -> None:
         raise ValueError(
             "component driver failed; retain originals and settle owned resources"
         )
+    plan.require_target()
     records = collect_component_images(plan)
     _ = (plan.output / "component-gallery-manifest.json").write_text(
         json.dumps(

@@ -45,6 +45,10 @@ enum ScreenCheckpoint: String {
   case compactSessionsClaude = "compact-sessions-claude"
   case compactSessionsCancelled = "compact-sessions-cancelled"
   case compactSessionsDetails = "compact-sessions-details"
+  case compactSessionsDetailsTitle = "compact-sessions-details-title"
+  case compactSessionsDetailsIdentity = "compact-sessions-details-identity"
+  case compactSessionsDetailsState = "compact-sessions-details-state"
+  case compactSessionsDetailsPath = "compact-sessions-details-path"
   case compactSessionsCodexDetails = "compact-sessions-codex-details"
   case compactSessionsFork = "compact-sessions-fork"
   case compactSessionsForkChoice = "compact-sessions-fork-choice"
@@ -228,42 +232,75 @@ enum ScreenCheckpoint: String {
     case .compactSessionsFork:
       ["Fork session", "Cancel", "Fork"]
     case .compactSessionsForkChoice:
-      ["Fork session", "Destination:", "Cancel", "Select"]
+      ["Fork session", "Destination", "Cancel", "Select"]
     case .compactSessionsNew:
       ["New session", "Client", "Codex", "Cancel", "Start"]
     case .compactSessionsNewMachine:
-      ["New session", "Machine:", "Cancel", "Select"]
+      ["New session", "Machine", "Cancel", "Select"]
     case .compactSessionsNewNoMatch:
-      ["New session", "Machine: zznomatchzz", "No matching choices", "Cancel", "Select"]
+      ["New session", "field machine query zznomatchzz", "No matching choices", "Cancel", "Select"]
     case .compactSessionsNewReturned:
       ["New session", "Machine", "Cancel", "Start"]
     case .compactSessionsMachineSources:
-      ["Choose machine", "Machine:", "Cancel", "Select"]
+      ["Choose machine", "Machine", "Cancel", "Select"]
     case .compactSessionsClientNoMatch:
-      ["Session filters", "Client: zznomatchzz", "No matching choices", "Cancel", "Select"]
+      [
+        "Session filters", "field client query zznomatchzz", "No matching choices", "Cancel",
+        "Select",
+      ]
     case .compactSessionsFolderChoice:
-      ["Session filters", "Folder: Checkout", "Cancel", "Select"]
+      ["Session filters", "field folder query checkout", "Cancel", "Select"]
     case .compactSessionsModelProviderChoice:
-      ["Session filters", "Model provider:", "Any model provider", "Cancel", "Select"]
+      ["Session filters", "Model provider", "Any model provider", "Cancel", "Select"]
     case .compactSessionsSourceChoice:
-      ["Session filters", "Source:", "All sources", "Cancel", "Select"]
+      ["Session filters", "Source", "All sources", "Cancel", "Select"]
     case .compactSessionsRuntimeChoice:
-      ["Session filters", "Runtime:", "Active", "Cancel", "Select"]
+      ["Session filters", "Runtime", "Active", "Cancel", "Select"]
     case .compactSessionsSortChoice:
-      ["Session filters", "Sort:", "Updated", "Cancel", "Select"]
+      ["Session filters", "Sort", "Updated", "Cancel", "Select"]
     case .compactSessionsClaude, .compactSessionsCancelled:
       ["Sessions", "Help", "Claude Code", "2/6", "Claude Gamma", "Details"]
     case .compactSessionsDetails:
-      ["Session details", "Help", "Claude Gamma", "Session ID", "Endpoint", "State", "Close"]
+      [
+        "Session details", "Help", "Claude Gamma", "Session ID", "Endpoint", "State", "Close",
+        "details context claude gamma [000.0011]",
+        "details session id 00000000-0000-4000-8000-000000000011",
+        "details endpoint claude gamma", "details state idle",
+      ]
+    case .compactSessionsDetailsTitle:
+      [
+        "Session details", "Help", "Claude Gamma", "Close",
+        "details context claude gamma [000.0011]",
+        "details title claude gamma session · project-a",
+      ]
+    case .compactSessionsDetailsIdentity:
+      [
+        "Session details", "Help", "Claude Gamma", "Close",
+        "details context claude gamma [000.0011]",
+        "details session id 00000000-0000-4000-8000-000000000011",
+      ]
+    case .compactSessionsDetailsState:
+      [
+        "Session details", "Help", "Claude Gamma", "Close",
+        "details context claude gamma [000.0011]",
+        "details endpoint claude gamma", "details state idle",
+      ]
+    case .compactSessionsDetailsPath:
+      [
+        "Session details", "Help", "Claude Gamma", "Close",
+        "details context claude gamma [000.0011]",
+        "details path /repo/project-a",
+      ]
     case .compactQuotaAll:
       ["Quota status", "Help", "All", "Disabled: Shown", "4/4", "Claude Delta"]
     case .compactQuotaProviderNoMatch:
       [
-        "Account filters", "Help", "Account provider: zznomatchzz", "No matching choices", "Select",
+        "Account filters", "Help", "field account provider query zznomatchzz",
+        "No matching choices", "Select",
         "Cancel",
       ]
     case .compactQuotaDisabledChoice:
-      ["Account filters", "Help", "Disabled accounts:", "› Shown", "Select", "Cancel"]
+      ["Account filters", "Help", "Disabled accounts", "› Shown", "Select", "Cancel"]
     case .compactQuotaHiddenChoice:
       ["Account filters", "Help", "Shown", "› Hidden", "Select", "Cancel"]
     case .compactQuotaChooser:
@@ -413,7 +450,8 @@ enum ScreenCheckpoint: String {
       hiddenShortcutMarkers + ["Selected account"]
     case .componentQuotaPolicyNoMatch, .componentQuotaPolicyChoiceReturned, .componentQuotaBrowse,
       .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-      .componentQuotaBrowsePaceValue, .componentQuotaBrowsePageReturned, .componentQuotaNextAccount, .componentQuotaRestoredAccount,
+      .componentQuotaBrowsePaceValue, .componentQuotaBrowsePageReturned, .componentQuotaNextAccount,
+      .componentQuotaRestoredAccount,
       .componentQuotaFloorOriginal, .componentQuotaFloorDraft,
       .componentQuotaFloorCancelled, .componentQuotaFloorSaved, .componentQuotaOptionsIdentity,
       .componentQuotaResetInventory, .componentQuotaResetLastPage, .componentQuotaCreditsIdentity,
@@ -443,7 +481,7 @@ enum ScreenCheckpoint: String {
       .compactSessionsRuntimeChoice, .compactSessionsSortChoice:
       ["New session", "Fork session", "Sessions Help"]
     case .compactSessionsAll:
-      hiddenShortcutMarkers + ["Session filters", "Search:", "View:", "Sort:"]
+      hiddenShortcutMarkers + ["Session filters", "Search:", "View:", "Sort"]
     case .compactSessionsChooser:
       hiddenShortcutMarkers + ["Sessions Help", "Quota Help"]
     case .compactSessionsHelp:
@@ -452,7 +490,8 @@ enum ScreenCheckpoint: String {
       hiddenShortcutMarkers + [
         "Codex Alpha", "Codex Beta", "Cursor Echo", "Session client provider", "Draft:",
       ]
-    case .compactSessionsDetails:
+    case .compactSessionsDetails, .compactSessionsDetailsTitle, .compactSessionsDetailsIdentity,
+      .compactSessionsDetailsState, .compactSessionsDetailsPath:
       hiddenShortcutMarkers + ["Draft:", "Session client provider", "Sessions Help"]
     case .compactQuotaAll:
       hiddenShortcutMarkers + ["Account provider", "Quota Help"]

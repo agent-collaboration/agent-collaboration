@@ -377,9 +377,18 @@ sys.exit(7)
             )
 
     def test_static_budget_accounts_for_every_grid_image_and_cleanup(self) -> None:
-        self.assertEqual(CaptureSelection.STATIC_QUOTA.static_budget_seconds, 3210)
-        self.assertEqual(CaptureSelection.STATIC_BOTH.static_budget_seconds, 8130)
-        self.assertEqual(CaptureSelection.STATIC_SESSIONS.static_budget_seconds, 5010)
+        self.assertEqual(
+            CaptureSelection.STATIC_QUOTA.static_budget_seconds,
+            90 + 6 * (90 + 40) + (54 + 24) * 30,
+        )
+        self.assertEqual(
+            CaptureSelection.STATIC_BOTH.static_budget_seconds,
+            90 + 12 * (90 + 40) + (182 + 57) * 30,
+        )
+        self.assertEqual(
+            CaptureSelection.STATIC_SESSIONS.static_budget_seconds,
+            90 + 6 * (90 + 40) + (128 + 33) * 30,
+        )
         for selection in (CaptureSelection.CUA_QUOTA, CaptureSelection.CUA_SESSIONS):
             with self.assertRaisesRegex(ValueError, "no static image"):
                 _ = selection.static_budget_seconds

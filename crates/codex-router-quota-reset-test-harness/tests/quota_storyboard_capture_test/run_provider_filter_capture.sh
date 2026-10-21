@@ -22,6 +22,7 @@ xcrun swiftc -parse-as-library -module-cache-path "$QUOTA_STORYBOARD_OUTPUT/swif
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_pace.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_sessions_controls.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_sessions.swift \
     -o "$QUOTA_STORYBOARD_IMAGE_VERIFIER"
 env -u CC -u CXX -u LDFLAGS -u CPPFLAGS \
     PATH="/opt/homebrew/opt/rustup/bin:$PATH" CARGO_BUILD_JOBS=1 \

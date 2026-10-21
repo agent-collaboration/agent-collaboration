@@ -44,11 +44,15 @@ extension VerifyScreenImage {
       ),
     ]
     for (name, checkpoint, lines, shouldPass) in refreshedFactCases {
-      let observationRegions = checkpoint == .componentQuotaCreditsRefreshedObservation
+      let observationRegions =
+        checkpoint == .componentQuotaCreditsRefreshedObservation
         ? observationControlRegions(
-          lines.joined(separator: " ").replacingOccurrences(of: "Observation ", with: ""))
-          .filter { lines.first?.hasPrefix("Observation ") == true
-            || normalizedMarkerText($0.text) != "observation" }
+          lines.joined(separator: " ").replacingOccurrences(of: "Observation ", with: "")
+        )
+        .filter {
+          lines.first?.hasPrefix("Observation ") == true
+            || normalizedMarkerText($0.text) != "observation"
+        }
         : []
       let result = observe(
         checkpoint: checkpoint,
@@ -156,7 +160,8 @@ extension VerifyScreenImage {
       ),
     ]
     for (name, checkpoint, lines, shouldPass) in optionsTitleCases {
-      let facts = checkpoint == .componentQuotaOptionsIdentity ? ["Live eligibility"] : ["Credit balance"]
+      let facts =
+        checkpoint == .componentQuotaOptionsIdentity ? ["Live eligibility"] : ["Credit balance"]
       let result = observe(checkpoint: checkpoint, recognizedLines: lines + facts)
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
         failures.append(name)
@@ -225,7 +230,9 @@ extension VerifyScreenImage {
     for (name, lines, shouldPass) in providerQueryCases {
       let result = observe(
         checkpoint: .compactQuotaProviderNoMatch,
-        recognizedLines: ["Account filters", "Help"] + lines)
+        recognizedLines: currentQueryControlRegions(["Account filters", "Help"] + lines).map(
+          \.text),
+        regions: currentQueryControlRegions(["Account filters", "Help"] + lines))
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
         failures.append(name)
       }
@@ -462,8 +469,10 @@ extension VerifyScreenImage {
     ]
     for (name, checkpoint, content, shouldPass) in expandedPolicyCases {
       let choice = checkpoint == .componentQuotaPolicyChoice
-      let result = observe(checkpoint: checkpoint,
-        recognizedLines: ["Credit usage"] + (choice ? ["alpha-tag", "Disallow", "Allow"] : []) + content,
+      let result = observe(
+        checkpoint: checkpoint,
+        recognizedLines: ["Credit usage"] + (choice ? ["alpha-tag", "Disallow", "Allow"] : [])
+          + content,
         regions: choice ? creditChoiceControlRegions() : [],
         selectedDecision: choice ? "allow" : nil)
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
@@ -596,109 +605,8 @@ extension VerifyScreenImage {
         failures.append(name)
       }
     }
-    let sessionsChoiceCases: [(String, ScreenCheckpoint, [String], Bool)] = [
-      (
-        "sessions-new-machine-query", .compactSessionsNewNoMatch,
-        ["New session", "Machine: zznomatchzz", "No matching choices", "Cancel Select"], true
-      ),
-      (
-        "sessions-new-wrong-field", .compactSessionsNewNoMatch,
-        ["New session", "Client: zznomatchzz", "No matching choices", "Cancel Select"], false
-      ),
-      (
-        "sessions-new-old-start", .compactSessionsNewNoMatch,
-        ["New session", "Machine: zznomatchzz", "No matching choices", "Cancel Start"], false
-      ),
-      (
-        "sessions-new-generic-search", .compactSessionsNewNoMatch,
-        ["New session", "Search: zznomatchzz", "No matching choices", "Cancel Select"], false
-      ),
-      (
-        "sessions-client-query", .compactSessionsClientNoMatch,
-        ["Session filters", "Client: zznomatchzz", "No matching choices", "Cancel Select"], true
-      ),
-      (
-        "sessions-client-wrapped-query", .compactSessionsClientNoMatch,
-        ["Session filters", "Client:", "zznomatchzz", "No matching choices", "Cancel Select"], true
-      ),
-      (
-        "sessions-client-wrong-query", .compactSessionsClientNoMatch,
-        ["Session filters", "Client: another", "No matching choices", "Cancel Select"], false
-      ),
-      (
-        "sessions-client-parent-apply", .compactSessionsClientNoMatch,
-        ["Session filters", "Client: zznomatchzz", "No matching choices", "Cancel Apply"], false
-      ),
-      (
-        "sessions-fork-destination", .compactSessionsForkChoice,
-        ["Fork session", "Destination:", "Cancel Select"], true
-      ),
-      (
-        "sessions-fork-generic-search", .compactSessionsForkChoice,
-        ["Fork session", "Search:", "Cancel Select"], false
-      ),
-      (
-        "sessions-machine-field", .compactSessionsMachineSources,
-        ["Choose machine", "Machine:", "Cancel Select"], true
-      ),
-      (
-        "sessions-machine-missing-select", .compactSessionsMachineSources,
-        ["Choose machine", "Machine:", "Cancel"], false
-      ),
-    ]
-    for (name, checkpoint, lines, shouldPass) in sessionsChoiceCases {
-      let result = observe(checkpoint: checkpoint, recognizedLines: lines)
-      if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
-        failures.append(name)
-      }
-    }
-    let sessionsFieldCases: [(String, [ScreenTextRegion], Bool)] = [
-      ("sessions-client-same-line", [region("Client Codex", 0.1, 0.7, 0.5, 0.03)], true),
-      (
-        "sessions-client-split-row",
-        [
-          region("Client", 0.1, 0.7, 0.1, 0.03),
-          region("Codex", 0.3, 0.7, 0.1, 0.03),
-        ], true
-      ),
-      (
-        "sessions-client-stacked",
-        [
-          region("Client", 0.1, 0.7, 0.2, 0.03),
-          region("Codex", 0.1, 0.66, 0.2, 0.03),
-        ], true
-      ),
-      (
-        "sessions-client-wrong-live-field",
-        [
-          region("Client Cursor", 0.1, 0.7, 0.5, 0.03),
-          region("Draft: Codex", 0.1, 0.8, 0.5, 0.03),
-        ], false
-      ),
-      (
-        "sessions-client-background-value",
-        [
-          region("Client All providers", 0.1, 0.7, 0.5, 0.03),
-          region("Codex Alpha", 0.1, 0.95, 0.5, 0.03),
-        ], false
-      ),
-      (
-        "sessions-client-nearest-wrong-value",
-        [
-          region("Client", 0.1, 0.7, 0.1, 0.03),
-          region("Cursor", 0.3, 0.7, 0.1, 0.03), region("Codex", 0.6, 0.7, 0.1, 0.03),
-        ], false
-      ),
-    ]
-    for (name, fields, shouldPass) in sessionsFieldCases {
-      let chrome = ["Session filters", "Help", "Cancel Apply"]
-      let result = observe(
-        checkpoint: .compactSessionsChooser,
-        recognizedLines: chrome + fields.map(\.text), regions: fields)
-      if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
-        failures.append(name)
-      }
-    }
+    let retainedSessionsControls = checkRetainedSessionsControls()
+    failures.append(contentsOf: retainedSessionsControls.failures)
     let helpBodyCases: [(String, ScreenCheckpoint, [String], Bool)] = [
       (
         "help-body-shortcuts-are-contextual", .componentQuotaHelpTop,
@@ -854,12 +762,14 @@ extension VerifyScreenImage {
       (.componentQuotaCreditsIdentity, "Options · Credits alpha-tag [Resets] [Credits]", false),
     ]
     for (checkpoint, text, expected) in lowerCases {
-      let result = observe(checkpoint: checkpoint, recognizedLines: ["Quota status", text], regions: normalHeader)
+      let result = observe(
+        checkpoint: checkpoint, recognizedLines: ["Quota status", text], regions: normalHeader)
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != expected {
         failures.append("lower-context-" + text)
       }
     }
-    let floorGuidanceTrap = observe(checkpoint: .componentQuotaFloorDraft,
+    let floorGuidanceTrap = observe(
+      checkpoint: .componentQuotaFloorDraft,
       recognizedLines: ["Weekly floor", "Floor 0%", "Warning: limit 1%", "Cancel Save"])
     if floorGuidanceTrap.missingMarkers.isEmpty && floorGuidanceTrap.unexpectedMarkers.isEmpty {
       failures.append("floor-guidance-cannot-prove-active-value")
@@ -877,7 +787,7 @@ extension VerifyScreenImage {
       policyCases.count, expandedPolicyCases.count, resetTailCases.count, helpBodyCases.count,
       headerCases.count, decisionCases.count, stackedPolicyCases.count, floorHeadingCases.count,
       providerQueryCases.count, floorAssociationCases.count, decisionGeometryCases.count,
-      sessionsChoiceCases.count, sessionsFieldCases.count, lastVoucherCases.count,
+      retainedSessionsControls.count, lastVoucherCases.count,
       optionsTitleCases.count,
       identityControls.count,
       observationControls.count,

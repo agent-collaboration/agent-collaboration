@@ -30,12 +30,15 @@ from scripts.verification.tui_capture import (
 from scripts.verification.tui_verification import (
     QUOTA_CHECKPOINT_STATES,
     SESSION_CHECKPOINT_STATES,
+    SESSION_DETAILS_FIELDS,
+    SESSION_DETAILS_POSES,
     VIEWPORTS,
     ArtifactBinding,
     CapturePlan,
     FilterReceipt,
     ImageObservation,
     SourceBinding,
+    session_checkpoint_states,
 )
 
 
@@ -49,66 +52,7 @@ class ComponentAdapterOutcome(Enum):
 class TuiCaptureSelectionTests(unittest.TestCase):
     def build_measured_details_receipts(self, root: Path) -> CapturePlan:
         """Literal adopted pose sets exercise the real receipt collector only."""
-        plan = self.build_static_receipts(root, CaptureSelection.STATIC_SESSIONS)
-        pose_states = {
-            (32, 24): ("details-title", "details", "details-path"),
-            (40, 24): ("details-title", "details", "details-path"),
-            (48, 12): (
-                "details-title", "details-identity", "details-state", "details-path"
-            ),
-            (48, 24): ("details-title", "details"),
-            (76, 30): ("details",),
-            (120, 36): ("details",),
-        }
-        fields = [
-            "details context claude gamma [000.0011]",
-            "details title claude gamma session · project-a",
-            "details path /repo/project-a",
-            "details session id 00000000-0000-4000-8000-000000000011",
-            "details endpoint claude gamma",
-            "details state idle",
-        ]
-        for (columns, rows), states in pose_states.items():
-            folder = plan.output / f"sessions-compact-{columns}x{rows}"
-            path = folder / "filter-receipt.json"
-            receipt = FilterReceipt.model_validate_json(path.read_bytes())
-            updated = receipt.model_dump(mode="json")
-            images: list[dict[str, str]] = []
-            for entry in receipt.images:
-                if entry.checkpoint != "compact-sessions-details":
-                    images.append(entry.model_dump())
-                    continue
-                for state in states:
-                    name = f"compact-sessions-{state}"
-                    image = folder / f"{name}.png"
-                    _ = image.write_bytes(b"\x89PNG\r\n\x1a\n" + b"protocol-only" * 100)
-                    images.append(
-                        {"checkpoint": name, "png_sha256": ArtifactBinding.capture(image).sha256}
-                    )
-                    observation = {
-                        "checkpoint": name, "recognizedLines": ["protocol-only"],
-                        "recognizedFieldPairs": fields, "choiceFocusMeasurements": [],
-                        "missingMarkers": [], "unexpectedMarkers": [],
-                    }
-                    _ = (folder / f"{name}.image-observation.json").write_text(
-                        json.dumps(observation)
-                    )
-                    observation["recognizedFieldPairs"] = []
-                    observation["missingMarkers"] = ["captured session context"]
-                    _ = (folder / f"reject-{name}-compact-sessions-codex-details.image-observation.json").write_text(json.dumps(observation))
-            if "details" not in states:
-                (folder / "compact-sessions-details.png").unlink()
-            updated["images"] = images
-            _ = path.write_text(json.dumps(updated))
-        short = plan.output / "sessions-compact-48x12"
-        rejection = {
-            "checkpoint": "compact-sessions-details-identity",
-            "recognizedLines": ["protocol-only"], "recognizedFieldPairs": [],
-            "choiceFocusMeasurements": [], "missingMarkers": ["Session ID"],
-            "unexpectedMarkers": [],
-        }
-        _ = (short / "reject-compact-sessions-details-identity-compact-sessions-details-title.image-observation.json").write_text(json.dumps(rejection))
-        return plan
+        return self.build_static_receipts(root, CaptureSelection.STATIC_SESSIONS)
 
     def test_sessions_accepts_measured_ordered_details_pose_sets(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -116,40 +60,78 @@ class TuiCaptureSelectionTests(unittest.TestCase):
             images = collect_images(plan, CaptureSelection.STATIC_SESSIONS)
             self.assertEqual(len(images), 128)
             self.assertEqual(
-                sum(image.journey.startswith("compact-sessions-details") for image in images),
+                sum(
+                    image.journey.startswith("compact-sessions-details")
+                    for image in images
+                ),
                 14,
             )
 
-    def test_sessions_details_rejects_incomplete_foreign_or_cross_pose_evidence(self) -> None:
-        for failure in ("missing", "extra", "reordered", "foreign-build", "wrong-id", "missing-title", "cross-pose"):
-            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as directory:
+    def test_sessions_details_rejects_incomplete_foreign_or_cross_pose_evidence(
+        self,
+    ) -> None:
+        for failure in (
+            "missing",
+            "extra",
+            "reordered",
+            "foreign-build",
+            "wrong-id",
+            "missing-title",
+            "cross-pose",
+        ):
+            with (
+                self.subTest(failure=failure),
+                tempfile.TemporaryDirectory() as directory,
+            ):
                 plan = self.build_measured_details_receipts(Path(directory))
                 folder = plan.output / "sessions-compact-48x12"
                 path = folder / "filter-receipt.json"
-                receipt = FilterReceipt.model_validate_json(path.read_bytes()).model_dump(mode="json")
+                receipt = FilterReceipt.model_validate_json(
+                    path.read_bytes()
+                ).model_dump(mode="json")
                 images = FilterReceipt.model_validate(receipt).images
                 if failure in ("missing", "extra", "reordered"):
                     entries = [entry.model_dump() for entry in images]
-                    index = next(i for i, entry in enumerate(images) if entry.checkpoint == "compact-sessions-details-identity")
+                    index = next(
+                        i
+                        for i, entry in enumerate(images)
+                        if entry.checkpoint == "compact-sessions-details-identity"
+                    )
                     if failure == "missing":
                         _ = entries.pop(index)
                     elif failure == "extra":
                         entries.insert(index, entries[index])
                     else:
-                        entries[index], entries[index + 1] = entries[index + 1], entries[index]
+                        entries[index], entries[index + 1] = (
+                            entries[index + 1],
+                            entries[index],
+                        )
                     receipt["images"] = entries
                 elif failure == "foreign-build":
                     receipt["binary_sha256"] = "f" * 64
                 else:
-                    state = "details-title" if failure == "missing-title" else "details-identity"
-                    observation_path = folder / f"compact-sessions-{state}.image-observation.json"
-                    observation = ImageObservation.model_validate_json(observation_path.read_bytes()).model_dump(mode="json")
+                    state = (
+                        "details-title"
+                        if failure == "missing-title"
+                        else "details-identity"
+                    )
+                    observation_path = (
+                        folder / f"compact-sessions-{state}.image-observation.json"
+                    )
+                    observation = ImageObservation.model_validate_json(
+                        observation_path.read_bytes()
+                    ).model_dump(mode="json")
                     if failure == "cross-pose":
                         observation["checkpoint"] = "compact-sessions-details-title"
                     elif failure == "wrong-id":
-                        observation["recognizedFieldPairs"] = ["details context claude gamma [000.0011]", "details session id 00000000-0000-4000-8000-000000000012"]
+                        observation["recognizedFieldPairs"] = [
+                            "details context claude gamma [000.0011]",
+                            "details session id 00000000-0000-4000-8000-000000000012",
+                        ]
                     else:
-                        observation["recognizedFieldPairs"] = ["details context claude gamma [000.0011]"]
+                        observation["recognizedFieldPairs"] = [
+                            "details context claude gamma [000.0011]"
+                        ]
                     _ = observation_path.write_text(json.dumps(observation))
                 _ = path.write_text(json.dumps(receipt))
                 with self.assertRaises((ValueError, FileNotFoundError)):
@@ -218,6 +200,8 @@ class TuiCaptureSelectionTests(unittest.TestCase):
                 else SESSION_CHECKPOINT_STATES
             )
             for columns, rows in VIEWPORTS:
+                if surface == "sessions":
+                    states = session_checkpoint_states(columns, rows)
                 folder = plan.output / f"{surface}-compact-{columns}x{rows}"
                 folder.mkdir(parents=True)
                 for name in ("quota.tape", "fixed_quota_child.py"):
@@ -250,6 +234,8 @@ class TuiCaptureSelectionTests(unittest.TestCase):
                                 if checkpoint == "compact-quota-chooser"
                                 else ["client codex"]
                                 if checkpoint == "compact-sessions-chooser"
+                                else list(SESSION_DETAILS_FIELDS)
+                                if checkpoint.startswith("compact-sessions-details")
                                 else [],
                                 "missingMarkers": [],
                                 "unexpectedMarkers": [],
@@ -279,6 +265,33 @@ class TuiCaptureSelectionTests(unittest.TestCase):
                             }
                         )
                     )
+                if surface == "sessions":
+                    negative_pairs = [
+                        (f"compact-sessions-{name}", "compact-sessions-codex-details")
+                        for name, _ in SESSION_DETAILS_POSES[(columns, rows)]
+                    ]
+                    if (columns, rows) == (48, 12):
+                        negative_pairs.append(
+                            (
+                                "compact-sessions-details-identity",
+                                "compact-sessions-details-title",
+                            )
+                        )
+                    for expected, wrong in negative_pairs:
+                        _ = (
+                            folder / f"reject-{expected}-{wrong}.image-observation.json"
+                        ).write_text(
+                            json.dumps(
+                                {
+                                    "checkpoint": expected,
+                                    "recognizedLines": ["protocol-only"],
+                                    "recognizedFieldPairs": [],
+                                    "choiceFocusMeasurements": [],
+                                    "missingMarkers": ["captured session context"],
+                                    "unexpectedMarkers": [],
+                                }
+                            )
+                        )
                 receipt: dict[str, object] = {
                     key: binding.sha256
                     for key in (
@@ -310,9 +323,9 @@ class TuiCaptureSelectionTests(unittest.TestCase):
 
     def test_static_selection_collects_every_declared_scene_and_grid(self) -> None:
         for selection, count, surfaces in (
-            (CaptureSelection.STATIC_BOTH, 174, {"sessions", "quota"}),
+            (CaptureSelection.STATIC_BOTH, 182, {"sessions", "quota"}),
             (CaptureSelection.STATIC_QUOTA, 54, {"quota"}),
-            (CaptureSelection.STATIC_SESSIONS, 120, {"sessions"}),
+            (CaptureSelection.STATIC_SESSIONS, 128, {"sessions"}),
         ):
             with (
                 self.subTest(selection=selection),

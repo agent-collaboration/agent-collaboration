@@ -1,12 +1,19 @@
 //! VHS inputs and literal compact scene contract; owned lifecycle stays separate.
 use super::{CapturedTuiSurface, FONT_FAMILY, TestResult, ensure};
+#[path = "provider_filter_details.rs"]
+mod provider_filter_details;
+use provider_filter_details::{compact_session_details_poses, expected_session_checkpoints};
 
 pub(super) fn validate_compact_checkpoints(
     surface: CapturedTuiSurface,
+    columns: u16,
+    rows: u16,
     checkpoints: &[&str],
 ) -> TestResult<()> {
     let complete = match surface {
-        CapturedTuiSurface::Sessions => checkpoints.len() == 20,
+        CapturedTuiSurface::Sessions => {
+            checkpoints == expected_session_checkpoints(columns, rows).as_slice()
+        }
         CapturedTuiSurface::Quota => {
             checkpoints
                 == [
@@ -282,7 +289,7 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-fork-choice",
-                "Fork session.*Destination:.*Cancel.*Select",
+                "Fork session.*Destination[:]?.*Cancel.*Select",
             );
             tape.push_str("Escape\nEscape\nWait+Screen /(?s)6\\/6.*Codex Alpha/\nCtrl+N\n");
             checkpoint(
@@ -296,14 +303,14 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-new-machine",
-                "New session.*Machine:.*Cancel.*Select",
+                "New session.*Machine[:]?.*Cancel.*Select",
             );
             tape.push_str("Type \"zznomatchzz\"\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-new-no-match",
-                r"New session.*Machine:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
+                r"New session.*Machine[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
             );
             tape.push_str("Escape\n");
             checkpoint(
@@ -317,14 +324,14 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-machine-sources",
-                "Choose machine.*Machine:.*Cancel.*Select",
+                "Choose machine.*Machine[:]?.*Cancel.*Select",
             );
             tape.push_str("Escape\nCtrl+F\nEnter\nType \"zznomatchzz\"\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-client-no-match",
-                r"Session filters.*Client:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
+                r"Session filters.*Client[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
             );
             tape.push_str("Escape\nEnter\nDown\nEnter\n");
             checkpoint(
@@ -355,46 +362,53 @@ pub(super) fn build_compact_filter_tape(
                 "2/6.*Claude Gamma",
             );
             tape.push_str("F4\n");
-            checkpoint(
-                &mut tape,
-                &mut checkpoints,
-                "compact-sessions-details",
-                "Session details.*Claude Gamma",
-            );
+            let mut previous = 0;
+            for &(name, down) in compact_session_details_poses(columns, rows) {
+                for _ in previous..down {
+                    tape.push_str("Down\n");
+                }
+                checkpoint(
+                    &mut tape,
+                    &mut checkpoints,
+                    name,
+                    "Session details.*Claude Gamma",
+                );
+                previous = down;
+            }
             tape.push_str("Escape\nWait+Screen /(?s)2\\/6.*Claude Gamma/\nCtrl+F\nTab\nEnter\nType \"Checkout\"\nEnter\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-folder-choice",
-                "Session filters.*Folder:.*Checkout.*Cancel.*Select",
+                "Session filters.*Folder[:]?.*Checkout.*Cancel.*Select",
             );
             tape.push_str("Escape\nTab\nEnter\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-model-provider-choice",
-                "Session filters.*Model provider:.*Any model provider.*Cancel.*Select",
+                "Session filters.*Model provider[:]?.*Any model provider.*Cancel.*Select",
             );
             tape.push_str("Escape\nTab\nEnter\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-source-choice",
-                "Session filters.*Source:.*All sources.*Cancel.*Select",
+                "Session filters.*Source[:]?.*All sources.*Cancel.*Select",
             );
             tape.push_str("Escape\nTab\nEnter\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-runtime-choice",
-                "Session filters.*Runtime:.*Active.*Cancel.*Select",
+                "Session filters.*Runtime[:]?.*Active.*Cancel.*Select",
             );
             tape.push_str("Escape\nTab\nEnter\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-sort-choice",
-                "Session filters.*Sort:.*Updated.*Cancel.*Select",
+                "Session filters.*Sort[:]?.*Updated.*Cancel.*Select",
             );
             tape.push_str("Escape\nEscape\nWait+Screen /(?s)2\\/6.*Claude Gamma/\nCtrl+D\n");
         }
@@ -413,7 +427,7 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-quota-provider-no-match",
-                r"Account filters.*Account provider:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices",
+                r"Account filters.*Account provider[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices",
             );
             tape.push_str("Escape\nEnter\nDown\nEnter\nDown\n");
             checkpoint(
@@ -434,7 +448,7 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-quota-disabled-choice",
-                "Account filters.*Disabled accounts:.*[›❯>] Shown",
+                "Account filters.*Disabled accounts[:]?.*[›❯>] Shown",
             );
             tape.push_str("Down\n");
             checkpoint(
@@ -488,7 +502,7 @@ mod compact_capture_contract_tests {
             for (columns, rows) in crate::CURRENT_STATIC_VIEWPORTS {
                 let label = format!("{}-{columns}x{rows}", surface.label());
                 let (tape, checkpoints) = build_compact_filter_tape(surface, columns, rows);
-                validate_compact_checkpoints(surface, &checkpoints)?;
+                validate_compact_checkpoints(surface, columns, rows, &checkpoints)?;
                 let path = output.join(format!("{label}.tape"));
                 std::fs::write(&path, tape)?;
                 let result = std::process::Command::new(&vhs)
@@ -519,7 +533,7 @@ mod compact_capture_contract_tests {
         for (columns, rows) in [(120, 36), (76, 30), (48, 24), (48, 12)] {
             let (_, checkpoints) =
                 build_compact_filter_tape(CapturedTuiSurface::Quota, columns, rows);
-            validate_compact_checkpoints(CapturedTuiSurface::Quota, &checkpoints)?;
+            validate_compact_checkpoints(CapturedTuiSurface::Quota, columns, rows, &checkpoints)?;
         }
         Ok(())
     }
@@ -531,17 +545,19 @@ mod compact_capture_contract_tests {
             let mut missing = checkpoints.clone();
             missing.remove(omitted_index);
             assert!(
-                validate_compact_checkpoints(CapturedTuiSurface::Quota, &missing).is_err(),
+                validate_compact_checkpoints(CapturedTuiSurface::Quota, 120, 36, &missing).is_err(),
                 "missing scene {} must reject before capture",
                 checkpoints[omitted_index]
             );
         }
         let mut replaced = checkpoints.clone();
         replaced[7] = replaced[0];
-        assert!(validate_compact_checkpoints(CapturedTuiSurface::Quota, &replaced).is_err());
+        assert!(
+            validate_compact_checkpoints(CapturedTuiSurface::Quota, 120, 36, &replaced).is_err()
+        );
         let mut extra = checkpoints;
         extra.push("unexpected-scene");
-        assert!(validate_compact_checkpoints(CapturedTuiSurface::Quota, &extra).is_err());
+        assert!(validate_compact_checkpoints(CapturedTuiSurface::Quota, 120, 36, &extra).is_err());
     }
 
     #[test]
@@ -591,11 +607,36 @@ mod compact_capture_contract_tests {
         ] {
             for (columns, rows) in crate::CURRENT_STATIC_VIEWPORTS.into_iter().rev() {
                 let (tape, checkpoints) = build_compact_filter_tape(surface, columns, rows);
+                let measured: &[&str] = match (columns, rows) {
+                    (32, 24) | (40, 24) => &[
+                        "compact-sessions-details-title",
+                        "compact-sessions-details",
+                        "compact-sessions-details-path",
+                    ],
+                    (48, 12) => &[
+                        "compact-sessions-details-title",
+                        "compact-sessions-details-identity",
+                        "compact-sessions-details-state",
+                        "compact-sessions-details-path",
+                    ],
+                    (48, 24) => &["compact-sessions-details-title", "compact-sessions-details"],
+                    _ => &["compact-sessions-details"],
+                };
+                let expected: Vec<&str> = expected
+                    .iter()
+                    .flat_map(|name| {
+                        if *name == "compact-sessions-details" {
+                            measured.to_vec()
+                        } else {
+                            vec![*name]
+                        }
+                    })
+                    .collect();
                 assert_eq!(
                     checkpoints, expected,
-                    "each declared menu must have an original-image checkpoint"
+                    "each declared menu/Details pose needs its own original"
                 );
-                validate_compact_checkpoints(surface, &checkpoints)
+                validate_compact_checkpoints(surface, columns, rows, &checkpoints)
                     .expect("the real capture consumer must accept every declared checkpoint");
                 assert_eq!(tape.matches("Screenshot ").count(), expected.len());
                 assert!(tape.contains("Wait+Screen /QUOTA_STORYBOARD_CHILD_EXIT=0/"));
@@ -610,7 +651,7 @@ mod compact_capture_contract_tests {
         let (tape, _) = build_compact_filter_tape(CapturedTuiSurface::Quota, 48, 24);
         let wait = tape
             .lines()
-            .find(|line| line.starts_with("Wait+Screen /(?s)Account filters.*Account provider:"))
+            .find(|line| line.starts_with("Wait+Screen /(?s)Account filters.*Account provider[:]?"))
             .ok_or("no-match wait missing")?;
         let pattern = wait
             .strip_prefix("Wait+Screen /")
@@ -621,17 +662,17 @@ mod compact_capture_contract_tests {
         let result = std::process::Command::new("/usr/bin/python3").args(["-c", r#"
 import re, sys
 pattern = re.compile(sys.argv[1])
-prefix = "Account filters Account provider: zznomatchzz "
+prefix = "Account filters Account provider Search: zznomatchzz "
 valid = [prefix + "No matching choices",
          prefix + "\n│ ││                    No matching       ┃ ││ │\n│ ││                    choices           │ ││ │",
          prefix + "\n│ A│                    No matching       ┃ │  │\n│ ┌│                    choices           │ │┐ │",
-         "Account filters Account provider:\n│ zznomatchzz No matching choices"]
+         "Account filters Account provider\n│ Search: zznomatchzz No matching choices"]
 invalid = [prefix + "No matching results", prefix + "choices No matching",
            prefix + "No matching", prefix + "No matching other choices",
            prefix + "No matching Ctrl+F choices",
            prefix + "No matching" + " " * 129 + "choices",
            "Account filters Search: zznomatchzz No matching choices",
-           "Account filters Account provider: another No matching choices"]
+           "Account filters Account provider Search: another No matching choices"]
 assert all(pattern.search(text) for text in valid), "wrapped exact label must match"
 assert not any(pattern.search(text) for text in invalid), "wrong content must reject"
 "#, pattern]).output()?;

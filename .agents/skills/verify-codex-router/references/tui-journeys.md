@@ -73,18 +73,25 @@ Hidden-focus oracle to reject the initial Shown-focus image. Missing, substitute
 or reordered auxiliary evidence cannot close the two-step choice proof.
 
 The Sessions-only selector
-`compiled_compact_current_sessions_storyboard_exports_real_tui` uses the unchanged
-CompactSessions journey independently of Quota. Use `--sessions-only` with the
-same `tui_capture` command for both `--check` and execution; it is mutually
-exclusive with `--quota-only` and `--cua-surface`. It captures 20 ordered scenes
-and three wrong-image controls at each of 32×24, 40×24, 48×12, 48×24, 76×30 and
-120×36, in that narrow-first order. The collector requires exactly six Sessions
-receipt sets and 120 originals; missing, extra or Quota receipts reject. The
-source-derived whole-driver budget is 5010 seconds (4920 work plus 90 cleanup).
-Provider/state/identity/viewport/negative-image and owned-process cleanup gates
-are unchanged. Passing this route says nothing about a failed Quota tour or
-public/provider actions; preserve those results separately. A newly released
-source-bound target and finite execution packet are still required.
+`compiled_compact_current_sessions_storyboard_exports_real_tui` preserves the
+19 non-Details scenes and replaces Gamma Details with measured ordered poses.
+Use `--sessions-only` for `--check` and execution, narrow first at six grids:
+32×24 Down0/4/6 (title, strict7/fullID, path);40×24 Down0/3/5;
+48×12 Down1/5/7/8 (title, fullID, Endpoint/State, path);
+48×24 Down0/3 (title, strict7/fullID);76×30 Down2;120×36 Down0.
+The last two grids use their single strict7/fullID pose. Each image requires
+fixed captured Gamma identity within actual dialog/action bounds. Across each
+grid, full captured title/path/ID and Endpoint/State remain required. Full title
+in fixed context counts where visible; a truncated value or foreign background
+never does. This implements Root0b's explicit short-height multi-pose admission.
+The strict collector requires128 originals/14 Details images and33 wrong images:
+18 previous controls,14 foreign-Codex Details controls, one short full-ID oracle
+against the same-session title-only image. Sessions cap5700s (5610work+90cleanup).
+Quota keeps54 originals/24 wrong images. BOTH requires182 originals/57 negative
+reads, cap8820s. These are maximum existing operation budgets, not measured time.
+Required source/build/effect/viewport/provider/state and independent cleanup
+gates remain. Failed runs preserve their original bytes/caps. Current source
+qualification is not current original-image proof or live provider acceptance.
 
 The chooser proves uncommitted labeled fields, not a decorative `Draft:` heading
 that may scroll out of a two-row body. Down reveals `Account provider OpenAI`
@@ -409,7 +416,7 @@ Select; closed parents retain Apply, Start or Fork. No-match observations requir
 the exact active-field query `zznomatchzz`. The uncommitted Client Codex checkpoint
 requires spatially associated `client codex`, including the narrow stacked field;
 a decorative Draft summary or background session name cannot qualify it. The
-collector requires that exact associated pair too. The same20 ordered scenes are
+collector requires that exact associated pair too. The 19 non-Details scenes and measured Details pose contract above are
 retained. Matcher controls must reject wrong-field/query/parent-action and stale/background/nearest-wrong-value evidence; source qualification is not a compiled Sessions observation.
 
 Only the four normal floor checkpoints normalize this observed heading's joined
@@ -510,8 +517,9 @@ tests plus personal and cold-reader inspection of both fresh originals. The
 semantic check alone makes no selected-color claim. Current compiled originals must establish the adopted concise label and result hierarchy; earlier wording does not decide the expectation.
 
 Compact Quota source expectations likewise follow the actual field labels:
-`Account provider: zznomatchzz` with `No matching choices` and unavailable `Select`,
-then `Disabled accounts:` on the initial choice and same-process Shown/Hidden
+the retained `Account provider` plus nested `Search: zznomatchzz`,
+with `No matching choices` and unavailable `Select`,
+then `Disabled accounts` on the initial choice and same-process Shown/Hidden
 focus. Generic `Search:` or collapsed `Apply` cannot qualify that expanded field.
 The exact nine-scene order and existing negatives/effect/cleanup duties remain;
 this semantic upkeep awaits compilation and observation on the next bound target.

@@ -333,7 +333,7 @@ async fn run_provider_filter_capture(
         build_filter_tape(surface, columns, rows, empty_quota)
     };
     if compact {
-        validate_compact_checkpoints(surface, &checkpoints)?;
+        validate_compact_checkpoints(surface, columns, rows, &checkpoints)?;
     }
     fs::write(output.join("quota.tape"), tape)?;
     let mut capture = tools.start_capture(&output, fixture.capability())?;
@@ -436,6 +436,27 @@ async fn run_provider_filter_capture(
             &output.join("compact-quota-disabled-choice.png"),
             true,
         )?;
+    }
+    if compact && sessions {
+        for checkpoint in checkpoints
+            .iter()
+            .filter(|name| name.starts_with("compact-sessions-details"))
+        {
+            tools.verify_image(
+                &output,
+                checkpoint,
+                &output.join("compact-sessions-codex-details.png"),
+                true,
+            )?;
+        }
+        if columns == 48 && rows == 12 {
+            tools.verify_image(
+                &output,
+                "compact-sessions-details-identity",
+                &output.join("compact-sessions-details-title.png"),
+                true,
+            )?;
+        }
     }
     write_filter_receipt(
         &output,

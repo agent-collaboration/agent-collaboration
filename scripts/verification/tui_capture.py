@@ -26,7 +26,8 @@ from scripts.verification.tui_verification import (
     QUOTA_CAPTURE_TEST,
     QUOTA_CHECKPOINT_STATES,
     QUOTA_COMPONENT_TEST,
-    SESSION_CHECKPOINT_STATES,
+    SESSION_DETAILS_FIELDS,
+    SESSION_DETAILS_POSES,
     SESSIONS_CAPTURE_TEST,
     VIEWPORTS,
     CapturePlan,
@@ -40,6 +41,8 @@ from scripts.verification.tui_verification import (
     checkpoint_dialog,
     coverage_gaps,
     file_digest,
+    session_checkpoint_states,
+    session_details_required_fields,
 )
 
 
@@ -419,7 +422,7 @@ def collect_images(
             require_digest(folder / "quota.tape", receipt.tape_sha256)
             require_digest(folder / "fixed_quota_child.py", receipt.fixed_child_sha256)
             states = (
-                SESSION_CHECKPOINT_STATES
+                session_checkpoint_states(columns, rows)
                 if surface == "sessions"
                 else QUOTA_CHECKPOINT_STATES
             )
@@ -449,6 +452,30 @@ def collect_images(
                 )
                 if rejection.checkpoint != expected:
                     raise ValueError("wrong negative-control checkpoint")
+            if surface == "sessions":
+                details_states = [
+                    name for name, _ in SESSION_DETAILS_POSES[(columns, rows)]
+                ]
+                negatives = [
+                    (f"compact-sessions-{name}", "compact-sessions-codex-details")
+                    for name in details_states
+                ]
+                if (columns, rows) == (48, 12):
+                    negatives.append(
+                        (
+                            "compact-sessions-details-identity",
+                            "compact-sessions-details-title",
+                        )
+                    )
+                for expected, wrong in negatives:
+                    rejection = ImageRejection.model_validate_json(
+                        (
+                            folder / f"reject-{expected}-{wrong}.image-observation.json"
+                        ).read_bytes()
+                    )
+                    if rejection.checkpoint != expected:
+                        raise ValueError("wrong Details negative-control checkpoint")
+            details_fields: set[str] = set()
             for entry in receipt.images:
                 png = folder / f"{entry.checkpoint}.png"
                 require_digest(png, entry.png_sha256)
@@ -476,6 +503,17 @@ def collect_images(
                     raise ValueError(
                         "chooser lacks exact associated uncommitted client"
                     )
+                if surface == "sessions" and entry.checkpoint.startswith(
+                    "compact-sessions-details"
+                ):
+                    fields = set(observation.recognizedFieldPairs)
+                    if not session_details_required_fields(entry.checkpoint).issubset(
+                        fields
+                    ):
+                        raise ValueError(
+                            "Details lacks associated captured identity or complete field value"
+                        )
+                    details_fields.update(fields)
                 content = png.read_bytes()
                 if len(content) <= 1000 or not content.startswith(b"\x89PNG\r\n\x1a\n"):
                     raise ValueError("missing original PNG")
@@ -494,6 +532,12 @@ def collect_images(
                         capture_driver_sha256=plan.capture_driver.sha256,
                         source_sha256=plan.source.digest(),
                     )
+                )
+            if surface == "sessions" and not set(SESSION_DETAILS_FIELDS).issubset(
+                details_fields
+            ):
+                raise ValueError(
+                    "Details pose set lacks full captured title/path/ID/endpoint/state"
                 )
     return images
 
@@ -520,7 +564,7 @@ def main() -> None:
     _ = surface_selection.add_argument(
         "--sessions-only",
         action="store_true",
-        help="Run only compact Sessions; require twenty scenes at all six grids, narrow first",
+        help="Run only compact Sessions; require 128 originals with measured Details poses across six grids, narrow first",
     )
     _ = surface_selection.add_argument(
         "--cua-surface",

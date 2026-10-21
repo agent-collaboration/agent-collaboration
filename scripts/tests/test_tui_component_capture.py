@@ -1,9 +1,12 @@
 """Component receipt protocol only; fabricated protocol bytes never prove a UI."""
 
 import json
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pydantic import ValidationError
 
@@ -12,6 +15,7 @@ from scripts.verification.tui_component_capture import (
     ComponentPlan,
     ComponentReceipt,
     collect_component_images,
+    run_component_capture,
 )
 from scripts.verification.tui_verification import (
     VIEWPORTS,
@@ -23,6 +27,108 @@ from scripts.verification.tui_verification import (
 
 
 class ComponentCaptureTests(unittest.TestCase):
+    def test_collection_rechecks_real_source_and_artifact_after_driver(self) -> None:
+        # Only external Git enumeration/driver execution are controlled. Real
+        # file hashes, admission, receipt collection and publication stay real.
+        for mutation in ("none", "source", "artifact"):
+            with (
+                self.subTest(mutation=mutation),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory).resolve()
+                plan, _ = self.prepare_receipts(root)
+                saved = root / "saved-receipts"
+                _ = plan.output.rename(saved)
+                source = root / "crates/declared-source.rs"
+                _ = source.write_text("before driver\n")
+                plan = plan.model_copy(
+                    update={
+                        "source": SourceBinding(
+                            head="a" * 40,
+                            files={
+                                "crates/declared-source.rs": ArtifactBinding.capture(
+                                    source
+                                ).sha256
+                            },
+                        )
+                    }
+                )
+
+                def complete_driver(
+                    *_args: object,
+                    prepared: tuple[Path, ComponentPlan, Path, str] = (
+                        saved,
+                        plan,
+                        source,
+                        mutation,
+                    ),
+                ) -> int:
+                    saved, plan, source, mutation = prepared
+                    _ = shutil.copytree(saved, plan.output, dirs_exist_ok=True)
+                    if mutation == "source":
+                        _ = source.write_text("changed during capture\n")
+                    elif mutation == "artifact":
+                        _ = plan.component_binary.path.write_bytes(
+                            b"changed during capture"
+                        )
+                    return 0
+
+                rejection = json.dumps(
+                    {
+                        "checkpoint": "component-quota-policy-saved",
+                        "recognizedLines": [],
+                        "recognizedFieldPairs": [],
+                        "choiceFocusMeasurements": [],
+                        "missingMarkers": ["marker"],
+                        "unexpectedMarkers": [],
+                    }
+                )
+
+                def controlled_git_output(_root: Path, arguments: list[str]) -> bytes:
+                    return (
+                        b"crates/declared-source.rs\0"
+                        if arguments[0] == "ls-files"
+                        else b"a" * 40
+                    )
+
+                def controlled_discovery(command: list[str], _root: Path) -> str:
+                    return command[1] + ": test\n"
+
+                with (
+                    patch(
+                        "scripts.verification.tui_verification.git_output",
+                        side_effect=controlled_git_output,
+                    ),
+                    patch(
+                        "scripts.verification.tui_component_capture.discover_capture_test",
+                        side_effect=controlled_discovery,
+                    ),
+                    patch(
+                        "scripts.verification.tui_component_capture.subprocess.run",
+                        return_value=subprocess.CompletedProcess([], 1, rejection, ""),
+                    ),
+                    patch(
+                        "scripts.verification.tui_component_capture.subprocess.Popen"
+                    ),
+                    patch(
+                        "scripts.verification.tui_component_capture.wait_static_capture",
+                        side_effect=complete_driver,
+                    ),
+                ):
+                    if mutation == "none":
+                        run_component_capture(plan)
+                        self.assertTrue(
+                            (plan.output / "component-gallery-manifest.json").exists()
+                        )
+                    else:
+                        with self.assertRaisesRegex(
+                            ValueError, "source changed|artifact changed"
+                        ):
+                            run_component_capture(plan)
+                        self.assertFalse(
+                            (plan.output / "component-gallery-manifest.json").exists()
+                        )
+
     def prepare_receipts(
         self, root: Path, grid: tuple[int, int] = (120, 36)
     ) -> tuple[ComponentPlan, Path]:

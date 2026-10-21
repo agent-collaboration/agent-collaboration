@@ -18,8 +18,9 @@ from pydantic import BaseModel, PositiveFloat
 
 from scripts.verification.tui_verification import (
     QUOTA_CHECKPOINT_STATES,
-    SESSION_CHECKPOINT_STATES,
+    SESSION_DETAILS_POSES,
     VIEWPORTS,
+    session_checkpoint_states,
 )
 
 
@@ -31,19 +32,20 @@ def static_capture_budget_seconds(
     # allow 40s per grid and retain a separate 90s whole-driver reserve.
     # This is the current six-grid source budget. Prior run packets retain their
     # original caps; a new target still needs its own finite execution packet.
-    return 90 + len(VIEWPORTS) * sum(
+    return 90 + sum(
         90
         + 30
         * (
-            len(
-                SESSION_CHECKPOINT_STATES
-                if surface == "sessions"
-                else QUOTA_CHECKPOINT_STATES
-            )
-            + (4 if surface == "quota" else 3)
+            len(session_checkpoint_states(columns, rows))
+            + 3
+            + len(SESSION_DETAILS_POSES[(columns, rows)])
+            + (1 if (columns, rows) == (48, 12) else 0)
+            if surface == "sessions"
+            else len(QUOTA_CHECKPOINT_STATES) + 4
         )
         + 40
         for surface in surfaces
+        for columns, rows in VIEWPORTS
     )
 
 
