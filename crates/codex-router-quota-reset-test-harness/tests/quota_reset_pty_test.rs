@@ -229,7 +229,7 @@ mod quota_reset_pty_test {
         let credits_tab_start = terminal.transcript_len();
         terminal.send(b"\t")?;
         stage(
-            terminal.wait_for_text_after("[ Credits ]", credits_tab_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
             "inspection-only cancellation acknowledgement before Credits",
         )?;
         provider.release_get_responses()?;
@@ -337,7 +337,7 @@ mod quota_reset_pty_test {
         let reopen_credits_start = terminal.transcript_len();
         terminal.send(b"\t")?;
         stage(
-            terminal.wait_for_text_after("[ Credits ]", reopen_credits_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("Options · Credits", reopen_credits_start, SEMANTIC_WAIT),
             "reopened Credits tab reads saved policy",
         )?;
         let reopen_editor_start = terminal.transcript_len();
@@ -479,13 +479,13 @@ mod quota_reset_pty_test {
         let confirmation_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         stage(
-            terminal.wait_for_text_after("Confirm reset credit", confirmation_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("Reset quota?", confirmation_start, SEMANTIC_WAIT),
             "confirmation screen",
         )?;
         let yes_selection_start = terminal.transcript_len();
         terminal.send(b"\x1b[C")?;
         stage(
-            terminal.wait_for_text_after("[Yes]", yes_selection_start, SEMANTIC_WAIT),
+            terminal.wait_for_text_after("Yes", yes_selection_start, SEMANTIC_WAIT),
             "enabled yes selection",
         )?;
         let commit_start = terminal.transcript_len();
@@ -593,8 +593,8 @@ mod quota_reset_pty_test {
         )?;
         let click_start = terminal.transcript_len();
         // The real shared-frame component proof pins the visible increment
-        // arrow at zero-based (37, 13) at 120x36.
-        terminal.send_sgr_mouse_left_down(37, 13)?;
+        // arrow at zero-based (37, 14) at 120x36.
+        terminal.send_sgr_mouse_left_down(37, 14)?;
         stage(
             terminal.wait_for_text_after("1%", click_start, SEMANTIC_WAIT),
             "pointer-incremented floor",

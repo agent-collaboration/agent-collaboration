@@ -2,7 +2,21 @@
 
 Canonical checklist for this redesign. Origin: this owner conversation, 2026-10-17. A checked item needs linked evidence. The HTML is a proposal, not product completion. Latest owner corrections override earlier proposed exclusions.
 
-## Current delivery status — 2026-10-21
+## Current release scope — 2026-10-21
+
+The owner subsequently asked to release the Quota/Sessions version now and continue Sessions improvements in follow-ups. The current release gate is passing CI on the final head and one independent verifier inspecting original compiled Quota and Sessions screens on one Mac. This replaces the earlier all-provider/two-machine release prerequisite; it does not turn unobserved flows into passing results.
+
+**Release is still pending.** Current `main` has released 0.1.98. This branch is integrated with that main and prepares **0.1.99**. The last published CI failed in terminal integration. The implementation owner is correcting obsolete screen-title and pointer-coordinate expectations, while the verifier corrects a complete-title matching defect and prepares current original screenshots.
+
+- [x] Integrated current main and advanced the candidate to 0.1.99.
+- [ ] Pass current-head CI, including terminal integration.
+- [ ] Independently inspect both current compiled screens on one Mac; publish original screenshots, transcript, artifact identity and limits in the gallery.
+- [ ] Complete the affected source/proof recheck, update the PR description, and verify final PR state.
+- [ ] Merge and publish the matching signed release and verified Homebrew distribution. Production processes and live configuration remain untouched.
+
+[Follow-up scope and passing conditions](release-follow-ups.md) preserves the deferred obligations. Prior checkpoint results below retain their original scope and are not current release acceptance.
+
+## Earlier C8 checkpoint — before the release-scope decision
 
 **Not PR-ready yet.** Latest C8 product changes are built and scoped tests pass. Current compiled screenshots, successful provider composition on both debug machines, final review and current-head CI are still required. Published C7 pictures remain historical.
 
