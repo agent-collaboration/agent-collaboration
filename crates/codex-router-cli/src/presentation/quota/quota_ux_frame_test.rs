@@ -228,10 +228,18 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
     let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let journey = async {
-        crate::presentation::quota::quota_frame_observation::next_current_frame(frames.as_mut())
-            .await
-            .unwrap()
-            .unwrap();
+        sender.send(TerminalEvent::Resize(80, 36)).unwrap();
+        let initialized = crate::presentation::quota::quota_frame_observation::next_current_frame(
+            frames.as_mut(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            (initialized.width(), initialized.height()),
+            (80, 36),
+            "declared initial viewport before phone resize journey: {initialized}"
+        );
         for width in [32usize, 40, 48, 32] {
             sender
                 .send(TerminalEvent::Resize(width as u16, 24))

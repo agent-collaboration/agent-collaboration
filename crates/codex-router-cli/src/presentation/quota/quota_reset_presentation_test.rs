@@ -233,6 +233,10 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         });
         let (events, expected_frame, frame_acknowledgements) = acknowledged_quota_events(vec![
             (
+                TerminalEvent::Resize(width as u16, height as u16),
+                Some("declared initial viewport"),
+            ),
+            (
                 TerminalEvent::Key(control_key('r')),
                 Some("Checking live eligibility"),
             ),
@@ -272,6 +276,13 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         .inspect(move |frame| {
             if let Some(marker) = *expected_frame.borrow()
                 && match marker {
+                    "declared initial viewport" => {
+                        frame.contains("Quota status")
+                            && frame.lines().count() == height
+                            && frame.lines().next().is_some_and(|line| {
+                                unicode_width::UnicodeWidthStr::width(line) == width
+                            })
+                    }
                     "narrow inspection frame" => {
                         frame.contains("Checking live eligibility")
                             && frame.lines().next().is_some_and(|line| {
