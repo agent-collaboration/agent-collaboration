@@ -1,3 +1,4 @@
+mod uncertainty_admission_tests;
 use super::*;
 use crate::ExternalProviderLaunch;
 use collaboration_protocol::{
