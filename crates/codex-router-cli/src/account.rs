@@ -40,9 +40,16 @@ use crate::router_root_or_default;
 
 #[path = "account_help.rs"]
 mod account_help;
+#[path = "account_login_identity.rs"]
+mod account_login_identity;
 #[path = "account_options.rs"]
 mod account_options;
 use account_help::*;
+#[cfg(test)]
+use account_login_identity::account_id_from_label;
+use account_login_identity::{
+    normalize_label, resolve_login_account_id, resolve_login_account_id_at_router_root,
+};
 use account_options::{
     AccountLoginOptions, AccountRootOptions, AccountSetWeeklyFloorOptions, AccountStatusOptions,
 };
@@ -447,8 +454,8 @@ fn login_with_openai_device_auth(
     secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
     let label = normalize_label(&label)?;
-    ensure_account_label_available_at_router_root(&router_root, &label, Provider::Openai)?;
-    let account_id = account_id_from_label(&label)?;
+    let account_id =
+        resolve_login_account_id_at_router_root(&router_root, &label, Provider::Openai)?;
     let runtime = account_command_runtime()?;
     let tokens = collect_openai_oauth_tokens(stdout, client, &runtime)?;
 
@@ -456,7 +463,9 @@ fn login_with_openai_device_auth(
     let state = runtime.block_on(AsyncSqliteStateStore::open(
         &router_root.join("state.sqlite"),
     ))?;
-    ensure_account_label_available(&state, &label, Provider::Openai, &runtime)?;
+    if resolve_login_account_id(&state, &label, Provider::Openai, &runtime)? != account_id {
+        return Err(AccountCommandError::DuplicateAccountLabel { label });
+    }
     let secret_store = match secret_store_override {
         Some(secret_store) => secret_store,
         None => runtime
@@ -556,8 +565,8 @@ fn login_with_claude_oauth(
     secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
     let label = normalize_label(&label)?;
-    ensure_account_label_available_at_router_root(&router_root, &label, Provider::Claude)?;
-    let account_id = account_id_from_label(&label)?;
+    let account_id =
+        resolve_login_account_id_at_router_root(&router_root, &label, Provider::Claude)?;
     let bundle = collect_claude_oauth_bundle(stdout, reader, flow)?;
 
     create_router_root(&router_root)?;
@@ -565,7 +574,9 @@ fn login_with_claude_oauth(
     let state = runtime.block_on(AsyncSqliteStateStore::open(
         &router_root.join("state.sqlite"),
     ))?;
-    ensure_account_label_available(&state, &label, Provider::Claude, &runtime)?;
+    if resolve_login_account_id(&state, &label, Provider::Claude, &runtime)? != account_id {
+        return Err(AccountCommandError::DuplicateAccountLabel { label });
+    }
     let secret_store = match secret_store_override {
         Some(secret_store) => secret_store,
         None => runtime
@@ -743,47 +754,6 @@ fn list_accounts(stdout: &mut impl Write, router_root: PathBuf) -> Result<(), Ac
     Ok(())
 }
 
-fn ensure_account_label_available_at_router_root(
-    router_root: &Path,
-    label: &str,
-    provider: Provider,
-) -> Result<(), AccountCommandError> {
-    let state_database_path = router_root.join("state.sqlite");
-    if !state_database_path.exists() {
-        return Ok(());
-    }
-
-    let runtime = account_command_runtime()?;
-    let state = runtime.block_on(AsyncSqliteStateStore::open(&state_database_path))?;
-    ensure_account_label_available(&state, label, provider, &runtime)?;
-    runtime.block_on(state.close())?;
-    Ok(())
-}
-
-fn ensure_account_label_available(
-    state: &AsyncSqliteStateStore,
-    label: &str,
-    provider: Provider,
-    runtime: &tokio::runtime::Runtime,
-) -> Result<(), AccountCommandError> {
-    let accounts = runtime.block_on(state.list_accounts())?;
-    let account_id = account_id_from_label(label)?;
-    for account in accounts {
-        if account.label() != label && account.account_id() != &account_id {
-            continue;
-        }
-        let is_same_account = account.label() == label
-            && account.account_id() == &account_id
-            && account.provider() == provider;
-        if !is_same_account {
-            return Err(AccountCommandError::DuplicateAccountLabel {
-                label: label.to_owned(),
-            });
-        }
-    }
-    Ok(())
-}
-
 fn set_weekly_floor(
     stdout: &mut impl Write,
     router_root: PathBuf,
@@ -900,35 +870,4 @@ fn create_router_root(router_root: &Path) -> Result<(), AccountCommandError> {
         path: router_root.to_path_buf(),
         source,
     })
-}
-
-fn normalize_label(label: &str) -> Result<String, AccountCommandError> {
-    let trimmed = label.trim();
-    if trimmed.is_empty() {
-        return Err(AccountCommandError::EmptyLabel);
-    }
-
-    Ok(trimmed.to_owned())
-}
-
-fn account_id_from_label(label: &str) -> Result<AccountId, AccountCommandError> {
-    let mut normalized = String::new();
-    let mut previous_was_separator = false;
-    for character in label.chars() {
-        if character.is_ascii_alphanumeric() {
-            normalized.extend(character.to_lowercase());
-            previous_was_separator = false;
-        } else if !previous_was_separator {
-            normalized.push('_');
-            previous_was_separator = true;
-        }
-    }
-    let normalized = normalized.trim_matches('_');
-    let stem = if normalized.is_empty() {
-        "imported"
-    } else {
-        normalized
-    };
-
-    AccountId::new(format!("acct_{stem}")).map_err(|_| AccountCommandError::EmptyLabel)
 }
