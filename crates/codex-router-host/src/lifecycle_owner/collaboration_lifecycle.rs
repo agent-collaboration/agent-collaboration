@@ -1,7 +1,7 @@
 //! Join existing child lifecycle facts to the independent public collaboration runtime.
 use crate::{
     AppServerChild, BackendSchemaEvidence, CollaborationRuntime, CollaborationRuntimeInputs,
-    HostConfig, RemoteControlServerName,
+    HostConfig, HostInstance, RemoteControlServerName,
 };
 use std::{io, path::PathBuf};
 
@@ -26,6 +26,7 @@ pub(super) struct CollaborationLifecycle {
 impl CollaborationLifecycle {
     pub(super) async fn start(
         config: &HostConfig,
+        instance: &HostInstance,
         child: &AppServerChild,
         remote_control_server_name: Option<RemoteControlServerName>,
         router_executable_relation: tokio::sync::watch::Receiver<
@@ -65,7 +66,7 @@ impl CollaborationLifecycle {
             published_child: None,
             schema_digest: None,
         };
-        if let Err(error) = owner.synchronize(Some(child)).await {
+        if let Err(error) = owner.synchronize(instance, Some(child)).await {
             let cleanup = owner.shutdown().await;
             return Err(match cleanup {
                 Ok(()) => error,
@@ -74,7 +75,11 @@ impl CollaborationLifecycle {
         }
         Ok(Some(owner))
     }
-    pub(super) async fn synchronize(&mut self, child: Option<&AppServerChild>) -> io::Result<()> {
+    pub(super) async fn synchronize(
+        &mut self,
+        instance: &HostInstance,
+        child: Option<&AppServerChild>,
+    ) -> io::Result<()> {
         let Some(child) = child else {
             if self.published_child.take().is_some()
                 && let Some(runtime) = &mut self.runtime
@@ -111,6 +116,9 @@ impl CollaborationLifecycle {
                 Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
                 Err(error) => return Err(error),
             }
+            instance
+                .clear_stale_endpoint_sockets(&self.directory)
+                .await?;
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
                     collaboration_runtime: CollaborationRuntimeInputs {

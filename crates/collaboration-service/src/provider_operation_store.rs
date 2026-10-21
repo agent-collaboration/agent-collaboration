@@ -175,25 +175,28 @@ impl ProviderOperationStore {
         .transpose()
     }
 
-    pub async fn has_blocking_uncertainty(
+    pub async fn blocking_uncertain_operation_ids(
         &mut self,
         binding: &ProviderBindingIdentity,
         target: Option<&SessionRef>,
-    ) -> Result<bool, ProviderOperationStoreError> {
+    ) -> Result<Vec<OperationId>, ProviderOperationStoreError> {
         let unknown = encode_enum(ProviderOperationEffect::Unknown)?;
         let candidates = sqlx::query!(
-            "SELECT binding_json,target_service_id,target_endpoint_id,target_session_id
-             FROM provider_operations WHERE effect=?",
+            "SELECT operation_id,binding_json,target_service_id,target_endpoint_id,target_session_id
+             FROM provider_operations WHERE effect=? ORDER BY operation_id",
             unknown,
         )
         .fetch_all(&mut self.connection)
         .await?;
+        let mut blocking = Vec::new();
         for candidate in candidates {
             let stored_binding = decode_binding(&candidate.binding_json)?;
             let same_scope = match stored_binding {
                 ConversationBindingIdentity::ExternalProvider { binding: stored } => {
+                    // A future in-serve process replacement must bump generation.
                     stored.endpoint == binding.endpoint
                         && stored.runtime.provider == binding.runtime.provider
+                        && stored.generation == binding.generation
                 }
                 ConversationBindingIdentity::CodexAcp { .. } => false,
             };
@@ -216,10 +219,13 @@ impl ProviderOperationStore {
                 _ => return Err(ProviderOperationStoreError::InvalidRecord),
             };
             if blocks {
-                return Ok(true);
+                blocking.push(
+                    OperationId::try_from(candidate.operation_id)
+                        .map_err(|_| ProviderOperationStoreError::InvalidRecord)?,
+                );
             }
         }
-        Ok(false)
+        Ok(blocking)
     }
 
     pub async fn mark_may_have_dispatched(

@@ -301,20 +301,26 @@ impl ExternalProviderSupervisor {
                     .map_err(|message| snapshot_failure(operation_id, message))?,
             ));
         }
-        if operation_kind != ProviderOperationKind::ConversationCancel
-            && store
-                .has_blocking_uncertainty(&binding, known_target)
+        if operation_kind != ProviderOperationKind::ConversationCancel {
+            let blocking = store
+                .blocking_uncertain_operation_ids(&binding, known_target)
                 .await
-                .map_err(|_| unavailable_failure(operation_id.clone(), failure_target.clone()))?
-        {
-            return Err(failure(
-                ConversationOperationFailureKind::Busy,
-                ConversationOperationFailureStage::Validation,
-                ProviderOperationEffect::None,
-                "provider binding has an unresolved operation",
-                operation_id,
-                failure_target,
-            ));
+                .map_err(|_| unavailable_failure(operation_id.clone(), failure_target.clone()))?;
+            if !blocking.is_empty() {
+                let ids = blocking
+                    .iter()
+                    .map(OperationId::as_str)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                return Err(failure(
+                    ConversationOperationFailureKind::Busy,
+                    ConversationOperationFailureStage::Validation,
+                    ProviderOperationEffect::None,
+                    &format!("provider binding has unresolved operations: {ids}"),
+                    operation_id,
+                    failure_target,
+                ));
+            }
         }
         let admission = store
             .admit(ProviderOperationAdmission {
@@ -676,7 +682,7 @@ fn failure(
     kind: ConversationOperationFailureKind,
     stage: ConversationOperationFailureStage,
     effect: ProviderOperationEffect,
-    message: &'static str,
+    message: &str,
     operation_id: OperationId,
     target: Option<SessionRef>,
 ) -> ConversationOperationFailure {
@@ -685,7 +691,7 @@ fn failure(
         stage,
         effect,
         message: NonEmptyText::try_from(message.to_owned())
-            .expect("static provider failure message is valid"),
+            .expect("provider failure message is valid"),
         operation_id: Some(operation_id),
         invalid_setting: None,
         provider_code: None,

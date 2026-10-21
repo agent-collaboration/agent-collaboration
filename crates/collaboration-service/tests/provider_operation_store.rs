@@ -424,29 +424,85 @@ async fn terminal_record_with_effect(
 }
 
 #[tokio::test]
-async fn uncertainty_matches_stable_endpoint_provider_scope_across_binding_restart() -> TestResult {
-    let database = TestDatabase::new("stable-uncertainty")?;
+async fn previous_generation_uncertainty_does_not_block_target() -> TestResult {
+    uncertainty_generation_scope(false).await
+}
+
+#[tokio::test]
+async fn previous_generation_targetless_uncertainty_does_not_block() -> TestResult {
+    uncertainty_generation_scope(true).await
+}
+
+async fn uncertainty_generation_scope(targetless: bool) -> TestResult {
+    let database = TestDatabase::new("generation-uncertainty")?;
     let mut store = ProviderOperationStore::open(&database.path).await?;
     let record = admitted_record(
         store
-            .admit(admission("018f1f62-6571-7ef0-8f0c-001122334488", 1)?)
+            .admit(admission("01900000-0000-7000-8000-000000000001", 1)?)
             .await?,
     )?;
     store
         .mark_may_have_dispatched(&record.operation_id, 2)
         .await?;
-    store
-        .record_target(&record.operation_id, &target()?, 3)
-        .await?;
-    let mut restarted = binding()?;
-    restarted.binding_id = ProviderBindingId::try_from("claude-bridge-restarted".to_owned())?;
-    restarted.generation.generation = GenerationNumber::try_from(99)?;
-    ensure!(
+    if !targetless {
         store
-            .has_blocking_uncertainty(&restarted, Some(&target()?))
-            .await?
+            .record_target(&record.operation_id, &target()?, 3)
+            .await?;
+    }
+    store
+        .record_terminal(
+            &record.operation_id,
+            ProviderOperationEffect::Unknown,
+            ProviderReconciliationState::NotReconcilable,
+            None,
+            4,
+        )
+        .await?;
+    let before = store
+        .inspect(&record.operation_id)
+        .await?
+        .ok_or("missing unknown operation")?;
+    store.close().await?;
+    let mut store = ProviderOperationStore::open(&database.path).await?;
+    ensure_eq!(
+        store
+            .blocking_uncertain_operation_ids(&binding()?, Some(&target()?))
+            .await?,
+        vec![record.operation_id.clone()]
     );
-    ensure!(!store.has_blocking_uncertainty(&restarted, None).await?);
+    ensure_eq!(
+        store
+            .blocking_uncertain_operation_ids(&binding()?, None)
+            .await?,
+        if targetless {
+            vec![record.operation_id.clone()]
+        } else {
+            vec![]
+        }
+    );
+    for epoch_changed in [false, true] {
+        let mut restarted = binding()?;
+        if epoch_changed {
+            restarted.generation.service_epoch =
+                UuidIdentity::try_from("00000000-0000-4000-8000-000000000099".to_owned())?;
+        } else {
+            restarted.generation.generation = GenerationNumber::try_from(99)?;
+        }
+        ensure!(
+            store
+                .blocking_uncertain_operation_ids(&restarted, Some(&target()?))
+                .await?
+                .is_empty()
+        );
+        ensure!(
+            store
+                .blocking_uncertain_operation_ids(&restarted, None)
+                .await?
+                .is_empty()
+        );
+    }
+    ensure_eq!(store.inspect(&record.operation_id).await?, Some(before));
+    store.close().await?;
     Ok(())
 }
 

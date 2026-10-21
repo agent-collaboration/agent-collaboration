@@ -330,6 +330,7 @@ impl HostRuntime {
         let router_executable_relation = router_executable_observer.lock().await.subscribe();
         let mut collaboration = match collaboration_lifecycle::CollaborationLifecycle::start(
             &config,
+            &instance,
             &app_server,
             readiness.remote_control_server_name().cloned(),
             router_executable_relation,
@@ -378,6 +379,7 @@ impl HostRuntime {
                 } else {
                     owner
                         .synchronize(
+                            &instance,
                             if matches!(state.app_server, AppServerCondition::NativeReady { .. }) {
                                 app_server.as_ref()
                             } else {

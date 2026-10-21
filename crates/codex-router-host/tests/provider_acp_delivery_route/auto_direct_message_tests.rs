@@ -1,4 +1,6 @@
 use super::*;
+#[path = "auto_direct_message_tests/uncertainty_push_tests.rs"]
+mod uncertainty_push_tests;
 use automation_storage::AutomationStore;
 use collaboration_protocol::{
     PushDeliveryState, PushHeaderFacts, PushKind, PushOrigin, PushRecordDraft,
