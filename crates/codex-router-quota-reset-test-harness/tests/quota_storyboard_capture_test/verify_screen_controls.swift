@@ -316,6 +316,33 @@ extension VerifyScreenImage {
         .isEmpty
       if passed != shouldPass { failures.append(name) }
     }
+    // Native boxes from the retained 120x36 cancelled original. One census
+    // shares the title row; another is split beside the pool-wide label.
+    let nativeCensusHeader = [
+      region("Quota status", 0.016313212642740636, 0.9455587389684814, 0.10114192495921696, 0.022922636103151817),
+      region("Account", 0.058712286237160745, 0.8365372328592812, 0.05875813669326061, 0.02033527669387425),
+      region("Clients 0 · Fresh 0 · Stale 0 · Data unknown 4", 0.4747145155655248, 0.9484240686485196, 0.38336052202283843, 0.02005730659025784),
+      region("Pool-wide: responses", 0.016313212928221882, 0.916905444448424, 0.16639477977161501, 0.025787965616045905),
+      region("Accounts 4 · Usable 0 · Reserve 0 · Blocked 0 · Pool unknown", 0.1990212130505708, 0.9197707740210124, 0.5024469820554649, 0.022922635420004056),
+      region("1. Excluded 3", 0.6998368699564981, 0.919770773686724, 0.12561174551386622, 0.02005730659025784),
+    ]
+    let mergedCensus = region(
+      "Accounts 4 · Usable 0 · Pool unknown 1 · Excluded 3", 0.2, 0.919, 0.7, 0.022)
+    let containedFreshness = region("Data unknown 4", 0.47, 0.946, 0.38, 0.02)
+    let censusCases: [(String, [ScreenTextRegion], Bool)] = [
+      ("native-census-top-edge-and-row-order", nativeCensusHeader, true),
+      ("native-census-top-edge", Array(nativeCensusHeader.prefix(3)) + [mergedCensus], true),
+      ("native-census-row-order", [nativeCensusHeader[0], nativeCensusHeader[1], containedFreshness] + Array(nativeCensusHeader.suffix(3)), true),
+      ("census-wrong-pool-count", Array(nativeCensusHeader.prefix(5)) + [region("9. Excluded 3", 0.7, 0.919, 0.125, 0.02)], false),
+      ("census-next-row-is-not-a-value", Array(nativeCensusHeader.prefix(5)) + [region("1. Excluded 3", 0.7, 0.86, 0.125, 0.02)], false),
+      ("census-wrong-data-count", [nativeCensusHeader[0], nativeCensusHeader[1], region("Data unknown 40", 0.47, 0.946, 0.38, 0.02), mergedCensus], false),
+      ("census-outside-title-edge", [nativeCensusHeader[0], nativeCensusHeader[1], region("Data unknown 4", 0.47, 0.94844, 0.38, 0.02005730659025784), mergedCensus], false),
+      ("census-duplicate-pool-count", nativeCensusHeader + [region("Pool unknown 1", 0.2, 0.88, 0.2, 0.02)], false),
+    ]
+    for (name, regions, shouldPass) in censusCases {
+      let passed = missingQuotaHeaderCounts(checkpoint: .compactQuotaCancelled, regions: regions).isEmpty
+      if passed != shouldPass { failures.append(name) }
+    }
     let labels = [region("Account provider", 0.1, 0.5), region("Disabled accounts", 0.1, 0.375)]
     let values = [region("OpenAI Y", 0.4, 0.5), region("Shown ▾", 0.4, 0.375)]
     let stale = [
@@ -325,6 +352,19 @@ extension VerifyScreenImage {
     ]
     let geometryCases: [(String, [ScreenTextRegion], Bool)] = [
       ("column-order-valid", labels + values, true),
+      ("observed-colon-disclosure", labels + [values[0], region("Shown :", 0.4, 0.375)], true),
+      ("wrong-colon-value", labels + [values[0], region("Hidden :", 0.4, 0.375)], false),
+      ("extra-after-colon", labels + [values[0], region("Shown : Hidden", 0.4, 0.375)], false),
+      ("colon-before-value", labels + [values[0], region(": Shown", 0.4, 0.375)], false),
+      (
+        "colon-wrong-adjacent-row",
+        labels + [region("OpenAI", 0.4, 0.375), region("Shown :", 0.4, 0.5)], false
+      ),
+      (
+        "colon-nearest-wrong-value",
+        labels + [values[0], region("Hidden :", 0.35, 0.375, 0.1), region("Shown :", 0.6, 0.375)],
+        false
+      ),
       ("observed-r-disclosure", labels + [values[0], region("Shown r", 0.4, 0.375)], true),
       ("wrong-r-value", labels + [values[0], region("Hidden r", 0.4, 0.375)], false),
       ("extra-after-r", labels + [values[0], region("Shown r Hidden", 0.4, 0.375)], false),
@@ -785,7 +825,7 @@ extension VerifyScreenImage {
     let controlCaseCounts: [Int] = [
       cases.count, choiceCases.count, fieldCases.count, geometryCases.count, focusCases.count,
       policyCases.count, expandedPolicyCases.count, resetTailCases.count, helpBodyCases.count,
-      headerCases.count, decisionCases.count, stackedPolicyCases.count, floorHeadingCases.count,
+      headerCases.count, censusCases.count, decisionCases.count, stackedPolicyCases.count, floorHeadingCases.count,
       providerQueryCases.count, floorAssociationCases.count, decisionGeometryCases.count,
       retainedSessionsControls.count, lastVoucherCases.count,
       optionsTitleCases.count,

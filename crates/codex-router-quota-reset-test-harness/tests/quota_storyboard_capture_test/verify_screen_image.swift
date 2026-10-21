@@ -498,14 +498,33 @@ struct VerifyScreenImage {
       }).max(by: { $0.bounds.maxY < $1.bounds.maxY })
     else { return expected.map { "header " + $0 } }
     let header = regions.filter {
-      $0.bounds.minY > table.bounds.maxY && $0.bounds.maxY <= title.bounds.maxY
+      $0.bounds.minY > table.bounds.maxY && $0.bounds.maxY <= title.bounds.maxY + 0.0000001
     }.sorted {
-      if $0.bounds.midY == $1.bounds.midY {
-        return $0.bounds.minX < $1.bounds.minX
-      }
-      return $0.bounds.midY > $1.bounds.midY
+      $0.bounds.midY > $1.bounds.midY
     }
-    let text = normalizedMarkerText(header.map(\.text).joined(separator: " "))
+    // Native boxes on one terminal row have slightly different vertical
+    // centers. Keep that row together before ordering its fragments by x;
+    // a count on another row must never complete an unfinished label.
+    var headerRows: [[ScreenTextRegion]] = []
+    for region in header {
+      let matchingRows = headerRows.indices.filter { index in
+        headerRows[index].allSatisfy { sibling in
+          let overlap = min(region.bounds.maxY, sibling.bounds.maxY)
+            - max(region.bounds.minY, sibling.bounds.minY)
+          return overlap >= min(region.bounds.height, sibling.bounds.height) / 2
+        }
+      }
+      guard matchingRows.count <= 1 else { return expected.map { "header " + $0 } }
+      if let index = matchingRows.first {
+        headerRows[index].append(region)
+      } else {
+        headerRows.append([region])
+      }
+    }
+    let rowTexts = headerRows.map { row in
+      normalizedMarkerText(
+        row.sorted { $0.bounds.minX < $1.bounds.minX }.map(\.text).joined(separator: " "))
+    }
     return expected.compactMap { association in
       let parts = association.split(separator: " ")
       let label = parts.dropLast().joined(separator: " ")
@@ -516,11 +535,13 @@ struct VerifyScreenImage {
       guard let expression = try? NSRegularExpression(pattern: pattern) else {
         return "header " + association
       }
-      let values = expression.matches(in: text, range: NSRange(text.startIndex..., in: text))
-        .compactMap { match -> String? in
-          guard let range = Range(match.range(at: 1), in: text) else { return nil }
-          return String(text[range])
-        }
+      let values = rowTexts.flatMap { text in
+        expression.matches(in: text, range: NSRange(text.startIndex..., in: text))
+          .compactMap { match -> String? in
+            guard let range = Range(match.range(at: 1), in: text) else { return nil }
+            return String(text[range])
+          }
+      }
       return values == [count] ? nil : "header " + association
     }
   }
@@ -598,10 +619,10 @@ struct VerifyScreenImage {
     let words = text.split(separator: " ").map(String.init)
     if allowed.contains(text) { return text }
     // A collapsed choice paints one disclosure glyph. These are the actual
-    // observed Vision readings of it (underlined ▾ read as '=' or '•');
+    // observed Vision readings of it (underlined ▾ read as '=', '•' or ':');
     // another word/value is never accepted.
     if words.count == 2 && allowed.contains(words[0])
-      && ["▾", "▼", "⌄", "v", "y", "r", "=", "•"].contains(words[1])
+      && ["▾", "▼", "⌄", "v", "y", "r", "=", "•", ":"].contains(words[1])
     {
       return words[0]
     }
