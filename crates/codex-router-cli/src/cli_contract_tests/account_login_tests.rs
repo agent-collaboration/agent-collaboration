@@ -289,7 +289,7 @@ fn exercise_openai_relogin(stored_id: &str) {
             &mut Cursor::new(Vec::<u8>::new()),
             command,
             &client,
-            secrets.clone().into(),
+            secrets.into(),
         ),
     );
     assert_eq!(
