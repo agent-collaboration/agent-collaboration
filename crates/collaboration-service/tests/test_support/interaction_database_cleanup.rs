@@ -6,16 +6,26 @@ use std::{path::Path, time::Duration};
 pub(crate) async fn remove_closed_interaction_database(
     database_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    // Drop only signals SQLx's worker. The exclusive WAL-to-DELETE transition
-    // refuses a live owner; closing this final connection joins its worker.
-    let connection = SqliteConnection::connect_with(
+    // A connect-time journal-mode error drops SQLx's worker without joining it.
+    // Own the connection first so even a refused transition finishes shutdown.
+    let mut connection = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
             .filename(database_path)
-            .journal_mode(SqliteJournalMode::Delete)
             .busy_timeout(Duration::from_millis(250)),
     )
     .await?;
-    connection.close().await?;
+    let journal_mode = sqlx::query_scalar::<_, String>("PRAGMA journal_mode=DELETE")
+        .fetch_one(&mut connection)
+        .await;
+    let connection_closed = connection.close().await;
+    let journal_mode = journal_mode?;
+    connection_closed?;
+    if !journal_mode.eq_ignore_ascii_case("delete") {
+        return Err(std::io::Error::other(format!(
+            "interaction cleanup refused journal mode {journal_mode:?}; expected DELETE"
+        ))
+        .into());
+    }
     std::fs::remove_file(database_path)?;
     Ok(())
 }
@@ -56,11 +66,20 @@ mod tests {
                 .await
                 .expect("cleanup after owner closes");
         }
+        let remaining_files = std::fs::read_dir(directory.path())
+            .expect("cleanup observation")
+            .count();
         directory.close().expect("empty fixture cleanup");
 
         // Assert after joined cleanup so a failed oracle does not leak workers.
-        assert!(cleanup.is_err(), "cleanup accepted a live WAL owner");
+        let refusal = cleanup.expect_err("cleanup accepted a live WAL owner");
+        let sqlite_error = refusal
+            .downcast_ref::<sqlx::Error>()
+            .and_then(sqlx::Error::as_database_error)
+            .expect("live WAL owner must refuse the SQLite transition");
+        assert_eq!(sqlite_error.code().as_deref(), Some("5"));
         assert!(database_preserved, "cleanup unlinked the live database");
+        assert_eq!(remaining_files, 0, "SQLite sidecars survived cleanup");
     }
 
     #[tokio::test]

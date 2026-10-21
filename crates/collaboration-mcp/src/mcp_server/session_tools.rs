@@ -41,7 +41,7 @@ impl CollaborationMcpServer {
         )
     }
 
-    #[tool(name = "provider_sessions_list", description = "Lists Router-hosted provider Sessions and live Claude Code terminal sessions. Claude terminal discovery supports active or loaded views; stored applies only to hosted Sessions. Live pages are not snapshots, so sessions may move between pages.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ProviderSessionListResult>>())]
+    #[tool(name = "provider_sessions_list", description = "Lists Router-hosted provider Sessions and native Claude Code observations. Stored/all reads managed Sessions; stored/interactive on canonical Claude reads native background history. Loaded/interactive includes live peers and known nonterminal jobs; native active requires working or busy evidence. Native coverage reports independent peer/background completeness. Pages are not snapshots, so sessions may move between pages.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<ProviderSessionListResult>>())]
     pub(super) async fn provider_sessions_list(
         &self,
         Parameters(request): Parameters<ProviderSessionListParams>,

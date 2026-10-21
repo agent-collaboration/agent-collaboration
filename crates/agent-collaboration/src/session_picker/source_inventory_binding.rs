@@ -20,6 +20,8 @@ pub(crate) struct SourceInventoryBinding {
     pub(crate) service_id: UuidIdentity,
     pub(crate) service_epoch: UuidIdentity,
     pub(crate) endpoints: BTreeMap<EndpointRef, InventoryEndpointKind>,
+    /// Canonical current Host membership; independent of managed ACP channels.
+    pub(crate) native_claude_endpoint: Option<EndpointRef>,
 }
 
 impl SourceInventoryBinding {
@@ -39,11 +41,15 @@ impl SourceInventoryBinding {
         }
         let mut seen = BTreeSet::new();
         let mut endpoints = BTreeMap::new();
+        let mut native_claude_endpoint = None;
         for description in &inventory.endpoints {
             if description.endpoint.service_id != *expected_service
                 || !seen.insert(description.endpoint.clone())
             {
                 return Err(SourceInventoryRejection::InvalidInventory);
+            }
+            if String::from(description.endpoint.endpoint_id.clone()) == "claude-local" {
+                native_claude_endpoint = Some(description.endpoint.clone());
             }
             let mut kind = None;
             for channel in &description.channels {
@@ -66,13 +72,14 @@ impl SourceInventoryBinding {
                 endpoints.insert(description.endpoint.clone(), kind);
             }
         }
-        if endpoints.is_empty() {
+        if endpoints.is_empty() && native_claude_endpoint.is_none() {
             return Err(SourceInventoryRejection::EndpointUnqualified);
         }
         Ok(Self {
             service_id: first.endpoint.service_id.clone(),
             service_epoch: inventory.service_epoch.clone(),
             endpoints,
+            native_claude_endpoint,
         })
     }
 
@@ -90,6 +97,7 @@ impl SourceInventoryBinding {
                 .try_into()
                 .unwrap(),
             endpoints: BTreeMap::from([(endpoint, InventoryEndpointKind::NativeCodex)]),
+            native_claude_endpoint: None,
         }
     }
 }

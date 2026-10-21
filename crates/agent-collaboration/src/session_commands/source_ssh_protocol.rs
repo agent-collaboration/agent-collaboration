@@ -4,9 +4,9 @@ use super::router_connection_registry::{
 };
 use codex_native_integration::ResumeModelChoice;
 use collaboration_client::protocol::{
-    CodexGeneration, EndpointInventory, EndpointRef, NativeSessionListParams,
-    NativeSessionListResult, ProviderSessionListParams, ProviderSessionListResult, SchemaDigest,
-    SessionRef, UuidIdentity,
+    CodexGeneration, ConversationOperationFailure, EndpointInventory, EndpointRef,
+    NativeSessionListParams, NativeSessionListResult, OperationId, ProviderBindingIdentity,
+    ProviderSessionListParams, ProviderSessionListResult, SchemaDigest, SessionRef, UuidIdentity,
 };
 use serde::{Deserialize, Serialize};
 
@@ -32,15 +32,33 @@ pub(crate) struct SourceRequest {
 )]
 pub(crate) enum SourceOperation {
     Endpoints,
+    ClientInventory,
+    ProviderInspect {
+        binding: ProviderBindingIdentity,
+        target: SessionRef,
+    },
     NativeSessions {
         params: NativeSessionListParams,
     },
     ProviderSessions {
         params: ProviderSessionListParams,
     },
+    ProviderOperationShow {
+        service_epoch: UuidIdentity,
+        operation_id: OperationId,
+    },
     Prepare {
         action: SourceSessionAction,
         client_profile: SourceClientProfile,
+    },
+    NativeClaude {
+        service_epoch: UuidIdentity,
+        action: SourceNativeClaudeAction,
+    },
+    ProviderAction {
+        operation_id: OperationId,
+        binding: ProviderBindingIdentity,
+        action: SourceManagedAction,
     },
     Launch {
         prepared: Box<PreparedSourceLaunch>,
@@ -51,10 +69,206 @@ pub(crate) enum SourceOperation {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) enum SourceReply {
-    Endpoints { inventory: EndpointInventory },
-    NativeSessions { page: NativeSessionListResult },
-    ProviderSessions { page: ProviderSessionListResult },
-    Prepared { launch: Box<PreparedSourceLaunch> },
+    ProviderInspection {
+        binding: Box<ProviderBindingIdentity>,
+        inspection: Box<collaboration_client::protocol::ProviderSessionInspectResult>,
+    },
+    #[serde(rename_all = "camelCase")]
+    ClientInventory {
+        inventory: EndpointInventory,
+        native_claude: SourceNativeLaunchAvailability,
+    },
+    Endpoints {
+        inventory: EndpointInventory,
+    },
+    NativeSessions {
+        page: NativeSessionListResult,
+    },
+    ProviderSessions {
+        page: ProviderSessionListResult,
+    },
+    ProviderOperation {
+        #[serde(rename = "operationId")]
+        operation_id: OperationId,
+        result: Box<SourceProviderOperationRead>,
+    },
+    Prepared {
+        launch: Box<PreparedSourceLaunch>,
+    },
+    ProviderAction {
+        result: Box<SourceProviderActionResult>,
+    },
+    NativeClaude {
+        result: Box<SourceNativeClaudeResult>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum SourceNativeLaunchAvailability {
+    Ready,
+    Unavailable { message: String },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub(crate) enum SourceNativeClaudeAction {
+    New {
+        directory: AbsoluteRemoteCwd,
+        arguments: Vec<std::ffi::OsString>,
+    },
+    Resume {
+        target: SessionRef,
+        directory: AbsoluteRemoteCwd,
+        arguments: Vec<std::ffi::OsString>,
+    },
+    Fork {
+        target: SessionRef,
+        directory: AbsoluteRemoteCwd,
+        arguments: Vec<std::ffi::OsString>,
+    },
+}
+
+impl SourceNativeClaudeAction {
+    pub(crate) fn captured_identity(&self) -> SourceNativeClaudeIdentity {
+        match self {
+            Self::New { directory, .. } => SourceNativeClaudeIdentity::New {
+                directory: directory.clone(),
+            },
+            Self::Resume {
+                target, directory, ..
+            } => SourceNativeClaudeIdentity::Resume {
+                target: target.clone(),
+                directory: directory.clone(),
+            },
+            Self::Fork {
+                target, directory, ..
+            } => SourceNativeClaudeIdentity::Fork {
+                target: target.clone(),
+                directory: directory.clone(),
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub(crate) enum SourceNativeClaudeIdentity {
+    New {
+        directory: AbsoluteRemoteCwd,
+    },
+    Resume {
+        target: SessionRef,
+        directory: AbsoluteRemoteCwd,
+    },
+    Fork {
+        target: SessionRef,
+        directory: AbsoluteRemoteCwd,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SourceNativeBinding {
+    pub(crate) service_id: UuidIdentity,
+    pub(crate) service_epoch: UuidIdentity,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct SourceNativeClaudeResult {
+    pub(crate) source: SourceNativeBinding,
+    pub(crate) action: SourceNativeClaudeIdentity,
+    pub(crate) observation: SourceNativeObservation,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum SourceNativeExitStatus {
+    Exited { code: i32 },
+    Terminated { description: String },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum SourceNativeUnknownReason {
+    MissingReceipt,
+    OutputUnavailable { message: String },
+    TimedOut,
+    TransportUnavailable,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum SourceNativeObservation {
+    Observed {
+        status: SourceNativeExitStatus,
+        stdout: Vec<u8>,
+        stderr: Vec<u8>,
+    },
+    Unknown {
+        reason: SourceNativeUnknownReason,
+        status: Option<SourceNativeExitStatus>,
+        stdout: Vec<u8>,
+        stderr: Vec<u8>,
+    },
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum SourceManagedAction {
+    Create { directory: AbsoluteRemoteCwd },
+    Load { target: SessionRef },
+    Resume { target: SessionRef },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub(crate) enum SourceProviderActionResult {
+    ManagedCreate {
+        result: Box<collaboration_client::protocol::ConversationCreateOutcome>,
+    },
+    ManagedLoad {
+        result: Box<collaboration_client::ConversationOperationResult>,
+    },
+    ManagedResume {
+        result: Box<collaboration_client::protocol::ConversationOperationWaitResult>,
+    },
+    Failed {
+        operation_id: OperationId,
+        target: Option<SessionRef>,
+        failure: Box<ConversationOperationFailure>,
+    },
+    Unknown {
+        operation_id: OperationId,
+        target: Option<SessionRef>,
+    },
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) enum SourceProviderOperationRead {
+    Found {
+        operation: Box<collaboration_client::protocol::ConversationOperationSnapshot>,
+    },
+    Failed {
+        failure: Box<ConversationOperationFailure>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -210,6 +424,8 @@ pub(crate) enum SourceRejection {
     ProfilePermissionConflict,
     #[error("configured launch accepts only model, effort and terminal display options")]
     ConflictingArguments,
+    #[error("selected provider does not advertise this action")]
+    UnsupportedProviderAction,
     #[error("source Router is unavailable")]
     SourceUnavailable,
 }

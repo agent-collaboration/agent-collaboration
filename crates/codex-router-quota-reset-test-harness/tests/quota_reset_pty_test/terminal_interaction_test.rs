@@ -147,6 +147,13 @@ impl TerminalDriver {
                 contains_completed_synchronized_frame_after_text(tail, expected.as_bytes())
             })
         })
+        .map_err(|error| {
+            let diagnostics = self.safe_semantic_diagnostics(start);
+            std::io::Error::other(format!(
+                "PTY action acknowledgement expected={expected:?} action_start={start}: {error}; {diagnostics}"
+            ))
+            .into()
+        })
     }
 
     pub(super) fn resize(&self, rows: u16, cols: u16) -> TestResult<()> {
@@ -414,6 +421,41 @@ mod tests {
                 "transcript boundary excluded bytes already queued by PTY reader",
             )
             .into());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn action_boundary_wait_rejects_stale_save_and_incomplete_current_frames() -> TestResult<()> {
+        for (current_output, should_complete) in [
+            (b"".as_slice(), false),
+            (b"\x1b[?2026hSave".as_slice(), false),
+            (b"\x1b[?2026hSave\x1b[?2026l".as_slice(), true),
+        ] {
+            let (output_sender, output_receiver) = mpsc::channel();
+            let mut terminal = TerminalDriver {
+                master: None,
+                writer: None,
+                child: None,
+                output_receiver,
+                reader_thread: None,
+                transcript: b"\x1b[?2026hSave\x1b[?2026l".to_vec(),
+                reached_eof: false,
+            };
+            let action_start = terminal.transcript_len();
+            output_sender.send(ReaderEvent::Bytes(current_output.to_vec()))?;
+            output_sender.send(ReaderEvent::Eof)?;
+
+            let completed = terminal
+                .wait_for_text_after("Save", action_start, Duration::ZERO)
+                .is_ok();
+
+            if completed != should_complete {
+                return Err(std::io::Error::other(
+                    "action acknowledgement reused old Save or accepted an incomplete repaint",
+                )
+                .into());
+            }
         }
         Ok(())
     }

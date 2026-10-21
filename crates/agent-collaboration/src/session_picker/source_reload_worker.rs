@@ -203,7 +203,10 @@ pub(super) async fn run_session_record_reload_worker(
                     match validated {
                         Ok((record_count,page_progress))=>{
                             match page_progress {
-                                super::InventoryPageProgress::Complete=>{if let Some(progress)=progress {progress.read_state=SourceReadState::Complete {record_count};}}
+                                super::InventoryPageProgress::Complete=>{if let Some(progress)=progress {
+                                    let partial=snapshots.iter().find(|(source,_,_)|source==&expected.source_context).is_some_and(|(_,_,snapshot)|snapshot.native_live_coverage.iter().any(|part|part.state.is_incomplete()));
+                                    progress.read_state=if partial {SourceReadState::Partial {record_count}}else {SourceReadState::Complete {record_count}};
+                                }}
                                 super::InventoryPageProgress::MoreAvailable {continuation}=>{
                                     if let Some(progress)=progress {progress.read_state=SourceReadState::Suspended {record_count};}
                                     let mut next=expected.clone();next.continuation=Some(continuation);pending_continuations.push_back(next);
@@ -275,16 +278,21 @@ fn validate_source_page(
         if *previous_binding != binding {
             return Err(SourceInventoryRejection::StaleSnapshot);
         }
-        if snapshot.records.iter().any(|row| {
-            previous
+        for row in snapshot.records {
+            if let Some(stored) = previous
                 .records
-                .iter()
-                .any(|old| old.identity == row.identity)
-        }) {
-            return Err(SourceInventoryRejection::InvalidInventory);
+                .iter_mut()
+                .find(|old| old.identity == row.identity)
+            {
+                stored
+                    .corroborate_native_loaded(row)
+                    .map_err(|_| SourceInventoryRejection::InvalidInventory)?;
+            } else {
+                previous.records.push(row);
+            }
         }
-        previous.records.extend(snapshot.records);
         previous.runtime_coverage = snapshot.runtime_coverage;
+        previous.native_live_coverage = snapshot.native_live_coverage;
         Ok((previous.records.len(), progress))
     } else {
         let count = snapshot.records.len();
@@ -307,6 +315,14 @@ fn source_snapshot_matches(
     if binding.service_id != profile.service_id {
         return false;
     }
+    let mut native_membership = std::collections::BTreeSet::new();
+    if snapshot.native_live_coverage.iter().any(|part| {
+        part.service_epoch != binding.service_epoch
+            || binding.native_claude_endpoint.as_ref() != Some(&part.endpoint)
+            || !native_membership.insert((part.endpoint.clone(), part.view))
+    }) {
+        return false;
+    }
     snapshot
         .records
         .iter()
@@ -314,6 +330,12 @@ fn source_snapshot_matches(
             SessionPickerIdentity::HostedCodex(target) => {
                 binding.contains(&target.endpoint, InventoryEndpointKind::NativeCodex)
                     && record.provenance == SessionRowProvenance::ObservedHosted
+                    && record.conversation_source.is_none()
+                    && record.normalized_cwd.is_none()
+            }
+            SessionPickerIdentity::NativeClaude(target) => {
+                binding.native_claude_endpoint.as_ref() == Some(&target.endpoint)
+                    && record.provenance == SessionRowProvenance::ObservedProvider
                     && record.conversation_source.is_none()
                     && record.normalized_cwd.is_none()
             }
@@ -337,6 +359,7 @@ fn merge_source_snapshots(
 ) -> PickerRecordsSnapshot {
     let mut records = BTreeMap::new();
     let mut coverage = PickerRuntimeCoverage::Unavailable;
+    let mut native_live_coverage = BTreeMap::new();
     let labels = qualified_alias_projection::qualified_alias_labels(source_order, snapshots);
     for source in source_order {
         let Some((_, _, snapshot)) = snapshots.iter().find(|(context, _, _)| context == source)
@@ -351,12 +374,18 @@ fn merge_source_snapshots(
                     (
                         PickerSourceContext::ConfiguredHosted(_),
                         SessionPickerIdentity::HostedCodex(target)
-                        | SessionPickerIdentity::HostedProvider(target),
+                        | SessionPickerIdentity::HostedProvider(target)
+                        | SessionPickerIdentity::NativeClaude(target),
                     ) => labels.get(&target.endpoint).cloned(),
                     _ => None,
                 };
                 record
             });
+        }
+        for part in &snapshot.native_live_coverage {
+            native_live_coverage
+                .entry((part.endpoint.clone(), part.service_epoch.clone(), part.view))
+                .or_insert_with(|| part.clone());
         }
         if snapshot.runtime_coverage == PickerRuntimeCoverage::Available {
             coverage = PickerRuntimeCoverage::Available;
@@ -365,6 +394,7 @@ fn merge_source_snapshots(
         }
     }
     PickerRecordsSnapshot {
+        native_live_coverage: native_live_coverage.into_values().collect(),
         records: records.into_values().collect(),
         runtime_coverage: coverage,
     }

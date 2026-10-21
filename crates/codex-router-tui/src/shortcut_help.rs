@@ -53,13 +53,9 @@ pub fn ShortcutHelp<'a>(props: &mut ShortcutHelpProps<'a>) -> impl Into<AnyEleme
     }).collect::<Vec<_>>();
     element! {
         DialogFrame(width: props.width, height: props.height, title: props.title.clone(),
-            presentation: if props.width < 90 || props.height < 28 {
-                DialogPresentation::FullScreen
-            } else {
-                DialogPresentation::Framed { maximum_width: 80, maximum_height: 28 }
-            },
+            presentation: DialogPresentation::default(),
             margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
-            keyboard_scroll: true, actions) {
+            scroll_keys: crate::DialogScrollKeys::Navigation, actions) {
             #(content)
         }
     }

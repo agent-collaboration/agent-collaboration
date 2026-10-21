@@ -71,9 +71,21 @@ pub(crate) async fn read_source(
     profile: &RouterConnectionProfile,
     operation: SourceOperation,
 ) -> Result<SourceReply, SourceReadError> {
-    if matches!(&operation, SourceOperation::Launch { .. }) {
+    if matches!(
+        &operation,
+        SourceOperation::Launch { .. }
+            | SourceOperation::ProviderAction { .. }
+            | SourceOperation::NativeClaude { .. }
+    ) {
         return Err(SourceReadError::Rejected(SourceRejection::InvalidRequest));
     }
+    exchange_source(profile, operation).await
+}
+
+pub(super) async fn exchange_source(
+    profile: &RouterConnectionProfile,
+    operation: SourceOperation,
+) -> Result<SourceReply, SourceReadError> {
     let request = request_for_profile(profile, operation).map_err(SourceReadError::Rejected)?;
     let RouterConnectionTransport::Ssh(connection) = &profile.transport else {
         return Err(SourceReadError::Rejected(
@@ -126,7 +138,8 @@ pub(crate) async fn read_source(
     let result = tokio::time::timeout(SOURCE_READ_TIMEOUT, exchange)
         .await
         .unwrap_or(Err(SourceReadError::ReadUnavailable));
-    // On every read failure, settle our own process; a read never creates a session.
+    // Settle only our SSH child. A remote mutation may already have happened;
+    // callers retain its captured identity and never replay this exchange.
     if result.is_err() {
         let _settled = child.kill().await;
     }

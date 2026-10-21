@@ -1,0 +1,41 @@
+{
+  "start": "2026-10-20T04:49:12.775041+00:00",
+  "independent_intake_seconds": 1.5688987909816206,
+  "index": 1,
+  "grid": [
+    32,
+    24
+  ],
+  "plan": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/c7-current-32x24-component-plan.json",
+  "plan_sha256": "bdbc6b8f2766ff3d5ffb0bf54c86edaa98cdd469fff8cbe03c07e9f546d1772c",
+  "command": [
+    "/Users/shravansunder/.local/bin/uv",
+    "run",
+    "--offline",
+    "--no-project",
+    "--with",
+    "pydantic==2.14.1",
+    "--python",
+    "3.13",
+    "python",
+    "-B",
+    "-m",
+    "scripts.verification.tui_component_capture",
+    "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/c7-current-32x24-component-plan.json"
+  ],
+  "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/repository",
+  "output": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-32x24",
+  "budget": {
+    "preflightSeconds": 50,
+    "workSeconds": 1870,
+    "cleanupSeconds": 90,
+    "wholeSeconds": 2010
+  },
+  "timeout": false,
+  "V_stop_requested": false,
+  "V_signals": [],
+  "wrapper_pid": 79722,
+  "exit": 0,
+  "finish": "2026-10-20T04:50:17.498203+00:00",
+  "seconds": 64.7227574577555
+}

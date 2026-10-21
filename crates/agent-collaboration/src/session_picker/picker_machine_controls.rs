@@ -22,7 +22,6 @@ pub(super) enum PickerMachineFilter {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum MachineChoicePurpose {
     Browse,
-    NewSession,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -48,10 +47,6 @@ pub(super) enum MachineChoiceNotice {
         name: String,
         reason: SourceInventoryRejection,
     },
-    MissingDestinationCwd(String),
-    NativeRouteUnavailable(String),
-    NativeCredentialTransportUnsupported(String),
-    LaunchNotQualified(String),
 }
 
 impl MachineChoiceNotice {
@@ -64,20 +59,15 @@ impl MachineChoiceNotice {
             Self::SourceReadFailed { name, reason } => {
                 format!("{name}: {reason}; previous view retained")
             }
-            Self::MissingDestinationCwd(name) => format!(
-                "{name}: configure a destination working directory before creating a session"
-            ),
-            Self::NativeRouteUnavailable(name) => {
-                format!("{name}: interactive session route is unavailable")
-            }
-            Self::NativeCredentialTransportUnsupported(name) => {
-                format!("{name}: credential reference is unsupported by this native transport")
-            }
-            Self::LaunchNotQualified(name) => {
-                format!("{name}: execution route needs verification; no session created")
-            }
         }
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum MachineChoiceKey {
+    Default,
+    All,
+    Configured(PickerSourceContext),
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -85,6 +75,7 @@ pub(super) struct PickerMachineControls {
     pub(super) filter: PickerMachineFilter,
     pub(super) stage: PickerMachineStage,
     pub(super) control_focused: bool,
+    pub(super) search: codex_router_tui::SearchSelectState<MachineChoiceKey>,
 }
 
 impl PickerMachineControls {
@@ -102,6 +93,7 @@ impl PickerMachineControls {
     }
 
     pub(super) fn open_browse(&mut self, registry: &RouterRegistryRead) {
+        self.search.open(MachineChoiceKey::Default);
         self.stage = PickerMachineStage::Choosing {
             purpose: MachineChoicePurpose::Browse,
             focus: 0,
@@ -109,68 +101,42 @@ impl PickerMachineControls {
         };
     }
 
-    pub(super) fn open_new(&mut self, registry: &RouterRegistryRead) -> bool {
-        let needs_choice = match registry {
-            RouterRegistryRead::Missing => false,
-            RouterRegistryRead::Ready(registry) => !registry.routers.is_empty(),
-            RouterRegistryRead::Rejected(_) => true,
-        };
-        if needs_choice {
-            let focus = match (&self.filter, registry) {
-                (PickerMachineFilter::Single { source }, RouterRegistryRead::Ready(registry)) => registry.routers.iter().position(|profile| {
-                    matches!(source.as_ref(), PickerSourceContext::ConfiguredHosted(selected) if selected == profile)
-                }).map_or(0, |index| index + 1),
-                _ => 0,
-            };
-            self.stage = PickerMachineStage::Choosing {
-                purpose: MachineChoicePurpose::NewSession,
-                focus,
-                notice: registry_notice(registry),
-            };
-        }
-        needs_choice
-    }
-
-    pub(super) fn choices(
+    pub(super) fn choice_options(
         &self,
         registry: &RouterRegistryRead,
         mode: PickerMachineSourceMode,
-    ) -> Vec<String> {
-        let mut choices = vec![match mode {
-            PickerMachineSourceMode::HostedDefault => "This machine (current/default)".to_owned(),
-            PickerMachineSourceMode::LocalCodex => "Local Codex".to_owned(),
-        }];
-        let PickerMachineStage::Choosing { purpose, .. } = self.stage else {
-            return choices;
-        };
-        if mode == PickerMachineSourceMode::HostedDefault {
-            if matches!(purpose, MachineChoicePurpose::Browse)
-                && matches!(registry, RouterRegistryRead::Ready(registry) if !registry.routers.is_empty())
-            {
-                choices.push("All machines".to_owned());
+    ) -> Vec<codex_router_tui::ChoiceOption<MachineChoiceKey>> {
+        use codex_router_tui::ChoiceOption;
+        let mut choices = vec![ChoiceOption::available(
+            MachineChoiceKey::Default,
+            match mode {
+                PickerMachineSourceMode::HostedDefault => "This machine (current/default)",
+                PickerMachineSourceMode::LocalCodex => "Local Codex",
+            },
+        )];
+        if mode == PickerMachineSourceMode::HostedDefault
+            && let RouterRegistryRead::Ready(registry) = registry
+        {
+            if !registry.routers.is_empty() {
+                choices.push(ChoiceOption::available(
+                    MachineChoiceKey::All,
+                    "All machines",
+                ));
             }
-            if let RouterRegistryRead::Ready(registry) = registry {
-                choices.extend(
-                    registry
-                        .routers
-                        .iter()
-                        .map(|profile| profile.name.as_str().to_owned()),
-                );
-            }
+            choices.extend(registry.routers.iter().map(|profile| {
+                ChoiceOption::available(
+                    MachineChoiceKey::Configured(PickerSourceContext::ConfiguredHosted(
+                        profile.clone(),
+                    )),
+                    profile.name.as_str(),
+                )
+            }));
         }
         choices
     }
 
-    pub(super) fn move_choice(&mut self, direction: isize, choice_count: usize) {
-        if let PickerMachineStage::Choosing { focus, notice, .. } = &mut self.stage {
-            *focus = focus
-                .saturating_add_signed(direction)
-                .min(choice_count.saturating_sub(1));
-            *notice = None;
-        }
-    }
-
     pub(super) fn cancel_choice(&mut self) {
+        self.search = codex_router_tui::SearchSelectState::Closed;
         self.stage = PickerMachineStage::Browsing;
         self.control_focused = false;
     }
@@ -186,12 +152,8 @@ impl PickerMachineControls {
             return false;
         };
         if focus == 0 {
-            if matches!(purpose, MachineChoicePurpose::Browse) {
-                self.return_to_default(mode, can_load_source);
-            } else {
-                self.cancel_choice();
-            }
-            return matches!(purpose, MachineChoicePurpose::NewSession);
+            self.return_to_default(mode, can_load_source);
+            return false;
         }
         let has_all = mode == PickerMachineSourceMode::HostedDefault
             && matches!(purpose, MachineChoicePurpose::Browse)
@@ -216,22 +178,7 @@ impl PickerMachineControls {
             };
             return false;
         }
-        let notice = match purpose {
-            MachineChoicePurpose::Browse => MachineChoiceNotice::SourceNotQualified(name),
-            MachineChoicePurpose::NewSession if profile.default_remote_cwd.is_none() => {
-                MachineChoiceNotice::MissingDestinationCwd(name)
-            }
-            MachineChoicePurpose::NewSession => match profile.native_codex() {
-                None => MachineChoiceNotice::NativeRouteUnavailable(name),
-                Some(native)
-                    if native.credential.is_some()
-                        && !native.address.allows_credential_reference() =>
-                {
-                    MachineChoiceNotice::NativeCredentialTransportUnsupported(name)
-                }
-                Some(_) => MachineChoiceNotice::LaunchNotQualified(name),
-            },
-        };
+        let notice = MachineChoiceNotice::SourceNotQualified(name);
         self.stage = PickerMachineStage::Choosing {
             purpose,
             focus,
@@ -258,6 +205,8 @@ impl PickerMachineControls {
                 self.cancel_choice();
             }
             Err(reason) => {
+                self.search
+                    .open(MachineChoiceKey::Configured(source.as_ref().clone()));
                 let name = match source.as_ref() {
                     PickerSourceContext::ConfiguredHosted(profile) => {
                         profile.name.as_str().to_owned()

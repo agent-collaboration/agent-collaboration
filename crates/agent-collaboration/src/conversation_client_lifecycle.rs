@@ -275,7 +275,7 @@ async fn report_wait(
     }
 }
 
-fn lifecycle_actor(
+pub(super) fn lifecycle_actor(
     service_id: &collaboration_client::protocol::UuidIdentity,
     actor: Option<&str>,
 ) -> Result<ProviderIdentity, String> {
@@ -286,7 +286,7 @@ fn lifecycle_actor(
     }
 }
 
-fn lifecycle_approver(
+pub(super) fn lifecycle_approver(
     approver: Option<&str>,
     default: &ProviderIdentity,
 ) -> Result<ProviderIdentity, &'static str> {

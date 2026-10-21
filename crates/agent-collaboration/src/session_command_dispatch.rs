@@ -79,12 +79,18 @@ pub(crate) use router_connection_registry::{RouterRegistryError, RouterRegistryR
 #[path = "session_commands/picker_runtime_inventory.rs"]
 mod picker_runtime_inventory;
 
+#[cfg(test)]
+#[path = "../tests/fake_api_support/mod.rs"]
+pub(crate) mod fake_api_support;
+
 #[path = "session_commands/configured_inventory_loader.rs"]
 pub(crate) mod configured_inventory_loader;
 #[path = "session_commands/configured_inventory_query.rs"]
 mod configured_inventory_query;
 #[path = "session_commands/configured_inventory_transport.rs"]
 mod configured_inventory_transport;
+#[path = "session_commands/source_inventory_failure.rs"]
+mod source_inventory_failure;
 
 #[path = "session_commands/source_native_carrier.rs"]
 mod source_native_carrier;
@@ -96,6 +102,11 @@ pub(crate) mod source_ssh_executor;
 pub(crate) mod source_ssh_protocol;
 #[path = "session_commands/source_ssh_transport.rs"]
 pub(crate) mod source_ssh_transport;
+
+#[path = "session_commands/source_action_transport.rs"]
+pub(crate) mod source_action_transport;
+#[path = "session_commands/source_client_action.rs"]
+pub(crate) mod source_client_action;
 
 #[cfg(test)]
 #[path = "../tests/integration/configured_inventory_faults.rs"]
@@ -361,10 +372,15 @@ fn run_interactive_session(
             runner.run_prepared_source(&command.codex_args, &selection)
         }
         SessionsPickerOutcome::TerminalTooNarrow => Err(SessionsCommandError::TerminalTooNarrow),
+        SessionsPickerOutcome::InterruptedClientAction(request) => {
+            Err(SessionsCommandError::ClientActionUnknown {
+                description: request.unknown_description(),
+            })
+        }
     }
 }
 
-fn session_picker_record_loader(
+pub(crate) fn session_picker_record_loader(
     context: CliContext,
     repository_identity: RepositoryIdentity,
     service_directory: Option<std::path::PathBuf>,
@@ -422,9 +438,13 @@ fn session_picker_record_loader(
                 .map(SessionPickerRecord::from_record)
                 .collect();
             let mut inventory = runtime_inventory.lock().await;
-            let snapshot = inventory
+            let snapshot = match inventory
                 .refresh(service_directory.as_deref(), stored, include_empty_sessions)
-                .await;
+                .await
+            {
+                Ok(snapshot) => snapshot,
+                Err(reason) => return SourceInventoryResult::Rejected { request, reason },
+            };
             SourceInventoryResult::Ready {
                 progress: crate::presentation::session_picker::InventoryPageProgress::Complete,
                 binding: None,
@@ -551,12 +571,14 @@ pub(crate) trait SessionsPicker {
 
 struct TerminalSessionsPicker {
     terminal_available: bool,
+    context: CliContext,
 }
 
 impl TerminalSessionsPicker {
     fn for_context(context: &CliContext) -> Self {
         let forced_non_tty = context.env_var("CODEX_ROUTER_FORCE_NON_TTY").is_some();
         Self {
+            context: context.clone(),
             terminal_available: !forced_non_tty
                 && std::io::stdin().is_terminal()
                 && std::io::stdout().is_terminal(),
@@ -577,7 +599,14 @@ impl SessionsPicker for TerminalSessionsPicker {
         request: SessionsPickerRequest,
         record_loader: Option<SessionsPickerRecordLoader>,
     ) -> Result<Option<SessionsPickerOutcome>, SessionsCommandError> {
-        run_sessions_picker(request, record_loader).map_err(SessionsCommandError::Picker)
+        run_sessions_picker(
+            request,
+            record_loader,
+            Some(
+                crate::presentation::session_picker::production_client_ports(self.context.clone()),
+            ),
+        )
+        .map_err(SessionsCommandError::Picker)
     }
 }
 

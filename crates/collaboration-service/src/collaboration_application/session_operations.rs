@@ -655,9 +655,6 @@ pub enum ProviderInventoryFailure {
     /// The listing could not be produced: `{kind, stage: discovery, message}`.
     #[error("Provider session inventory unavailable")]
     Unavailable(ProviderInventoryFailureKind),
-    /// Claude Code terminal sessions are only live; there is no stored inventory.
-    #[error("Claude Code terminal sessions have no stored inventory; use --view active")]
-    NoStoredTerminalInventory,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize)]
@@ -683,9 +680,6 @@ impl serde::Serialize for ProviderInventoryFailure {
             Self::Unavailable(kind) => {
                 json!({"kind":kind,"stage":"discovery","message":message})
             }
-            Self::NoStoredTerminalInventory => {
-                json!({"kind":"unsupportedCapability","stage":"discovery","message":message})
-            }
         };
         payload.serialize(serializer)
     }
@@ -703,7 +697,6 @@ impl CollaborationRejection for ProviderInventoryFailure {
                 | ProviderInventoryFailureKind::Unavailable
                 | ProviderInventoryFailureKind::ResponseTooLarge => None,
             },
-            Self::NoStoredTerminalInventory => None,
         }
     }
 
@@ -712,7 +705,7 @@ impl CollaborationRejection for ProviderInventoryFailure {
             Self::InvalidRequest(message) => {
                 PublishedRejection::bare(PublishedRejection::INVALID_PARAMS, *message)
             }
-            Self::Unavailable(_) | Self::NoStoredTerminalInventory => PublishedRejection::typed(
+            Self::Unavailable(_) => PublishedRejection::typed(
                 PublishedRejection::OPERATION_FAILED,
                 self.to_string(),
                 self,

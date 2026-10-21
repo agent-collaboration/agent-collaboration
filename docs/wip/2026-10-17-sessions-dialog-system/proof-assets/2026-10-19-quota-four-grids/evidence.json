@@ -1,0 +1,946 @@
+{
+  "kind": "partial-compiled-ui-checkpoint-after-empty-result-repair",
+  "productHead": "d7bb5ce8eef6950b4a57ca66066338eca842ccfe",
+  "archiveHead": "774227a6908ba6d7dbe70078e99eade752c3ce0f",
+  "sourceBindingDigest": "fe0848b217d49798230a398e0984e2875b26c5439210a3711350db772b7003e1",
+  "producerReceiptSha256": "f91868dd358a5191ee7c68fd43685583f85cb8096d1db488e23145d72a0cce0b",
+  "captureDriverSha256": "1562ecb36dae7b6a442f50b87dda7c65dc300063c9fe0baca6a616b5b2326e43",
+  "runtimeHarnessSha256": "ec2cb60207d023c22a533a31c12a3d7bf4c629f16e983583b2014931cd88cd4f",
+  "imageCheckerSha256": "ec10b47694e650e39b74aaadb7d99e141d8c368d3505b9b90d100fad0a979fa7",
+  "build": "Actual compiled iocraft product with d7bb5ce8 empty-result repair. Independently frozen archive774227a6; fresh capture driver, original embedded runtime preserved. Compiler/linker fixture signatures only; no production installation or Developer ID qualification.",
+  "run": {
+    "exit": 101,
+    "pid": 70480,
+    "started_at": "2026-10-19T15:06:05.767006+00:00",
+    "observed_at": "2026-10-19T15:06:59.159772+00:00",
+    "work_seconds": 1840.0,
+    "cleanup_seconds": 90.0,
+    "work_deadline": "2026-10-19T15:36:45.767006+00:00",
+    "whole_deadline": "2026-10-19T15:38:15.767006+00:00",
+    "deadline_reached": false,
+    "driver_settled": true,
+    "stop_error": null
+  },
+  "dataAndEffects": "Real compiled component, input, and PTY rendering; synthetic account data and external effect ports. No live account, vendor, remote, or production claim.",
+  "inspection": "Verifier personally opened all36 originals. Lead personally opened all9 tiny originals; the other27 are SHA256-identical to originals Lead personally opened in the immediately preceding qualified36 run.",
+  "actionEvidence": [
+    {
+      "viewport": [
+        120,
+        36
+      ],
+      "receiptSha256": "b85b4c62279cf5665dee9492f9d6bb41bff15613e34cc92e2efd427886180a00",
+      "positiveImages": 9,
+      "negativeControls": 4,
+      "providerRequests": 0,
+      "stateAndSecretsUnchanged": true,
+      "childExit": 0,
+      "ownedProcessesStopped": true
+    },
+    {
+      "viewport": [
+        76,
+        30
+      ],
+      "receiptSha256": "070bdff045fe0d6df9b44cb197b3d4474fc140d3e08ffee09ea6b88681489fd3",
+      "positiveImages": 9,
+      "negativeControls": 4,
+      "providerRequests": 0,
+      "stateAndSecretsUnchanged": true,
+      "childExit": 0,
+      "ownedProcessesStopped": true
+    },
+    {
+      "viewport": [
+        48,
+        24
+      ],
+      "receiptSha256": "f7ef308cdf9b5629ec948ba0b283e0cd85a44aae27dea26cf00c4afd97229dce",
+      "positiveImages": 9,
+      "negativeControls": 4,
+      "providerRequests": 0,
+      "stateAndSecretsUnchanged": true,
+      "childExit": 0,
+      "ownedProcessesStopped": true
+    }
+  ],
+  "cleanup": {
+    "recordedPidsAbsent": 54,
+    "privateProfilesAbsent": 4,
+    "fixtureRootsAbsent": 4,
+    "normalChildExits": 4,
+    "errors": 0
+  },
+  "limits": [
+    "Whole driver failed101 at48x12 chooser OCR disclosure, despite36 exported images.",
+    "Saved-image audit found an additional OCR omission of the visible48x12 Hidden focus chevron. Both strict checks remain required, with bounded original-pixel measurement under qualification.",
+    "Lower-body scrolling, current same-process resize, all remaining Quota dialogs, long/CJK account names, credits, Sessions and actual provider/two-machine acceptance remain open.",
+    "HTML browser rendering remains unverified."
+  ],
+  "images": [
+    {
+      "file": "120x36-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "a3adec1e006a5d2be82d8c932f03024091b8c2b333b5522fb3cc1831b7982f2d",
+      "bytes": 217768,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "all",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: Delta focused, distinct Account/Status/Quota groups and stable gutter; rows wrap within frame. Other accounts below fold at medium/narrow were not scrolled.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "d2d7ff5752d32b14060169fc87e348331ea7e6535cf2e66ddc5d570283ea63e1",
+      "bytes": 160949,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "provider-no-match",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: exact query and No matching choices visible; actions/header visible. No replacement popup; other fields can lie below fold.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "55f6f20c7032e379e84bd2e578b5c562fd4809dba5843ae65fa85be3e01384b3",
+      "bytes": 157785,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "chooser",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: actual labeled uncommitted Account provider OpenAI and Disabled accounts Shown, yellow field values, Cancel/Apply and Help visible. Committed summary remains All/Shown.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "01729578c4cb5d775a6ea9a131c0d31bae26083cd2a7671cc388616d89c47ede",
+      "bytes": 219281,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "help",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Quota Help: heading, contextual filter keys, Close and scroll indicator; text wraps inside frame. Lower help rows not scrolled in this journey.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-disabled-choice.png",
+      "title": "Shown selected",
+      "sha256": "845d1dadbc24f33420104ffa746a628dd35db18d900b71af0a43e4e9355ffbca",
+      "bytes": 161147,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "disabled-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: one inline Search; Shown selected by yellow chevron. Header/actions stable.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-hidden-choice.png",
+      "title": "Move selection to Hidden",
+      "sha256": "034d40110a668d0d077e94fc2d57d75c36771b8c68a86e988e5fac16ccc0d4b8",
+      "bytes": 161223,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "hidden-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Same Account filters: Down moves yellow chevron to Hidden; Shown remains above, header/actions visible.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "0919b77b496ca85926841729e9cfcd2f0f122323a87539d962061991771c8a21",
+      "bytes": 96901,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "claude",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: committed Claude/Hidden1/4, Gamma focused, filter draft closed; stable account/status/quota groups.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "0919b77b496ca85926841729e9cfcd2f0f122323a87539d962061991771c8a21",
+      "bytes": 96901,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "cancelled",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: reopening OpenAI draft then Escape preserves Claude/Hidden1/4 and Gamma; no draft remains.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "120x36-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "d86434158a978326830422a26d15204123667230fb4e52f3e7476b249b3772fc",
+      "bytes": 148888,
+      "pixels": {
+        "width": 1226,
+        "height": 698
+      },
+      "terminalViewport": {
+        "columns": 120,
+        "rows": 36
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "details",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account details: selected Gamma, unknown/missing credential and quota windows; Help/Close and scroll indicator visible. Lower body content not traversed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x12-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "78fbe4d0d8ecd38d06704c3031711870d6d6f69730f7f121a21c83f33f8a2703",
+      "bytes": 47383,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "all",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Browse Delta focused: title/provider, Account/Status/Quota headings, gutter and top totals visible; status/quota body continues below a scrollbar. Lower fields/accounts not traversed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "a9e8539cb889c78945b27f7572b4ee52404bbf77fb77d6689955659c2839881b",
+      "bytes": 25393,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "provider-no-match",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Single Account filters dialog: focus scrolling reveals No matching choices across two body rows. Header Help, Cancel/Apply and scrollbar remain visible. Search/query are above viewport at this checkpoint.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "04a771ca7d661c572adadf9e0a87290b8a81d26a05bd23b6615232bb9a9f0e14",
+      "bytes": 34349,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "chooser",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Single Account filters dialog: both actual labeled fields OpenAI and Shown visible together, yellow focus underline on Shown, Help/Cancel/Apply visible; no decorative/current summary needed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "153dd359cfbc4e1d92fc0e52931616916372d44db838296557cfa8b80ae07b05",
+      "bytes": 25141,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "help",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Single Quota Help dialog: Account filters and first move-field instruction visible; Close and scrollbar retained. Remaining instructions below fold; actual scroll not driven here.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-disabled-choice.png",
+      "title": "Shown selected",
+      "sha256": "c3c065280ac45b322050020f45ca0e7de09e7f6966a8cd29a303e8a3e8ba3a91",
+      "bytes": 29285,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "disabled-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Same Account filters dialog: Disabled accounts Search row and focusedShown row; header Help/actions/scroll retained. Hidden offscreen until next Down.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-hidden-choice.png",
+      "title": "Move selection to Hidden",
+      "sha256": "e0cbde00c866d9c13b3164798b2a6db84f216433e3a04798eb9d645e86cccdf2",
+      "bytes": 25737,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "hidden-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Same dialog/PTY afterDown: Shown and yellow-chevronHidden visible; headerHelp/actions retained. Search row above viewport.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "21d78db281d18d1acec71489837ef868a2a9e4c3e960ff196b43b3ca9e2367b9",
+      "bytes": 48084,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "claude",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Browse: Claude/Hidden1/4 and Gamma provider visible, gutter stable; full status/quota reasons below fold not traversed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "21d78db281d18d1acec71489837ef868a2a9e4c3e960ff196b43b3ca9e2367b9",
+      "bytes": 48084,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "cancelled",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Browse after actualEscape ofOpenAIdraft: stillClaude/Hidden1/4 andGamma; no active dialog/draft.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x12-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "944ffcf8b4baa3361f5567e865289b6128440bec3219bcd6f141649ec6c9901d",
+      "bytes": 27883,
+      "pixels": {
+        "width": 514,
+        "height": 252
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 12
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "details",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "Personally opened this original",
+      "visualReview": "Single Account details dialog: Selected account and fullClaudeGamma/unknown visible in two-row body; Help/Close/scroll retained. Quota windows/reason below fold not traversed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "Original personally inspected. Input journey exited normally; automated image checks stopped at the chooser because Vision read its disclosure glyph as a bullet. Later image and negative checks were not reached. The saved Hidden-focus image also exposed an OCR omission of its visible chevron."
+    },
+    {
+      "file": "48x24-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "6e11185f336a02750dcacb798ca538f7aca6620a1014c60c74bf2ec6840bb935",
+      "bytes": 80722,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "all",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: Delta focused, distinct Account/Status/Quota groups and stable gutter; rows wrap within frame. Other accounts below fold at medium/narrow were not scrolled.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "b900f204c3591b81c58e2777b8f90b93d6a92a0e4491634d7ec45f9edae1c5f6",
+      "bytes": 67676,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "provider-no-match",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: exact query and No matching choices visible; actions/header visible. No replacement popup; other fields can lie below fold.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "12eb7fc3e6685d16d7db60a63ede93e2ac513ae2069d244181cf0a944ca37f62",
+      "bytes": 69544,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "chooser",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: actual labeled uncommitted Account provider OpenAI and Disabled accounts Shown, yellow field values, Cancel/Apply and Help visible. Committed summary remains All/Shown.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "9eb70cafc43132ace26056a7aa6b136ed6ab914085181364682fb444f2756f37",
+      "bytes": 63411,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "help",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Quota Help: heading, contextual filter keys, Close and scroll indicator; text wraps inside frame. Lower help rows not scrolled in this journey.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-disabled-choice.png",
+      "title": "Shown selected",
+      "sha256": "7c0618eb9ce81da83c552d0c64bf08b81cae4e744d6513a227817c6f142b59cc",
+      "bytes": 72767,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "disabled-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: one inline Search; Shown selected by yellow chevron. Header/actions stable.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-hidden-choice.png",
+      "title": "Move selection to Hidden",
+      "sha256": "79b7e28211e71594a39153eb9f996c331ab5ddf6191412232570be0534707fb3",
+      "bytes": 72964,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "hidden-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Same Account filters: Down moves yellow chevron to Hidden; Shown remains above, header/actions visible.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "2243c1147dfa7156ed1b7a68c6a86564d084b36072d09bafb63c7310a00130b6",
+      "bytes": 81401,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "claude",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: committed Claude/Hidden1/4, Gamma focused, filter draft closed; stable account/status/quota groups.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "2243c1147dfa7156ed1b7a68c6a86564d084b36072d09bafb63c7310a00130b6",
+      "bytes": 81401,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "cancelled",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: reopening OpenAI draft then Escape preserves Claude/Hidden1/4 and Gamma; no draft remains.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "48x24-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "175a6e7f6b61797d01bbdf767c91d424dc23aa79fbbdf59b96a8407899d0dcb0",
+      "bytes": 70344,
+      "pixels": {
+        "width": 514,
+        "height": 484
+      },
+      "terminalViewport": {
+        "columns": 48,
+        "rows": 24
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "details",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account details: selected Gamma, unknown/missing credential and quota windows; Help/Close and scroll indicator visible. Lower body content not traversed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-all.png",
+      "title": "All accounts",
+      "sha256": "ceef63385b7a08d054c64b19e84880c26e711662c051886c51036855d3bfb072",
+      "bytes": 134510,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "all",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: Delta focused, distinct Account/Status/Quota groups and stable gutter; rows wrap within frame. Other accounts below fold at medium/narrow were not scrolled.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-provider-no-match.png",
+      "title": "Provider search: no matches",
+      "sha256": "52f1a75bfc1eb7de7d1d62693033395528ef0f80067086a1d399968424a6c20f",
+      "bytes": 106102,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "provider-no-match",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: exact query and No matching choices visible; actions/header visible. No replacement popup; other fields can lie below fold.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-chooser.png",
+      "title": "Unsaved provider choice",
+      "sha256": "9269d41ff939ad6444e1b2d70aed5a70d9952b44f970c17d83e72a8acdc53912",
+      "bytes": 102203,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "chooser",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: actual labeled uncommitted Account provider OpenAI and Disabled accounts Shown, yellow field values, Cancel/Apply and Help visible. Committed summary remains All/Shown.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-help.png",
+      "title": "Contextual Help",
+      "sha256": "6cf0fc54b06cbd6eccb2187fd4770c3fc5c50f584e1c92ec5e692196edae2c8f",
+      "bytes": 113508,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Quota Help",
+      "journey": "help",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Quota Help: heading, contextual filter keys, Close and scroll indicator; text wraps inside frame. Lower help rows not scrolled in this journey.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-disabled-choice.png",
+      "title": "Shown selected",
+      "sha256": "66f7d49f0664c4b30c46c58a9d51a973a217dd3f1a1b306406bd41da9bee6219",
+      "bytes": 105411,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "disabled-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account filters: one inline Search; Shown selected by yellow chevron. Header/actions stable.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-hidden-choice.png",
+      "title": "Move selection to Hidden",
+      "sha256": "6a86a87e76661c8a7b7a0f555049f5aed861cce076029debc07c133162fe4b2b",
+      "bytes": 105705,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account filters",
+      "journey": "hidden-choice",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Same Account filters: Down moves yellow chevron to Hidden; Shown remains above, header/actions visible.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-claude.png",
+      "title": "Applied Claude filter",
+      "sha256": "50656df86c3fa21af14a5bfd288c4df2290108d8918970e3258e0a1fd4a4b8a0",
+      "bytes": 79147,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "claude",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: committed Claude/Hidden1/4, Gamma focused, filter draft closed; stable account/status/quota groups.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-cancelled.png",
+      "title": "Cancel preserves the applied filter",
+      "sha256": "50656df86c3fa21af14a5bfd288c4df2290108d8918970e3258e0a1fd4a4b8a0",
+      "bytes": 79147,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Browse",
+      "journey": "cancelled",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Browse: reopening OpenAI draft then Escape preserves Claude/Hidden1/4 and Gamma; no draft remains.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    },
+    {
+      "file": "76x30-compact-quota-details.png",
+      "title": "Selected account Details",
+      "sha256": "9fd7c63d9fa884f366fa127273d4b44eaa51b2ec83127369e80041ec6b597b0b",
+      "bytes": 96279,
+      "pixels": {
+        "width": 790,
+        "height": 582
+      },
+      "terminalViewport": {
+        "columns": 76,
+        "rows": 30
+      },
+      "screen": "Quota",
+      "dialog": "Account details",
+      "journey": "details",
+      "verifierPersonallyOpened": true,
+      "leadInspectedOriginalPixels": true,
+      "leadInspectionMethod": "SHA256-identical to the qualified36 original personally opened by Lead",
+      "visualReview": "Account details: selected Gamma, unknown/missing credential and quota windows; Help/Close and scroll indicator visible. Lower body content not traversed.",
+      "visualVerdict": "No confirmed frame overflow, nested dialog, unreadable visible account/provider or inconsistent focus color in this original. Cyan frame/title, white choices/static text, yellow focus, grey Help. Browse has header actions and no shortcut footer. Keyboard outcomes supported only for driven journey; body scroll/resize not established.",
+      "limits": "Synthetic ports/data with real compiled Quota component/input/PTY renderer. No provider, real accounts, public Sessions, resize, complete Help/Details scroll or all-dialog acceptance.",
+      "result": "This grid completed all nine image checks and four wrong-image controls, zero provider requests, unchanged fixture state/secrets, normal exit and owned cleanup."
+    }
+  ]
+}

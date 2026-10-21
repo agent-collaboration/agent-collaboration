@@ -1,0 +1,103 @@
+{
+  "kind": "Root frozen five-file narrow pace affected review; actual new PNGs still pending",
+  "baseline": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-shared-gap-remaining-two-20261020T085524Z/repository",
+  "files": [
+    {
+      "relative_path": "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "before_present": true,
+      "before": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/before/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "before_sha256": "761adc7bd52b46a461c431daf7b23d2e8d32b056c95944f304ae519af507a593",
+      "after": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/after/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "after_sha256": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9"
+    },
+    {
+      "relative_path": "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs",
+      "before_present": true,
+      "before": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/before/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs",
+      "before_sha256": "9672875d4dc1dea84425bad220a77a14b4aecb3754905be5a50757073078bd6b",
+      "after": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/after/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs",
+      "after_sha256": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f"
+    },
+    {
+      "relative_path": "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs",
+      "before_present": false,
+      "before": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/before/crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs",
+      "before_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "after": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/after/crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs",
+      "after_sha256": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+    },
+    {
+      "relative_path": "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs",
+      "before_present": true,
+      "before": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/before/crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs",
+      "before_sha256": "560c0c03a2c3166248ab4da173c5b4da0f01560e053619d98aafa3bd36a6df6d",
+      "after": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/after/crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs",
+      "after_sha256": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84"
+    },
+    {
+      "relative_path": "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs",
+      "before_present": true,
+      "before": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/before/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs",
+      "before_sha256": "74f0f17d0eac1e30f4f8de603c0f8a583c5554f726c46b4a3f35ec6e44333259",
+      "after": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/after/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs",
+      "after_sha256": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f"
+    }
+  ],
+  "diff": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/affected.diff",
+  "diff_sha256": "e9ce03ac3c0532ac0d45dc4b69ce232ea333f91453c7a6085acb7f064d4fbfea",
+  "proof": [
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-row-red.json",
+      "sha256": "448f07da8f40f5f2e20bfd38e16bd36f2ccb529ccf2f00a0225cfba2542ae1c0"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-row-red.log",
+      "sha256": "7e6b1b9bd961286891375bfed1411d81adcd6e3aea74b3031cd9287c7008afa0"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-affected-green.json",
+      "sha256": "31ff86924b806f18987f63b8084301024bfb721d396731a031389983cf771f29"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-affected-green.log",
+      "sha256": "949c3918663d453108c96fdf0f4e1db4ec18cd55fe393e6d0e0cf6e73cbe36fb"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-cli-full.json",
+      "sha256": "9979dd8d37843a7bd944a8010fda7546c64c2fb7130e72e5c787df1aef37b8bb"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-cli-full.log",
+      "sha256": "4246dfdfc0b8b1b9a636d489210bd1028cda7986a3dd0119e7fa10b103cbfd3f"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-strict-clippy.json",
+      "sha256": "21722b0f6d3d085df8ad0b3ca490f95843f9ab6823aeee4d78fad0bc8e36717c"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-strict-clippy.log",
+      "sha256": "68038d26315c529e086e316c74b89893e03ab52fb8c16053293fa5a4bbb17b21"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-format.json",
+      "sha256": "c2ab6480d0ce01eccc146d4c151b7fb5100983686f886c9bb141b746bcc981eb"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-file-size.json",
+      "sha256": "7bce2ca240ea127e6665a6bfccf69296c9e78238e571c023a222069f1b26d132"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-file-size.log",
+      "sha256": "c8fd83ad405e395cb87316dd080408b1c7277a1a45cff1bb3c1e36a51871a6b8"
+    },
+    {
+      "path": "/private/tmp/2026-10-tui-component-system/phone-pace-root-review-20261020T0923Z/evidence/c7-phone-pace-wide-frame-equivalence.json",
+      "sha256": "447eb2ec2535cced73ff0d05a5365a1cbc402f90a19936ae1a99b42badcdecd1"
+    }
+  ],
+  "limits": "Copied current source only, not clean HEAD or binary identity. Before includes separately accepted P2 helper source bridge; e873 binary itself predates that helper. No product/source mutation or new execution."
+}

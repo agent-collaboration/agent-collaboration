@@ -119,7 +119,7 @@ async fn assert_held_switch(result: SwitchResult) {
                 }
             }
             if !settled && blocked_input_sent && text.contains("Loading machine: Sunbook")
-                && text.lines().next().is_some_and(|line| line.chars().count() == 140) {
+                && canvas.width()==140 {
                 settled = true;
                 match result {
                     SwitchResult::Ready => { completion.lock().unwrap().take().unwrap().send(true).unwrap(); }
@@ -157,8 +157,8 @@ async fn assert_held_switch(result: SwitchResult) {
                 }
             } else if exiting {
                 match result {
-                    SwitchResult::Ready if text.contains("Choose machine for new session") => {
-                        assert!(text.contains("❯ Sunbook"), "NEW must preselect the committed alias");
+                    SwitchResult::Ready if text.contains("New session") => {
+                        assert!(text.lines().any(|line|line.contains("Machine")&&line.contains("Sunbook")), "NEW must preselect the committed alias");
                         sender.send(key(KeyCode::Char('c'), KeyModifiers::CONTROL)).unwrap();
                     }
                     SwitchResult::Rejected if text.contains("Machine: This machine") && text.contains("Retained original row") => {

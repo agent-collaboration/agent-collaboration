@@ -4,6 +4,7 @@ mod quota_account_options;
 mod quota_browse_rendering;
 mod quota_detail_panel;
 mod quota_dialog_actions;
+mod quota_dialog_context;
 mod quota_dialog_rendering;
 mod quota_floor_editor;
 mod quota_help_rendering;
@@ -16,6 +17,7 @@ mod quota_reset_keyboard_interaction;
 mod quota_reset_presentation_model;
 mod quota_status_component;
 mod quota_status_entrypoint;
+mod quota_status_symbols;
 mod quota_status_view_model;
 mod responsive_quota_layout;
 
@@ -46,3 +48,13 @@ pub(crate) use quota_status_view_model::ResetPaceState;
 pub(crate) use quota_status_view_model::ResetPaceViewModel;
 pub(crate) use quota_status_view_model::SampleConfidence;
 pub(crate) use quota_status_view_model::SampleMetadata;
+
+pub(crate) use quota_status_symbols::{
+    QuotaAccountStatus, QuotaFreshnessCensus, QuotaHeaderFacts, QuotaPoolCensus, QuotaRowStatus,
+};
+
+#[cfg(test)]
+mod quota_viewport_trace;
+
+#[cfg(test)]
+mod quota_frame_observation;

@@ -6,6 +6,7 @@ use crate::picker_runtime_status::PickerRecordsSnapshot;
 pub(super) enum SourceReadState {
     Loading,
     Complete { record_count: usize },
+    Partial { record_count: usize },
     Suspended { record_count: usize },
     LoadingMore { record_count: usize },
     Rejected { reason: SourceInventoryRejection },
@@ -32,6 +33,9 @@ impl SourceReadProgress {
             SourceReadState::Complete { record_count } => {
                 format!("{name}: {record_count} sessions")
             }
+            SourceReadState::Partial { record_count } => {
+                format!("{name}: {record_count} sessions; Native Claude inventory incomplete")
+            }
             SourceReadState::LoadingMore { record_count } => {
                 format!("{name}: Loading ({record_count} fetched; unfinished)")
             }
@@ -48,6 +52,7 @@ pub(super) fn all_read_notice(progress: &[SourceReadProgress]) -> Option<String>
     let mut loading = Vec::new();
     let mut unavailable = Vec::new();
     let mut unfinished = Vec::new();
+    let mut incomplete_native = Vec::new();
     for source in progress {
         match source.read_state {
             SourceReadState::Loading => loading.push(source.source_name()),
@@ -55,12 +60,15 @@ pub(super) fn all_read_notice(progress: &[SourceReadProgress]) -> Option<String>
             SourceReadState::LoadingMore { .. } | SourceReadState::Suspended { .. } => {
                 unfinished.push(source.source_name())
             }
+            SourceReadState::Partial { .. } => incomplete_native.push(source.source_name()),
             SourceReadState::Complete { .. } => {}
         }
     }
-    let partial = !unavailable.is_empty() || !unfinished.is_empty();
+    let partial =
+        !unavailable.is_empty() || !unfinished.is_empty() || !incomplete_native.is_empty();
     let mut details = Vec::new();
     for (kind, names) in [
+        ("native Claude inventory incomplete", incomplete_native),
         ("unavailable", unavailable),
         ("unfinished", unfinished),
         ("loading", loading),

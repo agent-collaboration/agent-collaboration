@@ -129,11 +129,7 @@ pub(super) fn muted_text(content: impl Into<String>) -> ResetDetailRow {
 }
 
 pub(super) fn warning_text(content: impl Into<String>) -> ResetDetailRow {
-    styled_row(content, Color::Yellow)
-}
-
-pub(super) fn accent_text(content: impl Into<String>) -> ResetDetailRow {
-    styled_row(content, Color::Cyan)
+    styled_row(content, codex_router_tui::UiTextRole::Warning.color())
 }
 
 fn styled_row(content: impl Into<String>, color: Color) -> ResetDetailRow {

@@ -256,6 +256,14 @@ impl RegistryCase {
         std::fs::create_dir(root.join("codex-home"))?;
         std::fs::write(root.join("native-pids.log"), b"")?;
         write_managed_codex_version_fixture(&root.join("managed-codex"), "1.2.3")?;
+        let bin = root.join("bin");
+        std::fs::create_dir(&bin)?;
+        let claude = bin.join("claude");
+        std::fs::write(
+            &claude,
+            "#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint('[]')\n",
+        )?;
+        std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o700))?;
         self.router = Some(PersistentRouterHealthFixture::start().await?);
         self.peer = Some(PeerObserver::start(&root)?);
         let address = self
@@ -268,6 +276,7 @@ impl RegistryCase {
                 .args(["--exact", HOST_TEST, "--nocapture"])
                 .env(HOST_ROOT_ENV, &root)
                 .env(ROUTER_ADDRESS_ENV, address.to_string())
+                .env("PATH", format!("{}:/usr/bin:/bin", bin.display()))
                 .env_remove("CODEX_FIXTURE_IGNORE_TERM")
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())

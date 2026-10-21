@@ -1,0 +1,481 @@
+{
+  "kind": "declared-immutable-product-source-and-default-proof-not-visual-acceptance",
+  "sourceHandoffSha256": "5f245f3ccffa8f6d4cce4eb2da5922b4f909c0935168099a45982700a8c05ed3",
+  "ownedSourceSnapshots": {
+    "crates/codex-router-cli/src/presentation/quota/quota_account_options_rendering.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_account_options_rendering.rs",
+      "sha256": "d6eaa50f64da3f55ba7f44dc120bff300f37da95477f01d53e7148b058f91bcc"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_account_options_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_account_options_test.rs",
+      "sha256": "f97196a02125b982cde677f39da433b98a09cfdeb2eab1173aeca70242be4e3e"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs",
+      "sha256": "203dd27bf7d0e23f6ba6b9a9abe61ce3a8f7b505e4203d61f04379b18e744aea"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_help_rendering.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_help_rendering.rs",
+      "sha256": "e489d1b3dbbd87b3298ac956b3fec7ba94961a23bcd62551304d6de67f659fe6"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_reset_presentation_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_reset_presentation_test.rs",
+      "sha256": "1265156af1c1c9ebea76fe1f2ca9fc34de853c525c62e6d5e7d8f6abdf40a461"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_storyboard_fixture_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_storyboard_fixture_test.rs",
+      "sha256": "7ef6f68d368869904270fb0ebef89763ff3a208ad98c7bce2639ad00c72349b2"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_storyboard_observation_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_storyboard_observation_test.rs",
+      "sha256": "d2ecb54796c07bdee33ea49482dee4f8d30d78526722b9a75be43bd0839dbeb7"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs",
+      "sha256": "96c7f917f269f84c0a7bdea12872475328dd921064fa69ba8617fab90059a294"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs",
+      "sha256": "1099cc641342c9ae2058d25fa68d08711a1a1034d0bb7e792df504f9acd5c64d"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_form_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_form_test.rs",
+      "sha256": "3e1bc521f2d2bbf7f449a0c255af9641e723410f3f3bcfa49c07f56336ab5c24"
+    },
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/owned-source-snapshot/crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs",
+      "sha256": "ad0313011dd7419c1d194a7c03760e7ef4535cd8e05daa0d7b7dbe249e802d47"
+    }
+  },
+  "sourceFiles": {
+    "crates/codex-router-cli/src/presentation/quota/quota_account_options_rendering.rs": "d6eaa50f64da3f55ba7f44dc120bff300f37da95477f01d53e7148b058f91bcc",
+    "crates/codex-router-cli/src/presentation/quota/quota_account_options_test.rs": "f97196a02125b982cde677f39da433b98a09cfdeb2eab1173aeca70242be4e3e",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "203dd27bf7d0e23f6ba6b9a9abe61ce3a8f7b505e4203d61f04379b18e744aea",
+    "crates/codex-router-cli/src/presentation/quota/quota_help_rendering.rs": "e489d1b3dbbd87b3298ac956b3fec7ba94961a23bcd62551304d6de67f659fe6",
+    "crates/codex-router-cli/src/presentation/quota/quota_reset_presentation_test.rs": "1265156af1c1c9ebea76fe1f2ca9fc34de853c525c62e6d5e7d8f6abdf40a461",
+    "crates/codex-router-cli/src/presentation/quota/quota_storyboard_fixture_test.rs": "7ef6f68d368869904270fb0ebef89763ff3a208ad98c7bce2639ad00c72349b2",
+    "crates/codex-router-cli/src/presentation/quota/quota_storyboard_observation_test.rs": "d2ecb54796c07bdee33ea49482dee4f8d30d78526722b9a75be43bd0839dbeb7",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "96c7f917f269f84c0a7bdea12872475328dd921064fa69ba8617fab90059a294",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "1099cc641342c9ae2058d25fa68d08711a1a1034d0bb7e792df504f9acd5c64d",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_form_test.rs": "3e1bc521f2d2bbf7f449a0c255af9641e723410f3f3bcfa49c07f56336ab5c24",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_options_entry_test.rs": "ad0313011dd7419c1d194a7c03760e7ef4535cd8e05daa0d7b7dbe249e802d47"
+  },
+  "changes": {
+    "quota_browse_rendering.rs": "Existing DialogBodyViewport opts into existing Pages keys; arrows still select accounts.",
+    "quota_help_rendering.rs": "Browse Help names PgUp/PgDn scroll account content. Full exit guard unchanged.",
+    "quota_account_options_rendering.rs": "Static panel keeps decorative tabs; interactive title/actions already own active-page identity and navigation, body starts with task fact. Pending-tab assurance unchanged.",
+    "quota_storyboard_fixture_test.rs": "Actual compiled entry deletes non-Normal unknown-age override; shared Fresh/0s seed retained, production loader contracts unchanged."
+  },
+  "quality": {
+    "path": "/Users/shravansunder/code/projects/codex-router.codex-sessions-ux-redesign/tmp/tui-implementation/c7-normal-options-final-quality.json",
+    "sha256": "0b6f40975ca48055c828ab6ea07f5972d8e3413f56d05860b4d4905325eaa94a",
+    "fullCli": {
+      "passed": 560,
+      "failed": 0,
+      "ignored": 7,
+      "targets": 11,
+      "exit": 0,
+      "seconds": 71.19
+    },
+    "strictClippyExit": 0,
+    "formatExit": 0,
+    "fileSizeExit": 0,
+    "scope": "Full/lint individual passes explicitly reused from unchanged-source failed peer-format parent; new global format/size closure; not one rerun",
+    "immutableRawCopies": {
+      "fullCliTests": {
+        "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-final-fullCliTests.log",
+        "sha256": "701bc72075d65a0fb2c8748679cbc6e2d9e8150f1c1de7805385537f3f69c8d5",
+        "actualCommand": [
+          "cargo",
+          "test",
+          "--locked",
+          "--offline",
+          "-p",
+          "codex-router-cli",
+          "--features",
+          "keychain-test-support"
+        ],
+        "exit": 0,
+        "provenance": "tmp/tui-implementation/c7-normal-options-current-quality.json"
+      },
+      "allTargetCliClippy": {
+        "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-final-allTargetCliClippy.log",
+        "sha256": "034048e28e7da79fd393be4097cd74288849ed17c9651c7916997e34dda6fd16",
+        "actualCommand": [
+          "cargo",
+          "clippy",
+          "--locked",
+          "--offline",
+          "-p",
+          "codex-router-cli",
+          "--features",
+          "keychain-test-support",
+          "--all-targets",
+          "--",
+          "-D",
+          "warnings"
+        ],
+        "exit": 0,
+        "provenance": "tmp/tui-implementation/c7-normal-options-current-quality.json"
+      },
+      "format": {
+        "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-closed-format.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "actualCommand": [
+          "cargo",
+          "fmt",
+          "--all",
+          "--",
+          "--check"
+        ],
+        "exit": 0,
+        "provenance": "new actual format/size closure"
+      },
+      "fileSize": {
+        "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-closed-fileSize.log",
+        "sha256": "fe724c535db0d43e6fdebb8baed0ca452b1b1213beb7c24c3ea9600daefe9d4a",
+        "actualCommand": [
+          "python3",
+          "scripts/tooling/check-rust-file-size.py"
+        ],
+        "exit": 0,
+        "provenance": "new actual format/size closure"
+      }
+    },
+    "failedParent": {
+      "path": "tmp/tui-implementation/c7-normal-options-current-quality.json",
+      "sha256": "3d7164f70041a751605875718a108684105315bd6d379de12b2daef10db4855e",
+      "status": "failed workspace formatting; retained unchanged"
+    }
+  },
+  "rawLogs": [
+    {
+      "purpose": "fullCliTests",
+      "presentationLog": "c7-normal-options-final-fullCliTests.log",
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-final-fullCliTests.log",
+      "sha256": "701bc72075d65a0fb2c8748679cbc6e2d9e8150f1c1de7805385537f3f69c8d5",
+      "actualCommand": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support"
+      ],
+      "exit": 0,
+      "provenance": "tmp/tui-implementation/c7-normal-options-current-quality.json"
+    },
+    {
+      "purpose": "allTargetCliClippy",
+      "presentationLog": "c7-normal-options-final-allTargetCliClippy.log",
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-final-allTargetCliClippy.log",
+      "sha256": "034048e28e7da79fd393be4097cd74288849ed17c9651c7916997e34dda6fd16",
+      "actualCommand": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "provenance": "tmp/tui-implementation/c7-normal-options-current-quality.json"
+    },
+    {
+      "purpose": "format",
+      "presentationLog": "c7-normal-options-closed-format.log",
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-closed-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "actualCommand": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit": 0,
+      "provenance": "new actual format/size closure"
+    },
+    {
+      "purpose": "fileSize",
+      "presentationLog": "c7-normal-options-closed-fileSize.log",
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/c7-normal-options-closed-fileSize.log",
+      "sha256": "fe724c535db0d43e6fdebb8baed0ca452b1b1213beb7c24c3ea9600daefe9d4a",
+      "actualCommand": [
+        "python3",
+        "scripts/tooling/check-rust-file-size.py"
+      ],
+      "exit": 0,
+      "provenance": "new actual format/size closure"
+    }
+  ],
+  "defaultArtifacts": {
+    "quota-component-libtest": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+      "sha256": "27cbcfac401131b7330c12e9e4d5ca4c2bd97797f8c6514d414681c7ff7405aa",
+      "bytes": 300956272,
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/deps/codex_router_cli-9310a2cd910a5c02",
+      "profile": {
+        "opt_level": "0",
+        "debuginfo": "line-tables-only",
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": true
+      },
+      "features": [
+        "default"
+      ],
+      "cargoFresh": true,
+      "codesignVerifyExit": 0,
+      "signature": "Compiler/linker signature only; no signing/Keychain attempted"
+    },
+    "codex-router": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/codex-router",
+      "sha256": "7c58652cf5e7258538de3353bf96bb21c1add6bd0c0a5292034eac9b2f744864",
+      "bytes": 248391328,
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/codex-router",
+      "profile": {
+        "opt_level": "0",
+        "debuginfo": "line-tables-only",
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      },
+      "features": [
+        "default"
+      ],
+      "cargoFresh": true,
+      "codesignVerifyExit": 0,
+      "signature": "Compiler/linker signature only; no signing/Keychain attempted"
+    },
+    "agent-sessions": {
+      "path": "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/agent-sessions",
+      "sha256": "93e88c177f4d5eecafeb641f8f1fb05ed2b8df1ba3c604037c4fc1ffcd14c354",
+      "bytes": 76241616,
+      "sourceExecutable": "/private/tmp/2026-10-tui-component-system/build-target/debug/agent-sessions",
+      "profile": {
+        "opt_level": "0",
+        "debuginfo": "line-tables-only",
+        "debug_assertions": true,
+        "overflow_checks": true,
+        "test": false
+      },
+      "features": [],
+      "cargoFresh": true,
+      "codesignVerifyExit": 0,
+      "signature": "Compiler/linker signature only; no signing/Keychain attempted"
+    }
+  },
+  "defaultResults": {
+    "passed": 9,
+    "failed": 0,
+    "ignored": 0,
+    "commands": [
+      {
+        "case": "normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_frame_test::normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.22,
+        "log": "tmp/tui-implementation/c7-normal-options-default-normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "5fad57181f39dedc32e7c8967539cf6292f1fb08ae9b0b6e0440f7af3f5da9e0",
+        "presentationLog": "c7-normal-options-default-normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds.log",
+        "rawLogSha256": "5fad57181f39dedc32e7c8967539cf6292f1fb08ae9b0b6e0440f7af3f5da9e0"
+      },
+      {
+        "case": "phone_inventory_keeps_complete_unchanged_last_page_caption_reachable",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_inventory_caption_test::phone_inventory_keeps_complete_unchanged_last_page_caption_reachable",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.24,
+        "log": "tmp/tui-implementation/c7-normal-options-default-phone_inventory_keeps_complete_unchanged_last_page_caption_reachable.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "fe1e984445032f0d9be6d7724aee49e147639a4ca7afe78cc05d8a720339b732",
+        "presentationLog": "c7-normal-options-default-phone_inventory_keeps_complete_unchanged_last_page_caption_reachable.log",
+        "rawLogSha256": "fe1e984445032f0d9be6d7724aee49e147639a4ca7afe78cc05d8a720339b732"
+      },
+      {
+        "case": "phone_confirmation_identity_has_continuation_and_help_returns_to_yes_without_effects",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_identity_test::phone_confirmation_identity_has_continuation_and_help_returns_to_yes_without_effects",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.28,
+        "log": "tmp/tui-implementation/c7-normal-options-default-phone_confirmation_identity_has_continuation_and_help_returns_to_yes_without_effects.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "1730e364cddd58b457b0473b43dc8f3f1c11f80b039e99793febe2b247fa7b4d",
+        "presentationLog": "c7-normal-options-default-phone_confirmation_identity_has_continuation_and_help_returns_to_yes_without_effects.log",
+        "rawLogSha256": "1730e364cddd58b457b0473b43dc8f3f1c11f80b039e99793febe2b247fa7b4d"
+      },
+      {
+        "case": "normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_and_credit_groups",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::quota_storyboard_observation_test::normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_and_credit_groups",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 1.25,
+        "log": "tmp/tui-implementation/c7-normal-options-default-normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_and_credit_groups.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "ae3cc32fe0a7f93b4e0705a7ad057fb1a015ec897633b2f47be7d43ab61f6d5d",
+        "presentationLog": "c7-normal-options-default-normal_fixture_refresh_reloads_distinct_balance_and_keeps_help_target_and_credit_groups.log",
+        "rawLogSha256": "ae3cc32fe0a7f93b4e0705a7ad057fb1a015ec897633b2f47be7d43ab61f6d5d"
+      },
+      {
+        "case": "all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_last_voucher",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_form_test::all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_last_voucher",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.89,
+        "log": "tmp/tui-implementation/c7-normal-options-default-all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_last_voucher.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "c5d8c5c25517d4d7bbba4e4641ef648df65c7b2293665a912c9c47dbd71f0ebc",
+        "presentationLog": "c7-normal-options-default-all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_last_voucher.log",
+        "rawLogSha256": "c5d8c5c25517d4d7bbba4e4641ef648df65c7b2293665a912c9c47dbd71f0ebc"
+      },
+      {
+        "case": "constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_account",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_browse_scroll_test::constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_account",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.29,
+        "log": "tmp/tui-implementation/c7-normal-options-default-constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_account.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "300ffd793dbe7a4bd6af44b3202a8ff948a08f12613774bf8a906dee8c8b7311",
+        "presentationLog": "c7-normal-options-default-constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_account.log",
+        "rawLogSha256": "300ffd793dbe7a4bd6af44b3202a8ff948a08f12613774bf8a906dee8c8b7311"
+      },
+      {
+        "case": "initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_options_entry_test::initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.47,
+        "log": "tmp/tui-implementation/c7-normal-options-default-initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "38d3f142a1d1fc34d3bcc60129ffb43ed1098c835e3e853a009c05e0e901cef1",
+        "presentationLog": "c7-normal-options-default-initial_options_pages_show_task_content_before_manual_scrolling_at_all_grids.log",
+        "rawLogSha256": "38d3f142a1d1fc34d3bcc60129ffb43ed1098c835e3e853a009c05e0e901cef1"
+      },
+      {
+        "case": "help_exit_guard_is_reachable_in_one_actual_viewport_at_all_required_grids",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_browse_scroll_test::help_exit_guard_is_reachable_in_one_actual_viewport_at_all_required_grids",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.46,
+        "log": "tmp/tui-implementation/c7-normal-options-default-help_exit_guard_is_reachable_in_one_actual_viewport_at_all_required_grids.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "42fc310d04c744e000becfd19394dbf13af68d601fa5b47adfeb1a448ab1eec7",
+        "presentationLog": "c7-normal-options-default-help_exit_guard_is_reachable_in_one_actual_viewport_at_all_required_grids.log",
+        "rawLogSha256": "42fc310d04c744e000becfd19394dbf13af68d601fa5b47adfeb1a448ab1eec7"
+      },
+      {
+        "case": "normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all_six_grids",
+        "command": [
+          "/private/tmp/2026-10-tui-component-system/product-c7-normal-options-20261020T040543Z/bin/quota-component-libtest",
+          "presentation::quota::quota_browse_presentation_test::quota_ux_clarity_test::quota_ux_browse_scroll_test::normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all_six_grids",
+          "--exact",
+          "--nocapture"
+        ],
+        "exit": 0,
+        "seconds": 0.31,
+        "log": "tmp/tui-implementation/c7-normal-options-default-normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all_six_grids.log",
+        "resultCounts": {
+          "passed": 1,
+          "failed": 0,
+          "ignored": 0
+        },
+        "logSha256": "a7da36d6bc5eed22e65d609287d42622fa6dfa27970236fdf53f9882af98bc3c",
+        "presentationLog": "c7-normal-options-default-normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all_six_grids.log",
+        "rawLogSha256": "a7da36d6bc5eed22e65d609287d42622fa6dfa27970236fdf53f9882af98bc3c"
+      }
+    ]
+  },
+  "productInputCount": 2284,
+  "productFreezeSha256": "6715ceb338bc633752ad4d762b2ec13338d9ed23b5de1af87fa90bd8b8f249b4",
+  "reviewScope": {
+    "earlierProductReview": "tmp/tui-implementation/c7-paging-options-product-handoff.json",
+    "additivePoseTest": "tmp/tui-implementation/c7-paging-options-pose-final-test-source-binding.json",
+    "actualNormalInitialAssertionAndTestVisibility": "tmp/tui-implementation/c7-normal-options-test-source-binding.json",
+    "earlierA737And4d25NotRelabeled": true
+  },
+  "independentReviewSha256": "26ffd5759255c2a70524353a49d505f2cdcf2779f6e33efaa3abd4f5f632e977",
+  "limits": [
+    "No fresh originals for component27cb target yet",
+    "Independent product source review predates separately bound additive pose/immediate-entry tests",
+    "VisualP2 awaits new target originals/independent review",
+    "Pending/error/resize/provider/device/finalreview/current-head CI remain open",
+    "Feature-enabled full560 and default9 are distinct scopes",
+    "Failed peer-format parent retained; exact individual full/lint pass plus new fmt/size closure, not one fabricated aggregate run"
+  ]
+}

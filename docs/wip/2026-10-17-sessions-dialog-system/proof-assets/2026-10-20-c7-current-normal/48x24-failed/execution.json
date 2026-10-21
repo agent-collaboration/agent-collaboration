@@ -1,0 +1,41 @@
+{
+  "start": "2026-10-20T06:10:12.026698+00:00",
+  "independent_intake_seconds": 1.1138127092272043,
+  "index": 0,
+  "grid": [
+    48,
+    24
+  ],
+  "plan": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-strict-remaining-three-20261020T060307Z/c7-current-phone-component-plan.json",
+  "plan_sha256": "3f0cefe46180d780085f3293f7959b803451e7fc0e4d212d8bfee69efc4c3a30",
+  "command": [
+    "/Users/shravansunder/.local/bin/uv",
+    "run",
+    "--offline",
+    "--no-project",
+    "--with",
+    "pydantic==2.14.1",
+    "--python",
+    "3.13",
+    "python",
+    "-B",
+    "-m",
+    "scripts.verification.tui_component_capture",
+    "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-strict-remaining-three-20261020T060307Z/c7-current-phone-component-plan.json"
+  ],
+  "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-strict-remaining-three-20261020T060307Z/repository",
+  "output": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-strict-remaining-three-20261020T060307Z/phone-first-observation",
+  "budget": {
+    "preflightSeconds": 50,
+    "workSeconds": 1870,
+    "cleanupSeconds": 90,
+    "wholeSeconds": 2010
+  },
+  "timeout": false,
+  "V_stop_requested": false,
+  "V_signals": [],
+  "wrapper_pid": 89410,
+  "exit": 1,
+  "finish": "2026-10-20T06:10:58.973887+00:00",
+  "seconds": 46.94658691715449
+}

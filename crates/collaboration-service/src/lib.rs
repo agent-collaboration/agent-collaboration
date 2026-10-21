@@ -156,6 +156,7 @@ pub use unmaterialized_thread_holder::UnmaterializedThreadHolder;
 
 mod codex_session_inventory;
 mod instruction_projection;
+mod native_claude_catalogue;
 mod provider_session_inventory;
 mod stored_inventory_observation;
 

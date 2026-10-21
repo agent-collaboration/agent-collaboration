@@ -11,6 +11,15 @@ fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
 
+fn configured_new_events() -> Vec<TerminalEvent> {
+    let mut events = vec![ctrl_key('n')];
+    events.extend((0..3).map(|_| key(KeyCode::BackTab)));
+    events.extend([key(KeyCode::Enter), key(KeyCode::Down), key(KeyCode::Enter)]);
+    events.extend((0..3).map(|_| key(KeyCode::Tab)));
+    events.push(key(KeyCode::Enter));
+    events
+}
+
 #[tokio::test]
 async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards_late_result() {
     let (finish, receive) = tokio::sync::oneshot::channel();
@@ -42,7 +51,7 @@ async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards
         while let Some(canvas) = frames.next().await {
             let text = canvas.to_string();
             if phase == 0 {
-                for event in [TerminalEvent::Resize(120,36), ctrl_key('n'), key(KeyCode::Down), key(KeyCode::Enter)] { sender.send(event).unwrap(); }
+                for event in std::iter::once(TerminalEvent::Resize(120,36)).chain(configured_new_events()) { sender.send(event).unwrap(); }
                 phase = 1;
             } else if phase == 1 && text.contains("Checking source") {
                 for event in [key(KeyCode::Enter), ctrl_key('n'), ctrl_key('f'), key(KeyCode::F(1)), key(KeyCode::Down), TerminalEvent::BracketedPaste("do-not-search".to_owned()), TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), 5, 1)), TerminalEvent::Resize(100,30)] { sender.send(event).unwrap(); }
@@ -52,7 +61,7 @@ async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards
                 assert!(!text.contains("do-not-search"));
                 sender.send(key(KeyCode::Esc)).unwrap();
                 phase = 3;
-            } else if phase == 3 && !text.contains("Checking source") && text.contains("Choose machine for new session") {
+            } else if phase == 3 && !text.contains("Checking source") && text.contains("New session") {
                 let _ = finish.take().unwrap().send(Err(SourceReadError::ReadUnavailable));
                 sender.send(ctrl_key('d')).unwrap();
                 phase = 4;
@@ -82,8 +91,7 @@ async fn source_action_component_current_prepared_new_returns_exact_captured_out
     });
     let mut outcome = Option::<SessionsPickerOutcome>::None;
     let events =
-        futures_util::stream::iter(vec![ctrl_key('n'), key(KeyCode::Down), key(KeyCode::Enter)])
-            .chain(futures_util::stream::pending());
+        futures_util::stream::iter(configured_new_events()).chain(futures_util::stream::pending());
     tokio::time::timeout(Duration::from_secs(2), async {
         let mut picker = element! { SessionsPickerComponent(request: source_model().request, source_preparer: Some(preparer), width: 120usize, height: 36usize, selected_outcome_out: &mut outcome) };
         picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events)).collect::<Vec<_>>().await;
@@ -112,7 +120,7 @@ async fn source_action_component_whole_exit_invalidates_held_preparation() {
         while let Some(canvas) = frames.next().await {
             let text = canvas.to_string();
             if !started {
-                for event in [ctrl_key('n'), key(KeyCode::Down), key(KeyCode::Enter)] { sender.send(event).unwrap(); }
+                for event in configured_new_events() { sender.send(event).unwrap(); }
                 started = true;
             } else if !checking && text.contains("Checking source") {
                 sender.send(ctrl_key('d')).unwrap();

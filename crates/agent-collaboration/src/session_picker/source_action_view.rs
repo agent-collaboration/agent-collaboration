@@ -22,7 +22,7 @@ pub(super) fn checking_dialog(
         SourceSessionAction::Fork { .. } => "Fork session",
     };
     element! {
-        DialogFrame(presentation: if model.width < 72 { DialogPresentation::FullScreen } else { DialogPresentation::Framed { maximum_width: 72, maximum_height: 12 } },
+        DialogFrame(presentation: DialogPresentation::default(),
             width: u16::try_from(model.width).unwrap_or(u16::MAX), height: u16::try_from(height).unwrap_or(u16::MAX), title: "Checking source".to_owned(),
             actions: vec![element!(DialogAction(label: "Cancel", handler: move |_| state.write().cancel_source_action())).into_any()]) {
             UiText(content: format!("{} · {action}", request.profile.name.as_str()), role: UiTextRole::Body)

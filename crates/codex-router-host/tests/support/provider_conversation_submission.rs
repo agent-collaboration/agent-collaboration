@@ -94,7 +94,7 @@ pub(crate) async fn submit_provider_load(
         operation_id: Some(request.operation_id),
         target: request.target.clone(),
         working_directory: PathBuf::from(String::from(request.working_directory)),
-        requested_by: session_actor(&request.requested_by, "load requester must be a Session")?,
+        requested_by: request.requested_by.clone(),
         approver: Some(request.approver.clone()),
         access: request.requested_policy.access,
         generation: request.generation,

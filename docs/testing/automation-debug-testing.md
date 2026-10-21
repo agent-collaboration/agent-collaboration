@@ -8,11 +8,17 @@ Run from the repository root:
 
 ```sh
 cargo build -p codex-router-cli --bin codex-router
-cargo build -p codex-router-host --example automation-debug-host
+cargo build -p codex-router-host --bin automation-debug-host
 cargo test -p agent-collaboration --test debug_luna_acceptance --no-run
 ```
 
 The last command also builds the CLI used by the agent. The live test is ignored by default and requires an explicit invocation.
+
+Use the normal binary target for a real acceptance Host. The example target shares
+its implementation but includes development dependencies and their test credential
+features; it is suitable for regression tests, not real credential observation.
+Before runtime admission, inspect Cargo's actual helper, Host, and secret-store
+artifact features and reject any test credential features.
 
 ## Start the debug Host
 
@@ -20,7 +26,7 @@ In one terminal, choose a previously unused name:
 
 ```sh
 proof_root=/tmp/luna-proof-my-check
-./target/debug/examples/automation-debug-host \
+./target/debug/automation-debug-host \
   --run-directory "$proof_root" \
   --router-binary "$PWD/target/debug/codex-router" \
   --port 18787
@@ -134,7 +140,7 @@ from `debug-host-context.json`, stop that owned Host with Ctrl-C, and relaunch
 the same binary with the explicit resume option:
 
 ```sh
-./target/debug/examples/automation-debug-host \
+./target/debug/automation-debug-host \
   --resume-run-directory "$proof_root" \
   --router-binary "$PWD/target/debug/codex-router" \
   --port 18787

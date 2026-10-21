@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-client-protocol",
  "futures-util",
@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -533,7 +533,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -961,7 +961,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -982,7 +982,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1004,7 +1004,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1024,7 +1024,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-auth"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1044,7 +1044,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-cli"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-collaboration",
  "base64 0.22.1",
@@ -1093,7 +1093,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1105,7 +1105,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "acp-client-runtime",
  "agent-automation",
@@ -1147,7 +1147,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-proxy"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "async-compression",
  "bytes",
@@ -1182,7 +1182,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "codex-router-core",
  "thiserror 2.0.18",
@@ -1190,8 +1190,10 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-reset-test-harness"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
+ "axum",
+ "base64 0.22.1",
  "codex-router-cli",
  "codex-router-core",
  "codex-router-secret-store",
@@ -1203,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1225,7 +1227,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1240,7 +1242,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1253,7 +1255,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-test-support"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "codex-native-integration",
  "codex-router-cli",
@@ -1273,7 +1275,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tui"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "futures-util",
  "iocraft",
@@ -1282,14 +1284,14 @@ dependencies = [
 
 [[package]]
 name = "codex-router-ux-prototype"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "iocraft",
 ]
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "automation-storage",
  "codex-acp-adapter",
@@ -1316,7 +1318,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-collaboration",
  "automation-storage",
@@ -1348,7 +1350,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -1367,7 +1369,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2628,7 +2630,7 @@ dependencies = [
  "tokio",
  "tokio-rustls",
  "tower-service",
- "webpki-roots 1.0.8",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -3175,7 +3177,7 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3312,7 +3314,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "chrono",
  "schemars 1.2.2",
@@ -3324,7 +3326,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4234,7 +4236,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 1.0.8",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
@@ -4452,9 +4454,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.103.15"
+version = "0.103.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+checksum = "4443b1b6d39d7c663139942cc4558262562d2c84123bb6282ef177009ca8b281"
 dependencies = [
  "ring",
  "rustls-pki-types",
@@ -4732,7 +4734,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "base64 0.22.1",
  "message-board",
@@ -5129,7 +5131,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-turso"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "chrono",
  "serde",
@@ -5144,7 +5146,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-turso-core"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "chrono",
  "either",
@@ -5167,7 +5169,7 @@ dependencies = [
 
 [[package]]
 name = "sqlx-turso-macros"
-version = "0.1.98"
+version = "0.1.99"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -6423,14 +6425,14 @@ version = "0.26.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "521bc38abb08001b01866da9f51eb7c5d647a19260e00054a8c7fd5f9e57f7a9"
 dependencies = [
- "webpki-roots 1.0.8",
+ "webpki-roots 1.0.10",
 ]
 
 [[package]]
 name = "webpki-roots"
-version = "1.0.8"
+version = "1.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf85cb06032201fa7c6f829d7db5a7e5aa45bcc0655327713065f6f0576731bf"
+checksum = "1c1c8e20c8a38fc7d65abfe74eb7280e4aa667e8eec8bc84996d2874810748d9"
 dependencies = [
  "rustls-pki-types",
 ]

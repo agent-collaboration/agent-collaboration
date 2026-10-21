@@ -85,3 +85,53 @@ fn stored_binding_uses_observed_service_and_epoch_without_requiring_live_native_
         .unwrap();
     assert!(!binding.contains(&foreign, InventoryEndpointKind::NativeCodex));
 }
+
+fn unavailable_native_claude(service: &str, endpoint_id: &str) -> Value {
+    json!({"endpoint":{"serviceId":service,"endpointId":endpoint_id},
+        "label":"Display text is not an identity", "channels":[],
+        "availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00.000Z",
+            "reason":"Managed ACP unavailable"}})
+}
+
+#[test]
+fn canonical_native_claude_membership_qualifies_without_a_managed_channel() {
+    let expected = SERVICE.to_owned().try_into().unwrap();
+    let observed = inventory(vec![unavailable_native_claude(SERVICE, "claude-local")]);
+    let binding = SourceInventoryBinding::from_inventory(&expected, &observed)
+        .expect("canonical native discovery must not depend on managed ACP");
+    assert_eq!(String::from(binding.service_id), SERVICE);
+    assert_eq!(
+        String::from(binding.service_epoch),
+        "00000000-0000-4000-8000-000000000002"
+    );
+    assert!(
+        binding.endpoints.is_empty(),
+        "no managed endpoint was advertised"
+    );
+
+    for (observed, expected_reason) in [
+        (
+            inventory(vec![unavailable_native_claude(SERVICE, "display-claude")]),
+            SourceInventoryRejection::EndpointUnqualified,
+        ),
+        (
+            inventory(vec![unavailable_native_claude(
+                "00000000-0000-4000-8000-000000000003",
+                "claude-local",
+            )]),
+            SourceInventoryRejection::InvalidInventory,
+        ),
+        (
+            inventory(vec![
+                unavailable_native_claude(SERVICE, "claude-local"),
+                unavailable_native_claude(SERVICE, "claude-local"),
+            ]),
+            SourceInventoryRejection::InvalidInventory,
+        ),
+    ] {
+        assert_eq!(
+            SourceInventoryBinding::from_inventory(&expected, &observed).unwrap_err(),
+            expected_reason
+        );
+    }
+}

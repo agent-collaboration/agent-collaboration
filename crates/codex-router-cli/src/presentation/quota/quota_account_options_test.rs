@@ -61,94 +61,6 @@ fn account_options_render_explicit_tabs_and_unchecked_observation() {
 }
 
 #[test]
-fn credit_policy_options_render_in_keyboard_selection_order() {
-    let view_model = quota_two_account_view_model();
-    let mut options = AccountOptionsState::new(&view_model.rows[0], 1);
-    options.tab = AccountOptionsTab::Credits;
-    let editing = account_options_key_action(
-        &options,
-        WorkflowPhase::Browse,
-        KeyCode::Enter,
-        KeyModifiers::empty(),
-    );
-    update_credit_policy_editor(&mut options, editing, None);
-
-    let left_action = account_options_key_action(
-        &options,
-        WorkflowPhase::Browse,
-        KeyCode::Left,
-        KeyModifiers::empty(),
-    );
-    assert_eq!(left_action, AccountOptionsKeyAction::SelectDisallow);
-    update_credit_policy_editor(&mut options, left_action, None);
-    let disallow_frame = render_account_options_panel(AccountOptionsPanelProps {
-        options: &options,
-        reset_snapshot: None,
-        reset_target: None,
-        width: 100,
-        height: 24,
-        inventory_page_start: 0,
-        spinner_tick: 0,
-    })
-    .render(None)
-    .to_string();
-    let disallow_line = disallow_frame
-        .lines()
-        .find(|line| line.contains("Usage") && line.contains("Allow") && line.contains("Disallow"))
-        .expect("editing should render both credit policies on the Usage row");
-    let disallow_position = disallow_line
-        .find("Disallow")
-        .expect("Disallow should be visible");
-    let allow_position = disallow_line
-        .find("Allow")
-        .expect("Allow should be visible");
-    let selected_position = disallow_line
-        .find('›')
-        .expect("selection marker should be visible");
-    assert!(
-        disallow_position < allow_position && selected_position < disallow_position,
-        "Left selects the visually left Disallow option, but the row was:\n{disallow_line}"
-    );
-
-    let right_action = account_options_key_action(
-        &options,
-        WorkflowPhase::Browse,
-        KeyCode::Right,
-        KeyModifiers::empty(),
-    );
-    assert_eq!(right_action, AccountOptionsKeyAction::SelectAllow);
-    update_credit_policy_editor(&mut options, right_action, None);
-    let allow_frame = render_account_options_panel(AccountOptionsPanelProps {
-        options: &options,
-        reset_snapshot: None,
-        reset_target: None,
-        width: 100,
-        height: 24,
-        inventory_page_start: 0,
-        spinner_tick: 0,
-    })
-    .render(None)
-    .to_string();
-    let allow_line = allow_frame
-        .lines()
-        .find(|line| line.contains("Usage") && line.contains("Allow") && line.contains("Disallow"))
-        .expect("editing should continue to render both credit policies");
-    let disallow_position = allow_line
-        .find("Disallow")
-        .expect("Disallow should remain visible");
-    let allow_position = allow_line
-        .find("Allow")
-        .expect("Allow should remain visible");
-    let selected_position = allow_line
-        .find('›')
-        .expect("selection marker should be visible");
-    assert!(
-        disallow_position < selected_position && selected_position < allow_position,
-        "Right selects the visually right Allow option, but the row was:\n{allow_line}"
-    );
-}
-
-#[test]
 fn account_options_inventory_pages_render_every_voucher_once() {
     use crate::quota_reset::reset_session_supervisor::ConfirmationSelection;
     use crate::quota_reset::reset_session_supervisor::LiveWeeklyDisplayFacts;
@@ -234,79 +146,6 @@ fn account_options_inventory_pages_render_every_voucher_once() {
     assert_eq!(visited, vec![1, 2, 3, 4, 5]);
 }
 
-#[test]
-fn credit_refresh_is_blocked_locally_for_disabled_or_credentialless_targets() {
-    use crate::quota_reset::reset_session_supervisor::WorkflowPhase;
-
-    let view_model = quota_two_account_view_model();
-    for (enabled, credential_generation, reason) in [
-        (
-            false,
-            Some(7),
-            CreditUsageRefreshUnavailableReason::AccountDisabled,
-        ),
-        (
-            true,
-            None,
-            CreditUsageRefreshUnavailableReason::CredentialsUnavailable,
-        ),
-    ] {
-        let mut options = AccountOptionsState::new(&view_model.rows[0], 1);
-        options.tab = AccountOptionsTab::Credits;
-        options.target.enabled = enabled;
-        options.target.credential_generation = credential_generation;
-        let action = account_options_key_action(
-            &options,
-            WorkflowPhase::Browse,
-            KeyCode::Char('r'),
-            KeyModifiers::empty(),
-        );
-
-        let command = update_credit_policy_editor(&mut options, action, None);
-
-        assert_eq!(command, None);
-        assert_eq!(
-            options.message,
-            Some(AccountOptionsMessage::RefreshUnavailable(reason))
-        );
-        let frame = render_account_options_panel(AccountOptionsPanelProps {
-            options: &options,
-            reset_snapshot: None,
-            reset_target: None,
-            width: 100,
-            height: 24,
-            inventory_page_start: 0,
-            spinner_tick: 0,
-        })
-        .render(None)
-        .to_string();
-        let message = account_options_message_text(options.message.unwrap());
-        assert!(message.contains("unavailable"));
-        assert!(frame.contains(message), "{frame}");
-    }
-
-    let mut unsupported_provider_options = AccountOptionsState::new(&view_model.rows[0], 1);
-    unsupported_provider_options.tab = AccountOptionsTab::Credits;
-    unsupported_provider_options.message = Some(AccountOptionsMessage::RefreshUnavailable(
-        CreditUsageRefreshUnavailableReason::ProviderUnsupported,
-    ));
-    let unsupported_provider_frame = render_account_options_panel(AccountOptionsPanelProps {
-        options: &unsupported_provider_options,
-        reset_snapshot: None,
-        reset_target: None,
-        width: 100,
-        height: 24,
-        inventory_page_start: 0,
-        spinner_tick: 0,
-    })
-    .render(None)
-    .to_string();
-    assert!(
-        unsupported_provider_frame.contains("OpenAI accounts only can refresh credits."),
-        "{unsupported_provider_frame}"
-    );
-}
-
 #[tokio::test]
 async fn control_c_in_credit_browsing_exits_the_component() {
     assert_credit_control_c_exits_the_component(false).await;
@@ -370,74 +209,6 @@ fn protected_reset_phases_keep_forced_keys_with_the_reset_owner() {
             options.tab = AccountOptionsTab::Credits;
         }
     }
-}
-
-#[test]
-fn credit_options_truncate_dynamic_status_and_help_inside_narrow_pane() {
-    let view_model = quota_two_account_view_model();
-    let mut options = AccountOptionsState::new(&view_model.rows[0], 1);
-    options.tab = AccountOptionsTab::Credits;
-    options.target.weekly_quota_floor_percent = 95;
-    options.target.credit_usage = crate::quota::CreditUsageStatus {
-        policy: CreditUsagePolicy::Disallow,
-        provider_observation: codex_router_core::credit_usage::CreditProviderObservation::new(
-            CreditAvailability::Unknown,
-            codex_router_core::credit_usage::CreditSpendControl::Unknown,
-            Some(codex_router_core::credit_usage::CreditProviderLimitReason::Unknown),
-        ),
-        freshness: CreditUsageFreshness::Stale,
-        age_label: "very old synthetic sample".to_owned(),
-    };
-    options.editor = Some(CreditPolicyEditorState {
-        saved_policy: CreditUsagePolicy::Disallow,
-        draft_policy: CreditUsagePolicy::Allow,
-        phase: CreditPolicyEditorPhase::SaveFailed(
-            CreditUsagePolicySaveError::StateOperationFailed,
-        ),
-        operation_generation: 2,
-    });
-    options.message = Some(AccountOptionsMessage::RefreshFailed);
-
-    let frame = render_account_options_panel(AccountOptionsPanelProps {
-        options: &options,
-        reset_snapshot: None,
-        reset_target: None,
-        width: 48,
-        height: 24,
-        inventory_page_start: 0,
-        spinner_tick: 0,
-    })
-    .render(None)
-    .to_string();
-
-    assert!(frame.contains("Weekly floor"), "{frame}");
-    assert!(frame.contains("blocks credit routing"), "{frame}");
-    assert!(frame.contains("Included quota"), "{frame}");
-    assert!(frame.contains("Provider spend-control"), "{frame}");
-    assert!(frame.contains("credit preference save failed"), "{frame}");
-    assert!(frame.contains("Credit refresh failed"), "{frame}");
-    assert!(
-        frame
-            .lines()
-            .filter(|line| {
-                line.contains("Included quota")
-                    || line.contains("Allow is limited")
-                    || line.contains("Credit refresh failed")
-            })
-            .all(|line| line.contains("… │")),
-        "long help and status rows should show truncation before the inner border:\n{frame}"
-    );
-    assert!(
-        frame
-            .lines()
-            .find(|line| line.contains("Provider spend-control"))
-            .is_some_and(|line| line.ends_with('│')),
-        "provider-control copy should end inside the inner border:\n{frame}"
-    );
-    assert!(
-        frame.lines().all(|line| line.chars().count() <= 48),
-        "account-options rows must stay within their 48-column pane:\n{frame}"
-    );
 }
 
 #[test]
@@ -592,53 +363,18 @@ async fn ctrl_r_opens_disabled_credentialless_account_and_switches_to_credits() 
             .any(|frame| frame.contains("Resets are unavailable while this account is disabled."))
     );
     assert!(frames.iter().any(|frame| frame.contains("Close")));
-    assert!(frames.iter().any(|frame| frame.contains("[ Credits ]")));
+    assert!(
+        frames
+            .iter()
+            .any(|frame| frame.contains("Options · Credits"))
+    );
     assert!(frames.iter().any(|frame| frame.contains("Credit usage")));
-}
-
-#[tokio::test]
-async fn short_quota_options_keeps_credit_policy_and_footer_visible() {
-    for width in [100usize, 48] {
-        let events = vec![
-            (TerminalEvent::Key(control_key('r')), Some("Reset credits")),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-                Some("Credit usage"),
-            ),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Save"),
-            ),
-            (TerminalEvent::Key(control_key('c')), None),
-        ];
-
-        let frames = render_account_options_component_frames(
-            quota_two_account_view_model(),
-            width,
-            24,
-            events,
-            None,
-        )
-        .await;
-
-        assert!(
-            frames.iter().any(|frame| {
-                frame.contains("Credit usage")
-                    && frame.contains("Allow")
-                    && frame.contains("Disallow")
-                    && frame.contains("Save")
-                    && frame.contains("Cancel")
-            }),
-            "a {width}x24 credits pane must keep the active setting and editor footer visible:\n{}",
-            frames.join("\n--- frame ---\n")
-        );
-    }
 }
 
 #[tokio::test]
 async fn account_options_panel_keeps_spare_height_outside_its_border() {
     let events = vec![
-        (TerminalEvent::Key(control_key('r')), Some("Reset credits")),
+        (TerminalEvent::Key(control_key('r')), Some("Inspect")),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
             Some("Credit usage"),
@@ -655,93 +391,30 @@ async fn account_options_panel_keeps_spare_height_outside_its_border() {
     .await;
     let frame = frames
         .iter()
-        .find(|frame| frame.contains("[ Credits ]") && frame.contains("Credit usage"))
+        .find(|frame| frame.contains("Options · Credits") && frame.contains("Credit usage"))
         .expect("Credits pane should render");
     let lines = frame.lines().collect::<Vec<_>>();
-    let footer_index = lines
+    let top = lines
+        .iter()
+        .position(|line| line.chars().nth(12) == Some('╭'))
+        .expect("shared percentage frame");
+    let bottom = lines
+        .iter()
+        .position(|line| line.chars().nth(12) == Some('╰'))
+        .expect("shared frame bottom");
+    let actions = lines
         .iter()
         .position(|line| line.contains("Edit") && line.contains("Close"))
-        .expect("Credits pane footer should remain visible");
-    let pane_bottom_index = lines
-        .iter()
-        .take(footer_index)
-        .enumerate()
-        .rev()
-        .find(|(_index, line)| line.contains('└'))
-        .map(|(index, _line)| index)
-        .expect("Credits pane border should close before the footer");
-
-    assert!(
-        footer_index.saturating_sub(pane_bottom_index + 1) >= 3,
-        "flexible empty space belongs outside the content-sized Credits pane:\n{frame}"
+        .expect("fixed actions");
+    assert_eq!(
+        bottom - top + 1,
+        20,
+        "60% of available34 rows, independently clamped: {frame}"
     );
-}
-
-#[tokio::test]
-async fn short_credit_editor_keeps_save_error_with_floor_and_provider_notes_visible() {
-    for width in [100usize, 48] {
-        let mut view_model = quota_two_account_view_model();
-        view_model.rows[0].weekly_quota_floor_percent = 95;
-        view_model.rows[0].credit_usage = crate::quota::CreditUsageStatus {
-            policy: CreditUsagePolicy::Disallow,
-            provider_observation: codex_router_core::credit_usage::CreditProviderObservation::new(
-                CreditAvailability::Unknown,
-                codex_router_core::credit_usage::CreditSpendControl::Unknown,
-                Some(codex_router_core::credit_usage::CreditProviderLimitReason::Unknown),
-            ),
-            freshness: CreditUsageFreshness::Stale,
-            age_label: "very old synthetic sample".to_owned(),
-        };
-        let policy_saver: CreditUsagePolicySaver = Arc::new(|_account_id, _generation, _policy| {
-            Box::pin(async { Err(CreditUsagePolicySaveError::StateOperationFailed) })
-        });
-        let events = vec![
-            (TerminalEvent::Key(control_key('r')), Some("Reset credits")),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
-                Some("Credit usage"),
-            ),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("Save"),
-            ),
-            (
-                TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-                Some("credit preference save failed"),
-            ),
-            (TerminalEvent::Key(control_key('c')), None),
-        ];
-        let frames = render_account_options_component_frames(
-            view_model,
-            width,
-            24,
-            events,
-            Some(policy_saver),
-        )
-        .await;
-        let failed_frame = frames
-            .iter()
-            .find(|frame| frame.contains("credit preference save failed"))
-            .expect("save error should remain visible at short viewport height");
-
-        for marker in [
-            "Weekly floor",
-            "blocks credit routing",
-            "Provider spend-control",
-            "Cancel",
-        ] {
-            assert!(
-                failed_frame.contains(marker),
-                "missing {marker}:\n{failed_frame}"
-            );
-        }
-        assert!(
-            failed_frame
-                .lines()
-                .all(|line| line.chars().count() <= width),
-            "a {width}x24 credit options frame must fit the enclosing terminal:\n{failed_frame}"
-        );
-    }
+    assert!(
+        top > 0 && bottom < 35 && actions > top && actions < bottom,
+        "spare physical space surrounds shared frame; actions remain inside: {frame}"
+    );
 }
 
 async fn render_account_options_component_frames(
@@ -763,11 +436,17 @@ async fn render_account_options_component_frames(
         .inspect(move |frame| {
             *observed_frame.lock().expect("frame trace lock") = frame.clone();
             for marker in [
-                "Reset credits",
+                "Inspect",
                 "Resets are unavailable",
                 "Credit usage",
                 "Save",
+                "Search:",
+                "❯ Disallow",
+                "❯ Allow",
+                "Allow",
+                "credit preference",
                 "credit preference save failed",
+                "Weekly floor",
             ] {
                 if frame.contains(marker) {
                     let _ = acknowledgement_sender.send(marker);
@@ -836,7 +515,7 @@ async fn acknowledged_event_stream_fails_when_expected_frame_is_missing() {
 
 async fn assert_credit_control_c_exits_the_component(editing: bool) {
     let mut ordered_events = vec![
-        (TerminalEvent::Key(control_key('r')), Some("Reset credits")),
+        (TerminalEvent::Key(control_key('r')), Some("Inspect")),
         (
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Tab)),
             Some("Credit usage"),
@@ -845,12 +524,12 @@ async fn assert_credit_control_c_exits_the_component(editing: bool) {
     if editing {
         ordered_events.push((
             TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter)),
-            Some("Save"),
+            Some("Search:"),
         ));
     }
     ordered_events.push((
         TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('\u{3}'))),
-        Some(if editing { "Save" } else { "Credit usage" }),
+        Some(if editing { "Search:" } else { "Credit usage" }),
     ));
 
     let (acknowledged_events, acknowledgement_sender) = acknowledged_event_stream(ordered_events);
@@ -866,7 +545,7 @@ async fn assert_credit_control_c_exits_the_component(editing: bool) {
         .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
         .map(|canvas| canvas.to_string())
         .inspect(move |frame| {
-            for marker in ["Reset credits", "Credit usage", "Save"] {
+            for marker in ["Inspect", "Credit usage", "Search:"] {
                 if frame.contains(marker) {
                     let _ = acknowledgement_sender.send(marker);
                 }
@@ -878,7 +557,9 @@ async fn assert_credit_control_c_exits_the_component(editing: bool) {
         .await
         .expect("Ctrl-C in Credits should return control to the terminal host");
     assert!(
-        frames.iter().any(|frame| frame.contains("[ Credits ]")),
+        frames
+            .iter()
+            .any(|frame| frame.contains("Options · Credits")),
         "the component should enter Credits before handling Ctrl-C"
     );
 }
@@ -892,3 +573,6 @@ fn control_key(character: char) -> KeyEvent {
 #[cfg(test)]
 #[path = "quota_account_options_paging_test.rs"]
 mod quota_account_options_paging_test;
+
+#[path = "quota_credit_presentation_test.rs"]
+mod quota_credit_presentation_test;

@@ -23,7 +23,7 @@ fn hosted_picker_keeps_equal_codex_and_provider_ids_distinct_and_provider_read_o
         "origin":"hostedProvider",
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"thread-a"},
         "workingDirectory":"/repo/project-a","updatedAt":3,
-        "state":"unloaded",
+        "state":"unloaded","requestedPolicy":{"access":"write-restricted"},
         "approver":{"kind":"human","humanId":"owner"},
         "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     }))

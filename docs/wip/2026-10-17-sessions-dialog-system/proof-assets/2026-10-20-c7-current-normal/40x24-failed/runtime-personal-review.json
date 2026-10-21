@@ -1,0 +1,1176 @@
+{
+  "kind": "Every original personally reviewed from FAILEDcurrent40x24 Normal42/11 attempt",
+  "at": "2026-10-20T05:00:01.025397+00:00",
+  "packet": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/c7-current-phone-producer-handoff.json",
+  "packet_sha256": "346f876f570d6b8fba94c04a434ff16c0498c7eb962521727280e6570c0eb3bf",
+  "source": {
+    "repository": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/repository",
+    "head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+    "current_source_holds": 2313,
+    "compiled_component_inputs": 2284,
+    "compiled_test_source": "96c7f917, separately bound additiveobserver8f11295b; runtime unchanged"
+  },
+  "build": {
+    "quota-component-libtest": "27cbcfac401131b7330c12e9e4d5ca4c2bd97797f8c6514d414681c7ff7405aa",
+    "codex-router": "7c58652cf5e7258538de3353bf96bb21c1add6bd0c0a5292034eac9b2f744864",
+    "agent-sessions": "93e88c177f4d5eecafeb641f8f1fb05ed2b8df1ba3c604037c4fc1ffcd14c354",
+    "capture-driver": "f78e76fc97ca60af83bbdbe4cc5bcf06fcc08f5629225580f726fd411c518403",
+    "verify-tui-screen": "8eb89398cebddad0a89fb247ded2fcf4e76c0b06837b3185e66ca7628f638caa",
+    "quota-reset-harness": "0e34c877bf42be9ad3321bc6d40d42e4e3d7574f791cb2462f55f568f5c02db4"
+  },
+  "execution": "tmp/tui-verification/c7-lower42-normal-job-2-execution.json",
+  "independent_cleanup": "tmp/tui-verification/c7-lower42-normal-job-2-cleanup.json",
+  "result": "FAILED: browsePASS then lowercredit namegeometryREJECT; remaining40positive/11wrong checksUNRUN; all42originals viewed; noNormalreceipt/gallery",
+  "effects": "Normalreleasedfalse/external0/persisted0,child0;7exactPIDs/groups/profileabsent;1800rawpairs independentlyhashverified;noVsignals",
+  "personal_view_count": 42,
+  "all_originals_personally_reviewed": true,
+  "blocking_findings": [
+    "Apparatus namegeometry rejects actual native40 box; correct/qualify before any continuation target. No confirmed renderedframe/action defect from these42visual observations."
+  ],
+  "cold_ux_notes": [
+    "EmptyNo-cancel returnbody+Inspectaction remains sameboundedcoldUXnote as48/32.",
+    "At40 all initialAlpha lowerfacts andfullname/gutter are visiblypresent; nativeboxfailure doesnot establish productdefect."
+  ],
+  "limits": [
+    "Oldfailed40run remainsfailed; all42exportedpictures do not supply unrun40positives/11negatives or Normalreceipt",
+    "Later48x24/76x30/120x36 outputsremainabsent; no retrylaunched",
+    "No provider/model/config/storage/production effects; pending/error/resize/Sessions/public/native/phonehardware remain open"
+  ],
+  "images": [
+    {
+      "checkpoint": "component-quota-browse",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse.png",
+      "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; At40x24 whole Account/Status/Quota headings and full selected CJK/Latin Alpha name fit in their columns; Credits62.5k/fresh,5h99%,Weeklypace and completeburnunavailable are all visible; selectedgutter andouterframe intact.",
+      "screen": "Quota",
+      "dialog": "browse",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "browse",
+      "personal_original_view": true,
+      "observation": "At40x24 whole Account/Status/Quota headings and full selected CJK/Latin Alpha name fit in their columns; Credits62.5k/fresh,5h99%,Weeklypace and completeburnunavailable are all visible; selectedgutter andouterframe intact.",
+      "automatic_image_oracle": "PASS",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-browse-credit-window",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-credit-window.png",
+      "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Same unscrolled fullAlpha/gutter+62.5k/5h99% original visibly meets the task. Native checker rejects selected-name geometry only; no missing rendered letters/facts.",
+      "screen": "Quota",
+      "dialog": "browse-credit-window",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "browse-credit-window",
+      "personal_original_view": true,
+      "observation": "Same unscrolled fullAlpha/gutter+62.5k/5h99% original visibly meets the task. Native checker rejects selected-name geometry only; no missing rendered letters/facts.",
+      "automatic_image_oracle": "REJECTED: visible selected account missing or ambiguous",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-heading",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-pace-heading.png",
+      "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Initial40 viewport already exposes Weeklypace heading and selected fullAlpha; no manual page needed.",
+      "screen": "Quota",
+      "dialog": "browse-pace-heading",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "browse-pace-heading",
+      "personal_original_view": true,
+      "observation": "Initial40 viewport already exposes Weeklypace heading and selected fullAlpha; no manual page needed.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-browse-pace-value",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-pace-value.png",
+      "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Initial40 viewport exposes complete burn unavailable andAlpha62.5k/99%, full selected identity/gutter present; no offscreen identity limitation here.",
+      "screen": "Quota",
+      "dialog": "browse-pace-value",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "browse-pace-value",
+      "personal_original_view": true,
+      "observation": "Initial40 viewport exposes complete burn unavailable andAlpha62.5k/99%, full selected identity/gutter present; no offscreen identity limitation here.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-browse-page-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-browse-page-returned.png",
+      "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Unchanged page-returned view retains fullAlpha/gutter and initial facts/frame.",
+      "screen": "Quota",
+      "dialog": "browse-page-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "browse-page-returned",
+      "personal_original_view": true,
+      "observation": "Unchanged page-returned view retains fullAlpha/gutter and initial facts/frame.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-next-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-next-account.png",
+      "sha256": "69c807d9e133f0f5fa89497c8488b8ac56864568931bac05864fbe0f62aab848",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Full Claude Research Account Beta Full Name is yellow beside its sole gutter; other columns readable.",
+      "screen": "Quota",
+      "dialog": "next-account",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "next-account",
+      "personal_original_view": true,
+      "observation": "Full Claude Research Account Beta Full Name is yellow beside its sole gutter; other columns readable.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-restored-account",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-restored-account.png",
+      "sha256": "7e3e44df8910828f7ff5c63491e3541e09bf9a31529dbac4a4169c73a2948e4d",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Full Alpha name and gutter restored; initial geometry retained.",
+      "screen": "Quota",
+      "dialog": "restored-account",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "restored-account",
+      "personal_original_view": true,
+      "observation": "Full Alpha name and gutter restored; initial geometry retained.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-details-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-details-top.png",
+      "sha256": "3b72c180de9104cdd5c4e29736f940e1022f36a6c9ee33bd772ec143c1d78801",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Account details title/Help, compact ellipsized name plus complete alpha-tag, Status available and Reason alpha detail; Close visible.",
+      "screen": "Quota",
+      "dialog": "details-top",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "details-top",
+      "personal_original_view": true,
+      "observation": "Account details title/Help, compact ellipsized name plus complete alpha-tag, Status available and Reason alpha detail; Close visible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-details-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-details-bottom.png",
+      "sha256": "b3d9b0c55a0eaa873b1f35a26fe1cd43ace7410aae524eaacc2d1d7c3e41484a",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Details bottom exposes reset2available and note alpha detail; Close remains visible.",
+      "screen": "Quota",
+      "dialog": "details-bottom",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "details-bottom",
+      "personal_original_view": true,
+      "observation": "Details bottom exposes reset2available and note alpha detail; Close remains visible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-help-top.png",
+      "sha256": "a0c586bc844d5620e4f5ccc494763ea31f508d2f6e05ab0d433d30070cdc6822",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; HelpCurrentquota/Pool census is complete through Excluded0; DataClients beginsbelow. Closefixed.",
+      "screen": "Quota",
+      "dialog": "help-top",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "help-top",
+      "personal_original_view": true,
+      "observation": "HelpCurrentquota/Pool census is complete through Excluded0; DataClients beginsbelow. Closefixed.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-help-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-help-bottom.png",
+      "sha256": "d4f1fe04e644a6a04785b3bd53f7145843125a53b3c61cf354d8b19fd8d02c85",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Full Help exitclause readable across wrappedrows with Closefixed.",
+      "screen": "Quota",
+      "dialog": "help-bottom",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "help-bottom",
+      "personal_original_view": true,
+      "observation": "Full Help exitclause readable across wrappedrows with Closefixed.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-floor-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-original.png",
+      "sha256": "793360453e7e2b03fcf7bf9695dfa8be596d742ce298ebd8a424a498690d5a6c",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Weekly floor explicitly shows Current disabled(0%) versus active Floor0%, full guidance and Cancel/Save.",
+      "screen": "Quota",
+      "dialog": "floor-original",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "floor-original",
+      "personal_original_view": true,
+      "observation": "Weekly floor explicitly shows Current disabled(0%) versus active Floor0%, full guidance and Cancel/Save.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-floor-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-draft.png",
+      "sha256": "1d6909eb1847738e7840784cf121937dd7c4d4b6e17c5415145c7abf96e3735b",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Current remains disabled(0%) while active draft Floor1%; full guidance and actions fit.",
+      "screen": "Quota",
+      "dialog": "floor-draft",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "floor-draft",
+      "personal_original_view": true,
+      "observation": "Current remains disabled(0%) while active draft Floor1%; full guidance and actions fit.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-floor-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-cancelled.png",
+      "sha256": "793360453e7e2b03fcf7bf9695dfa8be596d742ce298ebd8a424a498690d5a6c",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Cancel/reopen returns active0%.",
+      "screen": "Quota",
+      "dialog": "floor-cancelled",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "floor-cancelled",
+      "personal_original_view": true,
+      "observation": "Cancel/reopen returns active0%.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-floor-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-floor-saved.png",
+      "sha256": "2df068449c42ccc14200829f7f3e66a1f054c2dbbe27a75483f58b744384a9b1",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Current1% and active Floor1% both visible after save/reopen; clear separation from disabled/draft earlier.",
+      "screen": "Quota",
+      "dialog": "floor-saved",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "floor-saved",
+      "personal_original_view": true,
+      "observation": "Current1% and active Floor1% both visible after save/reopen; clear separation from disabled/draft earlier.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-options-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-options-identity.png",
+      "sha256": "952a8c22725d05e2182ad674cccc8e3ddd6ae5bed7ede74ff1ac48c8362ba2b6",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; UnscrolledResets initial live1-1of7/nextvoucher1/fulltitle/facts visible; saved/live mismatch notice beginsbelow, actionsfit.",
+      "screen": "Quota",
+      "dialog": "options-identity",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "options-identity",
+      "personal_original_view": true,
+      "observation": "UnscrolledResets initial live1-1of7/nextvoucher1/fulltitle/facts visible; saved/live mismatch notice beginsbelow, actionsfit.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-reset-inventory",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-inventory.png",
+      "sha256": "1005e0b25e237e28d8c14432d3ee362cc1a0d35c10a15846022f9af7fb6f2f84",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Saved count differs2resets saved7live message is fully readable; Cancel/Review visible.",
+      "screen": "Quota",
+      "dialog": "reset-inventory",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "reset-inventory",
+      "personal_original_view": true,
+      "observation": "Saved count differs2resets saved7live message is fully readable; Cancel/Review visible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-reset-last-page",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-last-page.png",
+      "sha256": "f456139a250a73e6a150622982f065daef3e789e546528c43a46a752b7cbeea2",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Final reset page contains Usablecredits7, live7-7of7, exactvoucher7ID/fulltitle; Cancel/Reviewvisible.",
+      "screen": "Quota",
+      "dialog": "reset-last-page",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "reset-last-page",
+      "personal_original_view": true,
+      "observation": "Final reset page contains Usablecredits7, live7-7of7, exactvoucher7ID/fulltitle; Cancel/Reviewvisible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-credits-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-identity.png",
+      "sha256": "61bbc4413d2452366930463b3dfa2291f61ea136952d7b222ef8d8ff828ea769",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; InitialCredits shows Fresh/Observationchecked0sago andUsecreditsDisallow; allfouractionsfitone row.",
+      "screen": "Quota",
+      "dialog": "credits-identity",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "credits-identity",
+      "personal_original_view": true,
+      "observation": "InitialCredits shows Fresh/Observationchecked0sago andUsecreditsDisallow; allfouractionsfitone row.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-credits-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-balance.png",
+      "sha256": "ed09d38a86a268b91db8bb9b6b0d0912b1160d33b5c012e8f57a784e6384f742",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Initial62,500/Fresh/checked0sago allvisible, actionsone row.",
+      "screen": "Quota",
+      "dialog": "credits-balance",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "credits-balance",
+      "personal_original_view": true,
+      "observation": "Initial62,500/Fresh/checked0sago allvisible, actionsone row.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-original",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-original.png",
+      "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Credit usage has active Disallow and explicit Weekly floor1%blockscreditrouting warning; Cancel/Save fit.",
+      "screen": "Quota",
+      "dialog": "policy-original",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-original",
+      "personal_original_view": true,
+      "observation": "Credit usage has active Disallow and explicit Weekly floor1%blockscreditrouting warning; Cancel/Save fit.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-choice",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-choice.png",
+      "sha256": "d880baaef7a58bbf04f3118cd19be8ccb5e279eb2aa1d238e8e80d59b23052e9",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Expanded choice exposes Disallow and selected Allow with yellow gutter; Cancel/Select visible.",
+      "screen": "Quota",
+      "dialog": "policy-choice",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-choice",
+      "personal_original_view": true,
+      "observation": "Expanded choice exposes Disallow and selected Allow with yellow gutter; Cancel/Select visible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-no-match",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-no-match.png",
+      "sha256": "c00150527a24040b82a853e96293b138a51825ee6571d9201d0eaebf2ed9a732",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Exact queryzznomatchzz and No matching choices visible; Select visibly disabled, Cancel enabled.",
+      "screen": "Quota",
+      "dialog": "policy-no-match",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-no-match",
+      "personal_original_view": true,
+      "observation": "Exact queryzznomatchzz and No matching choices visible; Select visibly disabled, Cancel enabled.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-choice-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-choice-returned.png",
+      "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Choice cancellation returns collapsed Disallow.",
+      "screen": "Quota",
+      "dialog": "policy-choice-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-choice-returned",
+      "personal_original_view": true,
+      "observation": "Choice cancellation returns collapsed Disallow.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-draft",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-draft.png",
+      "sha256": "06fbdeba87f4b3fa2320bb60c7e2efb13da46fba638e0afa3e810b2c5ed57978",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Collapsed unsaved Allow draft is active and Save available.",
+      "screen": "Quota",
+      "dialog": "policy-draft",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-draft",
+      "personal_original_view": true,
+      "observation": "Collapsed unsaved Allow draft is active and Save available.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-cancelled",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-cancelled.png",
+      "sha256": "6c708c921aa3454665c06150143a9d66140d2b5b18a08e4cc3e9e8fcf8a33ccf",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Cancel/reopen restores committed Disallow.",
+      "screen": "Quota",
+      "dialog": "policy-cancelled",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-cancelled",
+      "personal_original_view": true,
+      "observation": "Cancel/reopen restores committed Disallow.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-policy-saved",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-policy-saved.png",
+      "sha256": "06fbdeba87f4b3fa2320bb60c7e2efb13da46fba638e0afa3e810b2c5ed57978",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Save/reopen retains committed Allow.",
+      "screen": "Quota",
+      "dialog": "policy-saved",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "policy-saved",
+      "personal_original_view": true,
+      "observation": "Save/reopen retains committed Allow.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-refresh-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-refresh-result.png",
+      "sha256": "4e90f65079063ddf1e4d1fa2b21b7d81c88a3eead3974333acb128b855580079",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; GreenCreditbalancerefreshed plusUsecreditsAllow andfloorwarning readable, actionsone row.",
+      "screen": "Quota",
+      "dialog": "refresh-result",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "refresh-result",
+      "personal_original_view": true,
+      "observation": "GreenCreditbalancerefreshed plusUsecreditsAllow andfloorwarning readable, actionsone row.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-balance",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-balance.png",
+      "sha256": "548bc2c367b33ac27bf5c9b6fd1af18b03e2f849b50103f922cdd975d37df854",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Refreshed63,000/Fresh/checked0sago allvisible.",
+      "screen": "Quota",
+      "dialog": "credits-refreshed-balance",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "credits-refreshed-balance",
+      "personal_original_view": true,
+      "observation": "Refreshed63,000/Fresh/checked0sago allvisible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-freshness",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-freshness.png",
+      "sha256": "548bc2c367b33ac27bf5c9b6fd1af18b03e2f849b50103f922cdd975d37df854",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; FreshnessFresh with63,000 andchecked0sago in onebody.",
+      "screen": "Quota",
+      "dialog": "credits-refreshed-freshness",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "credits-refreshed-freshness",
+      "personal_original_view": true,
+      "observation": "FreshnessFresh with63,000 andchecked0sago in onebody.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-credits-refreshed-observation",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-refreshed-observation.png",
+      "sha256": "548bc2c367b33ac27bf5c9b6fd1af18b03e2f849b50103f922cdd975d37df854",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; FullObservationchecked0sago with63,000/Fresh above; no missingtext.",
+      "screen": "Quota",
+      "dialog": "credits-refreshed-observation",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "credits-refreshed-observation",
+      "personal_original_view": true,
+      "observation": "FullObservationchecked0sago with63,000/Fresh above; no missingtext.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-credits-policy-boundary",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-credits-policy-boundary.png",
+      "sha256": "2bd1aa34169f8a5958773e2c8babd524da02c4611bc70563bb4c9f50f9cd3b93",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Credit usage subsection boundary is visible with top identity/actions; selected policy value belongs to separate scenes.",
+      "screen": "Quota",
+      "dialog": "credits-policy-boundary",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "credits-policy-boundary",
+      "personal_original_view": true,
+      "observation": "Credit usage subsection boundary is visible with top identity/actions; selected policy value belongs to separate scenes.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-reset-review",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-review.png",
+      "sha256": "1005e0b25e237e28d8c14432d3ee362cc1a0d35c10a15846022f9af7fb6f2f84",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Reset review returns Options Resets; complete saved/live mismatch notice and Review visible.",
+      "screen": "Quota",
+      "dialog": "reset-review",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "reset-review",
+      "personal_original_view": true,
+      "observation": "Reset review returns Options Resets; complete saved/live mismatch notice and Review visible.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-confirm-no",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-no.png",
+      "sha256": "84085fec9ccb1c4df252ff6f6296a20bdda9ce008516de7457cf864a64140969",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Confirm reset contains exact[voucher-1]/full title/expiry, readable1credit Cannot undo warning; one No/Yes choice, only No yellow/underlined; separate Cancel/Confirm.",
+      "screen": "Quota",
+      "dialog": "confirm-no",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "confirm-no",
+      "personal_original_view": true,
+      "observation": "Confirm reset contains exact[voucher-1]/full title/expiry, readable1credit Cannot undo warning; one No/Yes choice, only No yellow/underlined; separate Cancel/Confirm.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-confirm-no-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-no-returned.png",
+      "sha256": "46a5adc5c11441673f6f42f351d43b234cd5efcd797bfbc7a5e19398e474adfe",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; After No cancellation, Options Resets displays captured tag and Close/Credits/Inspect actions; body is empty. Source Browse/no-active-target branch supplies no explanation; retain as cold-UX review note.",
+      "screen": "Quota",
+      "dialog": "confirm-no-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "confirm-no-returned",
+      "personal_original_view": true,
+      "observation": "After No cancellation, Options Resets displays captured tag and Close/Credits/Inspect actions; body is empty. Source Browse/no-active-target branch supplies no explanation; retain as cold-UX review note.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-confirm-yes",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-yes.png",
+      "sha256": "66a5fe9e1c7a55efb5cef6e67e78324729c5ef76935ec272b02bdf1ddc208a33",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Same complete voucher/expiry/risk context; only Yes yellow/underlined, No neutral; separate actions.",
+      "screen": "Quota",
+      "dialog": "confirm-yes",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "confirm-yes",
+      "personal_original_view": true,
+      "observation": "Same complete voucher/expiry/risk context; only Yes yellow/underlined, No neutral; separate actions.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-top",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-top.png",
+      "sha256": "c087bcf9ba85802ba856ca6a3a1b2fe56f66fb5a3f2dfcd68c85202321c7f34f",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; ContextualHelp top contains fullTokyoOpenAIResearchAccountAlphaLongName[alpha-tag] in associatedAccountcolumn and Close.",
+      "screen": "Quota",
+      "dialog": "confirm-help-top",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "confirm-help-top",
+      "personal_original_view": true,
+      "observation": "ContextualHelp top contains fullTokyoOpenAIResearchAccountAlphaLongName[alpha-tag] in associatedAccountcolumn and Close.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-identity",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-identity.png",
+      "sha256": "29b9057f605467f014878695f1c33e77e6ad11d1b55ca343c119853c1411c7a9",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; ScrolledHelp identity retains exactfullname/tag andCurrentquota/Pool beside labels.",
+      "screen": "Quota",
+      "dialog": "confirm-help-identity",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "confirm-help-identity",
+      "personal_original_view": true,
+      "observation": "ScrolledHelp identity retains exactfullname/tag andCurrentquota/Pool beside labels.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-confirm-help-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-confirm-help-returned.png",
+      "sha256": "66a5fe9e1c7a55efb5cef6e67e78324729c5ef76935ec272b02bdf1ddc208a33",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Returning Help preserves nondefault Yes selection and warning/actions.",
+      "screen": "Quota",
+      "dialog": "confirm-help-returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "confirm-help-returned",
+      "personal_original_view": true,
+      "observation": "Returning Help preserves nondefault Yes selection and warning/actions.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-reset-result",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result.png",
+      "sha256": "daca2146865495ef302b089e5eb1f52cf26025038a5278fecb0ac1e3501097be",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; FullSuccessresetcompleted,Providerconfirmed1quotawindowreset andOneresetcreditwasconsumed readable;Closefixed.",
+      "screen": "Quota",
+      "dialog": "reset-result",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "reset-result",
+      "personal_original_view": true,
+      "observation": "FullSuccessresetcompleted,Providerconfirmed1quotawindowreset andOneresetcreditwasconsumed readable;Closefixed.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-reset-result-bottom",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-reset-result-bottom.png",
+      "sha256": "d0876f1227fb987d3093a27b20518bc8343384feed6f4a535eef6b7c53f4b6c9",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Resultbottom has full staleuntilnormalrefresh caveat andReturntoquotastatus with Close.",
+      "screen": "Quota",
+      "dialog": "reset-result-bottom",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "reset-result-bottom",
+      "personal_original_view": true,
+      "observation": "Resultbottom has full staleuntilnormalrefresh caveat andReturntoquotastatus with Close.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    },
+    {
+      "checkpoint": "component-quota-returned",
+      "path": "/private/tmp/2026-10-tui-component-system/quota-sessions-c7-lower42-all-six-20261020T044139Z/observation-40x24/quota-component-normal-40x24/component-quota-returned.png",
+      "sha256": "4955e2bba4a4bd2b2e595d768b8151be8fe4a08e2eb4b5b96ad97fd8930bdef2",
+      "pixels": [
+        432,
+        484
+      ],
+      "cells": [
+        40,
+        24
+      ],
+      "personal_review": "Viewed exact original bytes; Returnedbrowse retains fullAlpha/gutter,83%/99% andnew63kfresh creditvalue inowncolumns.",
+      "screen": "Quota",
+      "dialog": "returned",
+      "source_build": "Exact inherited archived source/build below",
+      "viewport": {
+        "columns": 40,
+        "rows": 24
+      },
+      "journey": "returned",
+      "personal_original_view": true,
+      "observation": "Returnedbrowse retains fullAlpha/gutter,83%/99% andnew63kfresh creditvalue inowncolumns.",
+      "automatic_image_oracle": "UNRUN after first unexpected failure",
+      "result": "Personal visual observation only; actual40 Normal run FAILED",
+      "limits": "Failedcompiledsynthetic40tour; personalimageinspection cannotpromote failedrun or unrun automatic checks"
+    }
+  ],
+  "recorded_pid_count": 7
+}

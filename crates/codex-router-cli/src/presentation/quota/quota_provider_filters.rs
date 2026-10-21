@@ -48,16 +48,6 @@ impl AccountProviderFilter {
             Self::Provider(Provider::Claude) => "Claude",
         }
     }
-
-    fn moved(self, forward: bool) -> Self {
-        match (self, forward) {
-            (Self::All, true) => Self::Provider(Provider::Openai),
-            (Self::Provider(Provider::Openai), true) => Self::Provider(Provider::Claude),
-            (Self::Provider(Provider::Openai), false) => Self::All,
-            (Self::Provider(Provider::Claude), false) => Self::Provider(Provider::Openai),
-            (Self::All, false) | (Self::Provider(Provider::Claude), true) => self,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -94,10 +84,6 @@ impl QuotaAccountFilters {
         (self.provider == AccountProviderFilter::All
             || self.provider == AccountProviderFilter::Provider(row.provider))
             && (self.disabled == DisabledAccountVisibility::Shown || row.enabled)
-    }
-
-    pub(super) fn visible_count(self, rows: &[QuotaStatusAccountViewModel]) -> usize {
-        rows.iter().filter(|row| self.includes_row(row)).count()
     }
 
     pub(super) fn visible_rows(
@@ -143,11 +129,47 @@ pub(super) struct QuotaFilterState {
     pub(super) draft: Option<QuotaFilterDraft>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum QuotaFilterValue {
+    Provider(AccountProviderFilter),
+    Disabled(DisabledAccountVisibility),
+}
+
+pub(super) fn quota_filter_choices(
+    field: QuotaFilterFocus,
+) -> Vec<codex_router_tui::ChoiceOption<QuotaFilterValue>> {
+    match field {
+        QuotaFilterFocus::Provider => AccountProviderFilter::CHOICES
+            .into_iter()
+            .map(|provider| {
+                codex_router_tui::ChoiceOption::available(
+                    QuotaFilterValue::Provider(provider),
+                    provider.label(),
+                )
+            })
+            .collect(),
+        QuotaFilterFocus::Disabled => [
+            DisabledAccountVisibility::Shown,
+            DisabledAccountVisibility::Hidden,
+        ]
+        .into_iter()
+        .map(|visibility| {
+            codex_router_tui::ChoiceOption::available(
+                QuotaFilterValue::Disabled(visibility),
+                visibility.label(),
+            )
+        })
+        .collect(),
+        QuotaFilterFocus::Apply | QuotaFilterFocus::Cancel => Vec::new(),
+    }
+}
+
 #[derive(Clone, Copy)]
 pub(super) enum QuotaFilterAction {
     Open,
     Provider(AccountProviderFilter),
     ToggleDisabled,
+    Disabled(DisabledAccountVisibility),
     Apply,
     Cancel,
 }
@@ -155,6 +177,7 @@ pub(super) enum QuotaFilterAction {
 #[derive(Clone, Copy)]
 pub(super) struct QuotaFilterController {
     pub(super) state: State<QuotaFilterState>,
+    pub(super) choice: State<codex_router_tui::SearchSelectState<QuotaFilterValue>>,
     pub(super) view_model: State<QuotaStatusViewModel>,
     pub(super) focused_account_id: State<Option<AccountId>>,
 }
@@ -164,6 +187,7 @@ impl QuotaFilterController {
         let mut next = *self.state.read();
         match action {
             QuotaFilterAction::Open => {
+                self.choice.set(codex_router_tui::SearchSelectState::Closed);
                 next.draft = Some(QuotaFilterDraft {
                     filters: next.committed,
                     focus: QuotaFilterFocus::Provider,
@@ -183,6 +207,12 @@ impl QuotaFilterController {
                     draft.focus = QuotaFilterFocus::Provider;
                 }
             }
+            QuotaFilterAction::Disabled(visibility) => {
+                if let Some(draft) = next.draft.as_mut() {
+                    draft.filters.disabled = visibility;
+                    draft.focus = QuotaFilterFocus::Disabled;
+                }
+            }
             QuotaFilterAction::ToggleDisabled => {
                 if let Some(draft) = next.draft.as_mut() {
                     draft.filters.disabled = draft.filters.disabled.toggled();
@@ -193,11 +223,51 @@ impl QuotaFilterController {
         self.state.set(next);
     }
 
+    pub(super) fn open_choice(mut self, field: QuotaFilterFocus) {
+        let mut next = *self.state.read();
+        if let Some(draft) = next.draft.as_mut() {
+            draft.focus = field;
+            let value = match field {
+                QuotaFilterFocus::Provider => QuotaFilterValue::Provider(draft.filters.provider),
+                QuotaFilterFocus::Disabled => QuotaFilterValue::Disabled(draft.filters.disabled),
+                QuotaFilterFocus::Apply | QuotaFilterFocus::Cancel => return,
+            };
+            self.choice.write().open(value);
+            self.state.set(next);
+        }
+    }
+    pub(super) fn select_choice(mut self, value: QuotaFilterValue) {
+        match value {
+            QuotaFilterValue::Provider(provider) => {
+                self.dispatch(QuotaFilterAction::Provider(provider))
+            }
+            QuotaFilterValue::Disabled(visibility) => {
+                self.dispatch(QuotaFilterAction::Disabled(visibility))
+            }
+        }
+        self.choice.set(codex_router_tui::SearchSelectState::Closed);
+    }
     pub(super) fn handle_key(mut self, code: KeyCode, modifiers: KeyModifiers) -> bool {
         let Some(mut draft) = self.state.read().draft else {
             return false;
         };
+        if self.choice.read().is_open() {
+            let choices = quota_filter_choices(draft.focus);
+            let transition = self.choice.write().handle_key(code, &choices);
+            if let codex_router_tui::ChoiceTransition::Selected(value) = transition {
+                self.select_choice(value);
+            }
+            return true;
+        }
         match code {
+            KeyCode::Enter
+                if matches!(
+                    draft.focus,
+                    QuotaFilterFocus::Provider | QuotaFilterFocus::Disabled
+                ) =>
+            {
+                self.open_choice(draft.focus)
+            }
             KeyCode::Esc => self.dispatch(QuotaFilterAction::Cancel),
             KeyCode::Enter => self.dispatch(if draft.focus == QuotaFilterFocus::Cancel {
                 QuotaFilterAction::Cancel
@@ -212,15 +282,11 @@ impl QuotaFilterController {
                 next.draft = Some(draft);
                 self.state.set(next);
             }
-            KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right
-                if draft.focus == QuotaFilterFocus::Provider =>
-            {
-                self.dispatch(QuotaFilterAction::Provider(
-                    draft
-                        .filters
-                        .provider
-                        .moved(matches!(code, KeyCode::Down | KeyCode::Right)),
-                ))
+            KeyCode::Up | KeyCode::Down => {
+                draft.focus = draft.focus.moved(code == KeyCode::Up);
+                let mut next = *self.state.read();
+                next.draft = Some(draft);
+                self.state.set(next);
             }
             KeyCode::Char(' ') if draft.focus == QuotaFilterFocus::Disabled => {
                 self.dispatch(QuotaFilterAction::ToggleDisabled)

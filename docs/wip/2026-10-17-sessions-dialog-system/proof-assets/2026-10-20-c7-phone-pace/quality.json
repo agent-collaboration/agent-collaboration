@@ -1,0 +1,243 @@
+{
+  "at": "2026-10-20T09:23:10.651264+00:00",
+  "complete": true,
+  "kind": "Current bounded P3-32-1 source/test quality, not visual acceptance",
+  "sourceHashes": {
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+    "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+    "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+    "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+    "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+    "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+    "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+    "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+    "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+    "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+    "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+    "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+    "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+  },
+  "sourceCount": 17,
+  "counts": {
+    "passed": 571,
+    "failed": 0,
+    "ignored": 7,
+    "targets": 11
+  },
+  "fullCommand": [
+    "cargo",
+    "test",
+    "--locked",
+    "--offline",
+    "-p",
+    "codex-router-cli",
+    "--features",
+    "keychain-test-support"
+  ],
+  "fullRecord": {
+    "path": "/private/tmp/2026-10-tui-component-system/phone-pace-source-review-20261020T092310Z/c7-phone-pace-cli-full.json",
+    "sha256": "9979dd8d37843a7bd944a8010fda7546c64c2fb7130e72e5c787df1aef37b8bb"
+  },
+  "fullLog": {
+    "path": "/private/tmp/2026-10-tui-component-system/phone-pace-source-review-20261020T092310Z/c7-phone-pace-cli-full.log",
+    "sha256": "4246dfdfc0b8b1b9a636d489210bd1028cda7986a3dd0119e7fa10b103cbfd3f"
+  },
+  "causal": {
+    "oldRow": "1pass1fail101; both unavailable and collecting displayed words split; fullDetails/widercasepass",
+    "currentAffected": "39pass0fail0ignored exit0; includes new row/Details/wide cases plus all earlier crop/modal/Help tests"
+  },
+  "qualityGates": [
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "exit": 0,
+      "seconds": 31.587837040890008,
+      "sourceBefore": {
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+        "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+        "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+        "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+        "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+        "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+        "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+        "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+        "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+        "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+        "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+      },
+      "sourceAfter": {
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+        "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+        "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+        "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+        "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+        "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+        "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+        "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+        "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+        "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+        "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+      },
+      "psExit": 0,
+      "remainingGroup": []
+    },
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "exit": 0,
+      "seconds": 4.523641458246857,
+      "sourceBefore": {
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+        "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+        "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+        "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+        "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+        "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+        "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+        "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+        "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+        "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+        "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+      },
+      "sourceAfter": {
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+        "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+        "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+        "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+        "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+        "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+        "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+        "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+        "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+        "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+        "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+      },
+      "psExit": 0,
+      "remainingGroup": []
+    },
+    {
+      "command": [
+        "python3",
+        "scripts/tooling/check-rust-file-size.py"
+      ],
+      "exit": 0,
+      "seconds": 0.27390754176303744,
+      "sourceBefore": {
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+        "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+        "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+        "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+        "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+        "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+        "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+        "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+        "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+        "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+        "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+      },
+      "sourceAfter": {
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "8efd16610644640926c7fa591b0d8f3b257331a3ce9365098ccdd85023c8889f",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+        "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+        "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+        "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs": "4ad0c7be8ab72e0167d0079805ce7f9a9440beaec5768da38cf2b6c8ad90975f",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "cafeb8fbe018137a4556368979eb1d7e36796fdfb31c2b24c916adceca59c3b9",
+        "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+        "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+        "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+        "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+        "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+        "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+        "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+        "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_frame_test.rs": "f2cbfb5516a2aea95cf601e9b87476b525188d7515dfd8d53c92b31607223d84",
+        "crates/codex-router-cli/src/presentation/quota/quota_ux_pace_test.rs": "e53aa5fb7bfab144237ce038455dc7ee6816a674def1930b601bd5aec5e5d367"
+      },
+      "psExit": 0,
+      "remainingGroup": []
+    }
+  ],
+  "wideEquivalence": {
+    "path": "/private/tmp/2026-10-tui-component-system/phone-pace-source-review-20261020T092310Z/c7-phone-pace-wide-frame-equivalence.json",
+    "sha256": "447eb2ec2535cced73ff0d05a5365a1cbc402f90a19936ae1a99b42badcdecd1",
+    "grids": [
+      [
+        40,
+        80
+      ],
+      [
+        48,
+        80
+      ],
+      [
+        76,
+        80
+      ],
+      [
+        120,
+        80
+      ]
+    ],
+    "actualFramesByteIdentical": true
+  },
+  "detailsAndMeasuredSummaryFunctionsByteUnchanged": true,
+  "scope": "Only row presentation for compact_phone and quota_width<11 and typedUnavailable shows Unknown; groups/gutters/ratios/state/projection/fullDetails/measuredbars unchanged. Tests vary two legitimate semantic-label inputs at the real renderer boundary; no new rate-estimator claim.",
+  "limits": [
+    "Current source quality only. Fresh genuine-default artifact, new32 original/coldUX and independent affected review pending.",
+    "All older e873 image passes/failed unsupported/UNRUN outcomes retain their exact old lineage. No old artifact relabel.",
+    ">=40 evidence is actual composed mock-terminal frame byte equivalence + unchanged false branch; not fresh device/screenshots.",
+    "Root owns PR/CI/device/provider/final acceptance."
+  ]
+}

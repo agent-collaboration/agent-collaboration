@@ -1,0 +1,222 @@
+{
+  "at": "2026-10-20T08:25:39.397913+00:00",
+  "head": "62f1ed739966e67d5270bb2bfdb3611368d7838c",
+  "finding": "DENSITY-P3-F1/P2",
+  "status": "READY for SAME independent affected review; scoped helper quality complete; closure/wholeproduct acceptance belongs to Root",
+  "ownedPath": "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs",
+  "before": {
+    "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/before.rs",
+    "sha256": "2408271e4362d42495ce439bbabe1733460a49ce2f414b9e858c69474b0d90f8"
+  },
+  "after": {
+    "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/after.rs",
+    "sha256": "9672875d4dc1dea84425bad220a77a14b4aecb3754905be5a50757073078bd6b"
+  },
+  "diff": {
+    "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/affected.diff",
+    "sha256": "b8a13e43e790bcafbe9dd855ad675aba42e1410a23f42edb10c70c2966ce4445"
+  },
+  "scenarioClaims": [
+    {
+      "wrong": "Missing modal bottom borrows background Use credits/Disallow from rounded outer frame",
+      "proof": "Permanent actual_dialog_crop_rejects_missing_modal_bottom_with_background_facts; old helper causal failure, corrected rejection"
+    },
+    {
+      "wrong": "Displaced bottom is accepted despite different left column",
+      "proof": "Permanent actual_dialog_crop_rejects_mismatched_modal_bottom_with_background_facts; old helper causal failure, corrected rejection"
+    },
+    {
+      "allowed": "Proper modal crop excludes background facts",
+      "proof": "Permanent positive passes before/after"
+    },
+    {
+      "allowed": "CJK wide underlay overwrites top-left corner without changing real modal bounds",
+      "proof": "Permanent positive passes before/after; existing real76Help/Options callers included in37/0"
+    }
+  ],
+  "implementation": "Existing helper binds nearest top border horizontal run and top-right Unicode column before choosing bottom; bottom must match both independently established columns. No outer-bottom geometry inference.",
+  "lineage": {
+    "compiledNormalInputs": 2284,
+    "unchangedCompiledInputs": 2283,
+    "differences": [
+      {
+        "path": "crates/codex-router-cli/src/presentation/quota/quota_ux_clarity_test.rs",
+        "compiledSha256": "2408271e4362d42495ce439bbabe1733460a49ce2f414b9e858c69474b0d90f8",
+        "currentSha256": "9672875d4dc1dea84425bad220a77a14b4aecb3754905be5a50757073078bd6b"
+      }
+    ],
+    "other14PresentationInputsUnchanged": {
+      "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering.rs": "74f0f17d0eac1e30f4f8de603c0f8a583c5554f726c46b4a3f35ec6e44333259",
+      "crates/codex-router-cli/src/presentation/quota/quota_browse_rendering_test.rs": "d10569c6572ee570028e86300b46366751e4ba74d2c643f435d76823548e52de",
+      "crates/codex-router-cli/src/presentation/quota/quota_presentation_support_test.rs": "5a0a204c4d5fb325a7d0f80e3d48ea70d31343b78515e875d705a695a200d28c",
+      "crates/codex-router-cli/src/presentation/quota/quota_provider_filters_test.rs": "6d8d3a4825911e07c04cfaa9d03b99c0bb77b9a585f671b8a340eeedcf71ef27",
+      "crates/codex-router-cli/src/presentation/quota/quota_browse_compatibility_test.rs": "82a5fa16c9d2d383f3a5dfa6ec3512ffe6ff55948490c9d4c773aa149516815a",
+      "crates/codex-router-cli/src/presentation/quota/quota_ux_browse_scroll_test.rs": "761adc7bd52b46a461c431daf7b23d2e8d32b056c95944f304ae519af507a593",
+      "crates/codex-router-cli/src/quota/quota_status_formatting_test.rs": "ae32dbf69d2e08b7faef1542288b202cde33a80aca92a393d1bf946809fdd269",
+      "crates/codex-router-cli/src/quota/quota_test_fixtures_test.rs": "f3cb85905a396d1a36788878cf36c9e0a33b00f57a07006e2d4de7a4da62bfcd",
+      "crates/codex-router-cli/src/quota/quota_status_formatting/quota_status_value_formatting.rs": "09779f411074c38b71c8e606eb7f3608c9604fe9e0bec0b8715dcea268d50001",
+      "crates/codex-router-cli/src/quota/quota_status_json.rs": "7a7f7b27907f442bc373149f7f76ac5628e4417ccc1f00d991b064c05201df7e",
+      "crates/codex-router-cli/tests/golden/quota/browse-narrow-width-48.txt": "4a48e0215243bd478a1c19096b6c5765be5239b2f4df6c7bbbb7e9321b30adf8",
+      "crates/codex-router-cli/tests/golden/quota/browse-stacked-width-159.txt": "a3033df26b0973dc7a1264da7cfe360be5b5ee7110e7d62b26e3f6b0cebffc7d",
+      "crates/codex-router-cli/tests/golden/quota/browse-sidecar-width-160.txt": "c251c3ff7fcbb3ffb25deb3a545dece264946eec7e166cf8f4af380ff61603a9",
+      "crates/codex-router-cli/tests/golden/quota/browse-clipped-height-12.txt": "4360896fb1f4dec8e872a92c680b4aa675275dd6c1e823b1263a13318c345cd7"
+    },
+    "V25Unchanged": true,
+    "productionUnchanged": true,
+    "prior565AndDefault9PredateThisRepair": true,
+    "observedRuntimeUnchanged": "e873/cf68/93e8 captured archive; no new product binary built or claimed"
+  },
+  "executionOrder": [
+    "causalRed2passed2failed exit101/33.2015s",
+    "fixedHelper4passed0failed exit0/30.1721s before formatter",
+    "absolute rustfmt changed line wrapping only",
+    "current affected whole quota_ux_clarity_test37passed0failed0ignored exit0/31.4289s",
+    "strictClippy25s timeout/-15, preserved; immediate2transient entries then independently absent",
+    "NEW granted successor strictClippy0/8.4188s, fmt0/4.6332s, size0/.1947s with all owned groups empty"
+  ],
+  "currentChecks": [
+    {
+      "kind": "affected",
+      "exit": 0,
+      "seconds": 31.428933708928525,
+      "command": [
+        "cargo",
+        "test",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support",
+        "--lib",
+        "quota_ux_clarity_test",
+        "--",
+        "--nocapture"
+      ],
+      "record": {
+        "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-affected.json",
+        "sha256": "d5ada1d86986069cc7f41c38660d4a6d78834ee5dc8655dc94526e63a49bbc48"
+      }
+    },
+    {
+      "kind": "clippy-successor",
+      "exit": 0,
+      "seconds": 8.418758417014033,
+      "command": [
+        "cargo",
+        "clippy",
+        "--locked",
+        "--offline",
+        "-p",
+        "codex-router-cli",
+        "--features",
+        "keychain-test-support",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "record": {
+        "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-clippy-successor.json",
+        "sha256": "22c25257d3c2e4c831c2cbf9fdbda081508d7cad09d8a2b53854a93b07cd175f"
+      }
+    },
+    {
+      "kind": "format",
+      "exit": 0,
+      "seconds": 4.633243500255048,
+      "command": [
+        "cargo",
+        "fmt",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "record": {
+        "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-format.json",
+        "sha256": "fd4069fd02a0a7db370fc297212b01eb3141e217a21ccc81777e2b775a7aac05"
+      }
+    },
+    {
+      "kind": "size",
+      "exit": 0,
+      "seconds": 0.19468391593545675,
+      "command": [
+        "python3",
+        "scripts/tooling/check-rust-file-size.py"
+      ],
+      "record": {
+        "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-size.json",
+        "sha256": "8ab924e3d49aa33b7142d6fd4c10d7656d96f942b211a4cf179e066584cd96dc"
+      }
+    }
+  ],
+  "receipts": {
+    "c7-density-p3-modal-crop-red.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-red.json",
+      "sha256": "9ffe26954aeec899ed040bbbab0272e57794f0d6f29f37f7d02682b17673f928"
+    },
+    "c7-density-p3-modal-crop-red.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-red.log",
+      "sha256": "d962d9f5f36bb4b10642037c24443a71475de178ba7331afd32065b74e641b18"
+    },
+    "c7-density-p3-modal-crop-green.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-green.json",
+      "sha256": "03aa5490d664145703713be616505ba6229e3bc54faa2d835cf809f6a64607af"
+    },
+    "c7-density-p3-modal-crop-green.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-green.log",
+      "sha256": "1f0cc0b1ca272095ae09bab9f410b1beb9a147792e50346a37d6735829838db5"
+    },
+    "c7-density-p3-modal-crop-affected.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-affected.json",
+      "sha256": "d5ada1d86986069cc7f41c38660d4a6d78834ee5dc8655dc94526e63a49bbc48"
+    },
+    "c7-density-p3-modal-crop-affected.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-affected.log",
+      "sha256": "b46a7d21afd2f4bd986640d63da79a897c9e3fa26d4495b318506e4d20d38942"
+    },
+    "c7-density-p3-modal-crop-clippy.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-clippy.json",
+      "sha256": "d92994ec584a8d71c85a1803f2062cda4011215f6e857f8df150a67e4afd0ce6"
+    },
+    "c7-density-p3-modal-crop-clippy.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-clippy.log",
+      "sha256": "ca2b1fbed5771b10ab565d53aedff4e7342c6b3479b57573829af9eb68dd8109"
+    },
+    "c7-density-p3-modal-crop-clippy-cleanup.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-clippy-cleanup.json",
+      "sha256": "87971e5b7184044ec9acad3074b9857aa2cafde838f0358113288909f65b9fe6"
+    },
+    "c7-density-p3-modal-crop-clippy-successor.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-clippy-successor.json",
+      "sha256": "22c25257d3c2e4c831c2cbf9fdbda081508d7cad09d8a2b53854a93b07cd175f"
+    },
+    "c7-density-p3-modal-crop-clippy-successor.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-clippy-successor.log",
+      "sha256": "2614a62da4b130183c3c97e6e66c7608368de3adb6974ed97f7b9dbee32281ce"
+    },
+    "c7-density-p3-modal-crop-format.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-format.json",
+      "sha256": "fd4069fd02a0a7db370fc297212b01eb3141e217a21ccc81777e2b775a7aac05"
+    },
+    "c7-density-p3-modal-crop-format.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-format.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "c7-density-p3-modal-crop-size.json": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-size.json",
+      "sha256": "8ab924e3d49aa33b7142d6fd4c10d7656d96f942b211a4cf179e066584cd96dc"
+    },
+    "c7-density-p3-modal-crop-size.log": {
+      "path": "/private/tmp/2026-10-tui-component-system/modal-crop-final-review-20261020T082539Z/c7-density-p3-modal-crop-size.log",
+      "sha256": "16fb6d2916661f14384603096a002b6159490f3582d140994b78ff116add8ca6"
+    }
+  },
+  "limits": [
+    "No whole565/current default9 rerun; earlier records remain bound to earlier helper; current37 demonstrates affected helper and real modal callers.",
+    "No Main UI observation or product render change, no new provider/Host/config/network effects.",
+    "First48x24 current e873 failed known Floor oracle/noNormal remains FAILED; next48x12 observed pass independently reported by V; other grids and live/filters/device/DX/finalacceptance remain separate.",
+    "New tests validate this crop observation boundary, not production modal rendering on all devices."
+  ]
+}

@@ -593,22 +593,32 @@ pub(super) fn run_load(args: LoadArguments) -> i32 {
         Err(_) => return 3,
     };
     runtime.block_on(async move {
-        let sender = match current_session_ref(&target.endpoint.service_id, args.from.as_deref()) {
-            Ok(value) => value,
-            Err(message) => {
-                return crate::endpoint_commands::report_failure(
-                    "invalidField",
-                    &message,
-                    2,
-                    args.json,
-                );
-            }
-        };
-        let approver =
-            match parse_optional_session_ref(args.approver.as_deref(), "--approver", args.json) {
+        let sender =
+            match lifecycle::lifecycle_actor(&target.endpoint.service_id, args.from.as_deref()) {
                 Ok(value) => value,
-                Err(exit) => return exit,
+                Err(message) => {
+                    return crate::endpoint_commands::report_failure(
+                        "invalidField",
+                        &message,
+                        2,
+                        args.json,
+                    );
+                }
             };
+        let approver = match args.approver.as_deref() {
+            Some(value) => match lifecycle::lifecycle_approver(Some(value), &sender) {
+                Ok(value) => Some(value),
+                Err(message) => {
+                    return crate::endpoint_commands::report_failure(
+                        "invalidField",
+                        message,
+                        2,
+                        args.json,
+                    );
+                }
+            },
+            None => None,
+        };
         let client = match ConversationClient::connect(
             &collaboration_client::CollaborationAccess::api(&directory),
             &target.endpoint,
@@ -630,7 +640,7 @@ pub(super) fn run_load(args: LoadArguments) -> i32 {
             target: target.clone(),
             working_directory: args.cwd,
             requested_by: sender,
-            approver: approver.map(Into::into),
+            approver,
             access: match args.access {
                 ConversationAccess::WriteRestricted => RouterAccess::WriteRestricted,
                 ConversationAccess::WorkspaceWrite => RouterAccess::WorkspaceWrite,

@@ -298,6 +298,7 @@ async fn picker_explains_unavailable_live_status_and_clears_notice_after_recover
             record.runtime_status = PickerRuntimeStatus::Idle;
         }
         Ok(PickerRecordsSnapshot {
+            native_live_coverage: Vec::new(),
             records: vec![record],
             runtime_coverage: if available {
                 PickerRuntimeCoverage::Available

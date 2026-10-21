@@ -24,11 +24,20 @@ mod cleanup_test;
 mod failure_evidence;
 mod owned_capture;
 use capture_receipt::write_receipt;
-use owned_capture::{OwnedCapture, create_browser_temporary_directory, ensure_owned_child_stopped};
+use owned_capture::{
+    CapturedChildOwnership, OwnedCapture, create_browser_temporary_directory,
+    ensure_capture_running, ensure_owned_child_stopped,
+};
 mod provider_filter_capture;
 mod provider_filter_tape;
+mod quota_component_capture;
+mod quota_component_tape;
 pub(super) use provider_filter_capture::ProviderFilterJourney;
 pub(super) use provider_filter_capture::run_provider_filter_storyboard;
+pub(super) use quota_component_capture::{
+    run_component_failure_retention_control, run_first_frame_component_diagnostic,
+    run_normal_component_capture,
+};
 
 #[derive(Clone, Copy)]
 enum CapturedTuiSurface {
@@ -249,6 +258,8 @@ struct CaptureTools {
     ttyd: PathBuf,
     image_verifier: PathBuf,
     dynamic_library_path: String,
+    image_timeout: Duration,
+    stop_file: Option<PathBuf>,
 }
 
 impl CaptureTools {
@@ -258,6 +269,10 @@ impl CaptureTools {
             ttyd: required_executable("QUOTA_STORYBOARD_TTYD")?,
             image_verifier: required_executable("QUOTA_STORYBOARD_IMAGE_VERIFIER")?,
             dynamic_library_path: std::env::var("QUOTA_STORYBOARD_DYLD_LIBRARY_PATH")?,
+            image_timeout: Duration::from_secs(30),
+            stop_file: std::env::var_os("QUOTA_STORYBOARD_OUTPUT")
+                .filter(|_| std::env::var_os("QUOTA_STORYBOARD_CUA_SURFACE").is_none())
+                .map(|root| PathBuf::from(root).join("capture-stop")),
         })
     }
 
@@ -282,6 +297,10 @@ impl CaptureTools {
             encode_json_string(surface.label()),
         );
         fs::write(output.join("fixture-command.json"), configuration)?;
+        self.write_child_adapter_files(output)
+    }
+
+    fn write_child_adapter_files(&self, output: &Path) -> TestResult<()> {
         // The extracted Homebrew library retains an installed plugin directory.
         // libwebsockets also searches cwd; supply the exact same verified plugin
         // there without installing or rewriting any system library.
@@ -304,6 +323,18 @@ impl CaptureTools {
     }
 
     fn start_capture(&self, output: &Path, capability: &str) -> TestResult<OwnedCapture> {
+        self.start_capture_with_owner(
+            output,
+            CapturedChildOwnership::FixtureCapability(capability.to_owned()),
+        )
+    }
+
+    fn start_capture_with_owner(
+        &self,
+        output: &Path,
+        child_ownership: CapturedChildOwnership,
+    ) -> TestResult<OwnedCapture> {
+        ensure_capture_running(self.stop_file.as_deref())?;
         let stdout = fs::File::create(output.join("vhs.stdout"))?;
         let stderr = fs::File::create(output.join("vhs.stderr"))?;
         let browser_temporary_directory = create_browser_temporary_directory(output)?;
@@ -343,8 +374,9 @@ impl CaptureTools {
             child,
             group_released: false,
             output: output.to_path_buf(),
-            capability: capability.to_owned(),
+            child_ownership,
             browser_temporary_directory,
+            stop_file: self.stop_file.clone(),
         })
     }
 
@@ -355,10 +387,7 @@ impl CaptureTools {
         image_path: &Path,
         expect_rejection: bool,
     ) -> TestResult<()> {
-        let observation = Command::new(&self.image_verifier)
-            .arg(checkpoint)
-            .arg(image_path)
-            .output()?;
+        ensure_capture_running(self.stop_file.as_deref())?;
         let label = if expect_rejection {
             format!(
                 "reject-{checkpoint}-{}",
@@ -370,23 +399,67 @@ impl CaptureTools {
         } else {
             checkpoint.to_owned()
         };
-        fs::write(
-            output.join(format!("{label}.image-observation.json")),
-            &observation.stdout,
-        )?;
-        fs::write(
-            output.join(format!("{label}.image-observation.stderr")),
-            &observation.stderr,
-        )?;
+        let stdout_path = output.join(format!("{label}.image-observation.json"));
+        let mut child = Command::new(&self.image_verifier)
+            .arg(checkpoint)
+            .arg(image_path)
+            .stdin(std::process::Stdio::null())
+            .stdout(fs::File::create(&stdout_path)?)
+            .stderr(fs::File::create(
+                output.join(format!("{label}.image-observation.stderr")),
+            )?)
+            .spawn()?;
+        let record = fs::write(
+            output.join(format!("{label}.image-verifier.pid")),
+            child.id().to_string(),
+        );
+        if record.is_err() {
+            let termination = child.kill();
+            let settlement = child.wait();
+            termination?;
+            settlement?;
+        }
+        record?;
+        let deadline = std::time::Instant::now() + self.image_timeout;
+        let status = loop {
+            if let Err(stopped) = ensure_capture_running(self.stop_file.as_deref()) {
+                let termination = child.kill();
+                let settlement = child.wait();
+                termination?;
+                settlement?;
+                return Err(stopped);
+            }
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                result => {
+                    let termination = child.kill();
+                    let settlement = child.wait();
+                    termination?;
+                    settlement?;
+                    return match result {
+                        Err(error) => Err(error.into()),
+                        _ => Err(std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            "owned image checker exceeded its deadline; stdout/stderr retained",
+                        )
+                        .into()),
+                    };
+                }
+            }
+        };
+        let stdout = fs::read(&stdout_path)?;
         if expect_rejection {
             ensure(
-                observation.status.code() == Some(1)
-                    && String::from_utf8_lossy(&observation.stdout).contains("missingMarkers"),
+                status.code() == Some(1)
+                    && String::from_utf8_lossy(&stdout).contains("missingMarkers"),
                 "blank or wrong-scene image must fail its scene oracle, not crash or fail to launch",
             )
         } else {
             ensure(
-                observation.status.success(),
+                status.success(),
                 "saved PNG failed its independent visible-scene oracle",
             )
         }

@@ -12,7 +12,7 @@ fn provider_summary(origin: &str, id: &str, endpoint: &str) -> ProviderSessionSu
     let value = if origin == "claudeCodeInteractive" {
         serde_json::json!({"origin":origin,"target":target,"workingDirectory":"/repo/project-a","updatedAt":3,"startedAt":1,"name":id,"status":"idle","statusUpdatedAt":3,"kind":"interactive","entrypoint":"cli"})
     } else {
-        serde_json::json!({"origin":origin,"target":target,"workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction","approver":{"kind":"human","humanId":"owner"},"createdBy":target})
+        serde_json::json!({"origin":origin,"target":target,"workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},"approver":{"kind":"human","humanId":"owner"},"createdBy":target})
     };
     serde_json::from_value(value).unwrap()
 }
@@ -115,7 +115,7 @@ fn provider_filters_retain_full_identity_fall_back_and_survive_reload_during_dra
     model.replace_records(observed_records(model.request.records.clone()));
     assert_eq!(model.provider_filter, SessionProviderFilter::ClaudeCode);
     assert_eq!(
-        model.provider_filter_draft.unwrap().selection,
+        model.provider_filter_draft.as_ref().unwrap().selection,
         SessionProviderFilter::Cursor
     );
     model.apply_provider_filters();
@@ -132,8 +132,12 @@ fn provider_filters_cancel_and_modal_open_guards_preserve_focus() {
     let identity = model.focused_identity().cloned();
     model.open_provider_filters();
     let draft = model.provider_filter_draft.as_mut().unwrap();
-    draft.move_provider(1);
-    draft.move_focus(false);
+    draft.select_value(super::provider_filter_model::SessionFilterValue::Client(
+        SessionProviderFilter::Codex,
+    ));
+    for _ in 0..6 {
+        draft.move_focus(false);
+    }
     assert_eq!(draft.focus, ProviderFilterFocus::Apply);
     draft.move_focus(false);
     assert_eq!(draft.focus, ProviderFilterFocus::Cancel);
@@ -179,7 +183,12 @@ fn provider_filter_projection_rejects_ambiguous_conflicting_missing_and_wrong_en
         (
             "claudeCodeInteractive",
             vec![ProviderKind::Cursor],
-            SessionProviderFamily::Unclassified,
+            SessionProviderFamily::External(ProviderKind::ClaudeCode),
+        ),
+        (
+            "claudeCodeInteractive",
+            vec![],
+            SessionProviderFamily::External(ProviderKind::ClaudeCode),
         ),
         (
             "claudeCodeInteractive",
@@ -187,7 +196,13 @@ fn provider_filter_projection_rejects_ambiguous_conflicting_missing_and_wrong_en
             SessionProviderFamily::External(ProviderKind::ClaudeCode),
         ),
     ] {
-        let summary = provider_summary(origin, "same-id", "actual");
+        // Native discovery's canonical membership is independent of the managed channel.
+        let endpoint_id = if origin == "claudeCodeInteractive" {
+            "claude-local"
+        } else {
+            "actual"
+        };
+        let summary = provider_summary(origin, "same-id", endpoint_id);
         let endpoint = description(&summary, &kinds);
         let record = SessionPickerRecord::from_provider_summary(&summary, "Misleading label")
             .with_provider_endpoint(&summary, &endpoint);
@@ -212,4 +227,71 @@ fn provider_filter_projection_rejects_ambiguous_conflicting_missing_and_wrong_en
         native.client_provider_family(),
         SessionProviderFamily::Codex
     );
+}
+
+#[test]
+fn filter_query_draft_apply_and_cancel_keep_client_family_separate_from_backend_provider() {
+    use super::provider_filter_model::SessionFilterValue;
+    use crate::sessions::{SessionsProvider, SessionsSort, SessionsSource};
+    let mut model = SessionsPickerModel::new(mixed_request(), 120);
+    let original = model.data_query();
+    model.open_provider_filters();
+    let draft = model.provider_filter_draft.as_mut().unwrap();
+    draft.select_value(SessionFilterValue::Client(SessionProviderFilter::Codex));
+    draft.select_value(SessionFilterValue::Folder(super::SessionsPickerRoot::Cwd));
+    draft.select_value(SessionFilterValue::ModelProvider(SessionsProvider::Id(
+        "claude".to_owned(),
+    )));
+    draft.select_value(SessionFilterValue::Source(SessionsSource::Interactive));
+    draft.select_value(SessionFilterValue::Sort(SessionsSort::Created));
+    assert_eq!(
+        model.data_query(),
+        original,
+        "unapplied draft cannot change loader query"
+    );
+    model.provider_filter_draft = None;
+    assert_eq!(model.data_query(), original, "Cancel is atomic");
+    model.open_provider_filters();
+    let draft = model.provider_filter_draft.as_mut().unwrap();
+    draft.select_value(SessionFilterValue::Client(SessionProviderFilter::Codex));
+    draft.select_value(SessionFilterValue::ModelProvider(SessionsProvider::Id(
+        "claude".to_owned(),
+    )));
+    model.apply_provider_filters();
+    assert_eq!(model.provider_filter, SessionProviderFilter::Codex);
+    assert_eq!(
+        model.data_query().provider,
+        SessionsProvider::Id("claude".to_owned())
+    );
+    assert_eq!(visible_ids(&model), ["native-a"]);
+}
+
+#[test]
+fn configured_filter_choices_explain_unavailability_without_rewriting_query() {
+    use super::provider_filter_model::{SessionFilterValue, filter_choices};
+    use codex_router_tui::ChoiceAvailability;
+    let mut model = super::source_action_tests::source_model();
+    let crate::sessions::RouterRegistryRead::Ready(registry) = &model.request.router_registry
+    else {
+        panic!("fixture")
+    };
+    model.machine_controls.filter = super::picker_machine_controls::PickerMachineFilter::Single {
+        source: Box::new(super::PickerSourceContext::ConfiguredHosted(
+            registry.routers[0].clone(),
+        )),
+    };
+    let original = model.data_query();
+    let choices = filter_choices(&model, ProviderFilterFocus::Folder);
+    for choice in choices {
+        if !matches!(
+            choice.key,
+            SessionFilterValue::Folder(super::SessionsPickerRoot::Any)
+        ) {
+            assert!(matches!(
+                choice.availability,
+                ChoiceAvailability::Unavailable { .. }
+            ));
+        }
+    }
+    assert_eq!(model.data_query(), original);
 }

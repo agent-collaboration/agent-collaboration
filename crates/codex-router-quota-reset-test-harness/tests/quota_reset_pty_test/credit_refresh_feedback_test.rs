@@ -51,7 +51,7 @@ async fn compiled_credit_refresh_reports_focused_responses_failure_despite_parti
     let credits_tab_start = terminal.transcript_len();
     terminal.send(b"\t")?;
     stage(
-        terminal.wait_for_text_after("[ Credits ]", credits_tab_start, SEMANTIC_WAIT),
+        terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "partial-refresh tab cancellation acknowledgement",
     )?;
     provider.release_get_responses()?;
@@ -175,7 +175,7 @@ async fn compiled_pending_refresh_tab_can_return_to_browse_and_exit_before_provi
     let credits_tab_start = terminal.transcript_len();
     terminal.send(b"\t")?;
     stage(
-        terminal.wait_for_text_after("[ Credits ]", credits_tab_start, SEMANTIC_WAIT),
+        terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "initial switch to Credits",
     )?;
 
@@ -277,7 +277,7 @@ async fn compiled_disabled_account_refresh_reports_unavailable_without_provider_
     let credits_tab_start = terminal.transcript_len();
     terminal.send(b"\t")?;
     stage(
-        terminal.wait_for_text_after("[ Credits ]", credits_tab_start, SEMANTIC_WAIT),
+        terminal.wait_for_text_after("Options · Credits", credits_tab_start, SEMANTIC_WAIT),
         "disabled-account tab switch acknowledgement",
     )?;
     let refresh_start = terminal.transcript_len();

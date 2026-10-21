@@ -1,0 +1,63 @@
+[
+  {
+    "name": "focused",
+    "command": [
+      "cargo",
+      "test",
+      "--locked",
+      "--offline",
+      "-p",
+      "codex-router-cli",
+      "--lib",
+      "supported_page_sequences_match_end_back_pose_and_exact_home_return",
+      "--",
+      "--nocapture"
+    ],
+    "exit": 0,
+    "seconds": 30.293940583243966,
+    "log": "tmp/tui-implementation/c7-supported-page-current-focused.log"
+  },
+  {
+    "name": "lint",
+    "command": [
+      "cargo",
+      "clippy",
+      "--locked",
+      "--offline",
+      "-p",
+      "codex-router-cli",
+      "--features",
+      "keychain-test-support",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit": 0,
+    "seconds": 8.56875287508592,
+    "log": "tmp/tui-implementation/c7-supported-page-current-lint.log"
+  },
+  {
+    "name": "format",
+    "command": [
+      "cargo",
+      "fmt",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "exit": 0,
+    "seconds": 4.641337709035724,
+    "log": "tmp/tui-implementation/c7-supported-page-current-format.log"
+  },
+  {
+    "name": "size",
+    "command": [
+      "python3",
+      "scripts/tooling/check-rust-file-size.py"
+    ],
+    "exit": 0,
+    "seconds": 0.15973570756614208,
+    "log": "tmp/tui-implementation/c7-supported-page-current-size.log"
+  }
+]

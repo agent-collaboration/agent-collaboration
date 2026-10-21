@@ -15,6 +15,7 @@ pub(crate) type QuotaStatusViewModelLoadFuture =
 pub(crate) struct QuotaStatusViewModel {
     pub(crate) width: usize,
     pub(crate) route_line: String,
+    pub(crate) header: super::quota_status_symbols::QuotaHeaderFacts,
     pub(crate) why_line: String,
     pub(crate) pool_freshness_summary: String,
     pub(crate) selection_projection_degraded: bool,
@@ -32,7 +33,7 @@ pub(crate) struct QuotaStatusAccountViewModel {
     pub(crate) enabled: bool,
     pub(crate) selected: bool,
     pub(crate) account: String,
-    pub(crate) status: String,
+    pub(crate) status: super::quota_status_symbols::QuotaRowStatus,
     pub(crate) active_clients: String,
     pub(crate) reset_credits: String,
     pub(crate) credit_usage_summary: String,

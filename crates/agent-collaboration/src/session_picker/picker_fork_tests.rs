@@ -38,9 +38,8 @@ fn review_fork_destination_aliases_use_captured_service_not_display_label() {
         captured.destinations[1].availability,
         ForkAvailability::HistoryRemainsOnSource
     );
-    assert_eq!(
-        captured.selection.identity,
-        SessionPickerIdentity::HostedCodex(target)
+    assert!(
+        matches!(&captured.launch_target, crate::presentation::session_picker::picker_fork_confirmation::ForkLaunchTarget::Codex(selection) if selection.identity==SessionPickerIdentity::HostedCodex(target))
     );
     assert!(captured.confirm().is_none());
     captured.move_destination(1);
@@ -139,12 +138,12 @@ async fn fork_confirmation_displays_actual_override_and_returns_frozen_selection
     request.records[0].reasoning_effort = Some("high".to_owned());
     let expected = SessionActionSelection::from_picker_record(&request.records[0]);
     let (frames, outcome) = after_popup(request, vec![key(KeyCode::Enter)]).await;
-    assert!(
-        frames
-            .iter()
-            .any(|frame| frame.contains("Working directory: /explicit/fork")
-                && frame.contains("explicit native argument"))
-    );
+    assert!(frames.iter().any(|frame| {
+        frame
+            .lines()
+            .any(|line| line.contains("Directory") && line.contains("/explicit/fork"))
+            && frame.contains("explicit native argument")
+    }));
     let Some(SessionsPickerOutcome::ForkSession(selection)) = outcome else {
         panic!("confirmed native source should fork")
     };
@@ -186,9 +185,12 @@ async fn fork_popup_blocks_other_machine_and_does_not_leak_main_shortcuts() {
             .iter()
             .all(|frame| !frame.contains("Search: [x]") && !frame.contains("Choose machine"))
     );
-    assert!(frames.iter().any(
-        |frame| frame.contains("Source: This machine") && frame.contains("invoking directory")
-    ));
+    assert!(frames.iter().any(|frame| {
+        frame
+            .lines()
+            .any(|line| line.contains("Source") && line.contains("This machine"))
+            && frame.contains("invoking directory")
+    }));
 }
 
 #[tokio::test]
@@ -220,14 +222,25 @@ fn fork_source_survives_refresh_with_equal_native_id_and_changed_metadata() {
     model.replace_records(observed_records(vec![replacement]));
     let confirmation = model.fork_confirmation.as_mut().unwrap();
     assert_eq!(confirmation, &captured);
-    let Some(SessionsPickerOutcome::ForkSession(selection)) = confirmation.confirm() else {
+    let Some(
+        crate::presentation::session_picker::picker_fork_confirmation::ForkLaunchTarget::Codex(
+            selection,
+        ),
+    ) = confirmation.confirm()
+    else {
         panic!("captured default source remains eligible")
     };
     assert_eq!(
         selection.identity,
         SessionPickerIdentity::HostedCodex(target)
     );
-    assert_eq!(selection.model_choice, captured.selection.model_choice);
+    let crate::presentation::session_picker::picker_fork_confirmation::ForkLaunchTarget::Codex(
+        captured_selection,
+    ) = captured.launch_target
+    else {
+        panic!("captured Codex fork")
+    };
+    assert_eq!(selection.model_choice, captured_selection.model_choice);
     assert_eq!(model.data_query(), query);
 }
 
@@ -242,9 +255,13 @@ async fn unqualified_source_fork_displays_source_directory_and_never_falls_back(
     request.records[0].cwd = Some("/source/fork-directory".to_owned());
     let (frames, outcome) = after_popup(request, vec![key(KeyCode::Enter), ctrl_key('d')]).await;
     assert_eq!(outcome, None);
-    assert!(frames.iter().any(|frame| frame.contains("Source: Sunbook")
-        && frame.contains("/source/fork-directory")
-        && frame.contains("source session")));
+    assert!(frames.iter().any(|frame| {
+        frame
+            .lines()
+            .any(|line| line.contains("Source") && line.contains("Sunbook"))
+            && frame.contains("/source/fork-directory")
+            && frame.contains("source session")
+    }));
     assert!(
         frames
             .iter()
@@ -257,7 +274,7 @@ async fn provider_fork_opens_an_explanation_without_a_native_action() {
     let summary = serde_json::from_value(json!({
         "origin":"hostedProvider",
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"provider-one"},
-        "workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction",
+        "workingDirectory":"/repo/project-a","updatedAt":3,"state":"requiresAction","requestedPolicy":{"access":"write-restricted"},
         "approver":{"kind":"human","humanId":"owner"},
         "createdBy":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"}
     })).unwrap();

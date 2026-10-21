@@ -1,14 +1,5 @@
-use crate::DialogInputScope;
+use crate::{DialogBodyViewport, DialogInputScope, DialogPresentation, UseDialogInteraction};
 use iocraft::prelude::*;
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum DialogPresentation {
-    FullScreen,
-    Framed {
-        maximum_width: u16,
-        maximum_height: u16,
-    },
-}
 
 /// Vertical values are terminal rows; horizontal values are terminal columns.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -50,7 +41,6 @@ pub fn DialogHost<'a>(props: &mut DialogHostProps<'a>) -> impl Into<AnyElement<'
 
 #[derive(Props)]
 pub struct DialogFrameProps<'a> {
-    #[iocraft(required)]
     pub presentation: DialogPresentation,
     #[iocraft(required)]
     pub width: u16,
@@ -62,9 +52,12 @@ pub struct DialogFrameProps<'a> {
     pub padding: Option<u16>,
     pub border_style: Option<BorderStyle>,
     pub border_color: Option<Color>,
-    pub keyboard_scroll: bool,
+    pub scroll_keys: crate::DialogScrollKeys,
+    pub keyboard_owner: crate::DialogKeyboardOwner,
     pub on_close: HandlerMut<'static, ()>,
     pub help_action: Option<AnyElement<'a>>,
+    /// Caller-owned identity stays attributable while the task body scrolls.
+    pub context: Vec<AnyElement<'a>>,
     pub children: Vec<AnyElement<'a>>,
     pub actions: Vec<AnyElement<'a>>,
 }
@@ -76,17 +69,20 @@ pub fn DialogFrame<'a>(
     props: &mut DialogFrameProps<'a>,
     mut hooks: Hooks,
 ) -> impl Into<AnyElement<'a>> {
-    hooks.use_terminal_events({
+    let owns_close = props.keyboard_owner == crate::DialogKeyboardOwner::Button;
+    hooks.use_dialog_events({
         let mut on_close = props.on_close.take();
         move |event| {
-            if matches!(
-                event,
-                TerminalEvent::Key(KeyEvent {
-                    code: KeyCode::Esc,
-                    kind: KeyEventKind::Press,
-                    ..
-                })
-            ) {
+            if owns_close
+                && matches!(
+                    event,
+                    TerminalEvent::Key(KeyEvent {
+                        code: KeyCode::Esc,
+                        kind: KeyEventKind::Press,
+                        ..
+                    })
+                )
+            {
                 on_close(());
             }
         }
@@ -97,19 +93,23 @@ pub fn DialogFrame<'a>(
     let bottom = props.margins.bottom.min(props.height.saturating_sub(top));
     let available_width = props.width.saturating_sub(left + right);
     let available_height = props.height.saturating_sub(top + bottom);
-    let (frame_width, frame_height) = match props.presentation {
-        DialogPresentation::FullScreen => (available_width, available_height),
-        DialogPresentation::Framed {
-            maximum_width,
-            maximum_height,
-        } => (
-            maximum_width.min(available_width),
-            maximum_height.min(available_height),
-        ),
-    };
+    let ((frame_width, width_limit), (frame_height, height_limit)) = props
+        .presentation
+        .resolve(available_width, available_height);
     let children = std::mem::take(&mut props.children);
     let actions = std::mem::take(&mut props.actions);
     let help_action = props.help_action.take();
+    let context = std::mem::take(&mut props.context);
+    let context_gap = u16::from(!context.is_empty() && height_limit >= 16);
+    let action_gap = u16::from(!actions.is_empty());
+    let padding = props.padding.unwrap_or(u16::from(height_limit >= 16));
+    let content_height = matches!(
+        props.presentation,
+        DialogPresentation::Sized {
+            height: crate::DialogAxisSize::Content { .. },
+            ..
+        }
+    );
     element! {
         View(
             position: Position::Absolute, top: 0, left: 0,
@@ -119,20 +119,20 @@ pub fn DialogFrame<'a>(
             overflow: Overflow::Hidden,
         ) {
             View(
-                width: u32::from(frame_width), height: u32::from(frame_height),
+                width: frame_width, height: frame_height,
+                max_width: u32::from(width_limit), max_height: u32::from(height_limit),
                 flex_direction: FlexDirection::Column, overflow: Overflow::Hidden,
                 border_style: props.border_style.unwrap_or(BorderStyle::Round),
                 border_color: props.border_color.unwrap_or(Color::Cyan),
-                background_color: Color::Reset, padding: props.padding.unwrap_or(1),
+                background_color: Color::Reset, padding,
                 flex_shrink: 0.0_f32,
             ) {
                 crate::SurfaceHeader(title: props.title.clone(), help_action)
-                View(flex_grow: 1.0_f32, flex_shrink: 1.0_f32, min_height: 0) {
-                    ScrollView(keyboard_scroll: props.keyboard_scroll) {
-                        View(width: 100pct, flex_direction: FlexDirection::Column, flex_shrink: 0.0_f32) { #(children) }
-                    }
-                }
-                View(flex_shrink: 0.0_f32, flex_direction: FlexDirection::Column) { #(actions) }
+                View(flex_direction: FlexDirection::Column, flex_shrink: 0.0_f32, margin_bottom: context_gap) { #(context) }
+                DialogBodyViewport(scroll_keys: props.scroll_keys, children)
+                View(height: action_gap, flex_shrink: 0.0_f32) {}
+                View(flex_shrink: 0.0_f32, column_gap: 2, flex_wrap: FlexWrap::Wrap) { #(actions) }
+                #((!content_height).then(|| element!(View(flex_grow: 1.0_f32))))
             }
         }
     }

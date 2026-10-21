@@ -11,6 +11,9 @@ use std::sync::Arc;
 #[path = "provider_conversation_http_tests/scripted_provider_backend.rs"]
 mod scripted_provider_backend;
 
+#[path = "provider_conversation_http_tests/human_load_tests.rs"]
+mod human_load_tests;
+
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
 const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
 const CREATE_OPERATION: &str = "019f0000-0000-7000-8000-000000000001";

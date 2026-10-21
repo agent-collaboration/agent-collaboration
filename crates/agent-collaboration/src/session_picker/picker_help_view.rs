@@ -48,13 +48,29 @@ pub(super) fn render_help(
             ("Esc", "Clear search or go back"),
         ]),
     }];
+    if let Some(dialog) = &model.details_dialog {
+        let record = dialog.record();
+        sections.push(captured_session_section(
+            &record.title,
+            &record.full_title,
+            record.explicit_name.as_deref(),
+            Some(&record.session_id),
+        ));
+    } else if let Some(confirmation) = &model.fork_confirmation {
+        sections.push(captured_session_section(
+            &confirmation.title,
+            &confirmation.full_title,
+            confirmation.explicit_name.as_deref(),
+            confirmation.session_id_label().as_deref(),
+        ));
+    }
     if model.provider_filter_draft.is_some() {
         sections.push(ShortcutSection {
             title: "Session filters".to_owned(),
             entries: entries(&[
-                ("↑ / ↓", "Choose provider draft"),
-                ("Tab / Shift+Tab", "Move between provider, Apply and Cancel"),
-                ("Enter", "Apply draft, or cancel when Cancel is focused"),
+                ("↑ / ↓", "Move field focus"),
+                ("Tab / Shift+Tab", "Move field focus"),
+                ("Enter", "Search choice or activate action"),
                 ("Esc", "Cancel draft"),
             ]),
         });
@@ -124,11 +140,48 @@ pub(super) fn render_help(
         actions: vec![element!(DialogAction(label: "Close", handler: move |_| state.write().show_help = false)).into_any()])).into_any()
 }
 
+fn captured_session_section(
+    display_title: &str,
+    full_title: &str,
+    explicit_name: Option<&str>,
+    session_id: Option<&str>,
+) -> ShortcutSection {
+    let mut entries = vec![ShortcutEntry {
+        keys: "Session".to_owned(),
+        description: display_title.to_owned(),
+    }];
+    if let Some(name) = explicit_name.filter(|name| !name.is_empty() && *name != display_title) {
+        entries.push(ShortcutEntry {
+            keys: "Name".to_owned(),
+            description: name.to_owned(),
+        });
+    }
+    if !full_title.is_empty() && full_title != display_title {
+        entries.push(ShortcutEntry {
+            keys: "Original title".to_owned(),
+            description: full_title.to_owned(),
+        });
+    }
+    if let Some(session_id) = session_id {
+        entries.push(ShortcutEntry {
+            keys: "Session ID".to_owned(),
+            description: session_id.to_owned(),
+        });
+    }
+    ShortcutSection {
+        title: "Captured session".to_owned(),
+        entries,
+    }
+}
+
 /// Machine and fork views are pure backgrounds, so Help adds exactly one host.
 pub(super) fn render_choice_surface(
     model: &SessionsPickerModel,
     state: State<SessionsPickerModel>,
     height: usize,
+    selection_handler: Handler<super::picker_machine_controls::MachineChoiceKey>,
+    cancel_handler: Handler<()>,
+    outcome: State<Option<super::SessionsPickerOutcome>>,
 ) -> Option<Element<'static, View>> {
     let background = if let Some(confirmation) = &model.fork_confirmation {
         super::picker_fork_view::render_fork_confirmation(
@@ -137,14 +190,23 @@ pub(super) fn render_choice_surface(
             height,
             help_action(state),
             model.show_help || model.source_action.pending.is_some(),
+            state,
+            outcome,
         )
         .into_any()
     } else if !matches!(
         model.machine_controls.stage,
         super::picker_machine_controls::PickerMachineStage::Browsing
     ) {
-        super::picker_machine_view::render_machine_choices(model, height, help_action(state))
-            .into_any()
+        super::picker_machine_view::render_machine_choices(
+            model,
+            height,
+            help_action(state),
+            selection_handler,
+            cancel_handler,
+            state,
+        )
+        .into_any()
     } else {
         return None;
     };

@@ -505,6 +505,10 @@ pub(super) fn window_display_note(window: &DisplayQuotaWindow, now_unix_seconds:
         || "reset unknown".to_owned(),
         |reset| format!("resets {}", format_relative_time(reset, now_unix_seconds)),
     );
+    window_display_note_with_reset(window, reset)
+}
+
+pub(super) fn window_display_note_with_reset(window: &DisplayQuotaWindow, reset: String) -> String {
     match window.status {
         QuotaWindowStatus::Eligible => reset,
         QuotaWindowStatus::Stale => reset,
