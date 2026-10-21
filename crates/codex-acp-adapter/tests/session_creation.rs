@@ -132,7 +132,14 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
                 assert_eq!(request["method"], "thread/resume");
                 assert_eq!(request["params"], json!({"threadId":"new-thread"}));
             }
-            server.send(Message::Text(json!({"id":request["id"],"result":{"cwd":effective_cwd,"model":"gpt-5.6-sol","approvalPolicy":"on-request","approvalsReviewer":effective_reviewer,"activePermissionProfile":{"id":"router-write-restricted","extends":":read-only"},"sandbox":applied_router_sandbox(&request),"thread":{"id":"new-thread","cwd":effective_cwd,"status":{"type":"idle"},"turns":[{"id":"old-turn","items":[{"type":"agentMessage","id":"message","text":"previous answer"}]}]}}}).to_string().into())).await.unwrap_or_else(|error| panic!("send: {error}"));
+            let mut sandbox = applied_router_sandbox(&request);
+            if creating {
+                sandbox["writableRoots"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(json!("/desktop/visualizations/thread"));
+            }
+            server.send(Message::Text(json!({"id":request["id"],"result":{"cwd":effective_cwd,"model":"gpt-5.6-sol","approvalPolicy":"on-request","approvalsReviewer":effective_reviewer,"activePermissionProfile":{"id":"router-write-restricted","extends":":read-only"},"sandbox":sandbox,"thread":{"id":"new-thread","cwd":effective_cwd,"status":{"type":"idle"},"turns":[{"id":"old-turn","items":[{"type":"agentMessage","id":"message","text":"previous answer"}]}]}}}).to_string().into())).await.unwrap_or_else(|error| panic!("send: {error}"));
         });
         let result = if creating {
             AcpSessionBinding::create(
@@ -179,9 +186,15 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
         if effective_cwd == "/work/project" {
             let mut session = result.unwrap_or_else(|error| panic!("create: {error}"));
             assert_eq!(
-                session.new_session_result(),
-                json!({"sessionId":"new-thread"})
+                session.new_session_result()["sessionId"],
+                json!("new-thread")
             );
+            if creating {
+                assert_eq!(
+                    session.new_session_result()["_meta"]["codexRouter"]["permissionDifferences"],
+                    json!(["writableRoots"])
+                );
+            }
             assert_eq!(
                 session.accepts_configuration(&generation, "new-thread", &configuration),
                 creating
@@ -389,6 +402,11 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
             assert!(request["params"].get("sandbox").is_none());
             assert!(request["params"].get("approvalPolicy").is_none());
             assert!(request["params"].get("approvalsReviewer").is_none());
+            let mut sandbox = applied_router_sandbox(&request);
+            sandbox["writableRoots"]
+                .as_array_mut()
+                .unwrap()
+                .push(json!("/desktop/visualizations/fork"));
             server
             .send(Message::Text(
                 json!({
@@ -399,7 +417,7 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
                         "approvalPolicy": "on-request",
                         "approvalsReviewer": "auto_review",
                         "activePermissionProfile":{"id":"router-workspace-write","extends":":workspace"},
-                        "sandbox":applied_router_sandbox(&request),
+                        "sandbox":sandbox,
                         "thread": {
                             "id": "forked-thread",
                             "cwd": "/work/project",
@@ -457,5 +475,9 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
             .await
             .unwrap_or_else(|error| panic!("fixture: {error}"));
         assert_eq!(session.session_id(), "forked-thread");
+        assert_eq!(
+            session.new_session_result()["_meta"]["codexRouter"]["permissionDifferences"],
+            json!(["writableRoots"])
+        );
     }
 }

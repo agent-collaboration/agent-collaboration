@@ -105,5 +105,7 @@ pub struct NativeSendReceipt {
     pub representation: MessageRepresentation,
     pub client_user_message_id: NonEmptyText,
     pub resume_effect: AcceptedResumeEffect,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_differences: Vec<crate::PermissionDifference>,
     pub acceptance: NativeSendAcceptance,
 }

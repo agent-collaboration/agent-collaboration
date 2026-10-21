@@ -79,6 +79,20 @@ pub async fn exercise_unloaded(
     exercise_message(scenario, FixtureTarget::Unloaded).await
 }
 
+pub async fn exercise_recorded_extra_root(
+    delivery: MessageDelivery,
+    unloaded: bool,
+) -> Result<RecordedMessageObservation, FixtureError> {
+    exercise_message(
+        MessageScenario {
+            delivery,
+            steps: Vec::new(),
+        },
+        FixtureTarget::RecordedExtraRoot { unloaded },
+    )
+    .await
+}
+
 pub async fn exercise_rejected(
     scenario: MessageScenario,
 ) -> Result<RecordedMessageObservation, FixtureError> {
@@ -112,6 +126,7 @@ enum FixtureTarget {
     Running,
     Unloaded,
     Recorded,
+    RecordedExtraRoot { unloaded: bool },
     InvalidRecordedResume,
     MissingRecordedCwd,
 }
@@ -120,13 +135,18 @@ async fn exercise_message(
     mut scenario: MessageScenario,
     fixture_target: FixtureTarget,
 ) -> Result<RecordedMessageObservation, FixtureError> {
-    let unloaded = matches!(fixture_target, FixtureTarget::Unloaded);
+    let unloaded = matches!(
+        fixture_target,
+        FixtureTarget::Unloaded | FixtureTarget::RecordedExtraRoot { unloaded: true }
+    );
     let recorded = matches!(
         fixture_target,
         FixtureTarget::Recorded
+            | FixtureTarget::RecordedExtraRoot { .. }
             | FixtureTarget::InvalidRecordedResume
             | FixtureTarget::MissingRecordedCwd
     );
+    let report_early_refusal = matches!(fixture_target, FixtureTarget::RecordedExtraRoot { .. });
     // Private RAII ownership keeps the native socket short and cleans broker/store sidecars too.
     let directory = tempfile::Builder::new().prefix("mf-").tempdir()?;
     let root = directory.path().to_path_buf();
@@ -200,13 +220,41 @@ async fn exercise_message(
             path,
         )
         .await?;
-        let fixture_mode = if matches!(fixture_target, FixtureTarget::Recorded) {
+        let fixture_mode = if matches!(
+            fixture_target,
+            FixtureTarget::Recorded | FixtureTarget::RecordedExtraRoot { .. }
+        ) {
             scenario.delivery
         } else {
             MessageDelivery::Queue
         };
         scenario.steps = recorded_loaded_steps(fixture_mode, &root, &scratch)?;
         match fixture_target {
+            FixtureTarget::RecordedExtraRoot { unloaded } => {
+                if let NativeReply::Result(response) = &mut scenario
+                    .steps
+                    .get_mut(1)
+                    .ok_or("recorded fixture omitted resume")?
+                    .reply
+                {
+                    response
+                        .pointer_mut("/sandbox/writableRoots")
+                        .and_then(Value::as_array_mut)
+                        .ok_or("roots missing")?
+                        .push(json!("/desktop/visualizations/thread"));
+                }
+                if unloaded
+                    && let NativeReply::Result(response) = &mut scenario
+                        .steps
+                        .first_mut()
+                        .ok_or("recorded fixture omitted read")?
+                        .reply
+                {
+                    *response
+                        .pointer_mut("/thread/status/type")
+                        .ok_or("recorded fixture omitted status")? = json!("notLoaded");
+                }
+            }
             FixtureTarget::InvalidRecordedResume => {
                 scenario.steps.truncate(2);
                 scenario
@@ -214,7 +262,7 @@ async fn exercise_message(
                     .get_mut(1)
                     .ok_or("recorded fixture omitted resume")?
                     .reply = NativeReply::Result(
-                    json!({"thread":{"id":"target","cwd":root},"cwd":root,"sandbox":{"type":"readOnly"}}),
+                    json!({"thread":{"id":"target","cwd":"/wrong/project"},"cwd":root,"sandbox":{"type":"readOnly"}}),
                 );
             }
             FixtureTarget::MissingRecordedCwd => {
@@ -303,9 +351,14 @@ async fn exercise_message(
         );
         let mut requests = Vec::new();
         for step in scenario.steps {
-            let frame = tokio::time::timeout(Duration::from_secs(2), socket.next())
-                .await?
-                .ok_or("native socket closed before expected operation")??;
+            let frame = match tokio::time::timeout(Duration::from_secs(2), socket.next()).await? {
+                Some(Ok(frame)) => frame,
+                _ if report_early_refusal => return Ok(requests),
+                _ => return Err("native socket closed before expected operation".into()),
+            };
+            if report_early_refusal && frame.is_close() {
+                return Ok(requests);
+            }
             let request: Value = serde_json::from_str(frame.to_text()?)?;
             assert_eq!(
                 request.get("method").and_then(Value::as_str),
@@ -521,7 +574,10 @@ fn recorded_loaded_steps(
                 reply: NativeReply::Result(json!({"turnId":"recorded-turn-1"})),
             },
         ]),
-        MessageDelivery::Auto => return Err("recorded fixture requires Queue or Steer".into()),
+        MessageDelivery::Auto => steps.push(NativeStep {
+            method: "turn/start",
+            reply: NativeReply::Result(json!({"turn":{"id":"recorded-auto-1"}})),
+        }),
     }
     Ok(steps)
 }

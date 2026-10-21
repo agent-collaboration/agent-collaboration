@@ -9,7 +9,7 @@ use super::SessionSetupError;
 use codex_native_integration::{
     READ_ONLY_INSIDE_TOOL_LOCATIONS, RESTRICTED_TOOL_LOCATIONS, WORKSPACE_TOOL_LOCATIONS,
 };
-use collaboration_protocol::RouterAccess;
+use collaboration_protocol::{PermissionDifference, RouterAccess};
 use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -218,43 +218,44 @@ impl RouterSessionProfile {
         ])
     }
 
-    /// Refuses a native start, fork or resume whose effective settings differ from this profile.
-    pub(super) fn validate_observed(&self, response: &Value) -> Result<(), SessionSetupError> {
+    /// Reports mismatched or unavailable permission fields without refusing setup.
+    pub(super) fn observed_differences(&self, response: &Value) -> Vec<PermissionDifference> {
         let profile_id = response
             .pointer("/activePermissionProfile/id")
-            .and_then(Value::as_str)
-            .ok_or(SessionSetupError::ConfigurationMismatch)?;
-        let actual = response
+            .and_then(Value::as_str);
+        let actual_roots = response
             .pointer("/sandbox/writableRoots")
             .and_then(Value::as_array)
-            .ok_or(SessionSetupError::ConfigurationMismatch)?
-            .iter()
-            .map(|root| {
-                root.as_str()
-                    .map(str::to_owned)
-                    .ok_or(SessionSetupError::ConfigurationMismatch)
-            })
-            .collect::<Result<BTreeSet<_>, _>>()?;
+            .and_then(|roots| {
+                roots
+                    .iter()
+                    .map(|root| root.as_str().map(str::to_owned))
+                    .collect::<Option<BTreeSet<_>>>()
+            });
         let sandbox_type = response.pointer("/sandbox/type").and_then(Value::as_str);
         let network_access = response
             .pointer("/sandbox/networkAccess")
             .and_then(Value::as_bool);
-        // Both profiles surface as a writable-roots sandbox with direct network; a
-        // proxy would not be visible here, so the root projection guards it.
-        // Temporary-directory flags are not compared: both profiles write them.
-        if profile_id != self.name()
-            || sandbox_type != Some("workspaceWrite")
-            || actual != self.writable_roots
-            || network_access != Some(true)
-        {
-            return Err(SessionSetupError::AccessMismatch {
-                requested: access_name(self.access).to_owned(),
-                effective: format!(
-                    "profile={profile_id}, sandbox={sandbox_type:?}, roots={actual:?}, networkAccess={network_access:?}"
-                ),
-            });
-        }
-        Ok(())
+        // Keep exact comparisons as evidence. Missing and malformed values differ too.
+        // Temporary-directory flags and the invisible proxy state are not compared.
+        [
+            (
+                profile_id != Some(self.name()),
+                PermissionDifference::Profile,
+            ),
+            (
+                sandbox_type != Some("workspaceWrite"),
+                PermissionDifference::Sandbox,
+            ),
+            (
+                actual_roots.as_ref() != Some(&self.writable_roots),
+                PermissionDifference::WritableRoots,
+            ),
+            (network_access != Some(true), PermissionDifference::Network),
+        ]
+        .into_iter()
+        .filter_map(|(differs, field)| differs.then_some(field))
+        .collect()
     }
 }
 
@@ -417,7 +418,7 @@ mod tests {
     }
 
     #[test]
-    fn native_settings_must_match_the_requested_profile_with_network() {
+    fn native_settings_report_each_difference_from_the_requested_profile() {
         // Arrange
         let workspace = profile(RouterAccess::WorkspaceWrite);
         let mut granted = under_home(&WORKSPACE_TOOL_LOCATIONS);
@@ -427,34 +428,46 @@ mod tests {
         let mut unsandboxed = native_response("router-workspace-write", &granted, true);
         unsandboxed["sandbox"]["type"] = json!("dangerFullAccess");
 
-        // Act & assert: exact profile, roots and network access are accepted.
-        assert!(
-            workspace
-                .validate_observed(&native_response("router-workspace-write", &granted, true))
-                .is_ok()
+        // Act/assert: report exact field classes, with no native paths in the report.
+        assert_eq!(
+            workspace.observed_differences(&native_response(
+                "router-workspace-write",
+                &granted,
+                true
+            )),
+            vec![]
         );
-        // Assert: missing settings, extra roots, missing network, another sandbox or
-        // the wrong profile are refused.
-        assert!(workspace.validate_observed(&json!({})).is_err());
-        assert!(
-            workspace
-                .validate_observed(&native_response(
-                    "router-workspace-write",
-                    &with_unexpected_root,
-                    true
-                ))
-                .is_err()
-        );
-        assert!(
-            workspace
-                .validate_observed(&native_response("router-workspace-write", &granted, false))
-                .is_err()
-        );
-        assert!(workspace.validate_observed(&unsandboxed).is_err());
-        assert!(
-            workspace
-                .validate_observed(&native_response("router-write-restricted", &granted, true))
-                .is_err()
+        for (response, expected) in [
+            (
+                json!({}),
+                vec![
+                    PermissionDifference::Profile,
+                    PermissionDifference::Sandbox,
+                    PermissionDifference::WritableRoots,
+                    PermissionDifference::Network,
+                ],
+            ),
+            (
+                native_response("router-workspace-write", &with_unexpected_root, true),
+                vec![PermissionDifference::WritableRoots],
+            ),
+            (
+                native_response("router-workspace-write", &granted, false),
+                vec![PermissionDifference::Network],
+            ),
+            (unsandboxed, vec![PermissionDifference::Sandbox]),
+            (
+                native_response("router-write-restricted", &granted, true),
+                vec![PermissionDifference::Profile],
+            ),
+        ] {
+            assert_eq!(workspace.observed_differences(&response), expected);
+        }
+        let mut malformed = native_response("router-workspace-write", &granted, true);
+        malformed["sandbox"]["writableRoots"] = json!([123]);
+        assert_eq!(
+            workspace.observed_differences(&malformed),
+            vec![PermissionDifference::WritableRoots]
         );
     }
 
@@ -478,22 +491,21 @@ mod tests {
         // Act & assert
         assert!(
             restricted
-                .validate_observed(&native_response("router-write-restricted", &granted, true))
-                .is_ok()
+                .observed_differences(&native_response("router-write-restricted", &granted, true))
+                .is_empty()
         );
-        assert!(
-            restricted
-                .validate_observed(&native_response(
-                    "router-write-restricted",
-                    &without_temporary,
-                    true
-                ))
-                .is_err()
+        assert_eq!(
+            restricted.observed_differences(&native_response(
+                "router-write-restricted",
+                &without_temporary,
+                true
+            )),
+            vec![PermissionDifference::WritableRoots]
         );
     }
 
     #[test]
-    fn canonical_scratch_keeps_strict_permission_equality_and_read_exceptions() {
+    fn canonical_scratch_reports_exact_permission_differences_and_keeps_read_exceptions() {
         // Arrange: the canonical owned scratch spelling is already selected.
         let restricted = RouterSessionProfile::with_host(
             RouterAccess::WriteRestricted,
@@ -524,7 +536,7 @@ mod tests {
             .remove("networkAccess");
 
         // Act & assert: alias handling must not turn exact policy into subset matching.
-        assert!(restricted.validate_observed(&accepted).is_ok());
+        assert!(restricted.observed_differences(&accepted).is_empty());
         for rejected in [
             native_response("router-write-restricted", &missing_scratch, true),
             native_response("router-write-restricted", &extra_root, true),
@@ -532,10 +544,7 @@ mod tests {
             native_response("router-write-restricted", &granted, false),
             missing_network,
         ] {
-            assert!(matches!(
-                restricted.validate_observed(&rejected),
-                Err(SessionSetupError::AccessMismatch { .. })
-            ));
+            assert!(!restricted.observed_differences(&rejected).is_empty());
         }
         let filesystem = filesystem(&restricted.native_config(), "router-write-restricted");
         assert_eq!(

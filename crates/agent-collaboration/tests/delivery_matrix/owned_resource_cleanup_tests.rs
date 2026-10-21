@@ -344,17 +344,20 @@ fn schedule_failure_projection_preserves_unknown_local_effect_and_route_kind() -
     }
     let route = ScheduleFailure {
         effects: ScheduleEffects::Route {
-            evidence: DeliveryRouteEvidence::CodexAppServer(NativeEffectEvidence {
-                target: None,
-                generation: None,
-                client_user_message_id: None,
-                native_turn_id: None,
-                native_submission_id: None,
-                allocation: PreparationEffect::NotRequested,
-                resume: PreparationEffect::Unknown,
-                submission: SubmissionEffect::Unknown,
-                cessation: CessationEvidence::Unconfirmed,
-            }),
+            evidence: Box::new(DeliveryRouteEvidence::CodexAppServer(
+                NativeEffectEvidence {
+                    permission_differences: Vec::new(),
+                    target: None,
+                    generation: None,
+                    client_user_message_id: None,
+                    native_turn_id: None,
+                    native_submission_id: None,
+                    allocation: PreparationEffect::NotRequested,
+                    resume: PreparationEffect::Unknown,
+                    submission: SubmissionEffect::Unknown,
+                    cessation: CessationEvidence::Unconfirmed,
+                },
+            )),
         },
         ..failure
     };

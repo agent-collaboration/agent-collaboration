@@ -104,9 +104,9 @@ impl AcpSessionBinding {
                 return Err(SessionSetupError::ConfigurationMismatch);
             }
         }
-        if let Some(profile) = profile.as_ref() {
-            profile.validate_observed(&result)?;
-        }
+        self.permission_differences = profile
+            .as_ref()
+            .map_or_else(Vec::new, |profile| profile.observed_differences(&result));
         Ok(result)
     }
     /// Empty load configuration adds nothing; a nonempty load must match fresh-new evidence.

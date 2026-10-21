@@ -454,6 +454,7 @@ async fn provider_create_wait_returns_the_target_from_exact_operation()
         != (ConversationCreateOutcome::Created {
             operation_id: operation_id.clone(),
             target: serde_json::from_value(target)?,
+            permission_differences: Vec::new(),
             effective_settings: Some(serde_json::from_value(json!({
                 "requestedPolicy":{"access":"workspace-write"},
                 "mappingStatus":"verified","authentication":"authenticated"

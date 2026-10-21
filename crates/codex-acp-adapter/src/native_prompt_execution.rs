@@ -356,9 +356,16 @@ impl PendingAcpPrompt {
                     "settingsObservation": &self.session.settings_observation,
                     "idleSeconds": idle_seconds
                 });
-                if let (Some(fields), Some(effort_change)) =
-                    (router_metadata.as_object_mut(), effort_change)
-                {
+                let fields = router_metadata
+                    .as_object_mut()
+                    .ok_or(PromptExecutionError::ReceiptProjection("router metadata"))?;
+                if !self.session.permission_differences.is_empty() {
+                    fields.insert(
+                        "permissionDifferences".into(),
+                        json!(self.session.permission_differences),
+                    );
+                }
+                if let Some(effort_change) = effort_change {
                     fields.insert("effortChange".into(), effort_change);
                 }
                 metadata.insert("codexRouter".into(), router_metadata);

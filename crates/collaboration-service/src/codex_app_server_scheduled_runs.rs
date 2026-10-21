@@ -504,6 +504,11 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
                             native_failure: None,
                         }));
                     }
+                    let mut run = run;
+                    let RouteEffectEvidence::CodexAppServer(effects) = &mut run.recorded else {
+                        return Err(DeliveryContractError::InvalidEvidence);
+                    };
+                    effects.permission_differences = binding.permission_differences().to_vec();
                     let result = crate::scheduled_native_dispatch::dispatch(
                         crate::scheduled_native_dispatch::ScheduledNativeDispatchInputs {
                             backend: &self.backend,

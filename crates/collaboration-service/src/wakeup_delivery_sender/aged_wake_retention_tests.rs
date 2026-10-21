@@ -62,6 +62,7 @@ impl SessionMessageDelivery for StoredWakeRoute {
                 return Err(DeliveryContractError::InvalidEvidence);
             }
             let mut effects = NativeEffectEvidence {
+                permission_differences: Vec::new(),
                 target: Some(request.target.clone()),
                 generation: Some(self.generation.clone()),
                 client_user_message_id: Some(request.correlation.as_str().to_owned()),

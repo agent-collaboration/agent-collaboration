@@ -57,6 +57,7 @@ async fn exact_completed_turn_releases_owned_run_without_touching_other_work()
         return Err("waiting consumed budget".into());
     }
     let effects = NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some("B".to_owned()),
         generation: Some("generation-fixture".to_owned()),
         client_user_message_id: Some(run.as_str().into()),

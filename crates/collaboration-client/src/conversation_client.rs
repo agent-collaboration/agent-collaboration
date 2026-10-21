@@ -454,6 +454,7 @@ impl ConversationClient {
                         operation_id,
                         target,
                         effective_settings: None,
+                        permission_differences: acp.permission_differences.clone(),
                     }),
                     Ok(Err(error)) => Err(error.into()),
                     Err(_) => Ok(ConversationCreateOutcome::Pending { operation_id }),
@@ -551,6 +552,7 @@ impl ConversationClient {
                                 operation_id: operation_id.clone(),
                                 target,
                                 effective_settings: Some(effective_settings),
+                                permission_differences: Vec::new(),
                             });
                         }
                         ConversationOperationWaitOutput::Available {

@@ -283,12 +283,20 @@ async fn exercise_held_empty_thread(
                     }
                 }
             }
+            let mut sandbox = applied_router_sandbox(&request);
+            if method == "thread/start" {
+                sandbox
+                    .get_mut("writableRoots")
+                    .and_then(Value::as_array_mut)
+                    .ok_or("fixture roots missing")?
+                    .push(json!("/desktop/visualizations/held-thread"));
+            }
             let result = match method {
                 "initialize" => json!({}),
                 "thread/start" => json!({
                     "cwd":"/work","model":"gpt-5.6-sol","approvalPolicy":"on-request","approvalsReviewer":"auto_review",
                     "activePermissionProfile":{"id":"router-workspace-write","extends":":workspace"},
-                    "sandbox":applied_router_sandbox(&request),
+                    "sandbox":sandbox,
                     "thread":{"id":"empty-thread","cwd":"/work","turns":[]}
                 }),
                 "thread/queue/add" => json!({"queuedSubmission":{"id":"queued-one"}}),
@@ -353,6 +361,10 @@ async fn exercise_held_empty_thread(
     if created.pointer("/result/sessionId").and_then(Value::as_str) != Some("empty-thread") {
         return Err(format!("session/new failed: {created}").into());
     }
+    assert_eq!(
+        created.pointer("/result/_meta/codexRouter/permissionDifferences"),
+        Some(&json!(["writableRoots"]))
+    );
     write.shutdown().await?;
     serving.await??;
     if !holder.contains("empty-thread") {
@@ -497,6 +509,13 @@ async fn exercise_held_empty_thread(
             }
         } else {
             let submission = submission_result?;
+            if let RunSubmission::Started(accepted) = &submission {
+                assert_eq!(
+                    serde_json::to_value(&accepted.receipt)?
+                        .pointer("/client/permissionDifferences"),
+                    Some(&json!(["writableRoots"]))
+                );
+            }
             match scenario {
                 ScheduledScenario::Started
                     if matches!(submission, RunSubmission::Started(_))
@@ -586,6 +605,10 @@ async fn exercise_held_empty_thread(
     if !matches!(queued.outcome, DeliveryOutcome::Queued) || !holder.contains("empty-thread") {
         return Err("queue did not use and retain the held native connection".into());
     }
+    assert_eq!(
+        serde_json::to_value(&queued)?.pointer("/client/permissionDifferences"),
+        Some(&json!(["writableRoots"]))
+    );
     let routed: Arc<dyn SessionDeliveryRoute> = route;
     let delivery_router = Arc::new(collaboration_service::SessionDeliveryRouter::new(vec![
         routed,
@@ -640,6 +663,10 @@ async fn exercise_held_empty_thread(
     {
         return Err("first message did not start through the held connection".into());
     }
+    assert_eq!(
+        serde_json::to_value(&started.receipt)?.pointer("/client/permissionDifferences"),
+        Some(&json!(["writableRoots"]))
+    );
     served.stop().await?;
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);

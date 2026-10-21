@@ -11,6 +11,8 @@ struct QueueObservation {
     intent: Option<PreparationEffect>,
     resume: PreparationEffect,
     receipt: Option<collaboration_protocol::DeliveryReceipt>,
+    stored_receipt: Option<Value>,
+    reopened_receipt: Option<collaboration_protocol::DeliveryReceipt>,
 }
 
 #[derive(Clone, Copy)]
@@ -105,12 +107,15 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let native_store = store.clone();
     let native_id = delivery_id.clone();
     let cwd = fixture.directory.path().to_string_lossy().into_owned();
-    let roots = fixture
+    let mut roots = fixture
         .filesystem
         .iter()
         .filter(|(_, access)| *access == &json!("write"))
         .map(|(path, _)| path.clone())
         .collect::<Vec<_>>();
+    if matches!(case, QueueProbeCase::MatchingItem) {
+        roots.push("/literal-extra-queue-root".to_owned());
+    }
     let native = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
         let mut socket = tokio_tungstenite::accept_async(stream).await?;
@@ -223,11 +228,25 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         return Err("wake correlation differs from stored push".into());
     }
     let receipt = if reconcile {
+        if matches!(case, QueueProbeCase::MatchingItem) {
+            let inspection = crate::delivery_projection::snapshot(record.clone())
+                .map_err(|_| "uncertain public inspection failed")?;
+            let public = serde_json::to_value(inspection)?;
+            assert_eq!(
+                public.pointer("/evidence/effects/permissionDifferences"),
+                Some(&json!(["writableRoots"])),
+                "public uncertain effect evidence must retain the report"
+            );
+        }
         crate::delivery_reconciliation::reconcile(&store, delivery.as_ref(), record).await?;
         let settled=store.lock().await.read_delivery::<SessionRef,CodexGeneration,crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
-        settled
-            .receipt
-            .map(crate::stored_delivery_receipt::StoredDeliveryReceipt::into_public)
+        let inspection = crate::delivery_projection::snapshot(settled)
+            .map_err(|_| "settled public inspection failed")?;
+        match inspection.evidence {
+            collaboration_protocol::DeliveryEvidence::Accepted { receipt, .. } => Some(receipt),
+            collaboration_protocol::DeliveryEvidence::OutcomeUnknown { receipt, .. } => receipt,
+            _ => return Err("unexpected queue public outcome".into()),
+        }
     } else {
         None
     };
@@ -246,13 +265,64 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
             intent: None,
             resume,
             receipt,
+            stored_receipt: None,
+            reopened_receipt: None,
         });
     }
     let intent = tokio::time::timeout(Duration::from_secs(5), native).await???;
+    let stored_receipt = store
+        .lock()
+        .await
+        .read_delivery::<SessionRef, CodexGeneration, Value>(&delivery_id)
+        .await?
+        .receipt;
+    let storage = Arc::try_unwrap(store)
+        .map_err(|_| "queue probe store still shared")?
+        .into_inner();
+    storage.close().await?;
+    let mut reopened =
+        AutomationStore::open(&fixture.directory.path().join("automation.sqlite")).await?;
+    let reopened_record = reopened
+        .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id)
+        .await?;
+    if matches!(case, QueueProbeCase::MatchingItem) {
+        let effects = reopened_record
+            .attempt
+            .as_ref()
+            .and_then(|attempt| attempt.effects.as_ref())
+            .ok_or("reopened effect evidence missing")?;
+        let public = serde_json::to_value(
+            crate::delivery_route_projection::project(effects)
+                .map_err(|_| "reopened effects projection failed")?,
+        )?;
+        assert_eq!(
+            public.get("permissionDifferences"),
+            Some(&json!(["writableRoots"])),
+            "reopened stored and public effect evidence must retain the report"
+        );
+    }
+    let reopened_public = crate::delivery_projection::snapshot(reopened_record)
+        .map_err(|_| "reopened public inspection failed")?;
+    let reopened_receipt = match reopened_public.evidence {
+        collaboration_protocol::DeliveryEvidence::Accepted { receipt, .. } => Some(receipt),
+        collaboration_protocol::DeliveryEvidence::OutcomeUnknown { receipt, .. } => receipt,
+        _ => return Err("unexpected reopened queue public outcome".into()),
+    };
+    let reopened_stored = reopened
+        .read_delivery::<SessionRef, CodexGeneration, Value>(&delivery_id)
+        .await?
+        .receipt;
+    assert_eq!(
+        reopened_stored, stored_receipt,
+        "reopening must preserve the exact stored receipt"
+    );
+    reopened.close().await?;
     Ok(QueueObservation {
         intent,
         resume,
         receipt,
+        stored_receipt,
+        reopened_receipt,
     })
 }
 
@@ -284,6 +354,28 @@ async fn policy_queue_accepted_resume_reconciliation_causal() {
     assert_eq!(
         client.resume_effect,
         collaboration_protocol::AcceptedResumeEffect::Accepted
+    );
+    assert_eq!(
+        client.permission_differences,
+        vec![collaboration_protocol::PermissionDifference::WritableRoots]
+    );
+    assert_eq!(
+        observed
+            .stored_receipt
+            .as_ref()
+            .and_then(|receipt| receipt.pointer("/client/permissionDifferences")),
+        Some(&json!(["writableRoots"]))
+    );
+    let reopened = observed
+        .reopened_receipt
+        .expect("reopened accepted receipt missing");
+    assert!(matches!(reopened.outcome, DeliveryOutcome::Queued));
+    let Some(DeliveryClientReceipt::CodexAppServer(client)) = reopened.client else {
+        panic!("reopened client receipt missing");
+    };
+    assert_eq!(
+        client.permission_differences,
+        vec![collaboration_protocol::PermissionDifference::WritableRoots]
     );
 }
 

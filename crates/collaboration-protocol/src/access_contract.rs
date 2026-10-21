@@ -9,6 +9,8 @@ pub enum RouterAccess {
     WorkspaceWrite,
 }
 
+pub use agent_automation::PermissionDifference;
+
 #[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SettingsObservationSource {

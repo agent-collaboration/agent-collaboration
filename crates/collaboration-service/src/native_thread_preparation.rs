@@ -24,6 +24,7 @@ pub(crate) fn initial_effects(destination: &DestinationPreparation) -> NativeEff
         _ => None,
     };
     NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target,
         generation: None,
         client_user_message_id: None,
@@ -40,6 +41,7 @@ pub(crate) fn initial_automation_effects(
 ) -> agent_automation::NativeEffectEvidence<SessionRef, collaboration_protocol::CodexGeneration> {
     let native = initial_effects(destination);
     agent_automation::NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: native.target,
         generation: native.generation,
         client_user_message_id: native.client_user_message_id,

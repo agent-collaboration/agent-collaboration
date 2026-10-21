@@ -392,6 +392,7 @@ fn conversation_create_tool_preserves_created_and_pending_operation_identity() {
             operation_id: operation_id.clone(),
             target,
             effective_settings: None,
+            permission_differences: Vec::new(),
         }),
         operation_id.clone(),
     );

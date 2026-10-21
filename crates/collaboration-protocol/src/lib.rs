@@ -63,7 +63,8 @@ pub use provider_session_inspect::{
 };
 mod question_contract;
 pub use access_contract::{
-    RouterAccess, SettingsObservation, SettingsObservationSource, SettingsUnavailableReason,
+    PermissionDifference, RouterAccess, SettingsObservation, SettingsObservationSource,
+    SettingsUnavailableReason,
 };
 pub use approval_contract::{
     ApprovalArgument, ApprovalDecideParams, ApprovalDecideResult, ApprovalDecision,

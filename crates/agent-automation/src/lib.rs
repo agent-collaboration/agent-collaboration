@@ -26,8 +26,8 @@ pub use accepted_delivery_effect::AcceptedDeliveryEffect;
 mod native_effects;
 mod route_effect_evidence;
 pub use native_effects::{
-    AttemptOutcome, CessationEvidence, DeliveryAttempt, NativeEffectEvidence, PreparationEffect,
-    SubmissionEffect,
+    AttemptOutcome, CessationEvidence, DeliveryAttempt, NativeEffectEvidence, PermissionDifference,
+    PreparationEffect, SubmissionEffect,
 };
 pub use route_effect_evidence::{
     ClaudeCodePeerEffectEvidence, PeerProcessId, PeerProcessIdError, PeerSessionReference,

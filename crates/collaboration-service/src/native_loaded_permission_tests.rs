@@ -1,4 +1,4 @@
-//! Known-route input must validate policy even after a failed resume left it loaded.
+//! Known-route input reports permission differences while preserving attachment checks.
 use super::*;
 use crate::{RunEvidenceDisposition, RunEvidenceSink, RunSubmission, SessionDeliveryRoute};
 use agent_automation::{CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId};
@@ -21,7 +21,7 @@ mod recorded_classification_tests;
 mod stored_policy_tests;
 
 #[tokio::test]
-async fn failed_cold_resume_cannot_bypass_policy_on_a_later_loaded_message() {
+async fn cold_and_loaded_messages_both_report_narrowed_permissions() {
     let fixture = RecordedPolicyFixture::create().await.unwrap();
     let server = policy_server(
         &fixture,
@@ -55,14 +55,26 @@ async fn failed_cold_resume_cannot_bypass_policy_on_a_later_loaded_message() {
         .unwrap()
         .unwrap()
         .unwrap();
-    assert!(matches!(first, NativeMessageOutcome::Failed(_)));
-    assert!(
-        exchanges
+    for outcome in [first, second] {
+        let NativeMessageOutcome::Accepted(receipt) = outcome else {
+            panic!("permission difference refused");
+        };
+        assert_eq!(
+            receipt.permission_differences,
+            vec![collaboration_protocol::PermissionDifference::WritableRoots]
+        );
+        assert_eq!(
+            receipt.resume_effect,
+            collaboration_protocol::AcceptedResumeEffect::Accepted
+        );
+    }
+    assert!(exchanges.iter().all(|requests| {
+        requests
             .iter()
-            .flatten()
-            .all(|request| request["method"] != "turn/start"),
-        "a loaded follow-up must not send input with the rejected grants"
-    );
+            .filter(|request| request["method"] == "turn/start")
+            .count()
+            == 1
+    }));
     let second_resume = exchanges[1]
         .iter()
         .find(|request| request["method"] == "thread/resume")
@@ -72,22 +84,11 @@ async fn failed_cold_resume_cannot_bypass_policy_on_a_later_loaded_message() {
         json!({"threadId":THREAD,"excludeTurns":true}),
         "loaded validation must not override config or trigger upstream cache rebuild"
     );
-    let NativeMessageOutcome::Failed(failure) = second else {
-        panic!("loaded narrowed state was accepted");
-    };
-    assert_eq!(
-        failure.pointer("/error/data/effects/resume"),
-        Some(&json!("accepted"))
-    );
-    assert_eq!(
-        failure.pointer("/error/data/effects/submission"),
-        Some(&json!("notDispatched"))
-    );
 }
 
 #[tokio::test]
-async fn scheduled_route_retains_policy_and_refuses_a_narrowed_loaded_followup() {
-    for policy in [ReplyPolicy::Narrowed, ReplyPolicy::MissingSettings] {
+async fn scheduled_route_reports_narrowing_but_refuses_missing_directory() {
+    for policy in [ReplyPolicy::Narrowed, ReplyPolicy::MissingDirectory] {
         let fixture = RecordedPolicyFixture::create().await.unwrap();
         let server = policy_server(
             &fixture,
@@ -149,18 +150,35 @@ async fn scheduled_route_retains_policy_and_refuses_a_narrowed_loaded_followup()
             cold.pointer("/params/config/permissions.router-workspace-write.filesystem"),
             Some(&json!(fixture.filesystem))
         );
-        assert!(
-            exchanges
-                .iter()
-                .flatten()
-                .all(|request| request["method"] != "turn/start"),
-            "scheduled loaded narrowing must be rejected before input"
-        );
-        assert!(matches!(
-            (policy, second),
-            (ReplyPolicy::Narrowed, RunSubmission::Rejected(_))
-                | (ReplyPolicy::MissingSettings, RunSubmission::Unknown)
-        ));
+        match (policy, second) {
+            (ReplyPolicy::Narrowed, RunSubmission::Started(accepted)) => {
+                let crate::DeliveryClientReceipt::CodexAppServer(receipt) =
+                    accepted.receipt.client.unwrap()
+                else {
+                    panic!("native receipt expected");
+                };
+                assert_eq!(
+                    receipt.permission_differences,
+                    vec![collaboration_protocol::PermissionDifference::WritableRoots]
+                );
+                assert_eq!(
+                    exchanges[1]
+                        .iter()
+                        .filter(|request| request["method"] == "turn/start")
+                        .count(),
+                    1
+                );
+            }
+            (ReplyPolicy::MissingDirectory, RunSubmission::Unknown) => {
+                assert!(
+                    exchanges
+                        .iter()
+                        .flatten()
+                        .all(|request| request["method"] != "turn/start")
+                );
+            }
+            _ => panic!("scheduled permission report or cwd refusal lost"),
+        }
         let evidence = sink.evidence.lock().unwrap();
         let RouteEffectEvidence::CodexAppServer(last) = evidence.last().unwrap() else {
             panic!("native evidence expected");
@@ -168,7 +186,11 @@ async fn scheduled_route_retains_policy_and_refuses_a_narrowed_loaded_followup()
         assert_eq!(last.resume, agent_automation::PreparationEffect::Accepted);
         assert_eq!(
             last.submission,
-            agent_automation::SubmissionEffect::NotDispatched
+            if matches!(policy, ReplyPolicy::Narrowed) {
+                agent_automation::SubmissionEffect::Accepted
+            } else {
+                agent_automation::SubmissionEffect::NotDispatched
+            }
         );
     }
 }
@@ -238,7 +260,7 @@ async fn matching_loaded_policy_allows_each_message_mode_without_overrides() {
 }
 
 #[tokio::test]
-async fn narrowed_loaded_policy_blocks_queue_and_steer_before_input() {
+async fn narrowed_loaded_policy_reports_differences_for_queue_and_steer() {
     for mode in [MessageDelivery::Queue, MessageDelivery::Steer] {
         let fixture = RecordedPolicyFixture::create().await.unwrap();
         let server = policy_server(
@@ -273,21 +295,27 @@ async fn narrowed_loaded_policy_blocks_queue_and_steer_before_input() {
             .unwrap()
             .unwrap();
         assert!(matches!(first, NativeMessageOutcome::Accepted(_)));
-        let NativeMessageOutcome::Failed(failure) = second else {
-            panic!("narrowed loaded input accepted");
+        let NativeMessageOutcome::Accepted(receipt) = second else {
+            panic!("narrowed loaded input refused");
         };
         assert_eq!(
-            failure.pointer("/error/data/effects/resume"),
-            Some(&json!("accepted"))
+            receipt.resume_effect,
+            collaboration_protocol::AcceptedResumeEffect::Accepted
         );
         assert_eq!(
-            failure.pointer("/error/data/effects/submission"),
-            Some(&json!("notDispatched"))
+            receipt.permission_differences,
+            vec![collaboration_protocol::PermissionDifference::WritableRoots]
         );
-        assert!(!exchanges[1].iter().any(|call| matches!(
-            call["method"].as_str(),
-            Some("turn/start" | "turn/steer" | "thread/queue/add")
-        )));
+        assert_eq!(
+            exchanges[1]
+                .iter()
+                .filter(|call| matches!(
+                    call["method"].as_str(),
+                    Some("turn/start" | "turn/steer" | "thread/queue/add")
+                ))
+                .count(),
+            1
+        );
     }
 }
 

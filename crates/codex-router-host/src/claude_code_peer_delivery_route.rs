@@ -28,7 +28,7 @@ pub struct ClaudeCodePeerDeliveryRoute {
 
 enum PeerDeliveryPreparation {
     Ready(PeerSessionRecord),
-    Finished(DeliveryReceipt),
+    Finished(Box<DeliveryReceipt>),
 }
 
 const AMBIGUOUS_PEER_CLAIM_REASON: &str =
@@ -96,42 +96,45 @@ impl ClaudeCodePeerDeliveryRoute {
         mode: MessageDelivery,
     ) -> Result<PeerDeliveryPreparation, DeliveryContractError> {
         if !self.serves(target) {
-            return Ok(PeerDeliveryPreparation::Finished(peer_rejection(
+            return Ok(PeerDeliveryPreparation::Finished(Box::new(peer_rejection(
                 DeliveryRejectionReason::NoRoute,
                 "Claude Code peer route does not serve this endpoint",
-            )));
+            ))));
         }
         if matches!(
             precondition,
             DeliveryPrecondition::EndpointGeneration { .. }
         ) {
-            return Ok(PeerDeliveryPreparation::Finished(peer_rejection(
+            return Ok(PeerDeliveryPreparation::Finished(Box::new(peer_rejection(
                 DeliveryRejectionReason::StaleGeneration,
                 "Claude Code peer sessions have no endpoint generation",
-            )));
+            ))));
         }
         if mode == MessageDelivery::Queue {
-            return Ok(PeerDeliveryPreparation::Finished(peer_rejection(
+            return Ok(PeerDeliveryPreparation::Finished(Box::new(peer_rejection(
                 DeliveryRejectionReason::QueueUnsupported,
                 "Queue delivery isn't supported for Claude Code terminals",
-            )));
+            ))));
         }
         Ok(match self.lookup(target).await {
-            PeerSessionLookup::Absent => PeerDeliveryPreparation::Finished(peer_receipt(
+            PeerSessionLookup::Absent => PeerDeliveryPreparation::Finished(Box::new(peer_receipt(
                 DeliveryOutcome::NotSubmitted {
                     retryable: true,
                     reason: "Claude Code session is no longer live".to_owned(),
                 },
                 None,
-            )),
-            PeerSessionLookup::LiveUnsupported { reason } => PeerDeliveryPreparation::Finished(
-                peer_rejection(DeliveryRejectionReason::LiveElsewhere, &reason),
-            ),
+            ))),
+            PeerSessionLookup::LiveUnsupported { reason } => {
+                PeerDeliveryPreparation::Finished(Box::new(peer_rejection(
+                    DeliveryRejectionReason::LiveElsewhere,
+                    &reason,
+                )))
+            }
             PeerSessionLookup::Ambiguous { claims } => {
-                PeerDeliveryPreparation::Finished(peer_receipt(
+                PeerDeliveryPreparation::Finished(Box::new(peer_receipt(
                     DeliveryOutcome::Rejected(peer_claim_rejection(claims)),
                     None,
-                ))
+                )))
             }
             PeerSessionLookup::Writable(peer) => PeerDeliveryPreparation::Ready(peer),
         })
@@ -323,7 +326,7 @@ impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
                 .await?
             {
                 PeerDeliveryPreparation::Ready(peer) => peer,
-                PeerDeliveryPreparation::Finished(receipt) => return Ok(receipt),
+                PeerDeliveryPreparation::Finished(receipt) => return Ok(*receipt),
             };
             self.write_peer_delivery(&peer, request.payload.line.as_str(), evidence)
                 .await

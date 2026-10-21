@@ -177,6 +177,55 @@ async fn explicit_steer_rejects_idle_without_starting_work() {
 
 type FixtureError = Box<dyn std::error::Error + Send + Sync>;
 
+#[tokio::test]
+async fn recorded_permission_difference_delivers_and_survives_public_stored_receipt() {
+    for (delivery, unloaded) in [
+        (MessageDelivery::Auto, false),
+        (MessageDelivery::Auto, true),
+        (MessageDelivery::Queue, false),
+        (MessageDelivery::Steer, false),
+    ] {
+        // Arrange/act: the native peer adds a desktop-owned writable root.
+        let observed = message_backend_fixture::exercise_recorded_extra_root(delivery, unloaded)
+            .await
+            .unwrap();
+        // Assert: decision 772 allows delivery and requires path-free differences.
+        let public = observed
+            .result
+            .expect("permission differences must not refuse delivery");
+        assert!(
+            matches!(
+                public.receipt.outcome,
+                collaboration_protocol::DeliveryOutcome::StartedOrSteered
+                    | collaboration_protocol::DeliveryOutcome::Started
+                    | collaboration_protocol::DeliveryOutcome::Steered
+                    | collaboration_protocol::DeliveryOutcome::Queued
+            ),
+            "permission differences must deliver: {:?}",
+            public.receipt.outcome
+        );
+        let receipt = serde_json::to_value(&public.receipt).unwrap();
+        assert_eq!(
+            receipt["client"]["permissionDifferences"],
+            json!(["writableRoots"])
+        );
+        let stored = observed.stored.unwrap();
+        assert_eq!(
+            serde_json::to_value(stored.last_outcome.unwrap()).unwrap(),
+            receipt
+        );
+        assert_eq!(observed.shown["result"]["record"]["lastOutcome"], receipt);
+        assert_eq!(
+            observed
+                .requests
+                .iter()
+                .filter(|request| request["method"] == "thread/resume")
+                .count(),
+            1
+        );
+    }
+}
+
 struct RecordedReceiptWitness {
     observation: message_backend_fixture::RecordedMessageObservation,
     stored: collaboration_protocol::PushRecord,
