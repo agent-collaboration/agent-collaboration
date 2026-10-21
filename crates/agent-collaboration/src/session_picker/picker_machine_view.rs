@@ -43,9 +43,12 @@ pub(super) fn render_machine_choices(
     height: usize,
     help_action: AnyElement<'static>,
     selection_handler: Handler<super::picker_machine_controls::MachineChoiceKey>,
+    cancel_handler: Handler<()>,
+    model_state: State<SessionsPickerModel>,
 ) -> Element<'static, View> {
     let width = u16::try_from(model.width).unwrap_or(u16::MAX);
     let height = u16::try_from(height).unwrap_or(u16::MAX);
+    let mut actions=vec![element!(codex_router_tui::DialogAction(label:"Cancel",keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,emphasis:codex_router_tui::DialogActionEmphasis::Secondary,handler:cancel_handler)).into_any()];
     let (title, body) = match &model.machine_controls.stage {
         PickerMachineStage::Loading { source, .. } => {
             let name = match source.as_ref() {
@@ -59,10 +62,22 @@ pub(super) fn render_machine_choices(
             let options = model
                 .machine_controls
                 .choice_options(&model.request.router_registry, model.request.machine_mode);
+            let enabled = model
+                .machine_controls
+                .search
+                .available_focused_key(&options)
+                .is_some();
+            let select_focused = selection_handler.clone();
+            actions.push(element!(codex_router_tui::DialogAction(label:"Select",enabled,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,handler:move |_| {
+                let selected={let current=model_state.read();let choices=current.machine_controls.choice_options(&current.request.router_registry,current.request.machine_mode);current.machine_controls.search.available_focused_key(&choices)};
+                if let Some(key)=selected {select_focused(key);}
+            })).into_any());
             ("Choose machine".to_owned(),element! {
                 View(flex_direction:FlexDirection::Column) {
-                    codex_router_tui::SearchSelect<super::picker_machine_controls::MachineChoiceKey>(state:model.machine_controls.search.clone(),options,on_select:selection_handler)
-                    #(notice.as_ref().map(|notice|element!(Text(content:notice.message(),color:Color::Yellow))))
+                    codex_router_tui::FormField(label:"Machine".to_owned(),label_width:14u16,stacked:width<52,has_focus:true) {
+                        codex_router_tui::SearchSelect<super::picker_machine_controls::MachineChoiceKey>(state:model.machine_controls.search.clone(),options,on_select:selection_handler)
+                    }
+                    #(notice.as_ref().map(|notice|element!(Text(content:notice.message(),color:codex_router_tui::UiTextRole::Warning.color()))))
                 }
             }.into_any())
         }
@@ -72,7 +87,7 @@ pub(super) fn render_machine_choices(
         View(width:u32::from(width),height:u32::from(height)) {
             codex_router_tui::DialogFrame(width,height,title,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
                 margins:codex_router_tui::DialogMargins {top:1,right:2,bottom:1,left:2},help_action:Some(help_action),
-                actions:vec![element!(Text(content:"Esc Cancel",color:Color::Grey)).into_any()]) {#(body)}
+                actions) {#(body)}
         }
     }
 }

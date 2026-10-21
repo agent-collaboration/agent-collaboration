@@ -332,7 +332,7 @@ async fn machine_selector_does_not_let_new_fork_search_or_reload_act_through_it(
         "without a registry, any leaked Ctrl+N would create a default action"
     );
     assert!(frames.iter().any(|frame| frame.contains("Choose machine")));
-    assert!(frames.iter().all(|frame| !frame.contains("Search: [x]")));
+    assert!(frames.iter().all(|frame| !frame.contains("Client: [x]")));
 }
 
 #[tokio::test]
@@ -420,7 +420,7 @@ async fn named_new_uses_configured_remote_cwd_and_cannot_create_before_route_qua
                     }
                     phase = 2;
                 } else if phase == 2
-                    && text.contains("Search:")
+                    && text.contains("Machine:")
                     && text.contains("/remote/only/project")
                     && text.contains("no session created")
                 {

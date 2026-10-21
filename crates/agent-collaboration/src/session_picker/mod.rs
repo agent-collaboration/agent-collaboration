@@ -25,6 +25,7 @@ mod provider_filter_storyboard_fixture;
 #[cfg(test)]
 mod provider_filter_tests;
 mod provider_filter_view;
+mod session_dialog_context;
 mod session_id_clipboard;
 pub(crate) use provider_filter_model::SessionProviderFamily;
 mod picker_source_view;

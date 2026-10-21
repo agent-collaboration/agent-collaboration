@@ -525,10 +525,14 @@ async fn quota_status_stacked_without_authoritative_selection_shows_focused_acco
         .find(|frame| frame.contains("Account details"))
         .expect("explicit details dialog");
 
-    assert!(text.contains("Selected account"), "{text}");
+    let dialog = quota_ux_clarity_test::actual_dialog_text(text, "Account details");
+    let words = dialog.split_whitespace().collect::<Vec<_>>().join(" ");
+    for fact in ["ssdev", "Status blocked", "Reason quota ineligible"] {
+        assert!(words.contains(fact), "{dialog}");
+    }
     assert!(
-        text.contains("ssdev    blocked    quota ineligible"),
-        "{text}"
+        !dialog.contains("Selected account"),
+        "one captured identity and task title: {dialog}"
     );
     assert!(
         !text.contains("No selectable account"),
@@ -591,7 +595,7 @@ async fn quota_status_narrow_rows_preserve_quota_windows_and_forecast() {
     assert!(text.contains("□□□□□□□│"), "{text}");
     assert!(
         frames.iter().any(|frame| !frame.contains("Account details")
-            && quota_column_words(frame, 21, 9).contains("1 client ↻ 2 resets")),
+            && quota_column_words(frame, 21, 9).contains("1 client 2 resets")),
         "the narrow browse row must preserve client/reset counts before details: {frames:?}"
     );
 }
@@ -604,7 +608,7 @@ fn quota_status_static_narrow_rows_preserve_quota_windows_and_forecast() {
     assert!(text.contains("5h"), "{text}");
     assert!(text.contains("□□□□□□□│"), "{text}");
     assert!(
-        quota_column_words(&text, 21, 9).contains("1 client ↻ 2 resets"),
+        quota_column_words(&text, 21, 9).contains("1 client 2 resets"),
         "{text}"
     );
 }

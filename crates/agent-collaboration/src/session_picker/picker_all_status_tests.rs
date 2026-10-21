@@ -380,7 +380,7 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
             })
         });
         let copied = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
-        let copier: crate::presentation::session_picker::session_id_clipboard::SessionIdCopier =
+        let copier: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter =
             Arc::new({
                 let copied = copied.clone();
                 move |session_id| {
@@ -403,7 +403,7 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
         let mut phase = 0;
         let mut last = String::new();
         let render = async {
-            let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),session_id_copier:Some(copier),width:180usize,height:60usize,selected_outcome_out:&mut outcome));
+            let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),session_clipboard_writer:Some(copier),width:180usize,height:60usize,selected_outcome_out:&mut outcome));
             let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(input));
             tokio::pin!(frames);
             while let Some(canvas) = frames.next().await {
@@ -460,7 +460,8 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
                     phase = 5;
                 } else if phase == 5 && frame.contains(marker) {
                     assert!(
-                        frame.contains("Session details · Native equal ID")
+                        frame.contains("Session details")
+                            && frame.contains("Native equal ID")
                             && frame.contains("/source/native"),
                         "background publication cannot replace the captured native origin: {frame}"
                     );

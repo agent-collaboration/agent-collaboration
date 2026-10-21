@@ -142,6 +142,7 @@ fn DialogJourney(mut hooks: Hooks) -> impl Into<AnyElement<'static>> {
         Some(element! {
             DialogFrame(width: width.max(40), height: height.max(12), title: "Dialog active".to_owned(),
                 presentation: DialogPresentation::cells(30, 10),
+                context:vec![element!(Text(content:"Account: alpha")).into_any()],
                 scroll_keys: crate::DialogScrollKeys::Navigation, on_close: move |_| open.set(false),
                 actions: vec![element!(Text(content: "Esc Close")).into_any()]) {
                 #((1..=40).map(|index| element!(Text(content: format!("CONTENT {index}")))))
@@ -202,6 +203,10 @@ async fn dialog_blocks_background_keys_and_pointer_then_restores_them_after_canc
                     "background input leaked: {frame}"
                 );
                 assert!(frame.contains("Esc Close"), "scroll lost actions: {frame}");
+                assert!(
+                    frame.contains("Account: alpha"),
+                    "scroll lost attributable context: {frame}"
+                );
                 sender
                     .send(TerminalEvent::Key(KeyEvent::new(
                         KeyEventKind::Press,
@@ -360,23 +365,34 @@ fn form_field_columns_use_terminal_layout_for_wide_labels() {
 }
 
 #[test]
-fn percentage_dialog_keeps_actions_at_the_fixed_bottom_edge() {
-    let frame=element! {View(width:80,height:30) {
-        DialogFrame(width:80u16,height:30u16,title:"Fixed actions".to_owned(),margins:DialogMargins {top:0,right:0,bottom:0,left:0},actions:vec![element!(crate::DialogAction(label:"Apply")).into_any()]) {
-            Text(content:"Short body")
-        }
-    }}.render(None).to_string();
-    let bottom = frame
-        .lines()
-        .position(|line| line.contains('╰'))
-        .expect("dialog bottom");
-    let action = frame
-        .lines()
-        .position(|line| line.contains("Apply"))
-        .expect("action");
-    assert_eq!(
-        bottom - action,
-        2,
-        "actions sit above one padding row and the border: {frame}"
-    );
+fn percentage_dialog_actions_follow_a_short_body_with_one_gap() {
+    for (width, height) in [
+        (120u16, 36u16),
+        (76, 30),
+        (48, 24),
+        (48, 12),
+        (40, 24),
+        (32, 20),
+    ] {
+        let frame = element! {View(width:u32::from(width),height:u32::from(height)) {
+            DialogFrame(width,height,title:"Credit usage".to_owned(),
+                actions:vec![element!(crate::DialogAction(label:"Cancel")).into_any(),element!(crate::DialogAction(label:"Save")).into_any()]) {
+                Text(content:"Use credits: Allow")
+            }
+        }}.render(None).to_string();
+        let body = frame
+            .lines()
+            .position(|line| line.contains("Use credits: Allow"))
+            .expect("short task body is visible");
+        let action = frame
+            .lines()
+            .position(|line| line.contains("Cancel") && line.contains("Save"))
+            .expect("actions remain visible");
+        assert_eq!(
+            action - body,
+            2,
+            "one deliberate gap after natural content at {width}x{height}: {frame}"
+        );
+        assert!(frame.lines().count() <= usize::from(height), "{frame}");
+    }
 }

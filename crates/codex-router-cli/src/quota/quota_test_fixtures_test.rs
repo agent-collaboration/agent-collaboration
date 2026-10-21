@@ -323,7 +323,7 @@ pub(super) fn assert_quota_capture_account_windows(text: &str, account_label: &s
                     .all(|character| character == '│' || character.is_whitespace())
         })
         .collect::<Vec<_>>();
-    let account_block = account_lines.join("\n");
+    let account_block = account_lines.join("\n").replace('\u{a0}', " ");
     for fact in ["Weekly", "5h", "resets 7d", "resets 5h", "%"] {
         assert!(
             account_block.contains(fact),

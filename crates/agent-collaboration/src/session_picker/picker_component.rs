@@ -60,7 +60,7 @@ pub(crate) struct SessionsPickerComponentProps<'a> {
     client_inventory_loader: Option<super::NewClientInventoryLoader>,
     client_executor: Option<crate::sessions::source_client_action::SessionClientExecutor>,
     details_client_inspector: Option<super::details_client_inventory::DetailsClientInspector>,
-    session_id_copier: Option<super::session_id_clipboard::SessionIdCopier>,
+    session_clipboard_writer: Option<super::session_id_clipboard::SessionClipboardWriter>,
     width: usize,
     height: usize,
     selected_outcome_out: Option<&'a mut Option<SessionsPickerOutcome>>,
@@ -74,10 +74,10 @@ pub(crate) fn SessionsPickerComponent<'a>(
     props: &mut SessionsPickerComponentProps<'a>,
     mut hooks: Hooks,
 ) -> impl Into<AnyElement<'static>> {
-    let session_id_copier = props
-        .session_id_copier
+    let session_clipboard_writer = props
+        .session_clipboard_writer
         .clone()
-        .unwrap_or_else(super::session_id_clipboard::unavailable_session_id_copier);
+        .unwrap_or_else(super::session_id_clipboard::unavailable_session_clipboard_writer);
     let mut system = hooks.use_context_mut::<SystemContext>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
     let live_terminal_width = props.width == 0;
@@ -216,7 +216,7 @@ pub(crate) fn SessionsPickerComponent<'a>(
         &mut hooks,
         picker_input::PickerInputContext {
             model,
-            session_id_copier: session_id_copier.clone(),
+            session_clipboard_writer: session_clipboard_writer.clone(),
             observed_width,
             observed_height,
             reload_generation,
@@ -268,19 +268,23 @@ pub(crate) fn SessionsPickerComponent<'a>(
         );
     }
 
+    let machine_context = picker_machine_input::MachineSelectionContext {
+        model,
+        can_load_source: props.record_loader.is_some(),
+        reload_port: reload_port.clone(),
+        reload_generation,
+        conversation_cache,
+    };
     if let Some(background) = super::picker_help_view::render_choice_surface(
         &model.read(),
         model,
         height,
         Handler::from({
-            let context = picker_machine_input::MachineSelectionContext {
-                model,
-                can_load_source: props.record_loader.is_some(),
-                reload_port: reload_port.clone(),
-                reload_generation,
-                conversation_cache,
-            };
+            let context = machine_context.clone();
             move |key| picker_machine_input::select_machine_choice(context.clone(), key)
+        }),
+        Handler::from(move |_| {
+            picker_machine_input::cancel_machine_choice(machine_context.clone())
         }),
         selected_outcome,
     ) {
@@ -321,7 +325,7 @@ pub(crate) fn SessionsPickerComponent<'a>(
             height,
             minimum_render_height,
         },
-        session_id_copier,
+        session_clipboard_writer,
         Handler::from(move |_| {
             let mut model = model;
             let mut cache = conversation_cache;

@@ -211,7 +211,7 @@ async fn sessions_picker_stacked_details_wraps_conversation_without_preview_or_m
     let mut phase = 0;
     let mut last = String::new();
     let journey = async {
-        while let Some(canvas) = frames.next().await {
+        while let Some(canvas) = next_current_canvas(frames.as_mut()).await.unwrap() {
             let text = canvas.to_string();
             if phase == 0 {
                 sender
@@ -236,11 +236,27 @@ async fn sessions_picker_stacked_details_wraps_conversation_without_preview_or_m
                 sender
                     .send(TerminalEvent::Key(KeyEvent::new(
                         KeyEventKind::Press,
-                        KeyCode::End,
+                        KeyCode::F(1),
                     )))
                     .unwrap();
                 phase = 2;
-            } else if phase == 2 && text.contains("final-conversation-marker") {
+            } else if phase == 2 && text.contains("Sessions Help") {
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::Esc,
+                    )))
+                    .unwrap();
+                phase = 3;
+            } else if phase == 3 && text.contains("Session details") {
+                sender
+                    .send(TerminalEvent::Key(KeyEvent::new(
+                        KeyEventKind::Press,
+                        KeyCode::End,
+                    )))
+                    .unwrap();
+                phase = 5;
+            } else if phase == 5 && text.contains("final-conversation-marker") {
                 assert!(
                     text.lines()
                         .all(|line| unicode_width::UnicodeWidthStr::width(line) <= 120),
@@ -251,14 +267,14 @@ async fn sessions_picker_stacked_details_wraps_conversation_without_preview_or_m
                     "{text}"
                 );
                 sender.send(ctrl_key('d')).unwrap();
-                phase = 3;
+                phase = 4;
             }
             last = text;
         }
     };
     let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
     assert!(result.is_ok(), "phase={phase}: {last}");
-    assert_eq!(phase, 3, "{last}");
+    assert_eq!(phase, 4, "{last}");
 }
 
 #[tokio::test]

@@ -149,13 +149,13 @@ async fn quota_help_phone_header_keeps_title_and_help_when_pool_status_is_long()
     );
     let header = frame.lines().take(5).collect::<Vec<_>>().join("\n");
     assert!(
-        header.contains("⇄ 4294967295") && header.contains("◷ 2"),
-        "wrap long counters while retaining their values and Help: {frame}"
+        header.contains("Accounts 2") && header.contains("Usable 2") && header.contains("Stale 2"),
+        "small header keeps core counts/nonzero problems; full client count remains in contextual Help: {frame}"
     );
 }
 
 #[tokio::test]
-async fn quota_help_filter_selection_stays_yellow_when_apply_has_focus() {
+async fn quota_help_inactive_filter_value_is_white_while_apply_focus_is_yellow() {
     let mut exit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('d'));
     exit.modifiers = KeyModifiers::CONTROL;
     let mut component = element!(QuotaStatusComponent(view_model: mixed_provider_filter_view_model(), width: 120usize, height: 36usize));
@@ -197,10 +197,10 @@ async fn quota_help_filter_selection_stays_yellow_when_apply_has_focus() {
         .expect("provider style");
     assert_eq!(
         style.color,
-        Some(Color::Yellow),
-        "selection cannot depend on action focus: {frame}"
+        Some(Color::White),
+        "inactive value remains readable without competing with current action focus: {frame}"
     );
-    assert_eq!(style.weight, Weight::Bold);
+    assert_eq!(style.weight, Weight::Normal);
     let (row, line) = frame
         .lines()
         .enumerate()
@@ -258,7 +258,7 @@ async fn quota_help_retains_filter_draft_and_blocks_background_keys() {
         vec![
             ("Filters", vec![provider_filter_key(KeyCode::F(3))]),
             (
-                "Account provider · Draft: All",
+                "Account provider",
                 vec![
                     provider_filter_key(KeyCode::Enter),
                     provider_filter_key(KeyCode::Down),
@@ -274,10 +274,7 @@ async fn quota_help_retains_filter_draft_and_blocks_background_keys() {
                     provider_filter_key(KeyCode::Esc),
                 ],
             ),
-            (
-                "Account provider · Draft: OpenAI",
-                vec![provider_filter_key(KeyCode::Esc)],
-            ),
+            ("OpenAI ▾", vec![provider_filter_key(KeyCode::Esc)]),
             ("Provider: All", vec![provider_filter_key(KeyCode::Esc)]),
         ],
         None,
@@ -286,11 +283,7 @@ async fn quota_help_retains_filter_draft_and_blocks_background_keys() {
     assert!(frames.iter().any(|frame| frame.contains("Quota Help")
         && frame.contains("Space")
         && frame.contains("Apply draft")));
-    assert!(
-        frames
-            .iter()
-            .any(|frame| frame.contains("Account provider · Draft: OpenAI"))
-    );
+    assert!(frames.iter().any(|frame| frame.contains("OpenAI ▾")));
     assert!(
         frames
             .last()

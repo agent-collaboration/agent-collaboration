@@ -72,11 +72,36 @@ impl<TKey: Clone + Eq> SearchSelectState<TKey> {
                 .map(|option| option.key.clone());
         }
     }
+    /// The same current choice gates both Enter and its visible Select action.
+    pub fn available_focused_key(&self, options: &[ChoiceOption<TKey>]) -> Option<TKey> {
+        let Self::Searching { query, focused } = self else {
+            return None;
+        };
+        options
+            .iter()
+            .find(|option| {
+                Some(&option.key) == focused.as_ref()
+                    && option.matches(query)
+                    && option.availability == ChoiceAvailability::Available
+            })
+            .map(|option| option.key.clone())
+    }
     pub fn handle_key(
         &mut self,
         code: KeyCode,
         options: &[ChoiceOption<TKey>],
     ) -> ChoiceTransition<TKey> {
+        if code == KeyCode::Enter {
+            if !self.is_open() {
+                return ChoiceTransition::Unhandled;
+            }
+            return if let Some(key) = self.available_focused_key(options) {
+                *self = Self::Closed;
+                ChoiceTransition::Selected(key)
+            } else {
+                ChoiceTransition::Handled
+            };
+        }
         let Self::Searching { query, focused } = self else {
             return ChoiceTransition::Unhandled;
         };
@@ -84,22 +109,6 @@ impl<TKey: Clone + Eq> SearchSelectState<TKey> {
             KeyCode::Esc => {
                 *self = Self::Closed;
                 ChoiceTransition::Cancelled
-            }
-            KeyCode::Enter => {
-                let selected = options
-                    .iter()
-                    .find(|option| {
-                        Some(&option.key) == focused.as_ref()
-                            && option.matches(query)
-                            && option.availability == ChoiceAvailability::Available
-                    })
-                    .map(|option| option.key.clone());
-                if let Some(key) = selected {
-                    *self = Self::Closed;
-                    ChoiceTransition::Selected(key)
-                } else {
-                    ChoiceTransition::Handled
-                }
             }
             KeyCode::Up | KeyCode::Down => {
                 let matching = options
@@ -175,7 +184,7 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
         let key=option.key;
         let handler=handler.clone();
         element! {
-            Button(handler:move |_|if available && enabled { handler(key.clone()); }) {
+            crate::DialogButton(handler:move |_|if available && enabled { handler(key.clone()); }) {
                 View(width:100pct,flex_shrink:0.0_f32) {
                     SelectableRow(selected) {
                         Text(content:label,color:if !available { Color::DarkGrey } else if selected { Color::Yellow } else { Color::White })
@@ -188,12 +197,10 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
     }).collect::<Vec<_>>();
     element! {
         View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            Text(content:format!("Search: {query}"),color:Color::Grey)
-            #(rows.is_empty().then(||element! {
-                crate::FocusReveal(has_focus:reveal_empty) {
-                    Text(content:"No matching choices",color:Color::Grey)
-                }
-            }))
+            crate::FocusReveal(has_focus:reveal_empty) {
+                View(padding_left:2) { Text(content:format!("Search: {query}"),color:Color::Grey,wrap:TextWrap::Wrap) }
+                #(rows.is_empty().then(||element!(View(padding_left:2) {Text(content:"No matching choices",color:Color::Grey,wrap:TextWrap::Wrap)})))
+            }
             #(rows)
         }
     }

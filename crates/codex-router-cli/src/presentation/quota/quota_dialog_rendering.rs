@@ -11,6 +11,8 @@ use iocraft::prelude::*;
 pub(super) struct QuotaDialogViewProps<'a> {
     pub width: u16,
     pub height: u16,
+    pub identity: Option<&'a super::quota_dialog_context::QuotaDialogIdentity>,
+    pub confirmation_choices: Option<AnyElement<'static>>,
     pub filter_state: QuotaFilterState,
     pub filter_controller: QuotaFilterController,
     pub details_dialog: State<Option<AccountId>>,
@@ -34,6 +36,8 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
     let QuotaDialogViewProps {
         width,
         height,
+        identity,
+        mut confirmation_choices,
         filter_state,
         filter_controller,
         mut details_dialog,
@@ -75,18 +79,47 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
             .find(|row| &row.account_id == identity)
             .map(|row| &row.details);
     }
-    let (title, content) = if let Some(options) = panel.account_options {
+    let (title, content) = if let (Some(snapshot), Some(target)) =
+        (panel.reset_snapshot, panel.reset_target)
+        && matches!(
+            snapshot.phase(),
+            crate::quota_reset::reset_session_supervisor::WorkflowPhase::Confirming
+                | crate::quota_reset::reset_session_supervisor::WorkflowPhase::Revalidating
+                | crate::quota_reset::reset_session_supervisor::WorkflowPhase::Committing
+                | crate::quota_reset::reset_session_supervisor::WorkflowPhase::Result
+        ) {
+        let title = match snapshot.phase() {
+            crate::quota_reset::reset_session_supervisor::WorkflowPhase::Confirming => {
+                "Confirm reset"
+            }
+            crate::quota_reset::reset_session_supervisor::WorkflowPhase::Revalidating => {
+                "Checking reset"
+            }
+            crate::quota_reset::reset_session_supervisor::WorkflowPhase::Committing => {
+                "Reset in progress"
+            }
+            _ => "Reset result",
+        };
+        (
+            title.to_owned(),
+            super::quota_reset_detail_rendering::render_reset_panel_content(
+                snapshot,
+                target,
+                panel.width,
+                panel.inventory_page_start,
+                super::quota_reset_presentation_model::reset_inventory_page_size(panel.height),
+                panel.spinner_tick,
+                confirmation_choices.take(),
+            ),
+        )
+    } else if let Some(options) = panel.account_options {
         (
             if options.editor.is_some() {
                 "Credit usage"
             } else {
                 match options.tab {
-                    super::quota_account_options::AccountOptionsTab::Resets => {
-                        "Account options · Resets"
-                    }
-                    super::quota_account_options::AccountOptionsTab::Credits => {
-                        "Account options · Credits"
-                    }
+                    super::quota_account_options::AccountOptionsTab::Resets => "Options · Resets",
+                    super::quota_account_options::AccountOptionsTab::Credits => "Options · Credits",
                 }
             }
             .to_owned(),
@@ -138,10 +171,10 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
                 snapshot,
                 target,
                 panel.width,
-                panel.height,
                 panel.inventory_page_start,
                 super::quota_reset_presentation_model::reset_inventory_page_size(panel.height),
                 panel.spinner_tick,
+                None,
             ),
         )
     } else {
@@ -157,6 +190,7 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
     };
     Some(element! {
         DialogFrame(width,height,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,title,presentation,margins,help_action,
+            context:identity.map(|identity|vec![identity.render(usize::from(frame_width.saturating_sub(4)))]).unwrap_or_default(),
             scroll_keys:if panel.account_options.and_then(|options|options.editor.as_ref()).is_some_and(|editor|editor.choice.is_open()) {codex_router_tui::DialogScrollKeys::Disabled}else if filter_modal_owns_input {codex_router_tui::DialogScrollKeys::Arrows}else {codex_router_tui::DialogScrollKeys::Navigation},
             actions:if filter_modal_owns_input {
                 actions

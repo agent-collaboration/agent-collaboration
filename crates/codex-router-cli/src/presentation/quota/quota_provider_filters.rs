@@ -86,10 +86,6 @@ impl QuotaAccountFilters {
             && (self.disabled == DisabledAccountVisibility::Shown || row.enabled)
     }
 
-    pub(super) fn visible_count(self, rows: &[QuotaStatusAccountViewModel]) -> usize {
-        rows.iter().filter(|row| self.includes_row(row)).count()
-    }
-
     pub(super) fn visible_rows(
         self,
         rows: &[QuotaStatusAccountViewModel],

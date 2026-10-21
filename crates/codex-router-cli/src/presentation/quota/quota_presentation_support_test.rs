@@ -251,8 +251,8 @@ fn quota_view_model() -> QuotaStatusViewModel {
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: crate::quota::CreditUsageStatus::default(),
             reason: "safest quota".to_owned(),
-            weekly_window: "█████ 83% left, reset 7d".to_owned(),
-            short_window: "█████ 99% left, reset 5h".to_owned(),
+            weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+            short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
             burn_meter: "■□□□".to_owned(),
             sample_metadata: SampleMetadata {
                 confidence: SampleConfidence::Fresh,
@@ -343,8 +343,8 @@ pub(super) fn quota_two_account_view_model() -> QuotaStatusViewModel {
                 credit_usage_summary: "unknown".to_owned(),
                 credit_usage: crate::quota::CreditUsageStatus::default(),
                 reason: "alpha detail".to_owned(),
-                weekly_window: "█████ 83% left, reset 7d".to_owned(),
-                short_window: "█████ 99% left, reset 5h".to_owned(),
+                weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+                short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
                 burn_meter: "■□□□".to_owned(),
                 sample_metadata: SampleMetadata::default(),
                 reset_pace: ResetPaceViewModel::default(),
@@ -368,8 +368,8 @@ pub(super) fn quota_two_account_view_model() -> QuotaStatusViewModel {
                 credit_usage_summary: "unknown".to_owned(),
                 credit_usage: crate::quota::CreditUsageStatus::default(),
                 reason: "beta detail".to_owned(),
-                weekly_window: "████ 75% left, reset 6d".to_owned(),
-                short_window: "████ 70% left, reset 4h".to_owned(),
+                weekly_window: "████ 75%\u{a0}left reset\u{a0}6d".to_owned(),
+                short_window: "████ 70%\u{a0}left reset\u{a0}4h".to_owned(),
                 burn_meter: "■■□□".to_owned(),
                 sample_metadata: SampleMetadata::default(),
                 reset_pace: ResetPaceViewModel::default(),
@@ -404,8 +404,8 @@ fn quota_many_account_view_model() -> QuotaStatusViewModel {
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: crate::quota::CreditUsageStatus::default(),
             reason: format!("account {index:02} detail"),
-            weekly_window: "█████ 83% left, reset 7d".to_owned(),
-            short_window: "█████ 99% left, reset 5h".to_owned(),
+            weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+            short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
             burn_meter: "■□□□".to_owned(),
             sample_metadata: SampleMetadata::default(),
             reset_pace: ResetPaceViewModel::default(),
@@ -605,8 +605,8 @@ fn quota_state_color_row(
         credit_usage_summary: "unknown".to_owned(),
         credit_usage: crate::quota::CreditUsageStatus::default(),
         reason: semantic_label.to_owned(),
-        weekly_window: "█████ 83% left, reset 7d".to_owned(),
-        short_window: "█████ 99% left, reset 5h".to_owned(),
+        weekly_window: "█████ 83%\u{a0}left reset\u{a0}7d".to_owned(),
+        short_window: "█████ 99%\u{a0}left reset\u{a0}5h".to_owned(),
         burn_meter: String::new(),
         sample_metadata: SampleMetadata {
             confidence: SampleConfidence::Fresh,
@@ -691,4 +691,14 @@ fn test_header_facts(usable: usize, fresh: usize) -> super::quota_status_symbols
         observed_clients: None,
         credential_notice: None,
     }
+}
+
+fn quota_selected_panel_has_facts(frame: &str, account: &str, status: &str, reason: &str) -> bool {
+    let panel = quota_selected_panel_text(frame);
+    let words = panel.split_whitespace().collect::<Vec<_>>().join(" ");
+    panel
+        .lines()
+        .any(|line| line.trim_matches(['│', ' ']) == account)
+        && words.contains(&format!("Status {status}"))
+        && words.contains(&format!("Reason {reason}"))
 }

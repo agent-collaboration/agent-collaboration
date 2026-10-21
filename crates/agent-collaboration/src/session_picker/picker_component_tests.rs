@@ -1,6 +1,6 @@
 //! Shared mock-terminal fixtures; actual behavior cases live in focused modules.
 
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
 use iocraft::MouseButton;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -28,6 +28,9 @@ mod picker_performance_tests;
 
 #[path = "picker_details_navigation_tests.rs"]
 mod picker_details_navigation_tests;
+
+#[path = "session_choice_ux_tests.rs"]
+mod session_choice_ux_tests;
 
 #[path = "native_catalogue_publication_tests.rs"]
 mod native_catalogue_publication_tests;
@@ -300,3 +303,85 @@ fn resume_key() -> TerminalEvent {
 
 #[path = "picker_pointer_tests.rs"]
 mod picker_pointer_tests;
+
+async fn next_current_canvas<TCanvases>(
+    mut canvases: std::pin::Pin<&mut TCanvases>,
+) -> std::io::Result<Option<iocraft::Canvas>>
+where
+    TCanvases: futures_util::Stream<Item = iocraft::Canvas> + ?Sized,
+{
+    let Some(mut current) = canvases.next().await else {
+        return Ok(None);
+    };
+    for _ in 0..64 {
+        match canvases.next().now_or_never() {
+            Some(Some(canvas)) => current = canvas,
+            _ => return Ok(Some(current)),
+        }
+    }
+    Err(std::io::Error::other(format!(
+        "ready-frame drain exceeded64: {current}"
+    )))
+}
+
+#[path = "session_context_ux_tests.rs"]
+mod session_context_ux_tests;
+
+#[derive(Clone, Copy)]
+struct DialogBounds {
+    top: usize,
+    left: usize,
+    right: usize,
+    bottom: usize,
+}
+
+fn dialog_bounds(frame: &str, title: &str) -> DialogBounds {
+    let lines = frame.lines().collect::<Vec<_>>();
+    let title_row = lines
+        .iter()
+        .position(|line| line.contains(title))
+        .expect("actual dialog title");
+    let top = (0..title_row)
+        .rev()
+        .find(|row| lines[*row].contains('╭') && lines[*row].contains('╮'))
+        .expect("actual modal top border");
+    let left = unicode_width::UnicodeWidthStr::width(
+        lines[top].get(..lines[top].find('╭').unwrap()).unwrap(),
+    );
+    let right = unicode_width::UnicodeWidthStr::width(
+        lines[top].get(..lines[top].find('╮').unwrap()).unwrap(),
+    );
+    let bottom = (title_row..lines.len())
+        .find(|row| {
+            lines[*row].find('╰').is_some_and(|byte| {
+                unicode_width::UnicodeWidthStr::width(lines[*row].get(..byte).unwrap()) == left
+            })
+        })
+        .expect("matching modal bottom border");
+    DialogBounds {
+        top,
+        left,
+        right,
+        bottom,
+    }
+}
+
+fn dialog_text(frame: &str, bounds: DialogBounds) -> String {
+    frame
+        .lines()
+        .skip(bounds.top + 1)
+        .take(bounds.bottom - bounds.top - 1)
+        .map(|line| {
+            line.chars()
+                .scan(0usize, |column, character| {
+                    let start = *column;
+                    *column += unicode_width::UnicodeWidthChar::width(character).unwrap_or(0);
+                    Some((start, character))
+                })
+                .filter(|(column, _)| *column > bounds.left && *column < bounds.right)
+                .map(|(_, character)| if character == '┃' { ' ' } else { character })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}

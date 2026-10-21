@@ -12,7 +12,7 @@ pub(crate) struct DialogBodyScroll {
 struct FocusRevealHook {
     scroll: Option<DialogBodyScroll>,
     focused: bool,
-    last_target: Option<(i32, u16, u16, u16)>,
+    last_target: Option<(i32, u16, u16)>,
 }
 impl Hook for FocusRevealHook {
     fn pre_component_draw(&mut self, drawer: &mut ComponentDrawer) {
@@ -29,8 +29,9 @@ impl Hook for FocusRevealHook {
             top + i32::from(scroll.offset.get()),
             drawer.size().height,
             scroll.viewport_height.get(),
-            scroll.natural_height.get(),
         );
+        // Content below an unchanged target may remeasure while scrolling.
+        // Its total height bounds offsets, but must not steal manual navigation.
         if self.last_target == Some(target) {
             return;
         }

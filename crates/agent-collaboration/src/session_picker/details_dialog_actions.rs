@@ -1,6 +1,6 @@
 //! Details event effects: selection uses captured state; clipboard output stays here.
 use super::details_dialog_state::{ClipboardRequestStatus, DetailsAction};
-use super::session_id_clipboard::SessionIdCopier;
+use super::session_id_clipboard::SessionClipboardWriter;
 use super::{SessionsPickerOutcome, picker_model::SessionsPickerModel};
 use crate::sessions::SessionActionSelection;
 use iocraft::prelude::*;
@@ -9,7 +9,7 @@ pub(super) fn dispatch_details_action(
     mut model: State<SessionsPickerModel>,
     mut outcome: State<Option<SessionsPickerOutcome>>,
     action: DetailsAction,
-    copier: &SessionIdCopier,
+    copier: &SessionClipboardWriter,
 ) {
     let selected = apply_details_action(&mut model.write(), action, copier);
     if let Some(selected) = selected {
@@ -20,7 +20,7 @@ pub(super) fn dispatch_details_action(
 pub(super) fn apply_details_action(
     model: &mut SessionsPickerModel,
     action: DetailsAction,
-    copy_session_id: &super::session_id_clipboard::SessionIdCopier,
+    clipboard_writer: &super::session_id_clipboard::SessionClipboardWriter,
 ) -> Option<SessionsPickerOutcome> {
     if model.source_action.pending.is_some() || model.client_action.is_active() || model.show_help {
         return None;
@@ -69,8 +69,16 @@ pub(super) fn apply_details_action(
             );
             model.details_dialog = None;
         }
-        DetailsAction::CopySessionId => {
-            let copied = copy_session_id(&dialog.record().session_id);
+        DetailsAction::CopySessionId | DetailsAction::CopyPath => {
+            let payload = match action {
+                DetailsAction::CopyPath => dialog
+                    .record()
+                    .cwd
+                    .as_deref()
+                    .filter(|path| !path.trim().is_empty())?,
+                _ => &dialog.record().session_id,
+            };
+            let copied = clipboard_writer(payload);
             if let Some(current) = &mut model.details_dialog {
                 current.clipboard_status = if copied.is_ok() {
                     ClipboardRequestStatus::Sent
@@ -87,7 +95,7 @@ pub(super) fn handle_details_key(
     model: &mut SessionsPickerModel,
     code: KeyCode,
     modifiers: KeyModifiers,
-    copier: &SessionIdCopier,
+    copier: &SessionClipboardWriter,
 ) -> Option<SessionsPickerOutcome> {
     let control_enter = code == KeyCode::Enter
         && modifiers.contains(KeyModifiers::CONTROL)

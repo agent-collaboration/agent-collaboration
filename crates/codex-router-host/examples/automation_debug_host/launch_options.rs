@@ -29,6 +29,7 @@ pub(super) struct DebugHostOptions {
     pub(super) router_binary: PathBuf,
     pub(super) port: u16,
     pub(super) router_root: Option<PathBuf>,
+    pub(super) collaboration_directory: Option<PathBuf>,
     pub(super) claude_provider: Option<ProviderCommand>,
     pub(super) cursor_provider: Option<ProviderCommand>,
     pub(super) peer_registry_directory: Option<PathBuf>,
@@ -46,6 +47,7 @@ pub(super) fn parse_options_from(
     let mut router_binary = None;
     let mut port = 18787;
     let mut router_root = None;
+    let mut collaboration_directory = None::<PathBuf>;
     let mut claude_executable = None;
     let mut claude_arguments = Vec::new();
     let mut cursor_executable = None;
@@ -54,7 +56,7 @@ pub(super) fn parse_options_from(
     while let Some(flag) = arguments.next() {
         if flag == "--help" || flag == "-h" {
             println!(
-                "automation-debug-host (--run-directory /tmp/NEW-DIRECTORY | --resume-run-directory /tmp/OWNED-DIRECTORY) --router-binary /ABSOLUTE/target/debug/codex-router [--port 18787] [--router-root /ABSOLUTE/ISOLATED-ROOT] [--claude-acp-executable /ABSOLUTE/ACP --claude-acp-arguments ARG ...] [--cursor-acp-executable /ABSOLUTE/ACP --cursor-acp-arguments ARG ...] [--peer-registry-directory /tmp/NEW-DIRECTORY/peer-registry]\n\nOpt-in real acceptance Host. Uses the existing codex-router-debug profile with an in-memory Luna override. Fresh mode creates runtime/workspace directories. Resume mode reopens only a stopped Host's validated private directory. Starts only its own debug router and app-server and shuts its children down on SIGTERM. Never use production paths or ports. Keep this process running while the acceptance runner connects."
+                "automation-debug-host (--run-directory /tmp/NEW-DIRECTORY | --resume-run-directory /tmp/OWNED-DIRECTORY) --router-binary /ABSOLUTE/target/debug/codex-router [--port 18787] [--router-root /ABSOLUTE/ISOLATED-ROOT] [--collaboration-directory /ABSOLUTE/ISOLATED-ROOT/agent-communication] [--claude-acp-executable /ABSOLUTE/ACP --claude-acp-arguments ARG ...] [--cursor-acp-executable /ABSOLUTE/ACP --cursor-acp-arguments ARG ...] [--peer-registry-directory /tmp/NEW-DIRECTORY/peer-registry]\n\nOpt-in real acceptance Host. Uses the existing codex-router-debug profile with an in-memory Luna override. Fresh mode creates runtime/workspace directories. Resume mode reopens only a stopped Host's validated private directory. Starts only its own debug router and app-server and shuts its children down on SIGTERM. Never use production paths or ports. Keep this process running while the acceptance runner connects."
             );
             return Ok(None);
         }
@@ -72,6 +74,9 @@ pub(super) fn parse_options_from(
             )?,
             Some("--router-binary") => router_binary = Some(PathBuf::from(value)),
             Some("--router-root") => router_root = Some(PathBuf::from(value)),
+            Some("--collaboration-directory") => {
+                collaboration_directory = Some(PathBuf::from(value))
+            }
             Some("--peer-registry-directory") => {
                 peer_registry_directory = Some(PathBuf::from(value))
             }
@@ -151,12 +156,20 @@ pub(super) fn parse_options_from(
     if router_root.as_ref().is_some_and(|root| !root.is_absolute()) {
         return Err("--router-root must be absolute".into());
     }
+    if let Some(directory) = &collaboration_directory
+        && !router_root.as_ref().is_some_and(|root| {
+            directory.is_absolute() && *directory == root.join("agent-communication")
+        })
+    {
+        return Err("collaboration directory requires exactly the explicit Router root agent-communication child".into());
+    }
     Ok(Some(DebugHostOptions {
         run_directory,
         run_directory_admission,
         router_binary: router_binary.ok_or("--router-binary required; use --help")?,
         port,
         router_root,
+        collaboration_directory,
         claude_provider,
         cursor_provider,
         peer_registry_directory,
@@ -176,6 +189,12 @@ fn select_run_directory(
 }
 
 impl DebugHostOptions {
+    pub(super) fn selected_collaboration_directory(&self) -> PathBuf {
+        self.collaboration_directory
+            .clone()
+            .unwrap_or_else(|| self.run_directory.join("agent-communication"))
+    }
+
     pub(super) fn host_coordination_paths(&self, router_root: &Path) -> HostCoordinationPaths {
         // The Host derives Claude's local routing token owner from the lock parent.
         HostCoordinationPaths::new(
@@ -195,6 +214,12 @@ impl DebugHostOptions {
         ];
         if let Some(root) = &self.router_root {
             arguments.extend([OsString::from("--router-root"), root.as_os_str().to_owned()]);
+        }
+        if let Some(directory) = &self.collaboration_directory {
+            arguments.extend([
+                OsString::from("--collaboration-directory"),
+                directory.as_os_str().to_owned(),
+            ]);
         }
         if let Some(directory) = &self.peer_registry_directory {
             arguments.extend([
@@ -284,5 +309,163 @@ impl DebugHostOptions {
                 config.with_external_provider_startup(ExternalProviderStartup::Launch(binding));
         }
         Ok(config)
+    }
+}
+
+#[cfg(test)]
+mod collaboration_tests {
+    use super::*;
+    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+
+    #[test]
+    fn public_discovery_directory_preserves_router_token_ownership()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let run = tempfile::tempdir()?;
+        let root = tempfile::tempdir()?;
+        let public_service = root.path().join("agent-communication");
+        // The old RUN projection points discovery at a different token owner.
+        assert_ne!(
+            run.path().join("agent-communication").parent(),
+            public_service.parent()
+        );
+        let options = parse_options_from([
+            OsString::from("--run-directory"),
+            run.path().as_os_str().to_owned(),
+            OsString::from("--router-binary"),
+            OsString::from("/tmp/router"),
+            OsString::from("--router-root"),
+            root.path().as_os_str().to_owned(),
+            OsString::from("--collaboration-directory"),
+            public_service.as_os_str().to_owned(),
+        ])?
+        .ok_or("launch options absent")?;
+        assert_eq!(options.selected_collaboration_directory(), public_service);
+        let socket_arguments = super::super::proof_permissions::automation_proof_startup_arguments(
+            &options.selected_collaboration_directory(),
+        )?;
+        assert!(socket_arguments.iter().any(|arg| {
+            arg.to_string_lossy().contains(
+                root.path()
+                    .canonicalize()
+                    .unwrap()
+                    .join("agent-communication/control.sock")
+                    .to_str()
+                    .unwrap(),
+            )
+        }));
+        let resumed = parse_options_from(options.resume_arguments())?.ok_or("resume absent")?;
+        let context = super::super::DebugHostContext {
+            kind: "debugHostPrepared".to_owned(),
+            run_directory: options.run_directory.clone(),
+            service_directory: public_service,
+            workspace: run.path().join("agent-workspace"),
+            profile: "codex-router-debug".to_owned(),
+            model: "gpt-5.6-luna".to_owned(),
+            port: options.port,
+            host_pid: std::process::id(),
+            router_root: options.router_root.clone(),
+            claude_provider: None,
+            cursor_provider: None,
+            peer_registry_directory: None,
+        };
+        super::super::validate_resume_binding(&context, &resumed)?;
+        let mut removed = resumed.clone();
+        removed.collaboration_directory = None;
+        assert!(super::super::validate_resume_binding(&context, &removed).is_err());
+        assert_eq!(
+            resumed,
+            DebugHostOptions {
+                run_directory_admission: RunDirectoryAdmission::Resume,
+                ..options
+            }
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn public_directory_requires_explicit_canonical_private_root_without_publication()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let run = tempfile::tempdir()?;
+        let root = tempfile::tempdir()?;
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
+        let root_path = root.path().canonicalize()?;
+        let service = root_path.join("agent-communication");
+        let mut options = parse_options_from([
+            OsString::from("--run-directory"),
+            run.path().as_os_str().to_owned(),
+            OsString::from("--router-binary"),
+            OsString::from("/tmp/router"),
+            OsString::from("--router-root"),
+            root_path.as_os_str().to_owned(),
+            OsString::from("--collaboration-directory"),
+            service.as_os_str().to_owned(),
+        ])?
+        .ok_or("options absent")?;
+        super::super::validate_collaboration_directory(&options)?;
+        std::fs::DirBuilder::new().mode(0o700).create(&service)?;
+        super::super::validate_collaboration_directory(&options)?;
+        std::fs::write(service.join("service.json"), b"existing publication")?;
+        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        std::fs::remove_file(service.join("service.json"))?;
+        std::fs::set_permissions(&service, std::fs::Permissions::from_mode(0o755))?;
+        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        std::fs::set_permissions(&service, std::fs::Permissions::from_mode(0o700))?;
+        let alias = root_path.join("foreign-service");
+        std::os::unix::fs::symlink(&service, &alias)?;
+        options.collaboration_directory = Some(alias);
+        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        let other_root = tempfile::tempdir()?;
+        std::fs::set_permissions(other_root.path(), std::fs::Permissions::from_mode(0o700))?;
+        let other_path = other_root.path().canonicalize()?;
+        let linked_service = other_path.join("agent-communication");
+        std::os::unix::fs::symlink(&service, &linked_service)?;
+        options.router_root = Some(other_path);
+        options.collaboration_directory = Some(linked_service);
+        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        options.collaboration_directory = Some(service);
+        options.router_root = Some(root_path.join("."));
+        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn default_run_projection_and_invalid_public_directory_arguments_are_preserved() {
+        let base = [
+            "--run-directory",
+            "/tmp/run",
+            "--router-binary",
+            "/tmp/router",
+        ];
+        let options = parse_options_from(base.map(OsString::from))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            options.selected_collaboration_directory(),
+            PathBuf::from("/tmp/run/agent-communication")
+        );
+        assert!(
+            !options
+                .resume_arguments()
+                .contains(&OsString::from("--collaboration-directory"))
+        );
+        for extras in [
+            vec!["--collaboration-directory", "/tmp/root/agent-communication"],
+            vec![
+                "--router-root",
+                "/tmp/root",
+                "--collaboration-directory",
+                "/tmp/foreign/agent-communication",
+            ],
+            vec![
+                "--router-root",
+                "/tmp/root",
+                "--collaboration-directory",
+                "relative",
+            ],
+        ] {
+            assert!(
+                parse_options_from(base.into_iter().chain(extras).map(OsString::from)).is_err()
+            );
+        }
     }
 }

@@ -26,10 +26,10 @@ use super::quota_reset_presentation_model::*;
 use super::quota_status_view_model::*;
 use super::responsive_quota_layout::*;
 
-pub(super) const MIN_QUOTA_WIDTH: usize = 48;
+pub(super) const MIN_QUOTA_WIDTH: usize = 32;
 pub(super) const MIN_RENDER_HEIGHT: usize = 24;
 pub(super) const SIDECAR_QUOTA_WIDTH: usize = 160;
-pub(super) const NARROW_QUOTA_WIDTH: usize = MIN_QUOTA_WIDTH;
+pub(super) const NARROW_QUOTA_WIDTH: usize = 48;
 pub(super) const LIVE_QUOTA_STATUS_RELOAD_INTERVAL: Duration = Duration::from_secs(60);
 pub(super) const LIVE_QUOTA_STATUS_SPINNER_INTERVAL: Duration = Duration::from_millis(120);
 pub(super) const QUOTA_STATUS_SPINNER_TICKS: &[&str] =
@@ -41,6 +41,8 @@ pub(super) struct QuotaStatusComponentProps {
     pub(super) view_model: QuotaStatusViewModel,
     pub(super) width: usize,
     pub(super) height: usize,
+    #[cfg(test)]
+    pub(super) viewport_trace: Option<super::quota_viewport_trace::QuotaViewportTrace>,
     pub(super) reload_view_model: Option<QuotaStatusViewModelLoader>,
     pub(super) reload_interval: Duration,
     pub(super) spinner_interval: Duration,
@@ -501,7 +503,9 @@ pub(super) fn QuotaStatusComponent(
     } else {
         props.height.max(1)
     };
-    let content_width = width.saturating_sub(4).max(44);
+    let compact_phone = interaction_mode == QuotaInteractionMode::Interactive && width < 48;
+    let horizontal_padding = usize::from(!compact_phone);
+    let content_width = width.saturating_sub(2 + 2 * horizontal_padding);
     let view_model = view_model.read();
     let filter_state = *filters.read();
     let visible_rows = filter_state.committed.visible_rows(&view_model.rows);
@@ -592,7 +596,9 @@ pub(super) fn QuotaStatusComponent(
                                 )
                             })
                         })
-                        .unwrap_or_else(|| selected_detail_height(focused_details.is_some()))
+                        .unwrap_or_else(|| {
+                            selected_detail_height(focused_details.is_some(), interaction_mode)
+                        })
                 },
                 |options| {
                     account_options_content_height(
@@ -652,6 +658,13 @@ pub(super) fn QuotaStatusComponent(
     let show_stacked_details = layout.show_stacked_details;
     let body_height = layout.body_height;
     let component_height = quota_status_height(height);
+    #[cfg(test)]
+    super::quota_viewport_trace::use_viewport_trace(
+        &mut hooks,
+        props.viewport_trace.clone(),
+        [terminal_width, terminal_height],
+        [width, component_height],
+    );
     let account_pointer_interaction_enabled = !reset_detail_active
         && current_weekly_floor_editor.is_none()
         && current_account_options.is_none()
@@ -664,6 +677,7 @@ pub(super) fn QuotaStatusComponent(
         element! { View(height: 0) {} }.into_any()
     } else {
         render_account_list(QuotaAccountListProps {
+            compact_phone,
             interactive: interaction_mode == QuotaInteractionMode::Interactive,
             rows: &visible_rows,
             width: content_width,
@@ -683,6 +697,7 @@ pub(super) fn QuotaStatusComponent(
         element! {
             View(width: 100pct,flex_shrink:1.0_f32,min_height:0, height: if interaction_mode==QuotaInteractionMode::Static {Size::Auto}else {Size::Length(body_height as u32)}) {
                 #(render_account_list(QuotaAccountListProps {
+            compact_phone,
             interactive:interaction_mode==QuotaInteractionMode::Interactive,
                     rows: &visible_rows,
                     width: list_width,
@@ -732,6 +747,7 @@ pub(super) fn QuotaStatusComponent(
         .into_any()
     } else {
         render_account_list(QuotaAccountListProps {
+            compact_phone,
             interactive: interaction_mode == QuotaInteractionMode::Interactive,
             rows: &visible_rows,
             width: content_width,
@@ -785,7 +801,7 @@ pub(super) fn QuotaStatusComponent(
     };
 
     let interactive = interaction_mode == QuotaInteractionMode::Interactive;
-    let actions = quota_dialog_actions(QuotaDialogActionContext {
+    let action_context = QuotaDialogActionContext {
         help_open,
         weekly_floor_editor,
         weekly_floor_command_port,
@@ -802,11 +818,14 @@ pub(super) fn QuotaStatusComponent(
         filters,
         interaction_mode,
         should_exit,
-    });
+    };
+    let confirmation_choices = quota_confirmation_choices(action_context.clone());
+    let actions = quota_dialog_actions(action_context);
     let sidecar_actions = Vec::new();
     let dialog_actions = actions;
     let background = render_quota_screen(QuotaScreenChromeProps {
         width,
+        horizontal_padding,
         height: (interaction_mode == QuotaInteractionMode::Interactive).then_some(component_height),
         header: render_quota_header(QuotaHeaderProps {
             model: &view_model,
@@ -855,9 +874,18 @@ pub(super) fn QuotaStatusComponent(
     } else {
         QuotaHelpMode::Browse
     };
+    let dialog_identity = super::quota_dialog_context::current_dialog_identity(
+        current_account_options.as_ref(),
+        current_reset_target.as_ref(),
+        current_weekly_floor_editor.as_ref(),
+        details_dialog.read().as_ref(),
+        &view_model.rows,
+    );
     let mut dialog = render_quota_dialog(QuotaDialogViewProps {
         width: viewport_width,
         height: viewport_height,
+        identity: dialog_identity.as_ref(),
+        confirmation_choices,
         filter_state,
         filter_controller,
         details_dialog,
@@ -886,6 +914,8 @@ pub(super) fn QuotaStatusComponent(
             viewport_height,
             help_mode,
             help_open,
+            &view_model.header,
+            dialog_identity.as_ref(),
         ));
     }
     if interaction_mode == QuotaInteractionMode::Static {

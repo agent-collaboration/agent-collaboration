@@ -49,7 +49,7 @@ async fn sessions_provider_filter_real_keys_apply_cancel_and_hide_nonmatching_ro
         "{final_frame}"
     );
     assert!(
-        !final_frame.contains("Session client provider"),
+        !final_frame.contains("Session filters"),
         "Cancel must close: {final_frame}"
     );
     assert!(
@@ -82,7 +82,7 @@ async fn sessions_provider_filter_real_keys_respect_fork_and_machine_modals() {
         assert!(
             frames
                 .iter()
-                .all(|frame| !frame.contains("Session client provider")),
+                .all(|frame| !frame.contains("Session filters")),
             "{frames:?}"
         );
     }
@@ -103,7 +103,7 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
         };
         let canvases = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(canvases);
-        while let Some(canvas) = canvases.next().await {
+        while let Some(canvas) = next_current_canvas(canvases.as_mut()).await.unwrap() {
             let frame = canvas.to_string();
             if phase == 0 && frame.contains("Filters · All providers") {
                 let row = frame
@@ -125,16 +125,18 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                     )))
                     .unwrap();
                 phase = 1;
-            } else if phase == 1 && frame.contains("Session client provider") && !choice_opened {
+            } else if phase == 1 && frame.contains("Session filters") && !choice_opened {
                 sender.send(key(KeyCode::Enter)).unwrap();
                 choice_opened = true;
             } else if phase == 1 && frame.contains("Search:") {
-                let row = frame
-                    .lines()
-                    .position(|line| {
-                        line.contains("Cursor") && line.contains("│                   Cursor")
-                    })
-                    .unwrap();
+                let bounds = dialog_bounds(&frame, "Session filters");
+                let modal = dialog_text(&frame, bounds);
+                let row = bounds.top
+                    + 1
+                    + modal
+                        .lines()
+                        .position(|line| line.trim() == "Cursor")
+                        .unwrap();
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),
@@ -143,15 +145,17 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                             .nth(row)
                             .unwrap()
                             .chars()
-                            .position(|character| character == 'C')
+                            .enumerate()
+                            .find(|(column, character)| *column > bounds.left && *character == 'C')
+                            .map(|(column, _)| column)
                             .unwrap() as u16,
                         row as u16,
                     )))
                     .unwrap();
                 phase = 2;
-            } else if phase == 2 && frame.contains("Draft: Cursor") {
+            } else if phase == 2 && frame.contains("Cursor ▾") {
                 assert!(
-                    frame.contains("Session client provider") && frame.contains("Draft: Cursor"),
+                    frame.contains("Session filters") && frame.contains("Cursor ▾"),
                     "{frame}"
                 );
                 assert!(
@@ -181,7 +185,7 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
             } else if phase == 3
                 && frame.contains("Filters · Cursor")
                 && frame.contains("Sessions · 1/5")
-                && !frame.contains("Session client provider")
+                && !frame.contains("Session filters")
             {
                 sender.send(ctrl_key('c')).unwrap();
                 phase = 4;
@@ -217,8 +221,8 @@ async fn sessions_picker_ctrl_f_and_f3_open_provider_filter_chooser() {
         for expected in [
             "Filters",
             "All providers",
-            "Session client provider",
-            "Draft: All providers",
+            "Session filters",
+            "All providers ▾",
             "Codex",
             "Apply",
             "Cancel",
@@ -268,7 +272,7 @@ async fn provider_inline_search_escape_cancels_choice_before_filter_draft() {
                 }
                 4 if frame.contains("Session filters") && !frame.contains("Search:") => {
                     assert!(
-                        frame.contains("Draft: All providers"),
+                        frame.contains("All providers ▾"),
                         "uncommitted query changed draft: {frame}"
                     );
                     sender.send(key(KeyCode::Esc)).unwrap();

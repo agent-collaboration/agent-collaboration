@@ -235,6 +235,9 @@ impl SessionsPickerModel {
     }
 
     pub(super) fn apply_provider_filters(&mut self) {
+        if self.provider_choice.is_open() {
+            return;
+        }
         let Some(draft) = self.provider_filter_draft.take() else {
             return;
         };

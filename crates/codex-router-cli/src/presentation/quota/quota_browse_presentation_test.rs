@@ -10,3 +10,6 @@ mod quota_choice_dialog_test;
 
 #[path = "quota_storyboard_fixture_test.rs"]
 mod quota_storyboard_fixture_test;
+
+#[path = "quota_ux_clarity_test.rs"]
+pub(super) mod quota_ux_clarity_test;

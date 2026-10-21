@@ -1,22 +1,22 @@
 //! Clipboard command output belongs to this terminal, including an SSH terminal.
 use std::{io, sync::Arc};
 
-pub(super) type SessionIdCopier = Arc<dyn Fn(&str) -> io::Result<()> + Send + Sync>;
+pub(super) type SessionClipboardWriter = Arc<dyn Fn(&str) -> io::Result<()> + Send + Sync>;
 
-pub(super) fn terminal_session_id_copier() -> SessionIdCopier {
-    Arc::new(|session_id| write_session_id_copy(&mut io::stdout(), session_id))
+pub(super) fn terminal_session_clipboard_writer() -> SessionClipboardWriter {
+    Arc::new(|payload| write_terminal_clipboard(&mut io::stdout(), payload))
 }
 
-pub(super) fn write_session_id_copy(
+pub(super) fn write_terminal_clipboard(
     writer: &mut impl io::Write,
-    session_id: &str,
+    payload: &str,
 ) -> io::Result<()> {
     use crossterm::{ExecutableCommand, clipboard::CopyToClipboard};
-    writer.execute(CopyToClipboard::to_clipboard_from(session_id))?;
+    writer.execute(CopyToClipboard::to_clipboard_from(payload))?;
     Ok(())
 }
 
-pub(super) fn unavailable_session_id_copier() -> SessionIdCopier {
+pub(super) fn unavailable_session_clipboard_writer() -> SessionClipboardWriter {
     Arc::new(|_| {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
@@ -32,7 +32,7 @@ mod tests {
     #[test]
     fn owner_details_navigation_copy_uses_exact_terminal_clipboard_command() {
         let mut bytes = Vec::new();
-        write_session_id_copy(&mut bytes, "thread-a").unwrap();
+        write_terminal_clipboard(&mut bytes, "thread-a").unwrap();
         assert_eq!(bytes, b"\x1b]52;c;dGhyZWFkLWE=\x1b\\");
     }
 
@@ -48,7 +48,7 @@ mod tests {
             }
         }
         assert_eq!(
-            write_session_id_copy(&mut FailingWriter, "thread-a")
+            write_terminal_clipboard(&mut FailingWriter, "thread-a")
                 .unwrap_err()
                 .kind(),
             io::ErrorKind::BrokenPipe

@@ -1,27 +1,27 @@
 ╭──────────────────────────────────────────────╮
 │ Quota status                    Details Help │
-│ ⇄ ? · ● 1 · ◷ 0 · ? 0                        │
-│ Pool-wide: responses                         │
-│ Σ 1 · ✓ 1 · ◇ 0 · ⊘ 0 · ? 0 · × 0            │
+│ Pool-wide: responses  Accounts 1 · Usable 1  │
 │ All · Disabled: Shown · 1/1 ▾                │
 │ ┌──────────────────────────────────────────┐ │
 │ │    Account       Status    Quota         │ │
-│ │  ❯ ssdev         ✓         safest        │ │
+│ │  ❯ ssdev         available safest        │ │
 │ │    ◎ OpenAI      1 client  quota         │ │
-│ │                  ↻ 2       Weekly        │ │
-│ │                  resets    █████ 83%     │ │
-│ │                  Credits   left, reset   │ │
-│ │                  unknown   7d            │ │
+│ │                  2 resets  Weekly        │ │
+│ │                  Credits   █████         │ │
+│ │                  unknown   83% left      │ │
+│ │                            reset 7d      │ │
 │ │                            5h            │ │
-│ │                            █████ 99%     │ │
-│ │                            left, reset   │ │
-│ │                            5h            │ │
+│ │                            █████         │ │
+│ │                            99% left      │ │
+│ │                            reset 5h      │ │
 │ │                            Weekly pace   │ │
 │ │                            □□□□□□□│□□□   │ │
 │ │                            □□□□  1.00x   │ │
 │ │                            reset pace    │ │
 │ │                            healthy       │ │
 │ └──────────────────────────────────────────┘ │
+│                                              │
+│                                              │
 │                                              │
 │                                              │
 │                                              │

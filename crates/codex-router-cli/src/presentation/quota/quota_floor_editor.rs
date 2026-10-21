@@ -268,6 +268,7 @@ pub(super) fn render_weekly_floor_editor(
     let content = render_weekly_floor_editor_content(editor, width.saturating_sub(4), state);
     element! {View(width:width as u32,height:height as u32,flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {
         UiHeading(content:"Weekly floor".to_owned(),level:UiHeadingLevel::Section)
+        codex_router_tui::FormField(label:"Account".to_owned(),label_width:10u16) {Text(content:editor.account_label.clone(),color:Color::White)}
         #(content)
     }}.into_any()
 }
@@ -281,9 +282,10 @@ pub(super) fn render_weekly_floor_editor_content(
         WeeklyFloorEditorPhase::Editing => None,
         WeeklyFloorEditorPhase::Saving => Some(("saving…", Color::Grey)),
         WeeklyFloorEditorPhase::SaveFailed(error) => Some((error.display_message(), Color::Red)),
-        WeeklyFloorEditorPhase::SavedRefreshFailed => {
-            Some(("saved; refresh failed", Color::Yellow))
-        }
+        WeeklyFloorEditorPhase::SavedRefreshFailed => Some((
+            "saved; refresh failed",
+            codex_router_tui::UiTextRole::Warning.color(),
+        )),
     };
     let current = if editor.current_percent == 0 {
         "disabled (0%)".to_owned()
@@ -295,7 +297,6 @@ pub(super) fn render_weekly_floor_editor_content(
     element! {
         View(width:width as u32,max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             #(status.map(|(message,color)|element!(Text(content:message,color))))
-            codex_router_tui::FormField(label:"Account".to_owned(),label_width:10u16) {Text(content:editor.account_label.clone(),color:Color::White)}
             codex_router_tui::FormField(label:"Current".to_owned(),label_width:10u16) {Text(content:current,color:Color::White)}
             codex_router_tui::FormField(label:"Floor".to_owned(),label_width:10u16,has_focus:true) {
                 View(column_gap:2,align_items:AlignItems::Center) {

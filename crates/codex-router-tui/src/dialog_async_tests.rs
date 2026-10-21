@@ -49,7 +49,8 @@ fn AsyncDialog(props: &AsyncDialogProps, mut hooks: Hooks) -> impl Into<AnyEleme
     element! {
         DialogHost(width,height, dialog: Some(element! {
             DialogFrame(width,height, title: format!("{width}x{height} {status}"),
-                presentation: if width < 60 { DialogPresentation::FullScreen } else { DialogPresentation::cells(50, 14) },
+                presentation: if width < 60 { DialogPresentation::default() } else { DialogPresentation::cells(50, 14) },
+                context:vec![element!(Text(content:"Account: alpha")).into_any()],
                 margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
                 actions: vec![element! {
                     DialogAction(label: format!("Apply {}", clicks.get()), has_focus: true, handler: move |_| clicks.set(clicks.get()+1))
@@ -82,29 +83,54 @@ async fn resize_and_apply_remain_responsive_while_tokio_loader_is_pending() {
                 }
                 1 if frame.contains("48x18 Loading") => {
                     assert!(frame.lines().count() <= 18, "{frame}");
+                    assert!(
+                        frame.contains("Account: alpha") && frame.contains("Apply 0"),
+                        "{frame}"
+                    );
+                    sender.send(TerminalEvent::Resize(32, 24)).unwrap();
+                    phase = 2;
+                }
+                2 if frame.contains("32x24 Loading") => {
+                    assert!(
+                        frame.contains("Account: alpha") && frame.contains("Apply 0"),
+                        "{frame}"
+                    );
+                    assert!(
+                        frame.lines().all(|line| line.chars().count() <= 32),
+                        "{frame}"
+                    );
+                    sender.send(TerminalEvent::Resize(40, 12)).unwrap();
+                    phase = 3;
+                }
+                3 if frame.contains("40x12 Loading") => {
+                    assert!(
+                        frame.contains("Account: alpha") && frame.contains("Apply 0"),
+                        "{frame}"
+                    );
+                    assert!(frame.lines().count() <= 12, "{frame}");
                     sender
                         .send(TerminalEvent::Key(KeyEvent::new(
                             KeyEventKind::Press,
                             KeyCode::Enter,
                         )))
                         .unwrap();
-                    phase = 2;
+                    phase = 4;
                 }
-                2 if frame.contains("Apply 1") => {
+                4 if frame.contains("Apply 1") => {
                     assert!(
                         frame.contains("Loading"),
                         "loader must still be held: {frame}"
                     );
                     assert_eq!(starts.load(Ordering::SeqCst), 1);
                     load_sender.send(true).unwrap();
-                    phase = 3;
+                    phase = 5;
                 }
-                3 if frame.contains("48x18 Loaded") => {
+                5 if frame.contains("40x12 Loaded") => {
                     assert!(frame.contains("Apply 1"));
                     sender.send(TerminalEvent::Resize(160, 40)).unwrap();
-                    phase = 4;
+                    phase = 6;
                 }
-                4 if frame.contains("160x40 Loaded") => {
+                6 if frame.contains("160x40 Loaded") => {
                     assert_eq!(starts.load(Ordering::SeqCst), 1, "resize recreated loader");
                     sender
                         .send(TerminalEvent::Key(KeyEvent::new(
@@ -112,7 +138,7 @@ async fn resize_and_apply_remain_responsive_while_tokio_loader_is_pending() {
                             KeyCode::Esc,
                         )))
                         .unwrap();
-                    phase = 5;
+                    phase = 7;
                 }
                 _ => {}
             }
@@ -121,7 +147,7 @@ async fn resize_and_apply_remain_responsive_while_tokio_loader_is_pending() {
     tokio::time::timeout(std::time::Duration::from_secs(2), journey)
         .await
         .unwrap();
-    assert_eq!(phase, 5);
+    assert_eq!(phase, 7);
 }
 
 #[test]

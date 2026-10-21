@@ -2,8 +2,8 @@
 use super::*;
 pub(super) struct PickerInputContext {
     pub model: State<SessionsPickerModel>,
-    pub session_id_copier:
-        crate::presentation::session_picker::session_id_clipboard::SessionIdCopier,
+    pub session_clipboard_writer:
+        crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter,
     pub observed_width: State<usize>,
     pub observed_height: State<usize>,
     pub reload_generation: State<u64>,
@@ -20,7 +20,7 @@ pub(super) struct PickerInputContext {
 pub(super) fn use_picker_input(hooks: &mut Hooks<'_, '_>, context: PickerInputContext) {
     let PickerInputContext {
         mut model,
-        session_id_copier,
+        session_clipboard_writer,
         mut observed_width,
         mut observed_height,
         mut reload_generation,
@@ -234,11 +234,16 @@ pub(super) fn use_picker_input(hooks: &mut Hooks<'_, '_>, context: PickerInputCo
             PickerMachineStage::Loading { .. }
         ) {
             if matches!(code, KeyCode::Esc) {
-                model_value.machine_controls.cancel_choice();
-                conversation_cache.write().invalidate();
-                let generation = reload_generation.get().saturating_add(1);
-                reload_generation.set(generation);
-                reload_port.send(model_value.prepare_source_reload(generation));
+                drop(model_value);
+                picker_machine_input::cancel_machine_choice(
+                    picker_machine_input::MachineSelectionContext {
+                        model,
+                        can_load_source,
+                        reload_port: reload_port.clone(),
+                        reload_generation,
+                        conversation_cache,
+                    },
+                );
             }
             return;
         }
@@ -278,7 +283,7 @@ pub(super) fn use_picker_input(hooks: &mut Hooks<'_, '_>, context: PickerInputCo
                 &mut model_value,
                 code,
                 modifiers,
-                &session_id_copier,
+                &session_clipboard_writer,
             ) {
                 selected_outcome.set(Some(outcome));
             }

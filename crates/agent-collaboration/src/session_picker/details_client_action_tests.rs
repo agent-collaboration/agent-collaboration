@@ -216,6 +216,7 @@ async fn managed_details_load_is_explicit_once_and_keeps_captured_source_target_
                             "qualified actions must not carry an unavailable claim: {frame}"
                         );
                         sender.send(key(KeyCode::Tab)).unwrap();
+                        sender.send(key(KeyCode::Tab)).unwrap(); // Copy path precedes restore actions.
                         sender.send(key(KeyCode::Enter)).unwrap();
                         phase = 1;
                     } else if phase == 1 && frame.contains("Waiting for the selected source result")
@@ -328,6 +329,7 @@ async fn native_details_fork_and_resume_keep_captured_directory_and_submit_one_n
                     {
                         assert!(effects.lock().unwrap().is_empty());
                         sender.send(key(KeyCode::Tab)).unwrap();
+                        sender.send(key(KeyCode::Tab)).unwrap(); // Retain Copy path next to Copy ID.
                         if !fork {
                             sender.send(key(KeyCode::Tab)).unwrap();
                         }

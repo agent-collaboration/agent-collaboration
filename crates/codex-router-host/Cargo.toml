@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[[bin]]
+name = "automation-debug-host"
+path = "src/bin/automation-debug-host.rs"
+test = false
+bench = false
+
 [features]
 keychain-test-support = [
     "codex-router-secret-store/keychain-test-guard",
@@ -42,6 +48,8 @@ thiserror.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
+toml = "1.1.2"
+tracing-subscriber.workspace = true
 
 [dev-dependencies]
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
@@ -50,11 +58,9 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 agent-client-protocol.workspace = true
 sha2.workspace = true
 tempfile = "3.27.0"
-toml = "1.1.2"
 sqlx = { workspace = true, features = ["sqlite"] }
 uuid.workspace = true
 tokio = { workspace = true, features = ["io-std", "test-util"] }
 futures-util.workspace = true
 tokio-tungstenite.workspace = true
-tracing-subscriber.workspace = true
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }

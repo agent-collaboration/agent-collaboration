@@ -87,9 +87,25 @@ pub(in crate::quota) fn quota_account_list_window_summary(
     else {
         return format!("{} no data {label}", quota_bar(0, true));
     };
-    let reset_note = window_display_note(window, now_unix_seconds).replace("resets in ", "resets ");
+    let reset = window.reset_unix_seconds.map_or_else(
+        || "reset\u{a0}unknown".to_owned(),
+        |reset| {
+            if reset >= now_unix_seconds {
+                format!("resets\u{a0}{}", format_duration(reset - now_unix_seconds))
+            } else {
+                format!(
+                    "resets\u{a0}{}\u{a0}ago",
+                    format_duration(now_unix_seconds - reset)
+                )
+            }
+        },
+    );
+    let reset_note = window_display_note_with_reset(window, reset);
+    let remaining_label = if label.is_empty() { "left" } else { label };
+    // Semantic unit spaces keep related words together when they physically fit;
+    // iocraft still wraps between the meter, remaining value and reset note.
     format!(
-        "{} {} {label} · {}",
+        "{} {}\u{a0}{remaining_label} {}",
         quota_bar(window.remaining_headroom, true),
         format_percent(window.remaining_headroom),
         reset_note

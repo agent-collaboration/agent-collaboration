@@ -73,11 +73,11 @@ async fn sessions_help_preserves_provider_draft_and_blocks_background_keys() {
     )
     .await;
     assert!(
-        frame.contains("Draft: Codex"),
+        frame.contains("Codex ▾"),
         "Help close must restore draft: {frame}"
     );
     assert!(
-        frame.contains("Current: All providers"),
+        frame.contains("Filters · All providers"),
         "Help must not apply draft: {frame}"
     );
     assert!(
@@ -400,10 +400,10 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
             assert_eq!(style.color, Some(Color::Yellow));
             assert_eq!(style.weight, Weight::Bold);
             assert!(style.underline, "{text}");
-            let (column, row) = locate("Session client provider");
+            let (column, row) = locate("Client");
             let style = canvas.cell(column, row).unwrap().text_style().unwrap();
             assert_eq!(style.color, Some(Color::White));
-            assert_eq!(style.weight, Weight::Bold);
+            assert_eq!(style.weight, Weight::Normal);
         } else {
             let (column, row) = locate("Codex");
             let style = canvas.cell(column, row).unwrap().text_style().unwrap();

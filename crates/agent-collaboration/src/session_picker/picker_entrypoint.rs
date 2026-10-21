@@ -19,7 +19,7 @@ pub(crate) fn run_sessions_picker(
                 client_inventory_loader: client_ports.as_ref().map(|ports|ports.inventory_loader.clone()),
                 client_executor: client_ports.as_ref().map(|ports|ports.executor.clone()),
                 details_client_inspector:client_ports.as_ref().map(|ports|ports.details_inspector.clone()),
-                session_id_copier: Some(super::super::session_id_clipboard::terminal_session_id_copier()),
+                session_clipboard_writer: Some(super::super::session_id_clipboard::terminal_session_clipboard_writer()),
                 width: 0usize,
                 selected_outcome_out: &mut selected_outcome,
             )

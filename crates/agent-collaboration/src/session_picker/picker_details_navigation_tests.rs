@@ -5,9 +5,14 @@ use super::*;
 async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body_scroll() {
     for navigation in [
         vec![KeyCode::Left],
-        vec![KeyCode::Right, KeyCode::Right, KeyCode::Right],
+        vec![
+            KeyCode::Right,
+            KeyCode::Right,
+            KeyCode::Right,
+            KeyCode::Right,
+        ],
         vec![KeyCode::BackTab],
-        vec![KeyCode::Tab, KeyCode::Tab, KeyCode::Tab],
+        vec![KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Tab],
     ] {
         let mut request = picker_request();
         request.root = SessionsRoot::Any;
@@ -17,7 +22,7 @@ async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body
             .map(|index| format!("DETAIL_BODY {index}"))
             .collect();
         let copied = Arc::new(Mutex::new(Vec::<String>::new()));
-        let copier: crate::presentation::session_picker::session_id_clipboard::SessionIdCopier =
+        let copier: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter =
             Arc::new({
                 let copied = copied.clone();
                 move |session_id| {
@@ -36,7 +41,7 @@ async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body
         let mut phase = 0;
         let mut last_frame = String::new();
         let mut component = element!(SessionsPickerComponent(request, width: 76usize, height: 30usize,
-            session_id_copier: Some(copier), selected_outcome_out: &mut outcome));
+            session_clipboard_writer: Some(copier), selected_outcome_out: &mut outcome));
         let journey = component
             .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
             .map(|canvas| {
@@ -192,7 +197,7 @@ async fn owner_details_navigation_control_shift_enter_opens_fork_confirmation() 
 }
 
 #[tokio::test]
-async fn owner_details_navigation_dialog_exposes_resume_fork_and_copy_session_id() {
+async fn owner_details_navigation_dialog_exposes_resume_fork_and_clipboard_writer() {
     let frame = render_picker_capture_at(
         picker_request(),
         120,
@@ -230,7 +235,7 @@ async fn owner_details_navigation_control_enter_resumes_without_opening_details(
 #[tokio::test]
 async fn owner_details_navigation_copy_action_sends_exact_id_once_without_launching() {
     let copied = Arc::new(Mutex::new(Vec::<String>::new()));
-    let copier: crate::presentation::session_picker::session_id_clipboard::SessionIdCopier =
+    let copier: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter =
         Arc::new({
             let copied = copied.clone();
             move |session_id| {
@@ -249,7 +254,7 @@ async fn owner_details_navigation_copy_action_sends_exact_id_once_without_launch
     let mut phase = 0;
     let frames = tokio::time::timeout(Duration::from_secs(2),
         element!(SessionsPickerComponent(request: picker_request(), width: 48usize, height: 24usize,
-            session_id_copier: Some(copier), selected_outcome_out: &mut outcome))
+            session_clipboard_writer: Some(copier), selected_outcome_out: &mut outcome))
             .mock_terminal_render_loop(MockTerminalConfig::with_events(events))
             .map(|canvas| {
                 let frame = canvas.to_string();
@@ -285,7 +290,7 @@ fn owner_details_navigation_actions_keep_the_captured_record_after_background_fo
         model.handle_key(SessionsPickerKey::MoveDown);
         assert_eq!(model.focused_record().unwrap().session_id, "thread-b");
         let copied = Arc::new(Mutex::new(Vec::<String>::new()));
-        let copier: crate::presentation::session_picker::session_id_clipboard::SessionIdCopier =
+        let copier: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter =
             Arc::new({
                 let copied = copied.clone();
                 move |session_id| {
@@ -336,4 +341,195 @@ async fn new_session_opens_one_form_before_start_with_machine_directory_and_clie
         !form.contains("no extra args") && !form.contains("Launch options"),
         "empty argument placeholders: {form}"
     );
+}
+
+#[test]
+fn owner_c8_copy_path_keeps_full_captured_path_after_background_focus_changes() {
+    use crate::presentation::session_picker::details_dialog_actions::apply_details_action;
+    let mut request = picker_request();
+    request.root = SessionsRoot::Any;
+    request.source = SessionsSource::All;
+    let path = format!("/repo/{}/東京 project", "long-directory/".repeat(12));
+    request.records[0].cwd = Some(path.clone());
+    let mut model = SessionsPickerModel::new(request, 48);
+    model.open_details_dialog();
+    model.handle_key(SessionsPickerKey::MoveDown);
+    let action = model
+        .details_dialog
+        .as_ref()
+        .unwrap()
+        .actions()
+        .iter()
+        .copied()
+        .find(|action| action.label() == "Copy path")
+        .expect("Details must expose Copy path for its captured path");
+    let copied = Arc::new(Mutex::new(Vec::<String>::new()));
+    let copier: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter =
+        Arc::new({
+            let copied = copied.clone();
+            move |value| {
+                copied.lock().unwrap().push(value.to_owned());
+                Ok(())
+            }
+        });
+    assert!(apply_details_action(&mut model, action, &copier).is_none());
+    assert_eq!(copied.lock().unwrap().as_slice(), [path]);
+    assert!(
+        model
+            .details_dialog
+            .as_ref()
+            .unwrap()
+            .actions()
+            .iter()
+            .any(|action| action.label() == "Copy session ID")
+    );
+}
+
+#[test]
+fn owner_c8_details_body_retains_equal_full_title_path_and_id() {
+    let mut request = picker_request();
+    let record = &mut request.records[0];
+    record.title =
+        "Full title starts here and continues beyond the fixed context COMPLETE_TITLE_END"
+            .to_owned();
+    record.full_title = record.title.clone();
+    record.cwd = Some("/repo/captured-directory/東京 project".to_owned());
+    let canvas =
+        super::super::picker_detail_view::render_details(record, 36, None, Size::Auto).render(None);
+    let frame = canvas.to_string();
+    assert!(
+        frame.contains("COMPLETE_TITLE_END"),
+        "full body title must remain scroll-reachable when fixed context clips it: {frame}"
+    );
+    let compact = frame.split_whitespace().collect::<String>();
+    assert!(
+        compact.contains("/repo/captured-directory/東京project"),
+        "full path body: {frame}"
+    );
+    assert!(frame.contains("thread-a"), "captured ID body: {frame}");
+}
+
+#[test]
+fn owner_c8_copy_path_is_absent_without_a_real_captured_path() {
+    use crate::presentation::session_picker::details_dialog_state::SessionDetailsDialog;
+    for cwd in [None, Some(String::new()), Some("   ".to_owned())] {
+        let mut record = picker_request().records.remove(0);
+        record.cwd = cwd;
+        let details = SessionDetailsDialog::capture(&record);
+        assert!(
+            !details
+                .actions()
+                .iter()
+                .any(|action| action.label() == "Copy path")
+        );
+        assert!(
+            details
+                .actions()
+                .iter()
+                .any(|action| action.label() == "Copy session ID")
+        );
+    }
+}
+
+#[tokio::test]
+async fn owner_c8_copy_path_keyboard_pointer_and_failure_use_the_existing_clipboard_boundary() {
+    for (pointer, failure) in [(false, false), (true, false), (false, true)] {
+        let mut request = picker_request();
+        let path = format!("/repo/{}/東京 project", "long-directory/".repeat(12));
+        request.records[0].cwd = Some(path.clone());
+        let copied = Arc::new(Mutex::new(Vec::<String>::new()));
+        let writer: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter = Arc::new({
+            let copied = copied.clone();
+            move |payload| { copied.lock().unwrap().push(payload.to_owned()); if failure { Err(std::io::ErrorKind::BrokenPipe.into()) } else {Ok(())} }
+        });
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        sender
+            .send(details_key(KeyCode::F(4), KeyModifiers::empty()))
+            .unwrap();
+        let events = futures_util::stream::unfold(receiver, |mut receiver| async move {
+            receiver.recv().await.map(|event| (event, receiver))
+        });
+        let mut outcome: Option<SessionsPickerOutcome> = None;
+        {
+            let mut component = element!(SessionsPickerComponent(request,width:48usize,height:24usize,session_clipboard_writer:Some(writer),selected_outcome_out:&mut outcome));
+            let canvases =
+                component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+            tokio::pin!(canvases);
+            let mut phase = 0;
+            let mut last = String::new();
+            let journey = async {
+                while let Some(canvas) = next_current_canvas(canvases.as_mut()).await.unwrap() {
+                    let frame = canvas.to_string();
+                    if phase == 0 && frame.contains("Copy path") {
+                        assert!(
+                            frame.contains("Copy session ID"),
+                            "ID copy remains separate: {frame}"
+                        );
+                        if pointer {
+                            let (row, line) = frame
+                                .lines()
+                                .enumerate()
+                                .find(|(_, line)| line.contains("Copy path"))
+                                .unwrap();
+                            let column = unicode_width::UnicodeWidthStr::width(
+                                line.get(..line.find("Copy path").unwrap()).unwrap(),
+                            );
+                            sender
+                                .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                                    MouseEventKind::Down(MouseButton::Left),
+                                    column as u16,
+                                    row as u16,
+                                )))
+                                .unwrap();
+                        } else {
+                            for code in [KeyCode::Tab, KeyCode::Tab, KeyCode::Tab, KeyCode::Enter] {
+                                sender
+                                    .send(details_key(code, KeyModifiers::empty()))
+                                    .unwrap();
+                            }
+                        }
+                        phase = 1;
+                    } else if phase == 1
+                        && frame.contains(if failure {
+                            "Could not copy"
+                        } else {
+                            "Copy requested"
+                        })
+                    {
+                        if failure {
+                            let (row, line) = frame
+                                .lines()
+                                .enumerate()
+                                .find(|(_, line)| line.contains("Could not copy"))
+                                .unwrap();
+                            let column = unicode_width::UnicodeWidthStr::width(
+                                line.get(..line.find("Could not copy").unwrap()).unwrap(),
+                            );
+                            assert_eq!(
+                                canvas
+                                    .cell(column, row)
+                                    .unwrap()
+                                    .text_style()
+                                    .unwrap()
+                                    .color,
+                                Some(Color::Red),
+                                "copy failure uses shared error role: {frame}"
+                            );
+                        }
+                        sender.send(ctrl_key('d')).unwrap();
+                        phase = 2;
+                    }
+                    last = frame;
+                }
+            };
+            tokio::time::timeout(Duration::from_secs(2), journey)
+                .await
+                .unwrap_or_else(|_| {
+                    panic!("pointer{pointer} failure{failure} phase{phase}: {last}")
+                });
+            assert_eq!(phase, 2);
+        }
+        assert!(outcome.is_none());
+        assert_eq!(copied.lock().unwrap().as_slice(), [path]);
+    }
 }

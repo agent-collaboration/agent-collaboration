@@ -1,13 +1,15 @@
 ---
 name: verify-codex-router
-description: Verify a declared signed debug Codex Router through its real Host, native stored-push correlation, typed provider Question and Approval callbacks, and owning SQLite reopen. Use for scoped local verification, not delivery acceptance.
+description: Verify a declared Codex Router target through isolated Host/callback/storage journeys or original compiled Sessions/Quota PTY captures. Use for scoped observation and verification upkeep, not delivery acceptance.
 ---
 
 # Verify Codex Router
 
-Drive an isolated debug Router and its real owning Host, preserving normal Codex home. All helper code lives once in `scripts/verification/`. Run from the repository root.
+Drive an isolated debug Router and its real owning Host, preserving normal Codex home. Reusable Python drivers live once in `scripts/verification/`; native fixtures and checkers stay with their permanent tests. Run from the repository root.
 
 For model-free private Tailnet MCP/board verification, follow the separate [Tailnet journey](references/tailnet-mcp.md) and its HostPlan/BoardPlan launch. That journey is draft until exercised on a declared real target.
+
+For Sessions/Quota presentation, follow [compiled TUI journeys](references/tui-journeys.md). Reusable source-bound drivers use prebuilt compiled PTY fixtures and retain original VHS PNGs or CUA JPEGs without starting a Host/provider session. Declare exact source/build/tools, plan, viewport and owned cleanup; fixture evidence is not public/provider proof. Narrow-width and short-height desktop proxies are the adopted phone scope; actual iPhone hardware is waived. Run results/history belong in the task evidence under `tmp/tui-verification/`, not this recipe.
 
 **Observed locally:** genuine Claude Question/Approval callbacks, actual Session test decisions, marker execution, owning SQLite reopen and exact cleanup on Sunclaw. The first unreachable native-Approver case remains negative evidence. **Portable cold entry and Cursor remain draft:** endpoint/settings/tool parameterization has structural and retained-Claude qualification; no Cursor model input or callback run has happened. Use [Cursor qualification](references/cursor-provider.md) before its first input. No successful journey is rerun merely to refresh the recipe.
 
@@ -35,6 +37,9 @@ It checks recorded PID/UID/birth/group/executable, binary hash, health version a
 
 | Journey | Driver and deciding evidence |
 | --- | --- |
+| Selected-machine Claude/Cursor actions (R16, draft/unobserved) | [Client actions](references/client-actions.md): actual Human callable Load, stored policy/directory/Approver preservation, typed origin and real local/remote client actions. Admitted S2b; await declared target/runtime packet. |
+| Native Claude background launch (R15, draft/unobserved) | [Claude background](references/claude-background.md): public agent-sessions process-boundary proof plus separate actual installed native background registration and exact owned cleanup. No provider launch is authorized by this recipe. |
+| Sessions/Quota compiled TUI (partial) | [Compiled TUI journeys](references/tui-journeys.md), `tui_capture.py --help`: exact prebuilt harness, source/build/viewport bindings, original PNG/JPEG and per-image gallery metadata. Normal Quota uses `tui_component_capture.py`; compact Sessions/Quota and live resize use `tui_capture.py`. Other scenario/resize/public gaps remain explicit. |
 | Private Tailnet boards and exposure lifecycle (draft) | [Tailnet MCP](references/tailnet-mcp.md): reciprocal real peer HTTPS operations, destination-local Unix/SQLite readback, Host/Origin controls and exact owned cleanup; separately declared after-ready exposure-loss negative. |
 | Stored native push | `native_correlation.py --help`: supply qualified CLI, explicit service directory, exact thread, accepted turn, Push ID and fresh output path. Only native initialize + `thread/read includeTurns`. Require one matching `userMessage.clientId` in the accepted turn; native `id` is separate. Retain IDs/count/text hash only. This does not run the complete native held/wake/full-body/order matrix. |
 | Real Question + private marker Approval | Follow [typed callbacks](references/typed-callbacks.md). Real emission, actual offered-option IDs, actual Session test actor, exact harmless marker command, actual allow-once option, provider callback/tool/turn and terminal rows. No fabricated Human or persistent grant. |

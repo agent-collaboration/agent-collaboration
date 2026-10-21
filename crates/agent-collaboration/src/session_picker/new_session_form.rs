@@ -3,7 +3,8 @@ use super::{PickerSourceContext, SessionsPickerOutcome, picker_model::SessionsPi
 use crate::sessions::{RouterRegistryRead, router_connection_registry::RouterConnectionTransport};
 use codex_router_tui::{
     ChoiceAvailability, ChoiceOption, ChoiceTransition, DialogAction, DialogFrame,
-    DialogKeyboardOwner, DialogMargins, FormField, SearchSelect, SearchSelectState,
+    DialogKeyboardOwner, DialogMargins, DialogPresentation, FormField, SearchSelect,
+    SearchSelectState,
 };
 use iocraft::prelude::*;
 use std::{ffi::OsString, path::PathBuf};
@@ -294,6 +295,9 @@ impl SessionsPickerModel {
             return None;
         }
         let draft = self.new_session.as_ref()?.clone();
+        if draft.choice.is_open() {
+            return None;
+        }
         if draft.client != NewSessionClient::CodexNative {
             self.begin_new_client_action(&draft);
             return None;
@@ -382,10 +386,18 @@ pub(super) fn render_new_form(
         Some(ChoiceAvailability::Available) => None,
     };
     let choice = draft.choice.clone();
+    let expanded = choice.is_open();
+    let width = u16::try_from(model.width).unwrap_or(u16::MAX);
+    let height = u16::try_from(height).unwrap_or(u16::MAX);
+    let ((_, frame_width), _) =
+        DialogPresentation::default().resolve(width.saturating_sub(4), height.saturating_sub(2));
+    // The longest field label, gap and searchable value fit in38 content cells.
+    // Below that, use the shared stacked form instead of clipping either column.
+    let stacked = frame_width.saturating_sub(4) < 38;
     let client_field = if choice.is_open() && draft.focus == NewFormFocus::Client {
         element!(SearchSelect<NewSessionChoiceKey>(state:choice.clone(),options:active_new_choices(model),on_select:move |key| {let mut state=state;state.write().select_new_choice(key);})).into_any()
     } else {
-        element! {Button(handler:move |_| {if let Some(draft)=state.write().new_session.as_mut() {draft.focus=NewFormFocus::Client;draft.choice.open(NewSessionChoiceKey::Client(draft.client));}}) {
+        element! {codex_router_tui::DialogButton(handler:move |_| {if let Some(draft)=state.write().new_session.as_mut() {draft.focus=NewFormFocus::Client;draft.choice.open(NewSessionChoiceKey::Client(draft.client));}}) {
             Text(content:format!("{} ▾",draft.client.label()),color:if draft.focus==NewFormFocus::Client {Color::Yellow}else {Color::White})
         }}.into_any()
     };
@@ -393,25 +405,36 @@ pub(super) fn render_new_form(
         element!(SearchSelect<NewSessionChoiceKey>(state:choice,options:active_new_choices(model),on_select:move |key| {let mut state=state;state.write().select_new_choice(key);})).into_any()
     } else {
         element! {
-            Button(handler:move |_| {if let Some(draft)=state.write().new_session.as_mut() {draft.focus=NewFormFocus::Machine;draft.choice.open(NewSessionChoiceKey::Machine(draft.selected_source.clone()));}}) {
+            codex_router_tui::DialogButton(handler:move |_| {if let Some(draft)=state.write().new_session.as_mut() {draft.focus=NewFormFocus::Machine;draft.choice.open(NewSessionChoiceKey::Machine(draft.selected_source.clone()));}}) {
                 Text(content:format!("{machine} ▾"),color:if draft.focus==NewFormFocus::Machine {Color::Yellow}else {Color::White})
             }
         }.into_any()
     };
-    let width = u16::try_from(model.width).unwrap_or(u16::MAX);
-    let height = u16::try_from(height).unwrap_or(u16::MAX);
+    let enabled = if expanded {
+        draft
+            .choice
+            .available_focused_key(&active_new_choices(model))
+            .is_some()
+    } else {
+        can_start
+    };
     let actions=vec![
         element!(DialogAction(label:"Cancel",keyboard_owner:DialogKeyboardOwner::Caller,has_focus:draft.focus==NewFormFocus::Cancel,handler:move |_|state.write().new_session=None)).into_any(),
-        element!(DialogAction(label:"Start",enabled:can_start,keyboard_owner:DialogKeyboardOwner::Caller,has_focus:draft.focus==NewFormFocus::Start,handler:move |_| {let selected=state.write().submit_new_form();if selected.is_some() {outcome.set(selected);}})).into_any(),
+        element!(DialogAction(label:if expanded {"Select"}else {"Start"},enabled,keyboard_owner:DialogKeyboardOwner::Caller,has_focus:!expanded&&draft.focus==NewFormFocus::Start,handler:move |_| {
+            if expanded {
+                let selected={let current=state.read();current.new_session.as_ref().and_then(|draft|draft.choice.available_focused_key(&active_new_choices(&current)))};
+                if let Some(key)=selected {state.write().select_new_choice(key);}
+            }else {let selected=state.write().submit_new_form();if selected.is_some() {outcome.set(selected);}}
+        })).into_any(),
     ];
     let arguments = model.request.new_session_args_display.clone();
     element! {
         DialogFrame(width,height,title:"New session".to_owned(),scroll_keys:if draft.choice.is_open() {codex_router_tui::DialogScrollKeys::Disabled}else {codex_router_tui::DialogScrollKeys::Navigation},keyboard_owner:DialogKeyboardOwner::Caller,
             margins:DialogMargins {top:1,right:2,bottom:1,left:2},help_action:Some(super::picker_help_view::help_action(state)),actions) {
-            FormField(label:"Client".to_owned(),label_width:10u16,has_focus:draft.focus==NewFormFocus::Client&&!draft.choice.is_open()) {#(client_field)}
-            FormField(label:"Machine".to_owned(),label_width:10u16,has_focus:draft.focus==NewFormFocus::Machine&&!draft.choice.is_open()) {#(machine_field)}
-            FormField(label:"Directory".to_owned(),label_width:10u16,has_focus:draft.focus==NewFormFocus::Directory) {Text(content:if draft.directory.as_os_str().is_empty() {"Not configured".to_owned()}else {draft.directory.display().to_string()},color:Color::White)}
-            #((!arguments.is_empty()).then(||element! {FormField(label:"Arguments".to_owned(),label_width:10u16) {Text(content:arguments,color:Color::Grey)}}))
+            FormField(label:"Client".to_owned(),label_width:10u16,stacked,has_focus:draft.focus==NewFormFocus::Client) {#(if expanded&&draft.focus==NewFormFocus::Client {client_field}else {element!(codex_router_tui::SelectableRow(selected:false) {#(client_field)}).into_any()})}
+            FormField(label:"Machine".to_owned(),label_width:10u16,stacked,has_focus:draft.focus==NewFormFocus::Machine) {#(if expanded&&draft.focus==NewFormFocus::Machine {machine_field}else {element!(codex_router_tui::SelectableRow(selected:false) {#(machine_field)}).into_any()})}
+            FormField(label:"Directory".to_owned(),label_width:10u16,stacked,has_focus:draft.focus==NewFormFocus::Directory) {Text(content:if draft.directory.as_os_str().is_empty() {"Not configured".to_owned()}else {draft.directory.display().to_string()},color:Color::White,wrap:TextWrap::Wrap)}
+            #((!arguments.is_empty()).then(||element! {FormField(label:"Arguments".to_owned(),label_width:10u16,stacked) {Text(content:arguments,color:Color::Grey,wrap:TextWrap::Wrap)}}))
             #(unavailable_reason.map(|reason|element!(Text(content:reason,color:Color::Grey))))
             #(super::source_action_view::source_error(model))
         }

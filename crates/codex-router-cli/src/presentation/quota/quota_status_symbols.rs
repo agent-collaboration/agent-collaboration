@@ -52,6 +52,8 @@ impl QuotaRowStatus {
                 let labeled = format!("{} {}", status.glyph(), status.label());
                 if UnicodeWidthStr::width(labeled.as_str()) <= width {
                     labeled
+                } else if UnicodeWidthStr::width(status.label()) <= width {
+                    status.label().to_owned()
                 } else {
                     status.glyph().to_owned()
                 }
@@ -92,17 +94,29 @@ impl QuotaPoolCensus {
         .fold(0, usize::saturating_add)
     }
     pub(crate) fn summary(self, width: usize) -> String {
-        counter_group(
-            &[
-                ("Σ", "accounts", self.total().to_string()),
-                ("✓", "usable", self.usable.to_string()),
-                ("◇", "reserve", self.reserve.to_string()),
-                ("⊘", "blocked", self.blocked.to_string()),
-                ("?", "unknown", self.unknown.to_string()),
-                ("×", "excluded", self.excluded.to_string()),
-            ],
-            width,
-        )
+        let counters = [
+            ("Accounts", self.total()),
+            ("Usable", self.usable),
+            ("Reserve", self.reserve),
+            ("Blocked", self.blocked),
+            ("Pool unknown", self.unknown),
+            ("Excluded", self.excluded),
+        ];
+        let full = counters
+            .iter()
+            .map(|(label, count)| format!("{label} {count}"))
+            .collect::<Vec<_>>()
+            .join(" · ");
+        if UnicodeWidthStr::width(full.as_str()) <= width {
+            return full;
+        }
+        counters
+            .iter()
+            .enumerate()
+            .filter(|(index, (_, count))| *index < 2 || *count > 0)
+            .map(|(_, (label, count))| format!("{label} {count}"))
+            .collect::<Vec<_>>()
+            .join(" · ")
     }
 }
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -120,19 +134,11 @@ impl QuotaFreshnessCensus {
         };
         *count = count.saturating_add(1);
     }
-    pub(crate) fn summary(self, clients: Option<u32>, width: usize) -> String {
-        counter_group(
-            &[
-                (
-                    "⇄",
-                    "clients",
-                    clients.map_or_else(|| "?".to_owned(), |count| count.to_string()),
-                ),
-                ("●", "fresh", self.fresh.to_string()),
-                ("◷", "stale", self.stale.to_string()),
-                ("?", "unknown", self.unknown.to_string()),
-            ],
-            width,
+    pub(crate) fn summary(self, clients: Option<u32>) -> String {
+        let clients = clients.map_or_else(|| "unknown".to_owned(), |count| count.to_string());
+        format!(
+            "Clients {clients} · Fresh {} · Stale {} · Data unknown {}",
+            self.fresh, self.stale, self.unknown
         )
     }
 }
@@ -143,22 +149,6 @@ pub(crate) struct QuotaHeaderFacts {
     pub freshness: QuotaFreshnessCensus,
     pub observed_clients: Option<u32>,
     pub credential_notice: Option<String>,
-}
-fn counter_group(counters: &[(&str, &str, String)], width: usize) -> String {
-    let labeled = counters
-        .iter()
-        .map(|(glyph, label, count)| format!("{glyph} {label} {count}"))
-        .collect::<Vec<_>>()
-        .join(" · ");
-    if UnicodeWidthStr::width(labeled.as_str()) <= width {
-        labeled
-    } else {
-        counters
-            .iter()
-            .map(|(glyph, _, count)| format!("{glyph} {count}"))
-            .collect::<Vec<_>>()
-            .join(" · ")
-    }
 }
 
 #[cfg(test)]
@@ -200,7 +190,7 @@ mod tests {
         assert_eq!(pool.total(), 3);
     }
     #[test]
-    fn labels_collapse_before_any_count_or_separator_is_lost() {
+    fn compact_counts_keep_names_and_nonzero_problems_with_complete_full_summary() {
         let census = QuotaPoolCensus {
             usable: 12345,
             reserve: 67,
@@ -210,11 +200,11 @@ mod tests {
         };
         assert_eq!(
             census.summary(200),
-            "Σ accounts 12429 · ✓ usable 12345 · ◇ reserve 67 · ⊘ blocked 8 · ? unknown 9 · × excluded 0"
+            "Accounts 12429 · Usable 12345 · Reserve 67 · Blocked 8 · Pool unknown 9 · Excluded 0"
         );
         assert_eq!(
             census.summary(1),
-            "Σ 12429 · ✓ 12345 · ◇ 67 · ⊘ 8 · ? 9 · × 0"
+            "Accounts 12429 · Usable 12345 · Reserve 67 · Blocked 8 · Pool unknown 9"
         );
         assert_eq!(
             QuotaFreshnessCensus {
@@ -222,10 +212,26 @@ mod tests {
                 stale: 0,
                 unknown: 1
             }
-            .summary(None, 1),
-            "⇄ ? · ● 2 · ◷ 0 · ? 1"
+            .summary(None),
+            "Clients unknown · Fresh 2 · Stale 0 · Data unknown 1"
         );
     }
+    #[test]
+    fn compact_status_uses_a_complete_fitting_label_before_falling_back_to_glyph() {
+        for (status, at_seven, at_nine) in [
+            (QuotaAccountStatus::Preferred, "★", "preferred"),
+            (QuotaAccountStatus::Available, "✓", "available"),
+            (QuotaAccountStatus::Held, "◇ held", "◇ held"),
+            (QuotaAccountStatus::Blocked, "blocked", "⊘ blocked"),
+            (QuotaAccountStatus::Stale, "◷ stale", "◷ stale"),
+            (QuotaAccountStatus::Unknown, "unknown", "? unknown"),
+        ] {
+            let row = QuotaRowStatus::Account(status);
+            assert_eq!(row.compact(7), at_seven, "{status:?} at seven cells");
+            assert_eq!(row.compact(9), at_nine, "{status:?} at nine cells");
+        }
+    }
+
     #[test]
     fn row_status_keeps_preference_held_and_freshness_distinct_from_counts() {
         for (status, glyph, label) in [

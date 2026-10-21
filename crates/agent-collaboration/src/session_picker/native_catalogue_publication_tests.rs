@@ -301,7 +301,7 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
         })
     });
     let copied = Arc::new(Mutex::new(Vec::<String>::new()));
-    let copier: crate::presentation::session_picker::session_id_clipboard::SessionIdCopier =
+    let copier: crate::presentation::session_picker::session_id_clipboard::SessionClipboardWriter =
         Arc::new({
             let copied = copied.clone();
             move |session_id| {
@@ -318,7 +318,7 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
     let mut phase = 0;
     let mut last = String::new();
     {
-        let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),session_id_copier:Some(copier),width:180usize,height:60usize,selected_outcome_out:&mut outcome));
+        let mut picker = element!(SessionsPickerComponent(request,record_loader:Some(loader),session_clipboard_writer:Some(copier),width:180usize,height:60usize,selected_outcome_out:&mut outcome));
         let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
         let journey = async {

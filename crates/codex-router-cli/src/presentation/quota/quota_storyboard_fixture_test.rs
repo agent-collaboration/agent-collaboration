@@ -22,7 +22,7 @@ use std::{
 };
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum FixtureScenario {
+pub(super) enum FixtureScenario {
     Normal,
     InspectionPending,
     CommitPending,
@@ -54,7 +54,7 @@ impl FixtureScenario {
     }
 }
 
-fn fixture_model() -> QuotaStatusViewModel {
+pub(super) fn fixture_model() -> QuotaStatusViewModel {
     let mut model = quota_two_account_view_model();
     model.header.observed_clients = Some(1);
     model.rows[0].account = "東京 OpenAI Research Account Alpha Long Name".to_owned();
@@ -67,6 +67,8 @@ fn fixture_model() -> QuotaStatusViewModel {
         None,
     );
     model.rows[0].credit_usage.freshness = crate::quota::CreditUsageFreshness::Fresh;
+    // Declared synthetic age, independent of the host clock or a provider request.
+    model.rows[0].credit_usage.age_label = "0s".to_owned();
     model.rows[0].credit_usage_summary = credit_usage_compact_summary(&model.rows[0].credit_usage);
     model.rows[1].account = "Claude Research Account Beta Full Name".to_owned();
     model.rows[1].provider = codex_router_core::provider::Provider::Claude;
@@ -74,7 +76,7 @@ fn fixture_model() -> QuotaStatusViewModel {
     model
 }
 
-fn fixture_snapshot(
+pub(super) fn fixture_snapshot(
     phase: WorkflowPhase,
     selection: ConfirmationSelection,
     scenario: FixtureScenario,
@@ -177,10 +179,10 @@ fn fixture_ports(
         })
     });
     let refresh: CreditUsageRefresher = Arc::new(move |account_id, generation| {
-        let model = model.lock().unwrap();
+        let mut model = model.lock().unwrap();
         let row = model
             .rows
-            .iter()
+            .iter_mut()
             .find(|row| row.account_id == account_id)
             .expect("captured fixture account");
         assert_eq!(row.active_credential_generation, generation);
@@ -193,6 +195,19 @@ fn fixture_ports(
                     .map_err(|_| CreditUsageRefreshError::Failed)?;
                 Ok(())
             });
+        }
+        if scenario == FixtureScenario::Normal {
+            // A distinct response lets the UI journey reject a stale reload.
+            row.credit_usage.provider_observation = CreditProviderObservation::new(
+                CreditAvailability::Available {
+                    balance: Some(CreditBalance::new("63000.0000000000000000").unwrap()),
+                },
+                CreditSpendControl::Clear,
+                None,
+            );
+            row.credit_usage.freshness = crate::quota::CreditUsageFreshness::Fresh;
+            row.credit_usage.age_label = "0s".to_owned();
+            row.credit_usage_summary = credit_usage_compact_summary(&row.credit_usage);
         }
         Box::pin(async { Ok(()) })
     });
@@ -420,7 +435,10 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
         }
     });
     let view_model = model.lock().unwrap().clone();
-    let result=element!(QuotaStatusComponent(view_model,width:0usize,height:0usize,reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)))
+    let viewport_trace = receipt_path
+        .as_ref()
+        .map(|_| super::super::quota_viewport_trace::QuotaViewportTrace::default());
+    let result=element!(QuotaStatusComponent(view_model,viewport_trace:viewport_trace.clone(),width:0usize,height:0usize,reload_view_model:Some(loader),weekly_floor_saver:Some(floor),credit_policy_saver:Some(policy),credit_usage_refresher:Some(refresh),reset_intent_sender:Some(ports.intent_sender),reset_snapshot_receiver:Some(ports.snapshot_receiver)))
         .render_loop().fullscreen().ignore_ctrl_c().await;
     driver.abort();
     if let Err(error) = driver.await
@@ -452,6 +470,9 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     let receipt = format!(
         "QUOTA_COMPONENT_FIXTURE_FINISHED scenario={scenario:?} released={released} external_requests=0 persisted_writes=0\n"
     );
+    if let (Some(trace), Some(path)) = (viewport_trace, receipt_path.as_deref()) {
+        trace.write_next_to(path)?;
+    }
     write_fixture_receipt(receipt_path.as_deref(), &receipt)?;
     print!("{receipt}");
     Ok(())
@@ -461,6 +482,7 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
 fn storyboard_fixture_retains_exact_balance_and_each_declared_reset_state() {
     let model = fixture_model();
     assert_eq!(model.rows[0].credit_usage_summary, "62.5k fresh");
+    assert_eq!(model.rows[0].credit_usage.age_label, "0s");
     assert_eq!(
         model.rows[0]
             .credit_usage
@@ -562,3 +584,6 @@ fn fixture_receipt_requires_fresh_output_and_never_overwrites_a_previous_result(
     );
     assert_eq!(std::fs::read(path).unwrap(), b"completed\n");
 }
+
+#[path = "quota_storyboard_observation_test.rs"]
+mod quota_storyboard_observation_test;

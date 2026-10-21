@@ -110,15 +110,7 @@ pub(super) fn quota_dialog_actions(context: QuotaDialogActionContext) -> Vec<Any
         match phase {
             WorkflowPhase::Inspected => vec![("Cancel", KeyCode::Esc), ("Review", KeyCode::Enter)],
             WorkflowPhase::Confirming => {
-                let mut choices = vec![("Cancel", KeyCode::Esc), ("No", KeyCode::Left)];
-                if snapshot
-                    .as_ref()
-                    .is_some_and(ResetWorkflowSnapshot::yes_enabled)
-                {
-                    choices.push(("Yes", KeyCode::Right));
-                }
-                choices.push(("Confirm", KeyCode::Enter));
-                choices
+                vec![("Cancel", KeyCode::Esc), ("Confirm", KeyCode::Enter)]
             }
             WorkflowPhase::Result => vec![("Close", KeyCode::Esc)],
             _ => vec![("Cancel", KeyCode::Esc)],
@@ -170,9 +162,45 @@ pub(super) fn quota_dialog_actions(context: QuotaDialogActionContext) -> Vec<Any
     } else {
         vec![]
     };
+    let selection_available = context
+        .account_options
+        .read()
+        .as_ref()
+        .and_then(|options| options.editor.as_ref())
+        .filter(|editor| editor.choice.is_open())
+        .is_none_or(|editor| {
+            editor
+                .choice
+                .available_focused_key(&credit_policy_choices())
+                .is_some()
+        });
     labels.into_iter().map(|(label, code)| {
         let context = context.clone();
-        element!(DialogAction(label: label.to_owned(),keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
+        element!(DialogAction(label: label.to_owned(),enabled:code!=KeyCode::Enter || selection_available,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
             emphasis:if code==KeyCode::Enter {codex_router_tui::DialogActionEmphasis::Primary}else {codex_router_tui::DialogActionEmphasis::Secondary},handler: move |_| context.clone().dispatch(code))).into_any()
     }).collect::<Vec<_>>()
+}
+
+pub(super) fn quota_confirmation_choices(
+    context: QuotaDialogActionContext,
+) -> Option<AnyElement<'static>> {
+    use crate::quota_reset::reset_session_supervisor::ConfirmationSelection;
+    let snapshot = context.reset_snapshot.read().clone()?;
+    if snapshot.phase() != WorkflowPhase::Confirming {
+        return None;
+    }
+    let no_selected = snapshot.confirmation_selection() == ConfirmationSelection::No;
+    let yes_selected = snapshot.confirmation_selection() == ConfirmationSelection::Yes;
+    let yes_enabled = snapshot.yes_enabled();
+    let no_context = context.clone();
+    Some(element! {codex_router_tui::FocusReveal(has_focus:true) {
+        codex_router_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:codex_router_tui::UiTextRole::Warning,wrap:TextWrap::Wrap)
+        View(column_gap:1,flex_shrink:0.0_f32) {
+            Text(content:"Reset quota?",color:Color::White,wrap:TextWrap::NoWrap)
+            DialogAction(label:"No",has_focus:no_selected,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
+                handler:move |_|no_context.clone().dispatch(KeyCode::Left))
+            DialogAction(label:"Yes",has_focus:yes_selected,enabled:yes_enabled,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,
+                handler:move |_|context.clone().dispatch(KeyCode::Right))
+        }
+    }}.into_any())
 }

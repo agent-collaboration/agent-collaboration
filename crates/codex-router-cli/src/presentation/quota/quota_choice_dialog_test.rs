@@ -176,7 +176,7 @@ async fn quota_filter_no_match_stays_visible_above_actions_in_a_two_row_body() {
                         assert!(
                             text.contains("Account filters")
                                 && text.contains("Cancel")
-                                && text.contains("Apply"),
+                                && text.contains("Select"),
                             "{text}"
                         );
                         // An empty Enter is deliberately a no-op and need not repaint.
@@ -207,4 +207,83 @@ async fn quota_filter_no_match_stays_visible_above_actions_in_a_two_row_body() {
         assert!(result.is_ok(), "{width}x{height} phase={phase}: {last}");
         assert_eq!(phase, 6, "{width}x{height}: {last}");
     }
+}
+
+#[tokio::test]
+async fn quota_disabled_choices_remain_keyboard_reachable_in_a_two_row_body() {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(QuotaStatusComponent(
+        view_model:quota_two_account_view_model(),width:48usize,height:12usize));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = frames.next().await {
+            let text = canvas.to_string();
+            match phase {
+                0 => {
+                    sender.send(control('f')).unwrap();
+                    phase = 1;
+                }
+                1 if text.contains("Account filters") => {
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    sender.send(key(KeyCode::Down)).unwrap();
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    phase = 2;
+                }
+                2 if text.contains("OpenAI ▾") && !text.contains("Search:") => {
+                    eprintln!("PROVIDER_DRAFT_48x12_OPENAI\n{text}");
+                    assert!(text.contains("Cancel") && text.contains("Apply"), "{text}");
+                    sender.send(key(KeyCode::Down)).unwrap();
+                    phase = 3;
+                }
+                3 if text.contains("Disabled accounts") && text.contains("Shown ▾") => {
+                    eprintln!("PROVIDER_DRAFT_48x12_FIELDS\n{text}");
+                    assert!(
+                        text.contains("Disabled accounts") && text.contains("Shown ▾"),
+                        "{text}"
+                    );
+                    assert!(text.contains("Cancel") && text.contains("Apply"), "{text}");
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    phase = 4;
+                }
+                4 if text.contains("❯ Shown") => {
+                    eprintln!("DISABLED_CHOICE_48x12_SHOWN\n{text}");
+                    assert!(text.contains("Cancel") && text.contains("Select"), "{text}");
+                    sender.send(key(KeyCode::Down)).unwrap();
+                    phase = 5;
+                }
+                5 if text.contains("❯ Hidden") => {
+                    eprintln!("DISABLED_CHOICE_48x12_HIDDEN\n{text}");
+                    assert!(text.contains("Cancel") && text.contains("Select"), "{text}");
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    phase = 6;
+                }
+                6 if text.contains("Account filters")
+                    && text.contains("Hidden")
+                    && !text.contains("Search:") =>
+                {
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 7;
+                }
+                7 if !text.contains("Account filters") => {
+                    assert!(
+                        text.contains("All") && text.contains("2/2"),
+                        "discard must preserve the committed disabled filter: {text}"
+                    );
+                    sender.send(control('d')).unwrap();
+                    phase = 8;
+                }
+                _ => {}
+            }
+            last = text;
+        }
+    };
+    let result = tokio::time::timeout(std::time::Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "phase={phase}: {last}");
+    assert_eq!(phase, 8, "{last}");
 }

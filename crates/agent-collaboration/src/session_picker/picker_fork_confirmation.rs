@@ -61,6 +61,8 @@ pub(super) enum ForkLaunchTarget {
 pub(super) struct ForkConfirmation {
     pub(super) launch_target: ForkLaunchTarget,
     pub(super) title: String,
+    pub(super) full_title: String,
+    pub(super) explicit_name: Option<String>,
     pub(super) source_label: String,
     pub(super) directory_label: String,
     pub(super) directory_origin: &'static str,
@@ -71,6 +73,15 @@ pub(super) struct ForkConfirmation {
 }
 
 impl ForkConfirmation {
+    pub(super) fn session_id_label(&self) -> Option<String> {
+        match &self.launch_target {
+            ForkLaunchTarget::Codex(selection) => Some(selection.session_id()),
+            ForkLaunchTarget::Native(selection) => {
+                Some(String::from(selection.target.session_id.clone()))
+            }
+            ForkLaunchTarget::Unsupported => None,
+        }
+    }
     pub(super) fn capture(record: &SessionPickerRecord, request: &SessionsPickerRequest) -> Self {
         let source_label = record.machine_label().to_owned();
         let configured = matches!(
@@ -148,6 +159,8 @@ impl ForkConfirmation {
                 )))
             },
             title: record.title.clone(),
+            full_title: record.full_title.clone(),
+            explicit_name: record.explicit_name.clone(),
             source_label,
             directory_label,
             directory_origin,
@@ -239,6 +252,9 @@ impl ForkConfirmation {
     }
 
     pub(super) fn confirm(&mut self) -> Option<ForkLaunchTarget> {
+        if self.search.is_open() {
+            return None;
+        }
         let destination = self.destinations.get(self.focused_destination)?;
         if let Some(reason) = destination.availability.explanation() {
             self.notice = Some(reason);

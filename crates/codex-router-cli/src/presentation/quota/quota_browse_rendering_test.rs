@@ -23,6 +23,7 @@ fn review_qstatic_preserves_responsive_group_column_alignment() {
         46,
         false,
         super::quota_provider_filters::QuotaInteractionMode::Static,
+        false,
     )
     .render(None)
     .to_string();
@@ -122,7 +123,7 @@ fn quota_status_selected_panel_spaces_activity_header_after_5h_pace() {
 }
 
 #[test]
-fn quota_status_unavailable_reset_pace_renders_marker_meter() {
+fn quota_status_unavailable_reset_pace_keeps_meaning_without_empty_meter() {
     let mut view_model = quota_view_model();
     let unavailable_reset_pace = ResetPaceViewModel::default();
     let selected_details = selected_account_details("ssdev", "safest quota");
@@ -136,8 +137,8 @@ fn quota_status_unavailable_reset_pace_renders_marker_meter() {
     let text = render_quota_static_capture(view_model, 160, false);
 
     assert!(
-        text.contains("□□□□□□□│□□□□□□□"),
-        "unavailable reset pace must keep the visible center-marker meter:\n{text}"
+        !text.contains("□□□□□□□│□□□□□□□"),
+        "unavailable reset pace must not draw a decorative empty meter:\n{text}"
     );
     assert!(text.contains("burn unavailable"), "{text}");
 }
@@ -156,8 +157,8 @@ fn quota_status_ansi_colors_selected_reset_pace() {
 #[tokio::test]
 async fn quota_pool_headers_survive_preference_focus_and_scroll_changes() {
     let route_summary =
-        "Σ accounts 10 · ✓ usable 2 · ◇ reserve 2 · ⊘ blocked 2 · ? unknown 2 · × excluded 2";
-    let freshness_summary = "● fresh 4 · ◷ stale 4 · ? unknown 2";
+        "Accounts 10 · Usable 2 · Reserve 2 · Blocked 2 · Pool unknown 2 · Excluded 2";
+    let freshness_summary = "Fresh 4 · Stale 4 · Data unknown 2";
     let mut observed_headers = Vec::new();
 
     for preferred_index in [0, 9] {
@@ -215,7 +216,7 @@ async fn quota_pool_headers_survive_preference_focus_and_scroll_changes() {
                 .lines()
                 .find(|line| line.contains("Quota status"))
                 .unwrap_or_else(|| panic!("quota title should render:\n{frame}"));
-            assert!(title_line.contains("⇄ clients 12"), "{frame}");
+            assert!(title_line.contains("Clients 12"), "{frame}");
             assert!(title_line.contains(freshness_summary), "{frame}");
             let route_line = frame
                 .lines()
@@ -283,7 +284,7 @@ async fn quota_status_down_arrow_focuses_next_account_details() {
         .cloned()
         .unwrap_or_else(|| panic!("quota status should render at least one frame"));
     assert!(
-        text.contains("beta    available    beta detail"),
+        quota_selected_panel_has_facts(&text, "beta", "available", "beta detail"),
         "down arrow should show details for the next quota account:\n{text}"
     );
 }
@@ -300,7 +301,11 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
     let mut phase = 0;
     let mut last = String::new();
     let result = tokio::time::timeout(Duration::from_secs(2), async {
-        while let Some(canvas) = frames.next().await {
+        while let Some(canvas) =
+            crate::presentation::quota::quota_frame_observation::next_current_frame(frames.as_mut())
+                .await
+                .expect("bounded current Quota pointer canvas")
+        {
             let text = canvas.to_string();
             match phase {
                 0 => {
@@ -323,7 +328,12 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
                     phase = 1;
                 }
                 1 if text.contains("❯ beta")
-                    && text.contains("beta    available    beta detail") =>
+                    && quota_selected_panel_has_facts(
+                        &text,
+                        "beta",
+                        "available",
+                        "beta detail",
+                    ) =>
                 {
                     assert!(
                         !text.contains("Account details"),
@@ -443,7 +453,7 @@ async fn quota_status_reloads_view_model_on_timer() {
         "quota status should render the reloaded route line: {frames:?}"
     );
     assert!(
-        frames.iter().any(|frame| frame.contains("stale 1")),
+        frames.iter().any(|frame| frame.contains("Stale 1")),
         "quota status title should render reloaded report-wide stale count: {frames:?}"
     );
 }
@@ -473,7 +483,7 @@ async fn quota_status_up_arrow_focuses_previous_account_details() {
         .cloned()
         .unwrap_or_else(|| panic!("quota status should render at least one frame"));
     assert!(
-        text.contains("alpha    available    alpha detail"),
+        quota_selected_panel_has_facts(&text, "alpha", "available", "alpha detail"),
         "up arrow should show details for the previous quota account:\n{text}"
     );
 }

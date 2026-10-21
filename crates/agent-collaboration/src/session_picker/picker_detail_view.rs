@@ -88,7 +88,8 @@ pub(super) fn render_details(
                 padding_left: if height==Size::Auto {0}else {1},
                 padding_right: if height==Size::Auto {0}else {1},
             ) {
-                Text(content:record.full_title.clone(),color:Color::White,wrap)
+                #((height!=Size::Auto).then(||element!(Text(content:record.full_title.clone(),color:Color::White,wrap))))
+                #((height==Size::Auto&&(!record.full_title.is_empty()||!record.title.is_empty())).then(||element!(Text(content:format!("Title: {}",if record.full_title.is_empty() {&record.title}else {&record.full_title}),color:Color::White,wrap))))
                 Text(content:format!("Client: {}",record.client_provider_family().label()),color:Color::White,wrap)
                 Text(content:display_line(format!("Machine: {}",record.machine_label())),color:Color::Grey,wrap)
                 Text(content: display_line(format!("Session ID: {}", record.session_id)), color: Color::Grey, wrap)
@@ -131,7 +132,7 @@ pub(super) fn render_details(
             padding_left: if height==Size::Auto {0}else {1},
             padding_right: if height==Size::Auto {0}else {1},
         ) {
-            #((height==Size::Auto).then(||element!(Text(content:record.full_title.clone(),color:Color::White,wrap))))
+            #((height==Size::Auto&&(!record.full_title.is_empty()||!record.title.is_empty())).then(||element!(Text(content:format!("Title: {}",if record.full_title.is_empty() {&record.title}else {&record.full_title}),color:Color::White,wrap))))
             Text(content: format!("Session ID: {}", record.session_id), color: Color::Grey, weight: Weight::Normal, wrap)
             #((height==Size::Auto).then(||element!(Text(content:format!("Working directory: {}",record.cwd.as_deref().unwrap_or("-")),color:Color::White,wrap))))
             View(height: 1) { Text(content: "") }

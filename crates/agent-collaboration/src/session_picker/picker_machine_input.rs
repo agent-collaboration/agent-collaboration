@@ -14,6 +14,23 @@ pub(super) struct MachineSelectionContext {
     pub conversation_cache: State<ConversationPreviewCache>,
 }
 
+pub(super) fn cancel_machine_choice(mut context: MachineSelectionContext) {
+    let mut model = context.model.write();
+    let was_loading = matches!(
+        model.machine_controls.stage,
+        PickerMachineStage::Loading { .. }
+    );
+    model.machine_controls.cancel_choice();
+    if was_loading {
+        context.conversation_cache.write().invalidate();
+        let generation = context.reload_generation.get().saturating_add(1);
+        context.reload_generation.set(generation);
+        context
+            .reload_port
+            .send(model.prepare_source_reload(generation));
+    }
+}
+
 pub(super) fn select_machine_choice(mut context: MachineSelectionContext, key: MachineChoiceKey) {
     let mut model = context.model.write();
     let registry = model.request.router_registry.clone();
@@ -63,8 +80,7 @@ pub(super) fn handle_machine_choice_key(context: MachineSelectionContext, code: 
     match transition {
         ChoiceTransition::Selected(key) => select_machine_choice(context, key),
         ChoiceTransition::Cancelled => {
-            let mut state = context.model;
-            state.write().machine_controls.cancel_choice();
+            cancel_machine_choice(context);
         }
         ChoiceTransition::Handled | ChoiceTransition::Unhandled => {}
     }

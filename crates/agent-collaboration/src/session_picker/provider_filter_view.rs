@@ -3,7 +3,7 @@ use super::{
     interactive_row::InteractiveSessionChoiceRow, picker_model::SessionsPickerModel,
     provider_filter_model::ProviderFilterFocus,
 };
-use codex_router_tui::{DialogAction, UiHeading, UiHeadingLevel, UiText, UiTextRole};
+use codex_router_tui::DialogAction;
 use iocraft::prelude::*;
 
 pub(super) fn render_provider_controls(
@@ -36,16 +36,13 @@ pub(super) fn render_provider_controls(
 pub(super) fn render_provider_chooser(
     model: &SessionsPickerModel,
     model_state: State<SessionsPickerModel>,
+    width: usize,
 ) -> Vec<AnyElement<'static>> {
     use super::provider_filter_model::SessionFilterValue;
     let Some(draft) = model.provider_filter_draft.as_ref() else {
         return Vec::new();
     };
-    let mut controls = vec![
-        element!(UiHeading(content:"Session client provider".to_owned(),level:UiHeadingLevel::Section)).into_any(),
-        element!(UiText(content:format!("Draft: {}",draft.selection.label()),role:UiTextRole::Secondary)).into_any(),
-        element!(UiText(content:format!("Current: {} · {}/{} sessions",model.provider_filter.label(),model.visible_record_len(),model.request.records.len()),role:UiTextRole::Secondary)).into_any(),
-    ];
+    let mut controls = Vec::new();
     for (field, label) in [
         (ProviderFilterFocus::Provider, "Client"),
         (ProviderFilterFocus::Folder, "Folder"),
@@ -88,8 +85,13 @@ pub(super) fn render_provider_chooser(
                 }
             }.into_any()
         };
+        let body = if expanded {
+            body
+        } else {
+            element!(codex_router_tui::SelectableRow(selected:false) {#(body)}).into_any()
+        };
         controls.push(element! {
-            codex_router_tui::FormField(label:label.to_owned(),label_width:14u16,has_focus:draft.focus==field&&!expanded) {#(body)}
+            codex_router_tui::FormField(label:label.to_owned(),label_width:14u16,stacked:width<52,has_focus:draft.focus==field) {#(body)}
         }.into_any());
     }
     controls
@@ -103,8 +105,22 @@ pub(super) fn render_provider_actions(
     let Some(draft) = model.provider_filter_draft.as_ref() else {
         return Vec::new();
     };
+    let expanded = model.provider_choice.is_open();
+    let enabled = !expanded
+        || model
+            .provider_choice
+            .available_focused_key(&super::provider_filter_model::filter_choices(
+                model,
+                draft.focus,
+            ))
+            .is_some();
     vec![
         element!(DialogAction(keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,label:"Cancel",has_focus:draft.focus==ProviderFilterFocus::Cancel,emphasis:codex_router_tui::DialogActionEmphasis::Secondary,handler:move |_|model_state.write().provider_filter_draft=None)).into_any(),
-        element!(DialogAction(keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,label:"Apply",has_focus:draft.focus==ProviderFilterFocus::Apply,handler:apply_filters)).into_any(),
+        element!(DialogAction(keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,label:if expanded {"Select"}else {"Apply"},enabled,has_focus:!expanded&&draft.focus==ProviderFilterFocus::Apply,handler:move |_| {
+            if expanded {
+                let still_open=model_state.read().provider_choice.is_open();
+                if still_open {super::provider_filter_input::handle_provider_filter_key(&mut model_state.write(),KeyCode::Enter,KeyModifiers::NONE);}
+            }else {apply_filters(());}
+        })).into_any(),
     ]
 }

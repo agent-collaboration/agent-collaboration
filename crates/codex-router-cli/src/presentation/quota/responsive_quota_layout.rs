@@ -1,6 +1,7 @@
 use crossterm::terminal;
 use iocraft::prelude::*;
 
+use super::quota_provider_filters::QuotaInteractionMode;
 use super::quota_status_component::MIN_QUOTA_WIDTH;
 use super::quota_status_component::QUOTA_STATUS_SPINNER_TICKS;
 use super::quota_status_view_model::QuotaStatusAccountViewModel;
@@ -90,8 +91,18 @@ pub(super) fn quota_account_list_height(
     2 + more_above_height + row_height + row_gap_height + more_below_height
 }
 
-pub(super) fn selected_detail_height(has_selected_details: bool) -> usize {
-    if has_selected_details { 21 } else { 3 }
+pub(super) fn selected_detail_height(
+    has_selected_details: bool,
+    mode: QuotaInteractionMode,
+) -> usize {
+    if !has_selected_details {
+        return 3;
+    }
+    match mode {
+        // Separate labelled status/reason add two rows to the interactive facts.
+        QuotaInteractionMode::Interactive => 23,
+        QuotaInteractionMode::Static => 21,
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

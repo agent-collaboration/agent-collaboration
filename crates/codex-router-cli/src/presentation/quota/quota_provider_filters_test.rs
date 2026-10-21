@@ -10,14 +10,11 @@ async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
             vec![
                 ("Filters ▾", vec![TerminalEvent::Key(opening_key)]),
                 (
-                    "Account provider · Draft: All",
+                    "Account provider",
                     vec![provider_filter_key(KeyCode::Enter)],
                 ),
                 ("Search:", vec![provider_filter_key(KeyCode::Esc)]),
-                (
-                    "Account provider · Draft: All",
-                    vec![provider_filter_key(KeyCode::Esc)],
-                ),
+                ("Account provider", vec![provider_filter_key(KeyCode::Esc)]),
                 (
                     "All · Disabled: Shown",
                     vec![provider_filter_key(KeyCode::Esc)],
@@ -33,7 +30,7 @@ async fn quota_provider_filters_ctrl_f_and_f3_open_real_component_chooser() {
                     && frame.contains("OpenAI")
                     && frame.contains("Claude")
                     && frame.contains("Disabled accounts")
-                    && frame.contains("Apply")
+                    && frame.contains("Select")
                     && frame.contains("Cancel")
             }),
             "Ctrl+F and F3 must open the actual quota filter chooser; frames: {frames:?}"
@@ -60,10 +57,11 @@ fn compact_account_rows_preserve_identity_and_quota_values() {
             width,
             true,
             super::quota_provider_filters::QuotaInteractionMode::Interactive,
+            false,
         )
         .render(None)
         .to_string();
-        for marker in [visible_name, "1 client", "↻ 2", "resets", "83%", "99%"] {
+        for marker in [visible_name, "1 client", "2 resets", "83%", "99%"] {
             assert!(
                 frame.contains(marker),
                 "missing {marker} atwidth{width}: {frame}"
@@ -207,7 +205,7 @@ async fn review_qstatic_narrow_filters_keep_distinct_visible_names() {
         let phases = vec![
             ("Quota status", vec![provider_filter_key(KeyCode::F(3))]),
             (
-                "Account provider · Draft: All",
+                "Account provider",
                 vec![
                     provider_filter_key(KeyCode::Enter),
                     provider_filter_key(KeyCode::Down),
@@ -274,7 +272,7 @@ async fn quota_provider_filters_real_component_partitions_provider_and_disabled_
             "{text}"
         );
         assert!(
-            text.contains("Pool-wide: responses") && text.contains("Σ accounts 4"),
+            text.contains("Pool-wide: responses") && text.contains("Accounts 4"),
             "{text}"
         );
     }
@@ -383,17 +381,19 @@ async fn quota_provider_filters_mouse_open_select_toggle_and_apply_match_keyboar
     let mut phase = 0;
     let mut frames = Vec::new();
     let journey = async {
-        while let Some(canvas) = canvases.next().await {
+        while let Some(canvas) =
+            crate::presentation::quota::quota_frame_observation::next_current_frame(
+                canvases.as_mut(),
+            )
+            .await
+            .expect("bounded current Quota pointer canvas")
+        {
             let frame = canvas.to_string();
             let target = match phase {
                 0 if frame.contains("Filters ▾") => Some("Filters ▾"),
-                1 if frame.contains("Account provider · Draft: All") => Some("All ▾"),
+                1 if frame.contains("Account provider") => Some("All ▾"),
                 2 if frame.contains("Search:") => Some("Claude"),
-                3 if frame.contains("Account provider · Draft: Claude")
-                    && !frame.contains("Search:") =>
-                {
-                    Some("Shown ▾")
-                }
+                3 if frame.contains("Claude ▾") && !frame.contains("Search:") => Some("Shown ▾"),
                 4 if frame.contains("Search:") => Some("Hidden"),
                 5 if !frame.contains("Search:") => Some("Apply"),
                 _ => None,
@@ -445,7 +445,8 @@ async fn quota_provider_filters_real_component_preserves_account_options_and_flo
     control_r.modifiers = KeyModifiers::CONTROL;
     let mut control_e = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('e'));
     control_e.modifiers = KeyModifiers::CONTROL;
-    for (opening_key, expected_modal) in [(control_r, "Reset credits"), (control_e, "Weekly floor")]
+    for (opening_key, expected_modal) in
+        [(control_r, "Options · Resets"), (control_e, "Weekly floor")]
     {
         let saver: super::quota_floor_editor::WeeklyQuotaFloorSaver =
             Arc::new(|_, _| Box::pin(async { panic!("filter/modal browsing must not save") }));
@@ -567,10 +568,7 @@ async fn quota_provider_filters_toolbar_chooser_and_footer_fit_owner_viewports()
             height,
             vec![
                 ("Quota status", vec![provider_filter_key(KeyCode::F(3))]),
-                (
-                    "Account provider · Draft: All",
-                    vec![provider_filter_key(KeyCode::Esc)],
-                ),
+                ("Account provider", vec![provider_filter_key(KeyCode::Esc)]),
                 (
                     "All · Disabled: Shown",
                     vec![provider_filter_key(KeyCode::Esc)],
@@ -587,9 +585,8 @@ async fn quota_provider_filters_toolbar_chooser_and_footer_fit_owner_viewports()
         for label in [
             "Account filters",
             "Help",
-            "Provider: All",
-            "Disabled: Shown",
-            "4/4",
+            "Account provider",
+            "Disabled accounts",
             "All ▾",
             "Shown ▾",
             "Apply",
@@ -704,6 +701,7 @@ fn account_rows_wrap_full_name_with_provider_below_and_fixed_selector_columns() 
                 width,
                 focused,
                 super::quota_provider_filters::QuotaInteractionMode::Interactive,
+                false,
             )
             .render(None)
             .to_string();
@@ -757,14 +755,14 @@ async fn quota_header_exposes_distinct_availability_and_operational_censuses() {
     .await;
     let header = frame.lines().take(6).collect::<Vec<_>>().join("\n");
     for counter in [
-        "Σ accounts 2",
-        "✓ usable 2",
-        "◇ reserve 0",
-        "⊘ blocked 0",
-        "? unknown 0",
-        "× excluded 0",
-        "● fresh 2",
-        "◷ stale 0",
+        "Accounts 2",
+        "Usable 2",
+        "Reserve 0",
+        "Blocked 0",
+        "Pool unknown 0",
+        "Excluded 0",
+        "Fresh 2",
+        "Stale 0",
     ] {
         assert!(
             header.contains(counter),
@@ -808,7 +806,7 @@ async fn routing_preference_and_stale_status_do_not_move_with_keyboard_focus() {
         "focus remains independent of freshness-derived status: {frame}"
     );
     assert!(
-        frame.contains("✓ usable 2") && frame.contains("◷ stale 1"),
+        frame.contains("Usable 2") && frame.contains("Stale 1"),
         "whole-pool availability and freshness remain independent: {frame}"
     );
 }

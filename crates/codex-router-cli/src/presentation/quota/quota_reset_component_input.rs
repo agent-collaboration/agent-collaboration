@@ -101,7 +101,7 @@ pub(super) fn handle_quota_reset_key(context: QuotaResetKeyContext<'_>) {
             let current_options = account_options.read().clone();
             let current_reset_target = reset_target.read().clone();
             let details_content_height = current_options.as_ref().map_or_else(
-                || selected_detail_height(focused_index.is_some()),
+                || selected_detail_height(focused_index.is_some(), interaction_mode),
                 |options| {
                     account_options_content_height(
                         options,

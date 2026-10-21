@@ -13,6 +13,7 @@ pub(super) enum DetailsAction {
     Load,
     Fork,
     CopySessionId,
+    CopyPath,
     Close,
 }
 
@@ -23,6 +24,7 @@ impl DetailsAction {
             Self::Load => "Load",
             Self::Fork => "Fork",
             Self::CopySessionId => "Copy session ID",
+            Self::CopyPath => "Copy path",
             Self::Close => "Close",
         }
     }
@@ -84,8 +86,8 @@ impl SessionDetailsDialog {
         }
     }
 
-    pub(super) fn actions(&self) -> &'static [DetailsAction] {
-        match &self.target {
+    pub(super) fn actions(&self) -> Vec<DetailsAction> {
+        let actions: &[DetailsAction] = match &self.target {
             SessionDetailsTarget::Session(record) if record.identity.is_provider() => {
                 use super::details_client_inventory::{
                     DetailsClientCapabilities, DetailsClientReadState, ManagedRestoreActions,
@@ -127,7 +129,21 @@ impl SessionDetailsDialog {
                 DetailsAction::Fork,
                 DetailsAction::Resume,
             ],
+        };
+        let mut actions = actions.to_vec();
+        if self
+            .record()
+            .cwd
+            .as_deref()
+            .is_some_and(|path| !path.trim().is_empty())
+        {
+            let position = actions
+                .iter()
+                .position(|action| *action == DetailsAction::CopySessionId)
+                .map_or(actions.len(), |index| index + 1);
+            actions.insert(position, DetailsAction::CopyPath);
         }
+        actions
     }
 
     pub(super) fn move_focus(&mut self, backwards: bool) {

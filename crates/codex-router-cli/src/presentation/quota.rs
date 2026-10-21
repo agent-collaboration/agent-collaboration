@@ -4,6 +4,7 @@ mod quota_account_options;
 mod quota_browse_rendering;
 mod quota_detail_panel;
 mod quota_dialog_actions;
+mod quota_dialog_context;
 mod quota_dialog_rendering;
 mod quota_floor_editor;
 mod quota_help_rendering;
@@ -51,3 +52,9 @@ pub(crate) use quota_status_view_model::SampleMetadata;
 pub(crate) use quota_status_symbols::{
     QuotaAccountStatus, QuotaFreshnessCensus, QuotaHeaderFacts, QuotaPoolCensus, QuotaRowStatus,
 };
+
+#[cfg(test)]
+mod quota_viewport_trace;
+
+#[cfg(test)]
+mod quota_frame_observation;

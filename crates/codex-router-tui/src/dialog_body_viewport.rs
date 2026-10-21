@@ -8,6 +8,8 @@ pub enum DialogScrollKeys {
     #[default]
     Disabled,
     Arrows,
+    /// Keep caller-owned arrows for fields/choices while long content can page.
+    Pages,
     Navigation,
 }
 impl DialogScrollKeys {
@@ -17,6 +19,10 @@ impl DialogScrollKeys {
             Self::Arrows => matches!(
                 code,
                 KeyCode::Up | KeyCode::Down | KeyCode::Home | KeyCode::End
+            ),
+            Self::Pages => matches!(
+                code,
+                KeyCode::Home | KeyCode::End | KeyCode::PageUp | KeyCode::PageDown
             ),
             Self::Navigation => matches!(
                 code,
@@ -156,7 +162,7 @@ pub fn DialogBodyViewport<'a>(
         }
     });
     element! {
-        View(padding_right:1,min_height: 0, flex_grow:1.0_f32,flex_shrink: 1.0_f32, overflow: Overflow::Hidden, flex_direction: FlexDirection::Column) {
+        View(padding_right:1,min_height: 0,flex_shrink: 1.0_f32, overflow: Overflow::Hidden, flex_direction: FlexDirection::Column) {
             ContextProvider(value:Context::owned(crate::dialog_focus_reveal::DialogBodyScroll {top:viewport_top,viewport_height,natural_height,offset})) {
                 View(flex_shrink: 0.0_f32, flex_direction: FlexDirection::Column) {
                     MeasuredBody(height: natural_height, offset: offset.get().min(maximum_offset), children)

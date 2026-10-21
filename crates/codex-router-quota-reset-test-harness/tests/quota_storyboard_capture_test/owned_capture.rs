@@ -9,6 +9,38 @@ use std::time::{Duration, Instant};
 
 static CAPTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+pub(super) fn ensure_capture_running(stop_file: Option<&Path>) -> TestResult<()> {
+    let Some(stop_file) = stop_file else {
+        return Ok(());
+    };
+    let metadata = match fs::symlink_metadata(stop_file) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error.into()),
+    };
+    let parent = stop_file
+        .parent()
+        .ok_or("capture stop has no private parent")?;
+    let owner = fs::symlink_metadata(parent)?;
+    ensure(
+        stop_file
+            .file_name()
+            .is_some_and(|name| name == "capture-stop")
+            && owner.is_dir()
+            && !owner.file_type().is_symlink()
+            && metadata.is_file()
+            && !metadata.file_type().is_symlink()
+            && metadata.uid() == owner.uid()
+            && fs::read(stop_file)? == b"stop\n",
+        "invalid private capture stop marker",
+    )?;
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Interrupted,
+        "owned capture stop requested",
+    )
+    .into())
+}
+
 pub(super) fn has_owned_browser(output: &Path) -> TestResult<bool> {
     let directory = fs::read_to_string(output.join("browser-temp.directory"))?;
     Ok(!browser_processes(Path::new(directory.trim()))?.is_empty())
@@ -97,14 +129,26 @@ pub(super) struct OwnedCapture {
     pub(super) child: Child,
     pub(super) group_released: bool,
     pub(super) output: PathBuf,
-    pub(super) capability: String,
+    pub(super) child_ownership: CapturedChildOwnership,
     pub(super) browser_temporary_directory: PathBuf,
+    pub(super) stop_file: Option<PathBuf>,
+}
+
+pub(super) enum CapturedChildOwnership {
+    FixtureCapability(String),
+    RetainedPythonChild,
 }
 
 impl OwnedCapture {
     pub(super) fn wait(&mut self, timeout: Duration) -> TestResult<ExitStatus> {
         let deadline = Instant::now() + timeout;
         loop {
+            if let Err(stopped) = ensure_capture_running(self.stop_file.as_deref()) {
+                if let Err(cleanup) = self.release_process_group() {
+                    return Err(format!("{stopped}; cleanup: {cleanup}").into());
+                }
+                return Err(stopped);
+            }
             if let Some(status) = self.child.try_wait()? {
                 return Ok(status);
             }
@@ -124,12 +168,30 @@ impl OwnedCapture {
             // group alone cannot establish its cleanup on an early error.
             // A failed identity check must never signal a foreign PID, but it
             // also must not skip cleanup of later independently owned resources.
-            let outcomes = [
-                terminate_owned_pid(&self.output.join("quota-child.pid"), &self.capability),
+            let child_cleanup = match &self.child_ownership {
+                CapturedChildOwnership::FixtureCapability(capability) => {
+                    terminate_owned_pid(&self.output.join("quota-child.pid"), capability)
+                }
+                // The retained Python Popen owns component/public children whose
+                // argv has no fixture capability. Never signal those PIDs here.
+                CapturedChildOwnership::RetainedPythonChild => Ok(()),
+            };
+            let wrapper_cleanup = if matches!(
+                self.child_ownership,
+                CapturedChildOwnership::RetainedPythonChild
+            ) && self.output.join("quota-wrapper.pid").exists()
+                && !self.output.join("quota-wrapper.identity").is_file()
+            {
+                Err("retained Python wrapper identity missing; refusing signal".into())
+            } else {
                 terminate_owned_pid(
                     &self.output.join("quota-wrapper.pid"),
                     &self.output.join("fixed_quota_child.py").to_string_lossy(),
-                ),
+                )
+            };
+            let outcomes = [
+                child_cleanup,
+                wrapper_cleanup,
                 terminate_owned_pid(
                     &self.output.join("ttyd.pid"),
                     &self.output.join("fixed_quota_child.py").to_string_lossy(),
@@ -220,6 +282,21 @@ fn terminate_owned_pid(record: &Path, expected_command_marker: &str) -> TestResu
         text.contains(expected_command_marker),
         "refusing to signal a PID whose command does not match this owned capture",
     )?;
+    if record
+        .file_name()
+        .is_some_and(|name| name == "quota-wrapper.pid")
+        && let Some(parent) = record.parent()
+        && parent.join("quota-wrapper.identity").exists()
+    {
+        let identity = Command::new("/bin/ps")
+            .args(["-p", &pid.to_string(), "-o", "uid=,lstart=,command="])
+            .output()?;
+        ensure(
+            identity.status.success()
+                && identity.stdout == fs::read(parent.join("quota-wrapper.identity"))?,
+            "public wrapper UID/birth/command changed; refusing signal",
+        )?;
+    }
     let _ = Command::new("/bin/kill")
         .args(["-TERM", &pid.to_string()])
         .output()?;

@@ -376,7 +376,7 @@ fn assert_ordered_inventory_pages(frames: &[String], expected_pages: &[(&str, &s
                 .enumerate()
                 .skip(next_frame_index)
                 .find_map(|(index, frame)| {
-                    (frame.contains("Account options · Resets")
+                    (frame.contains("Options · Resets")
                         && frame.contains(page_range)
                         && frame.contains(&voucher_marker))
                     .then_some(index)
@@ -460,11 +460,16 @@ async fn cancellation_body_text_precedes_acknowledged_options_close_action() {
                     phase = CancellationProofPhase::CancellationPending;
                 }
                 CancellationProofPhase::CancellationPending
-                    if frame.contains("Inspect reset eligibility.") =>
+                    if frame.contains("Options · Resets")
+                        && !frame.contains("voucher-1")
+                        && frame.contains("Review") =>
                 {
                     // This is the old PTY readiness marker, but the retained
                     // snapshot still owns inspection input and offers Cancel.
-                    assert!(frame.contains("Inspect"), "{frame}");
+                    assert!(
+                        frame.contains("alpha-tag"),
+                        "captured context remains while cancellation is pending: {frame}"
+                    );
                     assert!(
                         frame.contains("Review") && frame.contains("Cancel"),
                         "{frame}"
@@ -519,3 +524,6 @@ async fn cancellation_body_text_precedes_acknowledged_options_close_action() {
         "PTY1 controlled interleaving: Inspect body precedes Browse; early Escape emits Cancel; acknowledged Close then Escape restores Filters"
     );
 }
+
+#[path = "quota_account_options_scroll_test.rs"]
+mod quota_account_options_scroll_test;

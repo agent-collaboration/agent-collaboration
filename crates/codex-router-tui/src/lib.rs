@@ -9,7 +9,9 @@ mod dialog;
 mod dialog_interaction;
 
 pub use dialog::{DialogFrame, DialogFrameProps, DialogHost, DialogHostProps, DialogMargins};
-pub use dialog_interaction::{DialogInputScope, UseDialogInteraction};
+pub use dialog_interaction::{
+    DialogButton, DialogButtonProps, DialogInputScope, UseDialogInteraction,
+};
 mod dialog_action;
 pub use dialog_action::{
     DialogAction, DialogActionEmphasis, DialogActionProps, DialogKeyboardOwner,
