@@ -147,6 +147,13 @@ impl TerminalDriver {
                 contains_completed_synchronized_frame_after_text(tail, expected.as_bytes())
             })
         })
+        .map_err(|error| {
+            let diagnostics = self.safe_semantic_diagnostics(start);
+            std::io::Error::other(format!(
+                "PTY action acknowledgement expected={expected:?} action_start={start}: {error}; {diagnostics}"
+            ))
+            .into()
+        })
     }
 
     pub(super) fn resize(&self, rows: u16, cols: u16) -> TestResult<()> {

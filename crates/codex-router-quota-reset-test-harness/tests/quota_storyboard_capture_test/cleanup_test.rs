@@ -1,6 +1,8 @@
+use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
+use std::os::unix::process::{CommandExt, ExitStatusExt};
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
@@ -12,6 +14,83 @@ use super::QuotaResetFixture;
 use super::TestResult;
 use super::ensure;
 use super::ensure_owned_child_stopped;
+
+#[tokio::test(flavor = "current_thread")]
+async fn owned_capture_cleanup_scopes_the_group_operand_and_preserves_unrelated_processes()
+-> TestResult<()> {
+    // Check the real command owner before starting any child: a regression
+    // must fail without executing a potentially process-wide signal.
+    let command = super::owned_capture::owned_capture_group_termination_command(12345);
+    ensure(
+        command.get_program() == "/bin/kill"
+            && command.get_args().map(OsString::from).collect::<Vec<_>>()
+                == ["-TERM", "--", "-12345"].map(OsString::from),
+        "owned group signal must separate kill options from its negative group operand",
+    )?;
+
+    let fixture = QuotaResetFixture::create().await?;
+    let output = fixture.root().join("group-signal-cleanup");
+    fs::create_dir(&output)?;
+    let vhs = fixture.root().join("controlled-group-child");
+    fs::write(&vhs, "#!/bin/sh\nexec /bin/sleep 30\n")?;
+    fs::set_permissions(&vhs, fs::Permissions::from_mode(0o700))?;
+    let tools = CaptureTools {
+        vhs,
+        ttyd: PathBuf::new(),
+        image_verifier: PathBuf::new(),
+        dynamic_library_path: String::new(),
+        image_timeout: Duration::from_secs(1),
+        stop_file: None,
+    };
+    let mut sentinel = Command::new("/bin/sleep")
+        .arg("30")
+        .process_group(0)
+        .spawn()?;
+    let outcome = (|| -> TestResult<()> {
+        let mut capture = tools.start_capture(&output, fixture.capability())?;
+        ensure(
+            capture.child.id() != sentinel.id(),
+            "capture and sentinel must be different process-group leaders",
+        )?;
+        let browser_directory = capture.browser_temporary_directory.clone();
+        capture.release_process_group()?;
+        let deadline = Instant::now() + Duration::from_secs(1);
+        let capture_status = loop {
+            if let Some(status) = capture.child.try_wait()? {
+                break status;
+            }
+            ensure(
+                Instant::now() < deadline,
+                "owned capture survived group cleanup",
+            )?;
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        ensure(
+            capture_status.signal() == Some(15),
+            "real owned capture must terminate through group cleanup",
+        )?;
+        ensure(
+            sentinel.try_wait()?.is_none(),
+            "unrelated process group must remain alive after capture cleanup",
+        )?;
+        ensure(
+            !browser_directory.exists() && !output.join("cleanup-error.txt").exists(),
+            "group cleanup must retain owned-profile and cleanup-error checks",
+        )?;
+        fixture.assert_read_only()?;
+        Ok(())
+    })();
+    // Positive-PID Child ownership settles our sentinel even on assertion failure.
+    let sentinel_cleanup = (|| -> TestResult<()> {
+        if sentinel.try_wait()?.is_none() {
+            sentinel.kill()?;
+        }
+        sentinel.wait()?;
+        Ok(())
+    })();
+    outcome?;
+    sentinel_cleanup
+}
 
 #[tokio::test(flavor = "current_thread")]
 async fn failed_tool_spawn_removes_its_owned_browser_directory() -> TestResult<()> {
@@ -67,7 +146,7 @@ async fn controlled_image_lifecycle(cooperative_stop: bool) -> TestResult<()> {
     fs::write(
         &checker,
         format!(
-            "#!/bin/sh\nprintf '%s\\n' \"$$\" > '{}'\nprintf 'stdout before wait\\n'\nprintf 'stderr before wait\\n' >&2\nread release < '{}'\n",
+            "#!/bin/sh\nprintf 'stdout before wait\\n'\nprintf 'stderr before wait\\n' >&2\nprintf '%s\\n' \"$$\" > '{}'\nread release < '{}'\n",
             pid_file.display(),
             fifo.display(),
         ),

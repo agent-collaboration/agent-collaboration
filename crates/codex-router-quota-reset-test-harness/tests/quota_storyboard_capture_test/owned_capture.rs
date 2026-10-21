@@ -139,6 +139,12 @@ pub(super) enum CapturedChildOwnership {
     RetainedPythonChild,
 }
 
+pub(super) fn owned_capture_group_termination_command(group_id: u32) -> Command {
+    let mut command = Command::new("/bin/kill");
+    command.args(["-TERM", "--", &format!("-{group_id}")]);
+    command
+}
+
 impl OwnedCapture {
     pub(super) fn wait(&mut self, timeout: Duration) -> TestResult<ExitStatus> {
         let deadline = Instant::now() + timeout;
@@ -196,8 +202,7 @@ impl OwnedCapture {
                     &self.output.join("ttyd.pid"),
                     &self.output.join("fixed_quota_child.py").to_string_lossy(),
                 ),
-                Command::new("/bin/kill")
-                    .args(["-TERM", &format!("-{}", self.child.id())])
+                owned_capture_group_termination_command(self.child.id())
                     .output()
                     .map(|_| ())
                     .map_err(Into::into),
