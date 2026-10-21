@@ -42,6 +42,7 @@ pub use provider_operation_store::{
 };
 mod delivery_acceptance_effect;
 mod delivery_route_projection;
+mod native_delivery_receipt;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
 pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;

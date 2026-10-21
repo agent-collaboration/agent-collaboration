@@ -972,3 +972,6 @@ fn assert_uuid_v7_provider_reference(detail: &str, code_label: &str, provider_co
 
 #[path = "provider_acp_delivery_route/provider_failure_tests.rs"]
 mod provider_failure_tests;
+
+#[path = "provider_acp_delivery_route/auto_direct_message_tests.rs"]
+mod auto_direct_message_tests;

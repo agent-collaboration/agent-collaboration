@@ -320,5 +320,6 @@ fn rejected(
         client_code: None,
         detail: Some(detail.to_owned()),
         claims: None,
+        native_failure: None,
     })
 }

@@ -496,6 +496,7 @@ impl ScheduledRunWorker {
                                 .into(),
                         ),
                         claims: None,
+                        native_failure: None,
 
                         }),
                     Some((
@@ -513,6 +514,7 @@ impl ScheduledRunWorker {
                                             .into(),
                                     ),
                                     claims: None,
+                                    native_failure: None,
 
                                     }),
                                 reachability: None,

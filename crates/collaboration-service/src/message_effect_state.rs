@@ -1,4 +1,5 @@
 //! Request-local effect evidence; never a replay or delivery store.
+use collaboration_protocol::NativeDeliveryFailureCause;
 use serde_json::{Value, json};
 
 pub(crate) const HELD_BY_ANOTHER_CLIENT_GUIDANCE: &str =
@@ -27,14 +28,47 @@ impl MessageEffects {
         }
         json!({"jsonrpc":"2.0","id":self.id,"error":{"code":-32050,"message":"Message operation failed","data":data}})
     }
-    pub fn native_rejection(&self, stage: &str, code: i64, native: Option<&Value>) -> Value {
+    pub fn local_rejection(
+        &self,
+        operation: &str,
+        stage: &str,
+        cause: NativeDeliveryFailureCause,
+    ) -> Value {
+        let mut response = self.failure("localRejection", stage);
+        if let Some(data) = response
+            .pointer_mut("/error/data")
+            .and_then(Value::as_object_mut)
+        {
+            data.insert("operation".to_owned(), json!(operation));
+            data.insert("cause".to_owned(), json!(cause));
+        }
+        response
+    }
+    pub fn unsupported_method(&self, operation: &str, stage: &str) -> Value {
+        let mut response = self.local_rejection(
+            operation,
+            stage,
+            NativeDeliveryFailureCause::NativeMethodUnavailable,
+        );
+        if let Some(kind) = response.pointer_mut("/error/data/kind") {
+            *kind = json!("unsupportedCapability");
+        }
+        response
+    }
+    pub fn native_rejection(
+        &self,
+        operation: &str,
+        stage: &str,
+        code: i64,
+        native: Option<&Value>,
+    ) -> Value {
         let (reason, next_action) = classify_native_rejection(code, native);
         let message = if reason == "heldByAnotherClient" {
             HELD_BY_ANOTHER_CLIENT_GUIDANCE
         } else {
             "Message operation failed"
         };
-        let mut data = json!({"kind":"nativeRejected","stage":stage,"message":message,
+        let mut data = json!({"kind":"nativeRejected","operation":operation,"stage":stage,"cause":"nativeRejected","message":message,
             "reason":reason,"nextAction":next_action,"clientCode":code,
             "effects":{"resume":self.resume,"submission":self.submission}});
         if reason == "unknown"
@@ -141,7 +175,7 @@ mod tests {
                 "retryLater",
             ),
         ] {
-            let rejection = effects.native_rejection("submit", code, Some(&native));
+            let rejection = effects.native_rejection("turn/start", "start", code, Some(&native));
             assert_eq!(
                 rejection.pointer("/error/data/reason"),
                 Some(&json!(reason))

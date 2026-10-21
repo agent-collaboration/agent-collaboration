@@ -32,6 +32,7 @@ fn delivery_outcomes_and_reachability_round_trip_without_losing_strength() {
                 client_code: Some(-32601),
                 detail: Some("unsupported".to_owned()),
                 claims: None,
+                native_failure: None,
             }),
             json!({"kind": "rejected", "reason": "unsupportedCapability", "nextAction":"correctRequest", "clientCode":-32601, "detail":"unsupported"}),
         ),
@@ -53,6 +54,7 @@ fn delivery_outcomes_and_reachability_round_trip_without_losing_strength() {
                         cwd: None,
                     },
                 ]),
+                native_failure: None,
             }),
             json!({
                 "kind":"rejected",
@@ -84,6 +86,36 @@ fn delivery_outcomes_and_reachability_round_trip_without_losing_strength() {
             serde_json::from_value(encoded).expect("reachability decodes");
         assert_eq!(decoded, reachability);
     }
+}
+
+#[test]
+fn native_failure_is_optional_for_old_receipts_and_rejects_invalid_facts() {
+    let old = json!({"reason":"unsupportedCapability","nextAction":"correctRequest","clientCode":-32601,"detail":null});
+    let decoded: DeliveryRejection = serde_json::from_value(old.clone()).unwrap();
+    assert!(decoded.native_failure.is_none());
+    assert_eq!(to_value(decoded).unwrap(), old);
+
+    let failure = json!({
+        "operation":"thread/resume", "stage":"resume", "cause":"invalidResumeResponse",
+        "generation":{"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1},
+        "resume":"accepted", "submission":"notDispatched"
+    });
+    let mut receipt = json!({"reason":"localRejection","nextAction":"inspectTarget","clientCode":null,"detail":"Recorded resume response failed validation","nativeFailure":failure});
+    let decoded: DeliveryRejection = serde_json::from_value(receipt.clone()).unwrap();
+    assert_eq!(to_value(decoded).unwrap(), receipt);
+    for field in ["operation", "stage", "cause", "resume", "submission"] {
+        let mut invalid = receipt.clone();
+        invalid["nativeFailure"][field] = json!("unrecognized");
+        assert!(
+            serde_json::from_value::<DeliveryRejection>(invalid).is_err(),
+            "{field}"
+        );
+    }
+    receipt["nativeFailure"]
+        .as_object_mut()
+        .unwrap()
+        .remove("generation");
+    assert!(serde_json::from_value::<DeliveryRejection>(receipt).is_err());
 }
 
 #[test]

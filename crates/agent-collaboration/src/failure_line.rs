@@ -162,6 +162,7 @@ fn rejection_reason_label(reason: DeliveryRejectionReason) -> &'static str {
         DeliveryRejectionReason::UnsupportedCapability => {
             "the provider does not support this request"
         }
+        DeliveryRejectionReason::LocalRejection => "Router rejected the native operation locally",
         DeliveryRejectionReason::Unknown => "delivery was rejected for an unknown reason",
         DeliveryRejectionReason::EndpointUnavailable => "the target endpoint is unavailable",
         DeliveryRejectionReason::NoRoute => "no delivery route is available for the target",
@@ -255,6 +256,7 @@ mod tests {
     #[test]
     fn ambiguous_peer_claims_render_in_order_with_cwd_fallback() {
         let rejection = DeliveryRejection {
+            native_failure: None,
             reason: DeliveryRejectionReason::LiveElsewhere,
             next_action: DeliveryNextAction::InspectTarget,
             client_code: None,
@@ -305,6 +307,7 @@ mod tests {
             client_code: None,
             detail: Some("this Claude session is claimed by 5 live terminals".to_owned()),
             claims: Some(claims.clone()),
+            native_failure: None,
         };
 
         let line = render_rejection_line(&rejection, "fixture-session", "router://host/push/id");

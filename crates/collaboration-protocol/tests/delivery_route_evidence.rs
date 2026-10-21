@@ -29,6 +29,7 @@ fn receipt_round_trips_selected_and_unselected_outcomes() -> Result<(), Box<dyn 
                 client_code: None,
                 detail: Some("no route".into()),
                 claims: None,
+                native_failure: None,
             }),
             reachability: None,
             client: None,

@@ -80,11 +80,30 @@ fn guard() -> CodexGeneration {
 }
 
 #[tokio::test]
-async fn auto_and_queue_hold_without_attempt_and_recover_their_exact_mode() {
+async fn queue_and_previously_held_auto_wait_until_loaded_and_recover_their_exact_mode() {
     for mode in [MessageDelivery::Auto, MessageDelivery::Queue] {
         let fixture = OwnerFixture::new().await;
         *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
         let push_id = insert(&fixture, mode, None).await;
+        if mode == MessageDelivery::Auto {
+            fixture
+                .push_store
+                .lock()
+                .await
+                .hold_unsent_direct_message(
+                    &push_id,
+                    collaboration_protocol::DeliveryReceipt {
+                        outcome: DeliveryOutcome::NotSubmitted {
+                            retryable: true,
+                            reason: "target is not running; direct message held".to_owned(),
+                        },
+                        reachability: None,
+                        client: None,
+                    },
+                )
+                .await
+                .unwrap();
+        }
         let runtime = fixture.runtime_without_board().await;
         bounded_observe(&runtime, |event| {
             matches!(event, OwnerObservation::DirectMessageHeld)
@@ -117,6 +136,42 @@ async fn auto_and_queue_hold_without_attempt_and_recover_their_exact_mode() {
         );
         restored.close().await;
     }
+}
+
+#[tokio::test]
+async fn new_auto_to_unloaded_target_attempts_once_with_permission_to_load() {
+    let fixture = OwnerFixture::new().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    let runtime = fixture.runtime_without_board().await;
+    let push_id = insert(&fixture, MessageDelivery::Auto, None).await;
+    let service = runtime.service.clone();
+    let target = target_session(&fixture.reader).unwrap();
+    let selected_push = push_id.clone();
+    let mut sending =
+        tokio::spawn(async move { service.deliver_direct_message(target, selected_push).await });
+    tokio::select! {
+        submitted = request(&runtime) => {
+            assert_eq!(submitted.payload.push_id, push_id);
+            assert_eq!(submitted.mode, MessageDelivery::Auto);
+            assert_eq!(submitted.payload.load_policy, LoadPolicy::MayLoad);
+        }
+        early = &mut sending => panic!("new Auto was settled before native submission: {early:?}"),
+    }
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    assert_eq!(
+        sending.await.unwrap().unwrap().delivery_state,
+        PushDeliveryState::Delivered
+    );
+    bounded_observe(&runtime, |event| {
+        matches!(event, OwnerObservation::DirectMessageSettled)
+    })
+    .await;
+    assert_eq!(
+        record(&fixture, &push_id).await.delivery_state,
+        PushDeliveryState::Delivered
+    );
+    assert!(runtime.requests.lock().await.try_recv().is_err());
+    runtime.close().await;
 }
 
 #[tokio::test]
@@ -321,6 +376,7 @@ async fn restored_guarded_generation_mismatch_is_terminal_without_any_broadened_
                 client_code: None,
                 detail: Some("pinned generation no longer exists".to_owned()),
                 claims: None,
+                native_failure: None,
             },
         ))
         .unwrap();

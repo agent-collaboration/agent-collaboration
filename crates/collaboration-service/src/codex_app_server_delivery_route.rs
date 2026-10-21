@@ -5,9 +5,9 @@ use crate::native_message_dispatch::{
 };
 use crate::{
     AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryClientReceipt, DeliveryContractError, DeliveryFuture, DeliveryPrecondition,
-    DeliveryReceipt, EndpointDirectory, LoadPolicy, NOT_LOADED_REASON, NativeControlBackend,
-    RouteClaim, RoutePresence, RouteUnavailableReason, SessionDeliveryRoute,
+    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, DeliveryReceipt,
+    EndpointDirectory, LoadPolicy, NativeControlBackend, RouteClaim, RoutePresence,
+    RouteUnavailableReason, SessionDeliveryRoute,
 };
 use agent_automation::{
     CessationEvidence, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
@@ -16,10 +16,8 @@ use agent_automation::{
 use codex_acp_adapter::{HeldBindingCheckout, UnmaterializedBindingStore};
 use codex_native_integration::NativeProtocolConnection;
 use collaboration_protocol::{
-    AcceptedResumeEffect, ChannelDescription, CodexGeneration, DeliveryCorrelationId,
-    DeliveryNextAction, DeliveryOutcome, DeliveryRejection, DeliveryRejectionReason, MachineId,
-    MessageDelivery, NativeSendAcceptance, RouterLink, SessionReachability, SessionRef,
-    UuidIdentity,
+    ChannelDescription, DeliveryCorrelationId, DeliveryOutcome, MachineId, MessageDelivery,
+    NativeSendAcceptance, RouterLink, SessionReachability, SessionRef, UuidIdentity,
 };
 use serde_json::{Value, json};
 use std::time::Duration;
@@ -216,7 +214,7 @@ impl CodexAppServerDeliveryRoute {
                 (response, false)
             }
         };
-        let receipt = interpret_native_response(
+        let receipt = crate::native_delivery_receipt::interpret_native_response(
             &request.target,
             response,
             held_idle_submission,
@@ -326,7 +324,7 @@ impl CodexAppServerDeliveryRoute {
             },
             Err(
                 NativeThreadStatusReadError::Rejected { .. }
-                | NativeThreadStatusReadError::Unsupported
+                | NativeThreadStatusReadError::LocalRejection(_)
                 | NativeThreadStatusReadError::Unavailable,
             ) => RoutePresence::Unreachable {
                 reason: "Codex thread could not be read".to_owned(),
@@ -465,149 +463,5 @@ fn not_submitted(reason: &str, retryable: bool) -> DeliveryReceipt {
         },
         reachability: Some(SessionReachability::CodexAppServer),
         client: None,
-    }
-}
-
-fn interpret_native_response(
-    target: &SessionRef,
-    response: crate::native_message_dispatch::NativeMessageOutcome,
-    held_idle_submission: bool,
-    effects: &mut NativeEffectEvidence<SessionRef, CodexGeneration>,
-) -> DeliveryReceipt {
-    let (outcome, client) = match response {
-        crate::native_message_dispatch::NativeMessageOutcome::Accepted(receipt) => match receipt {
-            receipt
-                if receipt.target == *target
-                    && effects.generation.as_ref() == Some(&receipt.generation)
-                    && effects.client_user_message_id.as_deref()
-                        == Some(String::from(receipt.client_user_message_id.clone()).as_str()) =>
-            {
-                effects.resume = match receipt.resume_effect {
-                    AcceptedResumeEffect::Accepted => PreparationEffect::Accepted,
-                    AcceptedResumeEffect::NotRequested => PreparationEffect::NotRequested,
-                };
-                effects.submission = SubmissionEffect::Accepted;
-                let client = Some(DeliveryClientReceipt::CodexAppServer(receipt.clone()));
-                match receipt.acceptance {
-                    NativeSendAcceptance::QueueAccepted { submission_id } => {
-                        effects.native_submission_id = Some(String::from(submission_id));
-                        (DeliveryOutcome::Queued, client)
-                    }
-                    NativeSendAcceptance::NativeInputAccepted {
-                        operation, turn_id, ..
-                    } => {
-                        effects.native_turn_id = Some(String::from(turn_id));
-                        let outcome = if held_idle_submission
-                            && matches!(
-                                operation,
-                                collaboration_protocol::NativeInputOperation::TurnStart
-                            ) {
-                            DeliveryOutcome::Started
-                        } else {
-                            DeliveryOutcome::StartedOrSteered
-                        };
-                        (outcome, client)
-                    }
-                    NativeSendAcceptance::SteerAccepted {
-                        turn_id,
-                        submission_id,
-                    } => {
-                        effects.native_turn_id = Some(String::from(turn_id));
-                        effects.native_submission_id = submission_id.map(String::from);
-                        (DeliveryOutcome::Steered, client)
-                    }
-                }
-            }
-            _ => {
-                effects.submission = SubmissionEffect::Unknown;
-                (DeliveryOutcome::Unknown, None)
-            }
-        },
-        crate::native_message_dispatch::NativeMessageOutcome::Failed(response) => {
-            let data = response.pointer("/error/data");
-            effects.resume = match data
-                .and_then(|value| value.pointer("/effects/resume"))
-                .and_then(Value::as_str)
-            {
-                Some("notRequested") => PreparationEffect::NotRequested,
-                Some("accepted") => PreparationEffect::Accepted,
-                Some("rejected") => PreparationEffect::Rejected,
-                _ => PreparationEffect::Unknown,
-            };
-            effects.submission = match data
-                .and_then(|value| value.pointer("/effects/submission"))
-                .and_then(Value::as_str)
-            {
-                Some("notDispatched") => SubmissionEffect::NotDispatched,
-                Some("rejected") => SubmissionEffect::Rejected,
-                _ => SubmissionEffect::Unknown,
-            };
-            let kind = data
-                .and_then(|value| value.get("kind"))
-                .and_then(Value::as_str)
-                .unwrap_or("outcomeUnknown");
-            if effects.resume == PreparationEffect::Unknown
-                || effects.submission == SubmissionEffect::Unknown
-            {
-                (DeliveryOutcome::Unknown, None)
-            } else if kind == "threadMissingOrUnmaterialized" {
-                (
-                    DeliveryOutcome::NotSubmitted {
-                        retryable: false,
-                        reason: "thread not found or never started; if it was created without a first message, it was lost when the Host restarted — create it again".into(),
-                    },
-                    None,
-                )
-            } else if kind == NOT_LOADED_REASON {
-                (
-                    DeliveryOutcome::NotSubmitted {
-                        retryable: true,
-                        reason: NOT_LOADED_REASON.into(),
-                    },
-                    None,
-                )
-            } else if kind == "nativeRejected" || kind == "unsupportedCapability" {
-                let reason = data
-                    .and_then(|value| value.get("reason"))
-                    .cloned()
-                    .and_then(|value| serde_json::from_value::<DeliveryRejectionReason>(value).ok())
-                    .unwrap_or(DeliveryRejectionReason::UnsupportedCapability);
-                let next_action = data
-                    .and_then(|value| value.get("nextAction"))
-                    .cloned()
-                    .and_then(|value| serde_json::from_value::<DeliveryNextAction>(value).ok())
-                    .unwrap_or(DeliveryNextAction::CorrectRequest);
-                (
-                    DeliveryOutcome::Rejected(DeliveryRejection {
-                        reason,
-                        next_action,
-                        client_code: data
-                            .and_then(|value| value.get("clientCode"))
-                            .and_then(Value::as_i64),
-                        detail: (reason == DeliveryRejectionReason::HeldByAnotherClient).then(
-                            || {
-                                crate::message_effect_state::HELD_BY_ANOTHER_CLIENT_GUIDANCE
-                                    .to_owned()
-                            },
-                        ),
-                        claims: None,
-                    }),
-                    None,
-                )
-            } else {
-                (
-                    DeliveryOutcome::NotSubmitted {
-                        retryable: matches!(kind, "unavailable" | "overloaded"),
-                        reason: kind.into(),
-                    },
-                    None,
-                )
-            }
-        }
-    };
-    DeliveryReceipt {
-        outcome,
-        reachability: Some(SessionReachability::CodexAppServer),
-        client,
     }
 }

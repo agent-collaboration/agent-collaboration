@@ -295,6 +295,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
                         client_code: None,
                         detail: Some("fixture rejection".into()),
                         claims: None,
+                        native_failure: None,
                     }));
                 }
                 (FakeSubmissionPlan::Unknown, _) => {

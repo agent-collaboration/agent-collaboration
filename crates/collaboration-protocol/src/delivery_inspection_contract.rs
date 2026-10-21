@@ -24,7 +24,7 @@ pub struct NativeEffectEvidence {
     pub submission: SubmissionEffect,
     pub cessation: CessationEvidence,
 }
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreparationEffect {
     NotRequested,
@@ -33,7 +33,7 @@ pub enum PreparationEffect {
     Rejected,
     Unknown,
 }
-#[derive(Clone, Copy, Debug, JsonSchema, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum SubmissionEffect {
     NotDispatched,

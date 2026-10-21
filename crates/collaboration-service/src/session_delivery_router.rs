@@ -81,6 +81,7 @@ impl SessionDeliveryRouter {
                     client_code: None,
                     detail: Some(detail.to_owned()),
                     claims: None,
+                    native_failure: None,
                 }),
                 reachability: None,
                 client: None,
@@ -99,6 +100,7 @@ impl SessionDeliveryRouter {
                         "session is live in a Claude Code process Router cannot message".into(),
                     ),
                     claims: None,
+                    native_failure: None,
                 }),
                 reachability: None,
                 client: None,
@@ -154,6 +156,7 @@ impl SessionDeliveryRouter {
                     reasons.join("; ")
                 }),
                 claims: None,
+                native_failure: None,
             }),
             reachability: None,
             client: None,
@@ -340,6 +343,7 @@ mod tests {
     async fn typed_route_rejection_precedes_another_routes_holds_claim()
     -> Result<(), Box<dyn std::error::Error>> {
         let rejection = DeliveryRejection {
+            native_failure: None,
             reason: DeliveryRejectionReason::LiveElsewhere,
             next_action: DeliveryNextAction::InspectTarget,
             client_code: None,
