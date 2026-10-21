@@ -292,9 +292,36 @@ async fn compact_details_facts_remain_reachable_with_captured_context_at_all_gri
         println!(
             "DETAILS_REACHABILITY {width}x{height} earliest_common={earliest_common:?} reachable={reachable:?}"
         );
-        assert!(
-            reachable.iter().all(|seen| *seen),
-            "all old facts and full title/path/ID must be reachable at {width}x{height}: {reachable:?}"
-        );
+        assert_details_pose_coverage(width, height, reachable, earliest_common);
     }
+}
+
+#[cfg(feature = "quota-reset-test-harness")]
+fn assert_details_pose_coverage(
+    width: usize,
+    height: usize,
+    reachable: [bool; 10],
+    earliest_common: Option<usize>,
+) {
+    assert!(
+        (width == 48 && height == 12) || earliest_common.is_some(),
+        "seven common Details facts must share one pose at {width}x{height}"
+    );
+    assert!(
+        reachable.iter().all(|seen| *seen),
+        "all old facts and full title/path/ID must be reachable at {width}x{height}: {reachable:?}"
+    );
+}
+
+#[cfg(feature = "quota-reset-test-harness")]
+#[test]
+#[should_panic(expected = "seven common Details facts must share one pose")]
+fn details_coverage_rejects_individually_reachable_facts_without_common_pose() {
+    assert_details_pose_coverage(32, 24, [true; 10], None);
+}
+
+#[cfg(feature = "quota-reset-test-harness")]
+#[test]
+fn details_coverage_preserves_the_exact_short_grid_exception() {
+    assert_details_pose_coverage(48, 12, [true; 10], None);
 }
