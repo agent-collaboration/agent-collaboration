@@ -45,6 +45,8 @@ pub struct ConversationCreateRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ConversationCreateResult {
     pub target: SessionRef,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_differences: Vec<collaboration_protocol::PermissionDifference>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]

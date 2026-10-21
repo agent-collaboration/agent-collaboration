@@ -28,10 +28,35 @@ fn legacy_wake_evidence_decodes_as_codex_app_server() {
         panic!("legacy native evidence must retain its client identity");
     };
     assert_eq!(native.target.as_deref(), Some("codex-thread"));
+    assert!(native.permission_differences.is_empty());
     assert_eq!(native.generation.as_deref(), Some("generation-1"));
     assert_eq!(native.submission, SubmissionEffect::Accepted);
     assert_eq!(native.cessation, CessationEvidence::Confirmed);
     assert_eq!(native.allocation, PreparationEffect::Accepted);
+}
+
+#[test]
+fn native_permission_evidence_is_optional_closed_and_retained() {
+    // Arrange: old stored evidence omits the additive observation field.
+    let old = legacy_native();
+    let decoded: NativeEffectEvidence<String, String> =
+        serde_json::from_value(old.clone()).unwrap();
+    assert_eq!(serde_json::to_value(decoded).unwrap(), old);
+    let mut reported = old;
+    reported["permissionDifferences"] = json!(["writableRoots"]);
+
+    // Act: decode and re-encode the same persisted native evidence.
+    let decoded: NativeEffectEvidence<String, String> =
+        serde_json::from_value(reported.clone()).unwrap();
+
+    // Assert: retain the closed report without accepting arbitrary paths or tags.
+    assert_eq!(
+        decoded.permission_differences,
+        vec![agent_automation::PermissionDifference::WritableRoots]
+    );
+    assert_eq!(serde_json::to_value(decoded).unwrap(), reported);
+    reported["permissionDifferences"] = json!(["/unexpected/path"]);
+    assert!(serde_json::from_value::<NativeEffectEvidence<String, String>>(reported).is_err());
 }
 
 #[test]

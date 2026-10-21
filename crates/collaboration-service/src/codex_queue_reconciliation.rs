@@ -70,6 +70,7 @@ pub(crate) async fn reconcile(
         return AttemptReconciliation::StillUnknown;
     };
     let receipt = NativeSendReceipt {
+        permission_differences: native.permission_differences,
         target,
         generation,
         input_kind,

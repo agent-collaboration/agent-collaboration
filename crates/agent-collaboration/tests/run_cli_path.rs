@@ -58,6 +58,7 @@ async fn cli_reads_finished_run_from_host_storage() -> Result<(), Box<dyn std::e
         .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 1000)
         .await?;
     let mut effects = NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some(target.clone()),
         generation: Some(generation.clone()),
         client_user_message_id: Some(run.as_str().into()),

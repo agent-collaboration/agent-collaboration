@@ -33,6 +33,7 @@ impl DurableMessage for Message {
 }
 fn effects(submission: SubmissionEffect) -> NativeEffectEvidence<String, String> {
     NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some("B".into()),
         generation: Some("g1".into()),
         client_user_message_id: None,

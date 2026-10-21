@@ -171,7 +171,7 @@ pub(crate) async fn dispatch(
             }
             if let Some(profile) = prepared {
                 match profile.validate_response(&resumed).await {
-                    Ok(()) => {}
+                    Ok(differences) => effects.permission_differences = differences,
                     Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown) => {
                         effects.submission = SubmissionEffect::NotDispatched;
                         sink.record(RouteEffectEvidence::CodexAppServer(effects))
@@ -246,6 +246,7 @@ pub(crate) async fn dispatch(
             effects.submission = SubmissionEffect::Accepted;
             effects.native_turn_id = Some(turn_id.into());
             let receipt = NativeSendReceipt {
+                permission_differences: effects.permission_differences.clone(),
                 target: run.target.clone(),
                 generation: admission.generation().clone(),
                 input_kind: MessageInputKind::Agent,

@@ -57,6 +57,7 @@ async fn summary_completion_requires_exact_attempt_and_retains_source()
         return Err("waiting consumed budget".into());
     }
     let effects = NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some("B".to_owned()),
         generation: Some("generation-fixture".to_owned()),
         client_user_message_id: Some(run.as_str().into()),

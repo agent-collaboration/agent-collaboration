@@ -103,6 +103,6 @@ pub enum ScheduleEffects {
         mutation: crate::LocalMutationState,
     },
     Route {
-        evidence: crate::DeliveryRouteEvidence,
+        evidence: Box<crate::DeliveryRouteEvidence>,
     },
 }

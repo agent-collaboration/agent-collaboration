@@ -269,7 +269,7 @@ pub fn run_schedule_command(arguments: Vec<OsString>) -> i32 {
                 ScheduleEffects::Local {
                     mutation: LocalMutationState::Unknown | LocalMutationState::Committed
                 }
-            ) || matches!(&error.effects, ScheduleEffects::Route { evidence } if match evidence {
+            ) || matches!(&error.effects, ScheduleEffects::Route { evidence } if match evidence.as_ref() {
                 DeliveryRouteEvidence::CodexAppServer(native) => matches!(native.allocation, collaboration_client::protocol::PreparationEffect::Accepted | collaboration_client::protocol::PreparationEffect::Unknown)
                     || matches!(native.resume, collaboration_client::protocol::PreparationEffect::Accepted | collaboration_client::protocol::PreparationEffect::Unknown)
                     || matches!(native.submission, collaboration_client::protocol::SubmissionEffect::Accepted | collaboration_client::protocol::SubmissionEffect::Dispatching | collaboration_client::protocol::SubmissionEffect::Unknown),

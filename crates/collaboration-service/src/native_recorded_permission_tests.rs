@@ -286,6 +286,7 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
     let result = tokio::time::timeout(
         Duration::from_secs(5),
         dispatch_message(NativeMessageRequest {
+            attempt_evidence: None,
             params: NativeMessageParams {
                 target: target(),
                 generation,
@@ -341,7 +342,7 @@ fn assert_projected_policy(observation: &ProbeObservation) {
 }
 
 #[tokio::test]
-async fn cold_native_message_projects_recorded_grants_before_turn_submission() {
+async fn cold_native_message_projects_recorded_grants_and_reports_narrowed_permissions() {
     let observation = cold_message_probe(ProbeCase {
         authority: RecordedAuthority::Valid,
         reply: NativeReply::Narrowed,
@@ -351,19 +352,19 @@ async fn cold_native_message_projects_recorded_grants_before_turn_submission() {
     .expect("native fixture operation");
     assert_projected_policy(&observation);
     assert!(
-        !observation.turn_started,
-        "narrowed native grants must prevent turn submission"
+        observation.turn_started,
+        "permission differences must not block input"
     );
-    let NativeMessageOutcome::Failed(failure) = observation.outcome else {
-        panic!("narrowed resume was accepted");
+    let NativeMessageOutcome::Accepted(receipt) = observation.outcome else {
+        panic!("narrowed resume must report and deliver");
     };
     assert_eq!(
-        failure.pointer("/error/data/effects/resume"),
-        Some(&json!("accepted"))
+        receipt.resume_effect,
+        collaboration_protocol::AcceptedResumeEffect::Accepted
     );
     assert_eq!(
-        failure.pointer("/error/data/effects/submission"),
-        Some(&json!("notDispatched"))
+        receipt.permission_differences,
+        vec![collaboration_protocol::PermissionDifference::WritableRoots]
     );
 }
 

@@ -456,7 +456,9 @@ async fn finish_failure(
 
 fn public_effects(effects: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> ScheduleEffects {
     match crate::schedule_preparation_evidence_sink::project_evidence(effects) {
-        Ok(evidence) => ScheduleEffects::Route { evidence },
+        Ok(evidence) => ScheduleEffects::Route {
+            evidence: Box::new(evidence),
+        },
         Err(_) => ScheduleEffects::Local {
             mutation: collaboration_protocol::LocalMutationState::None,
         },

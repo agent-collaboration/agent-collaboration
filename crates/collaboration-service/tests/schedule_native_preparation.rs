@@ -242,7 +242,7 @@ async fn exercise_preparation(
             Err(collaboration_client::ScheduleClientError::Rejected(error)) => error,
             _ => return Err("lost allocation response lacked typed evidence".into()),
         };
-        if !matches!(&error.effects,collaboration_protocol::ScheduleEffects::Route{evidence: collaboration_protocol::DeliveryRouteEvidence::CodexAppServer(evidence)} if matches!(evidence.allocation,collaboration_protocol::PreparationEffect::Unknown))
+        if !matches!(&error.effects,collaboration_protocol::ScheduleEffects::Route{evidence} if matches!(evidence.as_ref(), collaboration_protocol::DeliveryRouteEvidence::CodexAppServer(native) if matches!(native.allocation,collaboration_protocol::PreparationEffect::Unknown)))
         {
             return Err("lost allocation response invented no effect".into());
         }

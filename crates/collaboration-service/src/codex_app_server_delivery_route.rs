@@ -92,6 +92,7 @@ impl CodexAppServerDeliveryRoute {
             }
         };
         let mut effects = NativeEffectEvidence {
+            permission_differences: Vec::new(),
             target: Some(request.target.clone()),
             generation: Some(generation.clone()),
             client_user_message_id: Some(request.correlation.as_str().to_owned()),
@@ -148,8 +149,17 @@ impl CodexAppServerDeliveryRoute {
                         .await?;
                     return Ok(not_submitted("staleGeneration", false));
                 }
-                let response = crate::native_message_dispatch::dispatch_message(
+                effects.permission_differences = binding.permission_differences().to_vec();
+                sink.record(RouteEffectEvidence::CodexAppServer(effects.clone()))
+                    .await?;
+                let mut response = crate::native_message_dispatch::dispatch_message(
                     crate::native_message_dispatch::NativeMessageRequest {
+                        attempt_evidence: Some(
+                            crate::message_effect_state::NativeMessageAttemptEvidence {
+                                effects: &mut effects,
+                                sink,
+                            },
+                        ),
                         params,
                         id: json!(request.attempt.as_str()),
                         service_id: &self.service_id,
@@ -163,6 +173,11 @@ impl CodexAppServerDeliveryRoute {
                     },
                 )
                 .await;
+                if let crate::native_message_dispatch::NativeMessageOutcome::Accepted(receipt) =
+                    &mut response
+                {
+                    receipt.permission_differences = binding.permission_differences().to_vec();
+                }
                 match &response {
                     crate::native_message_dispatch::NativeMessageOutcome::Accepted(receipt)
                         if matches!(
@@ -198,6 +213,12 @@ impl CodexAppServerDeliveryRoute {
             HeldBindingCheckout::Missing => {
                 let response = crate::native_message_dispatch::dispatch_message(
                     crate::native_message_dispatch::NativeMessageRequest {
+                        attempt_evidence: Some(
+                            crate::message_effect_state::NativeMessageAttemptEvidence {
+                                effects: &mut effects,
+                                sink,
+                            },
+                        ),
                         params,
                         id: json!(request.attempt.as_str()),
                         service_id: &self.service_id,
