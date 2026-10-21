@@ -26,6 +26,56 @@ mod account_provider_cli_tests {
     use codex_router_core::provider::Provider;
 
     #[test]
+    fn login_rejects_mixed_provider_duplicate_labels() {
+        assert_duplicate_login_labels_rejected(Provider::Openai, Provider::Claude);
+    }
+
+    #[test]
+    fn login_rejects_same_provider_duplicate_labels() {
+        for provider in [Provider::Openai, Provider::Claude] {
+            assert_duplicate_login_labels_rejected(provider, provider);
+        }
+    }
+
+    fn assert_duplicate_login_labels_rejected(first: Provider, second: Provider) {
+        // Arrange: the store admits two IDs sharing an exact display label.
+        let root = tempfile::tempdir().unwrap();
+        let runtime = account_command_runtime().unwrap();
+        let state = runtime
+            .block_on(AsyncSqliteStateStore::open(
+                &root.path().join("state.sqlite"),
+            ))
+            .unwrap();
+        for (id, provider) in [("acct_a_existing", first), ("acct_b_existing", second)] {
+            runtime
+                .block_on(state.upsert_account(&AccountRecord::new(
+                    provider,
+                    AccountId::new(id).unwrap(),
+                    "ambiguous label",
+                    AccountStatus::Enabled,
+                )))
+                .unwrap();
+        }
+        assert_eq!(runtime.block_on(state.list_accounts()).unwrap().len(), 2);
+        runtime.block_on(state.close()).unwrap();
+
+        // Act/assert: login preflight refuses ambiguity for either provider.
+        for provider in [Provider::Openai, Provider::Claude] {
+            assert!(
+                matches!(
+                    resolve_login_account_id_at_router_root(
+                        root.path(),
+                        "ambiguous label",
+                        provider
+                    ),
+                    Err(AccountCommandError::DuplicateAccountLabel { .. })
+                ),
+                "duplicate labels must never select the first matching account"
+            );
+        }
+    }
+
+    #[test]
     fn new_login_label_derives_identity_and_rejects_another_accounts_id() {
         // Arrange: a different label already owns the normalized ID.
         let root = tempfile::tempdir().unwrap();

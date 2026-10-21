@@ -28,14 +28,17 @@ pub(super) fn resolve_login_account_id(
     runtime: &tokio::runtime::Runtime,
 ) -> Result<AccountId, AccountCommandError> {
     let accounts = runtime.block_on(state.list_accounts())?;
-    if let Some(account) = accounts.iter().find(|account| account.label() == label) {
-        return if account.provider() == provider {
-            Ok(account.account_id().clone())
-        } else {
-            Err(AccountCommandError::DuplicateAccountLabel {
+    let mut matching_accounts = accounts.iter().filter(|account| account.label() == label);
+    match (matching_accounts.next(), matching_accounts.next()) {
+        (Some(account), None) if account.provider() == provider => {
+            return Ok(account.account_id().clone());
+        }
+        (None, None) => {}
+        _ => {
+            return Err(AccountCommandError::DuplicateAccountLabel {
                 label: label.to_owned(),
-            })
-        };
+            });
+        }
     }
     let account_id = account_id_from_label(label)?;
     if accounts
