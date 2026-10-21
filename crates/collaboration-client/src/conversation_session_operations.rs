@@ -88,7 +88,9 @@ impl ConversationClient {
                     settlement: ConversationSettlement {
                         target: loaded,
                         stop_reason: None,
-                        detail: ConversationSettlementDetail::CodexLoad,
+                        detail: ConversationSettlementDetail::CodexLoad {
+                            permission_differences: acp.permission_differences.clone(),
+                        },
                     },
                 })
             }

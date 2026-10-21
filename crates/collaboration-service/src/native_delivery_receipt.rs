@@ -26,6 +26,7 @@ pub(crate) fn interpret_native_response(
                     AcceptedResumeEffect::NotRequested => PreparationEffect::NotRequested,
                 };
                 effects.submission = SubmissionEffect::Accepted;
+                effects.permission_differences = receipt.permission_differences.clone();
                 let client = Some(DeliveryClientReceipt::CodexAppServer(receipt.clone()));
                 match receipt.acceptance {
                     NativeSendAcceptance::QueueAccepted { submission_id } => {

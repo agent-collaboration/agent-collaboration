@@ -139,6 +139,7 @@ mod tests {
 
     fn native(submission: SubmissionEffect) -> RouteEffectEvidence<String, String> {
         RouteEffectEvidence::CodexAppServer(NativeEffectEvidence {
+            permission_differences: Vec::new(),
             target: Some("target".to_owned()),
             generation: Some("generation".to_owned()),
             client_user_message_id: None,

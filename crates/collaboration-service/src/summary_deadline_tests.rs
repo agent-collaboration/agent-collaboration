@@ -64,6 +64,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
         deadline_at_ms: now_ms + 900_000,
         phase: SummaryPhase::Preparing,
         effects: agent_automation::NativeEffectEvidence {
+            permission_differences: Vec::new(),
             target: Some(summary_target),
             generation: Some(generation.clone()),
             client_user_message_id: None,
@@ -79,6 +80,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
     let evidence = agent_automation::RunExecutionEvidence {
         route: Some(agent_automation::RouteEffectEvidence::CodexAppServer(
             agent_automation::NativeEffectEvidence {
+                permission_differences: Vec::new(),
                 target: Some(native_target),
                 generation: Some(generation.clone()),
                 client_user_message_id: None,
@@ -232,6 +234,7 @@ async fn exercise_timeout_connection(fail_connection: bool) -> TestResult<()> {
     let instruction_id = agent_automation::InstructionId::generate();
     let revision_id = agent_automation::RevisionId::generate();
     let effects = agent_automation::NativeEffectEvidence {
+        permission_differences: Vec::new(),
         target: Some(target.clone()),
         generation: Some(generation.clone()),
         client_user_message_id: None,

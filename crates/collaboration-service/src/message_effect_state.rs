@@ -1,9 +1,27 @@
 //! Request-local effect evidence; never a replay or delivery store.
-use collaboration_protocol::NativeDeliveryFailureCause;
+use collaboration_protocol::{
+    CodexGeneration, NativeDeliveryFailureCause, PermissionDifference, SessionRef,
+};
 use serde_json::{Value, json};
 
 pub(crate) const HELD_BY_ANOTHER_CLIENT_GUIDANCE: &str =
     "Message it from the Codex client that holds it.";
+
+pub(crate) struct NativeMessageAttemptEvidence<'a> {
+    pub effects: &'a mut agent_automation::NativeEffectEvidence<SessionRef, CodexGeneration>,
+    pub sink: &'a dyn crate::AttemptEvidenceSink,
+}
+
+impl NativeMessageAttemptEvidence<'_> {
+    pub async fn observe_permission_differences(
+        &mut self,
+        differences: &[PermissionDifference],
+    ) -> Result<(), crate::DeliveryContractError> {
+        self.effects.permission_differences = differences.to_vec();
+        self.effects.resume = agent_automation::PreparationEffect::Accepted;
+        self.sink.record(self.effects.clone().into()).await
+    }
+}
 
 pub(crate) struct MessageEffects {
     pub id: Value,

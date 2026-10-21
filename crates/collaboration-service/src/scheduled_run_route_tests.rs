@@ -756,7 +756,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
         .await;
     if !matches!(fork.as_ref().map_err(crate::collaboration_application::ScheduleOperationFailure::failure), Err(failure)
         if matches!(failure.kind, collaboration_protocol::ScheduleFailureKind::UnsupportedCapability)
-            && matches!(failure.effects, collaboration_protocol::ScheduleEffects::Route { evidence: DeliveryRouteEvidence::ProviderAcp { .. } }))
+            && matches!(failure.effects, collaboration_protocol::ScheduleEffects::Route { ref evidence } if matches!(evidence.as_ref(), DeliveryRouteEvidence::ProviderAcp { .. })))
     {
         return Err("provider fork did not report route-specific unsupported capability".into());
     }

@@ -1,6 +1,7 @@
 //! Prepare and verify native attachment from the existing recorded Router policy.
 use super::{RouterSessionProfile, SessionSetupError, normalized_directory};
 use crate::ApprovalRoute;
+use collaboration_protocol::PermissionDifference;
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
 
@@ -55,8 +56,11 @@ impl RecordedSessionResume {
         json!({"threadId":self.thread_id,"excludeTurns":true})
     }
 
-    /// A successful RPC can still narrow access. Validate before submitting any turn.
-    pub async fn validate_response(&self, response: &Value) -> Result<(), SessionSetupError> {
+    /// Validate thread identity and cwd; permission differences are report-only.
+    pub async fn validate_response(
+        &self,
+        response: &Value,
+    ) -> Result<Vec<PermissionDifference>, SessionSetupError> {
         if response.pointer("/thread/id").and_then(Value::as_str) != Some(&self.thread_id) {
             return Err(SessionSetupError::OutcomeUnknown);
         }
@@ -69,6 +73,51 @@ impl RecordedSessionResume {
                 return Err(SessionSetupError::ConfigurationMismatch);
             }
         }
-        self.profile.validate_observed(response)
+        Ok(self.profile.observed_differences(response))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn permission_reporting_preserves_thread_and_both_cwd_checks() {
+        // Arrange: a recorded route with a fixed thread and working directory.
+        let actor = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"});
+        let route: ApprovalRoute = serde_json::from_value(json!({
+            "threadId":"recorded-thread","createdBy":actor,"approver":actor,
+            "access":"workspace-write","scratchPath":"/recorded-scratch","rootMessageId":null
+        }))
+        .unwrap();
+        let prepared =
+            RecordedSessionResume::prepare(&route, "recorded-thread", "/recorded-project")
+                .await
+                .unwrap();
+        let response = json!({"thread":{"id":"recorded-thread","cwd":"/recorded-project"},"cwd":"/recorded-project"});
+        // Act/assert: missing permissions report every field and still allow input.
+        assert_eq!(
+            prepared.validate_response(&response).await.unwrap(),
+            vec![
+                PermissionDifference::Profile,
+                PermissionDifference::Sandbox,
+                PermissionDifference::WritableRoots,
+                PermissionDifference::Network,
+            ]
+        );
+        for pointer in ["/cwd", "/thread/cwd"] {
+            let mut wrong_cwd = response.clone();
+            *wrong_cwd.pointer_mut(pointer).unwrap() = json!("/other-project");
+            assert!(matches!(
+                prepared.validate_response(&wrong_cwd).await,
+                Err(SessionSetupError::ConfigurationMismatch)
+            ));
+        }
+        let mut wrong_thread = response;
+        wrong_thread["thread"]["id"] = json!("other-thread");
+        assert!(matches!(
+            prepared.validate_response(&wrong_thread).await,
+            Err(SessionSetupError::OutcomeUnknown)
+        ));
     }
 }

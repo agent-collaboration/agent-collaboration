@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeEffectEvidence {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_differences: Vec<crate::PermissionDifference>,
     #[serde(deserialize_with = "Option::deserialize")]
     pub target: Option<SessionRef>,
     #[serde(deserialize_with = "Option::deserialize")]

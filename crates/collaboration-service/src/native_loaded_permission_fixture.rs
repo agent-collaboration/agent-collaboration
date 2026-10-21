@@ -62,6 +62,7 @@ impl RecordedPolicyFixture {
         broker: &'a std::sync::Weak<dyn ApprovalBroker>,
     ) -> NativeMessageRequest<'a> {
         NativeMessageRequest {
+            attempt_evidence: None,
             params: NativeMessageParams {
                 target: target(),
                 generation: self.generation.clone(),
@@ -96,7 +97,7 @@ impl RecordedPolicyFixture {
 pub(super) enum ReplyPolicy {
     Matching,
     Narrowed,
-    MissingSettings,
+    MissingDirectory,
 }
 pub(super) struct PolicyServerCase {
     pub(super) cold: ReplyPolicy,
@@ -146,7 +147,7 @@ pub(super) async fn policy_server(
                             scenario.loaded
                         };
                         let mut response = json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":if matches!(policy, ReplyPolicy::Matching) {roots.clone()} else {vec![]}}});
-                        if matches!(policy, ReplyPolicy::MissingSettings) {
+                        if matches!(policy, ReplyPolicy::MissingDirectory) {
                             response.as_object_mut().unwrap().remove("cwd");
                         }
                         response

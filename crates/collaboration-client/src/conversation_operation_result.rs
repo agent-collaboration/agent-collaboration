@@ -112,7 +112,10 @@ pub enum ConversationSettlementDetail {
         permission_required: bool,
         result: Option<Value>,
     },
-    CodexLoad,
+    CodexLoad {
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        permission_differences: Vec<collaboration_protocol::PermissionDifference>,
+    },
     ProviderPrompt {
         output: ProviderPromptOutput,
     },

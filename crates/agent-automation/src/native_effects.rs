@@ -1,6 +1,17 @@
 //! Native side-effect evidence is data, not permission to replay an uncertain submission.
 use crate::AttemptId;
+use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize};
+/// Permission fields whose native values differ from the requested Router projection.
+#[derive(JsonSchema, Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PermissionDifference {
+    Profile,
+    Sandbox,
+    WritableRoots,
+    Network,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum PreparationEffect {
@@ -30,6 +41,8 @@ pub enum CessationEvidence {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NativeEffectEvidence<TTarget, TGeneration> {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub permission_differences: Vec<PermissionDifference>,
     pub target: Option<TTarget>,
     pub generation: Option<TGeneration>,
     pub client_user_message_id: Option<String>,

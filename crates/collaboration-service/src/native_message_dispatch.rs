@@ -1,6 +1,7 @@
 //! Native message composition with explicit delivery and retained partial effects.
 use crate::{
-    LoadPolicy, NOT_LOADED_REASON, NativeControlBackend, message_effect_state::MessageEffects,
+    LoadPolicy, NOT_LOADED_REASON, NativeControlBackend,
+    message_effect_state::{MessageEffects, NativeMessageAttemptEvidence},
 };
 use codex_native_integration::{
     NativeConnectionError, NativeOperation, NativePayloadSchemas, NativeProtocolConnection,
@@ -114,6 +115,7 @@ pub(crate) async fn read_native_thread_status(
 }
 
 pub(crate) struct NativeMessageRequest<'a> {
+    pub attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     pub params: NativeMessageParams,
     pub id: Value,
     pub service_id: &'a UuidIdentity,
@@ -259,11 +261,13 @@ pub(crate) async fn dispatch_message(
         },
     };
     let mut session = MessageSession {
+        attempt_evidence: request.attempt_evidence,
         deadline,
         connection,
         schemas,
         retired,
         effects,
+        permission_differences: Vec::new(),
     };
     let target_id = String::from(params.target.session_id.clone());
     let delivery_context = NativeMessageDeliveryContext {
@@ -293,17 +297,20 @@ pub(crate) async fn dispatch_message(
         } else {
             AcceptedResumeEffect::NotRequested
         },
+        permission_differences: session.permission_differences,
         acceptance,
     };
     NativeMessageOutcome::Accepted(receipt)
 }
 
 struct MessageSession<'a> {
+    attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     deadline: tokio::time::Instant,
     connection: &'a mut NativeProtocolConnection,
     schemas: Arc<NativePayloadSchemas>,
     retired: CancellationToken,
     effects: MessageEffects,
+    permission_differences: Vec<collaboration_protocol::PermissionDifference>,
 }
 
 struct NativeMessageDeliveryContext<'a> {
@@ -497,7 +504,17 @@ impl MessageSession<'_> {
                     result = tokio::time::timeout_at(self.deadline, prepared.validate_response(&resumed)) => result,
                 };
                 match validation {
-                    Ok(Ok(())) => {}
+                    Ok(Ok(differences)) => {
+                        if let Some(attempt) = &mut self.attempt_evidence
+                            && attempt
+                                .observe_permission_differences(&differences)
+                                .await
+                                .is_err()
+                        {
+                            return Err(self.effects.failure("unavailable", "resume"));
+                        }
+                        self.permission_differences = differences;
+                    }
                     Ok(Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown)) => {
                         return Err(self.effects.failure("outcomeUnknown", "resume"));
                     }
