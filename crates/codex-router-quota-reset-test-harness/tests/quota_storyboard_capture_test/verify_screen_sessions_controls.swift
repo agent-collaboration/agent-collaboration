@@ -80,6 +80,28 @@ extension VerifyScreenImage {
     if !requiredPairs.isSubset(of: Set(valid.recognizedFieldPairs)) {
       failures.append("c8-details-full-values-are-scoped-fields")
     }
+    func titlePose(_ context: String, bodyTitle: Bool) -> [ScreenTextRegion] {
+      details.filter {
+        !$0.text.contains("[000.0011]") && (bodyTitle || !$0.text.hasPrefix("Title:"))
+      } + [region(context, 0.1, 0.89)]
+    }
+    let titleCases: [(String, [ScreenTextRegion], Bool)] = [
+      ("full-context-without-body-title", titlePose("Claude Gamma session · project-a [000.0011]", bodyTitle: false), true),
+      ("extra-title-suffix-without-body", titlePose("Claude Gamma session · project-a EXTRA [000.0011]", bodyTitle: false), false),
+      ("extra-title-prefix-without-body", titlePose("EXTRA Claude Gamma session · project-a [000.0011]", bodyTitle: false), false),
+      ("short-context-without-body-title", titlePose("Claude Gamma [000.0011]", bodyTitle: false), false),
+      ("short-context-with-exact-body-title", titlePose("Claude Gamma [000.0011]", bodyTitle: true), true),
+      ("clipped-context-with-exact-body-title", titlePose("Claude Gamma sessi [000.0011]", bodyTitle: true), true),
+      ("different-context-with-exact-body-title", titlePose("Claude Gamma session · project-a EXTRA [000.0011]", bodyTitle: true), false),
+      ("repeated-context-tag", titlePose("Claude Gamma session · project-a [000.0011] [000.0011]", bodyTitle: false), false),
+    ]
+    for (name, regions, shouldPass) in titleCases {
+      let result = observe(
+        checkpoint: .compactSessionsDetailsTitle, recognizedLines: regions.map(\.text), regions: regions)
+      if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
+        failures.append(name)
+      }
+    }
     for (name, regions) in [
       (
         "c8-details-wrong-captured-tag",
@@ -118,7 +140,7 @@ extension VerifyScreenImage {
         failures.append("c8-folder-query-" + query)
       }
     }
-    return (noMatchCases.count + 6, failures)
+    return (noMatchCases.count + titleCases.count + 6, failures)
   }
 }
 

@@ -65,9 +65,15 @@ extension VerifyScreenImage {
 
   static func sessionsDetailsPairs(_ regions: [ScreenTextRegion]) -> [String] {
     let body = sessionsDialogRegions(regions, title: "session details", action: "close")
+    let capturedTitle = "claude gamma session · project-a"
+    let capturedTagSuffix = " [000.0011]"
     let contexts = body.filter {
       let text = normalizedMarkerText($0.text)
-      return text.contains("claude gamma") && text.contains("[000.0011]")
+      guard text.hasSuffix(capturedTagSuffix) else { return false }
+      let visibleTitle = String(text.dropLast(capturedTagSuffix.count))
+      // The source clips this label before its separately reserved tag. A
+      // visible prefix can bind the context, but cannot prove the full title.
+      return visibleTitle.hasPrefix("claude gamma") && capturedTitle.hasPrefix(visibleTitle)
     }
     guard contexts.count == 1, let context = contexts.first else { return [] }
     let content = body.filter { $0.bounds.maxY < context.bounds.minY }
@@ -88,7 +94,7 @@ extension VerifyScreenImage {
       ("state", "idle", "details state "),
     ]
     var pairs = ["details context claude gamma [000.0011]"]
-    if normalizedMarkerText(context.text).contains("claude gamma session · project-a") {
+    if normalizedMarkerText(context.text) == capturedTitle + capturedTagSuffix {
       pairs.append("details title claude gamma session · project-a")
     }
     for (label, value, prefix) in expected {
