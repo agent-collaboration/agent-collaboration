@@ -17,11 +17,15 @@ pub struct TranslatedSessionItem {
 
 /// Produces only ThreadItem tags defined by Codex app-server protocol v2.
 /// Source: openai/codex e72da2b538, v2/item.rs:236-429.
+/// Provider metadata stays in the Session hub/observation API, not assistant prose.
 pub fn translate_session_item(
     item: &SessionItem,
     thread_id: &str,
     turn_id: &str,
-) -> TranslatedSessionItem {
+) -> Option<TranslatedSessionItem> {
+    if crate::app_server_item_metadata::is_provider_metadata(item) {
+        return None;
+    }
     let item_id = &item.item_id;
     let text = item.text.as_deref().unwrap_or("");
     let (thread_item, notification) = match &item.kind {
@@ -85,10 +89,10 @@ pub fn translate_session_item(
             )
         }
     };
-    TranslatedSessionItem {
+    Some(TranslatedSessionItem {
         thread_item,
         notification,
-    }
+    })
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -156,7 +160,8 @@ pub fn render_historical_turn(turn: &HistoricalTurn) -> Value {
     let items = turn
         .items
         .iter()
-        .map(|item| translate_session_item(item, "", &turn.turn_id).thread_item)
+        .filter_map(|item| translate_session_item(item, "", &turn.turn_id))
+        .map(|translated| translated.thread_item)
         .collect::<Vec<_>>();
     json!({
         "id":turn.turn_id,"items":items,"itemsView":"full",

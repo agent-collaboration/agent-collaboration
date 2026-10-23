@@ -124,7 +124,8 @@ pub(crate) fn historical_turns(session: &SessionRef, snapshot: &[HubEvent]) -> V
     if let (Some(turn_id), Some(active_items)) = (active_turn, active_items) {
         let translated_items = active_items
             .iter()
-            .map(|item| translate_session_item(item, &thread_alias(session), &turn_id).thread_item)
+            .filter_map(|item| translate_session_item(item, &thread_alias(session), &turn_id))
+            .map(|translated| translated.thread_item)
             .collect::<Vec<_>>();
         turns.push(json!({
             "id":turn_id,"items":translated_items,"itemsView":"full",
@@ -207,7 +208,10 @@ impl AppServerEventForwarding {
             }
             SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } => {
                 let turn_id = self.turn_ids.get(session).map(String::as_str).unwrap_or("");
-                let translated = translate_session_item(item, &thread_id, turn_id);
+                let Some(translated) = translate_session_item(item, &thread_id, turn_id) else {
+                    self.items.remove(&(session.clone(), item.item_id.clone()));
+                    return Vec::new();
+                };
                 let previous = self.items.insert(
                     (session.clone(), item.item_id.clone()),
                     translated.thread_item.clone(),
@@ -690,3 +694,8 @@ impl AppServerEventForwarding {
 #[allow(clippy::panic_in_result_fn)]
 #[path = "app_server_event_forwarding_tests.rs"]
 mod notification_wire_tests;
+
+#[cfg(test)]
+#[allow(clippy::expect_used)]
+#[path = "app_server_metadata_projection_tests.rs"]
+mod metadata_projection_tests;

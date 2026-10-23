@@ -441,6 +441,93 @@ fn item(item_id: &str, text: &str) -> SessionEvent {
     }
 }
 
+/// Metadata stays available through the existing public observation surface,
+/// independently of whether a transcript facade chooses to display an Item.
+#[tokio::test]
+async fn metadata_payloads_remain_exact_in_retained_and_live_public_observation() {
+    // Arrange: usage already retained, and a catalogue that will arrive live.
+    let fixture = provider_fixture().await.expect("provider fixture");
+    let usage = SessionEvent::ItemStarted {
+        item: SessionItem {
+            item_id: "usage-metadata".into(),
+            kind: SessionItemKind::Usage,
+            text: Some(r#"{"used":12,"size":100,"cost":{"amount":0.25,"currency":"USD"}}"#.into()),
+        },
+    };
+    let commands = SessionEvent::ItemStarted {
+        item: SessionItem {
+            item_id: "command-metadata".into(),
+            kind: SessionItemKind::Notice,
+            text: Some(
+                r#"{"availableCommands":[{"name":"compact","description":"Compact context"}]}"#
+                    .into(),
+            ),
+        },
+    };
+    fixture
+        .hub
+        .publish(fixture.board_target.clone(), usage.clone())
+        .await
+        .expect("retain usage");
+    let served = served_api::ServedApi::start(fixture.identity)
+        .await
+        .expect("served API");
+    let client = served.client("metadata-observer").await.expect("client");
+    let request = BoundedObservationRequest {
+        target: fixture.target.clone(),
+        timeout_seconds: 5,
+        max_events: 2,
+        max_bytes: 262_144,
+        after_sequence: Some(1),
+        epoch: Some(0),
+    };
+    let (observed, mut streamed) = tokio::sync::mpsc::unbounded_channel();
+
+    // Act: await the retained event as the actual attachment signal, then publish live.
+    let call = tokio::spawn(async move {
+        client
+            .observe_provider_session_streaming(request, Some(observed))
+            .await
+    });
+    let retained = tokio::time::timeout(std::time::Duration::from_secs(5), streamed.recv())
+        .await
+        .expect("retained metadata deadline")
+        .expect("retained metadata");
+    assert!(
+        !call.is_finished(),
+        "the observer must still be attached for live metadata"
+    );
+    fixture
+        .hub
+        .publish(fixture.board_target, commands.clone())
+        .await
+        .expect("publish commands");
+    let result = call
+        .await
+        .expect("observation joins")
+        .expect("observation succeeds");
+
+    // Assert: exact original kinds and JSON bodies, with resumable positions.
+    assert_eq!(retained.event, json!({"sequence":2,"event":usage}));
+    assert_eq!(
+        result.events,
+        vec![
+            json!({"sequence":2,"event":usage}),
+            json!({"sequence":3,"event":commands})
+        ]
+    );
+    assert_eq!(result.epoch, Some(0));
+    assert_eq!(result.end_reason, ObservationEndReason::ResultLimitReached);
+    assert_eq!(
+        streamed.recv().await.expect("live metadata").cursor,
+        Some(collaboration_protocol::ObservationCursor {
+            epoch: 0,
+            after_sequence: 3
+        })
+    );
+    served.stop().await.expect("API stops");
+}
+
 /// The next event after `after_sequence` in `epoch`, waiting up to two seconds for it, with the
 /// hub's epoch.
 async fn single_event(

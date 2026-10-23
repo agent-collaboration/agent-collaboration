@@ -67,16 +67,16 @@ jobs:
       - name: Prepare verification checks
         run: |
           python3 -m venv "$RUNNER_TEMP/router-verification"
-          "$RUNNER_TEMP/router-verification/bin/python" -m pip install --disable-pip-version-check pydantic==2.14.1 basedpyright==1.40.2 ruff==0.17.0
+          "$RUNNER_TEMP/router-verification/bin/python" -m pip install --disable-pip-version-check pydantic==2.14.1 basedpyright==1.40.2 ruff==0.17.0 websockets==17.3
       - name: Check verification apparatus
         id: verification_observations
         background: true
         run: |
           verification_python="$RUNNER_TEMP/router-verification/bin/python"
-          "$verification_python" -W error::ResourceWarning -m unittest scripts.tests.test_verification_observations scripts.tests.test_verification_lifecycle scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport -v
-          "$verification_python" -m ruff check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/verification_controller_fixture.py
-          "$verification_python" -m ruff format --check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/verification_controller_fixture.py
-          "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/verification_controller_fixture.py
+          "$verification_python" -W error::ResourceWarning -m unittest scripts.tests.test_verification_observations scripts.tests.test_verification_lifecycle scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport scripts.tests.test_acp_metadata_observation -v
+          "$verification_python" -m ruff check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
+          "$verification_python" -m ruff format --check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
+          "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
       - name: Enforce dependency policy
         id: dependency_policy
         background: true

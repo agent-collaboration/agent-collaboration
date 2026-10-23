@@ -37,7 +37,8 @@ impl ClaudeProcessFixture {
     async fn new() -> std::io::Result<Self> {
         let root = tempfile::Builder::new()
             .prefix("claude-background-")
-            .tempdir()?;
+            // The normal macOS temp root makes control.sock exceed SUN_LEN.
+            .tempdir_in("/tmp")?;
         let working_directory = root.path().join("original project 東京");
         for directory in [
             "bin",
@@ -48,6 +49,8 @@ impl ClaudeProcessFixture {
             fs::create_dir_all(root.path().join(directory))?;
         }
         fs::create_dir(&working_directory)?;
+        // A child reports the canonical cwd (not macOS's /var → /private/var alias).
+        let working_directory = working_directory.canonicalize()?;
         fs::write(
             root.path().join("router/secrets/local_router_token.secret"),
             "fixture-router-token",
