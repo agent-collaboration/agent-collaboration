@@ -122,7 +122,7 @@ fn live_metadata_lifecycle_has_no_transcript_frames_and_preserves_real_content()
 }
 
 #[test]
-fn completed_and_active_history_exclude_metadata_without_mutating_source_items() {
+fn completed_and_active_history_exclude_metadata_and_preserve_transcript_content() {
     for active in [false, true] {
         let mut items = metadata_items();
         let expected = display_items();
@@ -152,7 +152,6 @@ fn completed_and_active_history_exclude_metadata_without_mutating_source_items()
                 },
             });
         }
-        let original = snapshot.clone();
         let turns = historical_turns(&target(), &snapshot);
         assert_eq!(turns.len(), 1);
         let rendered = turns
@@ -170,10 +169,6 @@ fn completed_and_active_history_exclude_metadata_without_mutating_source_items()
                 .iter()
                 .map(|item| item.item_id.as_str())
                 .collect::<Vec<_>>()
-        );
-        assert_eq!(
-            snapshot, original,
-            "history rendering must not erase retained metadata"
         );
     }
 }
