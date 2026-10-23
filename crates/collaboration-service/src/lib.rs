@@ -46,6 +46,7 @@ mod native_delivery_receipt;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
 pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
+mod app_server_item_metadata;
 mod app_server_item_translation;
 mod app_server_model_catalog;
 pub use app_server_item_translation::{

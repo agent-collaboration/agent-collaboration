@@ -26,7 +26,7 @@ fn item(id: &str, kind: SessionItemKind, text: Option<&str>) -> SessionItem {
 /// Oracle: Codex v2 ThreadItem serde tags in item.rs:236-429 at e72da2b538.
 /// An unknown tag would poison the whole thread/read response.
 #[test]
-fn every_session_item_maps_to_a_known_codex_item() {
+fn every_transcript_item_maps_to_a_known_codex_item() {
     let cases = [
         (SessionItemKind::UserMessage, "userMessage"),
         (SessionItemKind::AgentMessage, "agentMessage"),
@@ -39,10 +39,6 @@ fn every_session_item_maps_to_a_known_codex_item() {
             "mcpToolCall",
         ),
         (SessionItemKind::Plan, "plan"),
-        (SessionItemKind::Usage, "agentMessage"),
-        (SessionItemKind::ModeChange, "agentMessage"),
-        (SessionItemKind::ConfigChange, "agentMessage"),
-        (SessionItemKind::SessionInfo, "agentMessage"),
         (SessionItemKind::Notice, "agentMessage"),
         (
             SessionItemKind::Unknown {
@@ -53,7 +49,8 @@ fn every_session_item_maps_to_a_known_codex_item() {
     ];
     for (index, (kind, expected_tag)) in cases.into_iter().enumerate() {
         let source = item(&format!("item-{index}"), kind, Some("visible text"));
-        let translated = translate_session_item(&source, "thread-1", "turn-1");
+        let translated =
+            translate_session_item(&source, "thread-1", "turn-1").expect("transcript item");
         assert_eq!(translated.thread_item["type"], expected_tag);
         assert_eq!(translated.thread_item["id"], source.item_id);
     }
@@ -71,7 +68,7 @@ fn generic_tool_call_keeps_status_and_text() {
         },
         Some("command output"),
     );
-    let translated = translate_session_item(&source, "thread-1", "turn-1");
+    let translated = translate_session_item(&source, "thread-1", "turn-1").expect("tool item");
     assert_eq!(translated.thread_item["type"], "mcpToolCall");
     assert_eq!(translated.thread_item["tool"], "execute");
     assert_eq!(translated.thread_item["status"], "completed");
@@ -90,7 +87,7 @@ fn plan_emits_a_native_plan_update_without_invented_steps() {
         SessionItemKind::Plan,
         Some("First inspect the API"),
     );
-    let translated = translate_session_item(&source, "thread-1", "turn-1");
+    let translated = translate_session_item(&source, "thread-1", "turn-1").expect("plan item");
     assert_eq!(translated.thread_item["type"], "plan");
     assert_eq!(
         translated.notification,
