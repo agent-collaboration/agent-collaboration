@@ -2,7 +2,10 @@ import type { Receipt } from "./receipt.ts";
 
 export class RunLifetime {
   private readonly resources: { name: string; resource: { close(): Promise<void> } }[] = [];
-  constructor(private readonly receipt: Receipt) {}
+  private readonly receipt: Receipt;
+  constructor(receipt: Receipt) {
+    this.receipt = receipt;
+  }
   own<TResource extends { close(): Promise<void> }>(name: string, resource: TResource): TResource {
     this.resources.push({ name, resource });
     return resource;

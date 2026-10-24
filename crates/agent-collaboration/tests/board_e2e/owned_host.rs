@@ -35,6 +35,16 @@ pub struct BoardHost {
     output: BufReader<ChildStdout>,
 }
 
+/// Evidence that this exact owned child was joined before native fixture readback.
+pub struct StoppedHost {
+    directory: PathBuf,
+}
+impl StoppedHost {
+    pub fn directory(&self) -> &Path {
+        &self.directory
+    }
+}
+
 pub struct McpReply {
     pub is_error: bool,
     pub value: Value,
@@ -224,6 +234,12 @@ impl BoardHost {
             is_error: result.get("isError") == Some(&json!(true)),
             value: structured.clone(),
         })
+    }
+
+    pub async fn stop_for_readback(self) -> FixtureResult<StoppedHost> {
+        let directory = self.directory.canonicalize()?;
+        self.stop().await?;
+        Ok(StoppedHost { directory })
     }
 
     pub async fn stop(mut self) -> FixtureResult {

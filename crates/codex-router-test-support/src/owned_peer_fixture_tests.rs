@@ -321,3 +321,112 @@ async fn preexisting_key_file_is_preserved_and_not_adopted() -> ProofResult<()> 
     require_absent(&registry.socket, "socket")?;
     require_absent(&registry.record, "registry record")
 }
+
+#[tokio::test]
+async fn barrier_counts_every_authenticated_frame_without_counting_itself() -> ProofResult<()> {
+    let registry = PrivateRegistry::create()?;
+    let mut peer =
+        PeerFixture::start_in_registry(&registry.directory, &fixture_endpoint()?).await?;
+    let scenario: ProofResult<()> = async {
+        assert_eq!(peer.count_after_barrier().await?, 0);
+        for expected in [1, 2] {
+            let mut stream = tokio::net::UnixStream::connect(&registry.socket).await?;
+            stream.write_all(AUTH_FRAME).await?;
+            stream
+                .write_all(
+                    b"{\"type\":\"user\",\"message\":{\"content\":\"same literal input\"}}\n",
+                )
+                .await?;
+            stream.shutdown().await?;
+            assert_eq!(peer.count_after_barrier().await?, expected);
+        }
+        assert_eq!(
+            peer.expect_text_with_timeout("same literal input", WAIT)
+                .await?,
+            "same literal input"
+        );
+        assert_eq!(
+            peer.expect_text_with_timeout("same literal input", WAIT)
+                .await?,
+            "same literal input"
+        );
+        assert_eq!(peer.count_after_barrier().await?, 2);
+        Ok(())
+    }
+    .await;
+    let cleanup = shutdown_and_reap(peer).await;
+    preserve_scenario_and_cleanup(scenario, cleanup)
+}
+
+#[tokio::test]
+async fn named_peer_uses_this_process_pid_and_exact_supplied_session() -> ProofResult<()> {
+    let registry = PrivateRegistry::create()?;
+    let session = "literal-named-session".to_owned().try_into()?;
+    let peer = PeerFixture::start_in_registry_with_session(
+        &registry.directory,
+        &fixture_endpoint()?,
+        session,
+    )
+    .await?;
+    let socket = registry
+        .directory
+        .join(format!("peer-{}.sock", std::process::id()));
+    let scenario: ProofResult<()> = async {
+        let record: serde_json::Value = serde_json::from_slice(&std::fs::read(&registry.record)?)?;
+        assert_eq!(record["pid"], std::process::id());
+        assert_eq!(record["sessionId"], "literal-named-session");
+        assert_eq!(
+            record["messagingSocketPath"],
+            socket.to_string_lossy().as_ref()
+        );
+        assert_eq!(
+            String::from(peer.target.session_id.clone()),
+            "literal-named-session"
+        );
+        assert_eq!(peer.count_after_barrier().await?, 0);
+        Ok(())
+    }
+    .await;
+    let cleanup = shutdown_and_reap(peer).await;
+    preserve_scenario_and_cleanup(scenario, cleanup)?;
+    require_absent(&socket, "named socket")?;
+    require_absent(&registry.record, "named record")
+}
+
+#[tokio::test]
+async fn matching_barrier_excludes_grants_and_counts_duplicate_post_frames() -> ProofResult<()> {
+    let registry = PrivateRegistry::create()?;
+    let peer = PeerFixture::start_in_registry(&registry.directory, &fixture_endpoint()?).await?;
+    let scenario: ProofResult<()> = async {
+        for (text, expected) in [
+            ("Role assignment changed", 0),
+            ("New thread post · literal cause", 1),
+            ("New thread post · literal cause", 2),
+        ] {
+            let mut stream = tokio::net::UnixStream::connect(&registry.socket).await?;
+            stream.write_all(AUTH_FRAME).await?;
+            let user = json!({"type":"user","message":{"content":text}});
+            stream.write_all(format!("{user}\n").as_bytes()).await?;
+            stream.shutdown().await?;
+            assert_eq!(
+                peer.count_matching_after_barrier("New thread post").await?,
+                expected
+            );
+        }
+        assert_eq!(peer.count_after_barrier().await?, 3);
+        assert_eq!(
+            peer.count_matching_after_barrier("never received").await?,
+            0
+        );
+        assert_eq!(
+            peer.count_matching_after_barrier("Role assignment changed")
+                .await?,
+            1
+        );
+        assert_eq!(peer.count_after_barrier().await?, 3);
+        Ok(())
+    }
+    .await;
+    let cleanup = shutdown_and_reap(peer).await;
+    preserve_scenario_and_cleanup(scenario, cleanup)
+}

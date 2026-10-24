@@ -8,6 +8,7 @@ import {
   projectPlacementSchema,
 } from "../clients/board-requests.ts";
 import type { PreparedRun } from "../run-setup.ts";
+import { projectForCases } from "../run-setup.ts";
 import type { CaseRegistration } from "../coverage.ts";
 import { ObservationOpen, type Receipt } from "../receipt.ts";
 import { freezeNotification, finishNotification } from "./notifications.ts";
@@ -24,8 +25,8 @@ export async function heldCopy(context: PreparedRun, receipt: Receipt): Promise<
   const notification = {
     source: source.installation,
     actor: source.actor,
-    project: source.heldProject,
-    recipients: [target.recipient],
+    project: await projectForCases(source.installation, source.actor),
+    recipients: [target],
     receipt,
   };
   const hold = new CopyHold({

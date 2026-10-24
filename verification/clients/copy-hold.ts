@@ -39,16 +39,18 @@ type Command =
   | "resumeDispatch"
   | "resumeDispatchAndHoldNext"
   | "observe";
+interface CopyHoldInput {
+  readonly owner: CentralOwner;
+  readonly service: string;
+  readonly project: string;
+  readonly receipt: Receipt;
+}
 export class CopyHold {
   private armed = false;
-  constructor(
-    private readonly input: {
-      owner: CentralOwner;
-      service: string;
-      project: string;
-      receipt: Receipt;
-    },
-  ) {}
+  private readonly input: CopyHoldInput;
+  constructor(input: CopyHoldInput) {
+    this.input = input;
+  }
   private async command(kind: Command): Promise<z.infer<typeof dispatchSchema>> {
     const destination = { kind: "copy", value: this.input.project };
     const reply = await this.input.owner.control(

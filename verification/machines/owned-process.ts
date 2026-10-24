@@ -163,7 +163,7 @@ export class OwnedProcess {
       this.listeners.delete(listener);
     };
   }
-  capture(): void {
+  capture(): readonly number[] {
     const lines = execFileSync("/bin/ps", ["-axo", "pid=,ppid=,lstart=,comm="], {
       encoding: "utf8",
     })
@@ -183,6 +183,7 @@ export class OwnedProcess {
           this.descendants.set(Number(match[1]), match[3]);
         }
       }
+    return [...selected];
   }
   async stop(): Promise<void> {
     this.capture();

@@ -214,9 +214,18 @@ async fn refuse_duplicate_ack(fixture: &BoardFixture, case: &AckCase) -> Fixture
 
 async fn assert_no_ack_decision(fixture: &mut BoardFixture, case: &AckCase) -> FixtureResult {
     let entries = &case.entries;
-    fixture.stop_host().await?;
-    let ledger = super::records_reopen::stopped_values(
-        fixture,
+    let stopped = fixture
+        .host
+        .take()
+        .ok_or("ACK readback Host absent")?
+        .stop_for_readback()
+        .await?;
+    let relative = std::path::Path::new("projects")
+        .join(&fixture.project)
+        .join("e1.sqlite");
+    let ledger = super::records_reopen::stopped_database_values(
+        &stopped,
+        &relative,
         "SELECT request_id AS value FROM request_decisions",
     )
     .await?;

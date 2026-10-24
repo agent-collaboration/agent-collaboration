@@ -168,6 +168,11 @@ export class Installation {
       await this.remote.stop(child.process);
     }
     this.children.delete(child);
+    if (
+      (this.state.kind === "ready" || this.state.kind === "hostStarting") &&
+      this.state.host === child
+    )
+      await this.guard.endHostWindow(this.input.receipt);
   }
   private async awaitReady(probe: () => Promise<void>): Promise<void> {
     const deadline = Date.now() + 45_000;
@@ -248,6 +253,8 @@ export class Installation {
     if (this.state.kind !== "routerRunning")
       throw new Error("Router must be running without a Host");
     const router = this.state.router;
+    await this.guard.beginHostWindow(this.input.receipt);
+    await this.input.receipt.record("hostLaunchRequested", { machine: this.machine.name });
     const host = await this.spawn(
       [
         "host",
@@ -261,6 +268,10 @@ export class Installation {
       ],
       "host",
     );
+    await this.input.receipt.record("hostProcessStarted", {
+      machine: this.machine.name,
+      pid: host.process.pid,
+    });
     this.state = { kind: "hostStarting", router, host };
     let client: RouterMcp | undefined;
     await this.awaitReady(async (): Promise<void> => {
@@ -307,7 +318,6 @@ export class Installation {
     await this.guard.verify(this.input.receipt);
   }
   async check(): Promise<void> {
-    await this.guard.verify(this.input.receipt);
     await this.health();
     if (this.remote !== undefined) await this.remote.budget({ kind: "running" });
     for (const artifact of [this.machine.router, this.machine.cli]) {
@@ -323,10 +333,11 @@ export class Installation {
               .split(/\s+/)[0];
       if (hash !== artifact.sha256) throw new Error("installation artifact changed during run");
     }
+    const ownedPids: number[] = [];
     for (const child of this.children) {
       if (child.kind === "ssh") {
         if (this.remote === undefined) throw new Error("SSH owner absent");
-        await this.remote.capture(child.process);
+        ownedPids.push(...(await this.remote.capture(child.process)));
       } else {
         const observed = await command("/bin/ps", [
           "-p",
@@ -336,9 +347,10 @@ export class Installation {
         ]);
         if (observed.stdout !== child.process.identity)
           throw new Error("owned installation PID changed or ended");
-        child.process.capture();
+        ownedPids.push(...child.process.capture());
       }
     }
+    await this.guard.verify(this.input.receipt, [...new Set(ownedPids)]);
   }
   async close(): Promise<void> {
     const failures: unknown[] = [];
@@ -351,6 +363,7 @@ export class Installation {
     }
     this.state = { kind: "closed" };
     try {
+      await this.guard.endHostWindow(this.input.receipt);
       await this.guard.verify(this.input.receipt);
     } catch (error: unknown) {
       failures.push(error);

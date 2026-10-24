@@ -12,13 +12,14 @@ import {
   writeHeader,
 } from "../clients/board-requests.ts";
 import type { Installation } from "../machines/installation.ts";
-import type { CodexSession } from "../recipients/codex-session.ts";
+import type { JourneyMachine } from "../run-context.ts";
 import { ObservationOpen, type Receipt } from "../receipt.ts";
 
 const intentSchema = z.object({
   kind: z.literal("notifyIntent"),
   record: z.object({
     envelope: z.object({ position: projectPlacementSchema }),
+    intentId: z.string(),
     cause: z.object({ id: z.string() }),
     recipient: z.object({
       kind: z.literal("resolved"),
@@ -39,13 +40,13 @@ export interface NotificationInput {
   readonly source: Installation;
   readonly actor: Identity;
   readonly project: string;
-  readonly recipients: readonly CodexSession[];
+  readonly recipients: readonly JourneyMachine[];
   readonly receipt: Receipt;
 }
 async function frozenItems(
   input: NotificationInput,
   post: string,
-): Promise<{ items: readonly string[]; through: FeedCursor }> {
+): Promise<{ items: readonly string[]; intents: readonly string[]; through: FeedCursor }> {
   const deadline = Date.now() + 30_000;
   do {
     const records = (
@@ -68,17 +69,17 @@ async function frozenItems(
       records.length === input.recipients.length &&
       records.every((record): boolean => record.state.kind === "handedOff")
     ) {
-      const items = input.recipients.map((recipient): string => {
+      const handoffs = input.recipients.map((recipient) => {
         const matches = records.filter((record): boolean =>
           isDeepStrictEqual(record.recipient.recipient.actor, {
             kind: "session",
-            session: sessionSchema.parse(recipient.target),
+            session: sessionSchema.parse(recipient.recipient.target),
           }),
         );
         const match = matches[0];
         if (matches.length !== 1 || match?.state.kind !== "handedOff")
           throw new Error("frozen handoff does not name exactly one actual recipient");
-        return match.state.item;
+        return { item: match.state.item, intent: match.intentId };
       });
       const cursors = records.map((record): FeedCursor => record.envelope.position.position.cursor);
       const first = cursors[0];
@@ -87,7 +88,11 @@ async function frozenItems(
         (latest, cursor): FeedCursor => (feedAtLeast(cursor, latest) ? cursor : latest),
         first,
       );
-      return { items, through };
+      return {
+        items: handoffs.map((row) => row.item),
+        intents: handoffs.map((row) => row.intent),
+        through,
+      };
     }
     await setTimeout(200);
   } while (Date.now() < deadline);
@@ -98,6 +103,7 @@ export interface FrozenNotification {
   readonly decision: unknown;
   readonly post: string;
   readonly items: readonly string[];
+  readonly intents: readonly string[];
   readonly marker: string;
   readonly through: FeedCursor;
 }
@@ -116,7 +122,7 @@ export async function freezeNotification(input: NotificationInput): Promise<Froz
     watch: false,
     addressees: input.recipients.map((recipient) => ({
       kind: "actor",
-      recipient: { kind: "session", session: recipient.target },
+      recipient: { kind: "session", session: recipient.recipient.target },
     })),
   };
   const decision = await acceptedWrite({
@@ -124,22 +130,62 @@ export async function freezeNotification(input: NotificationInput): Promise<Froz
     tool: "thread_create",
     request,
   });
-  const { items, through } = await frozenItems(input, post);
+  const { items, intents, through } = await frozenItems(input, post);
   await input.receipt.equal(
     "one cause has a distinct item per recipient",
     new Set(items).size,
     input.recipients.length,
   );
-  return { request, decision, post, items, marker, through };
+  return { request, decision, post, items, intents, marker, through };
 }
 export async function finishNotification(
   input: NotificationInput,
   frozen: FrozenNotification,
 ): Promise<void> {
-  const { request, decision, post, items, marker } = frozen;
-  for (const [index, recipient] of input.recipients.entries()) {
+  const { request, decision, post, items, intents } = frozen;
+  for (const [index, machine] of input.recipients.entries()) {
+    const recipient = machine.recipient;
     const item = z.string().parse(items[index]);
-    await recipient.completed(item, marker);
+    await recipient.completed(item, [
+      "📋 Router: board notification",
+      "New thread post",
+      `router://${recipient.target.endpoint.serviceId}/push/${item}`,
+    ]);
+    const shown = await machine.installation.mcp.call("router_show", {
+      caller: recipient.target,
+      reference: item,
+    });
+    const record = z
+      .object({
+        record: z.object({
+          kind: z.literal("board-notification"),
+          target: sessionSchema,
+          body: z.null(),
+          headerFacts: z.object({
+            kind: z.literal("boardNotification"),
+            project: z.string(),
+            intent: z.string(),
+            cause: z.object({ kind: z.literal("post"), id: z.string() }),
+            summary: z.literal("New thread post"),
+          }),
+        }),
+      })
+      .parse(shown).record;
+    await input.receipt.equal(
+      "native notification retains the actual recipient and cause pointer",
+      {
+        target: record.target,
+        project: record.headerFacts.project,
+        cause: record.headerFacts.cause,
+        intent: record.headerFacts.intent,
+      },
+      {
+        target: recipient.target,
+        project: input.project,
+        cause: { kind: "post", id: post },
+        intent: z.string().parse(intents[index]),
+      },
+    );
   }
   await input.receipt.equal(
     "notification cause replay preserves its decision",
@@ -149,15 +195,15 @@ export async function finishNotification(
   await input.receipt.equal(
     "notification cause replay preserves original handoffs",
     await frozenItems(input, post),
-    { items, through: frozen.through },
+    { items, intents, through: frozen.through },
   );
   await Promise.all(
     input.recipients.map((recipient, index): Promise<void> =>
-      recipient.unique(z.string().parse(items[index]), 3000),
+      recipient.recipient.unique(z.string().parse(items[index]), 3000),
     ),
   );
   for (const [index, recipient] of input.recipients.entries())
-    await recipient.unique(z.string().parse(items[index]));
+    await recipient.recipient.unique(z.string().parse(items[index]));
 }
 export async function notifyAndRepeat(input: NotificationInput): Promise<void> {
   await finishNotification(input, await freezeNotification(input));

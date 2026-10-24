@@ -209,7 +209,7 @@ export class Remote {
     if (!identity.trim()) throw new Error("remote child identity absent");
     return { pid, identity, descendants: new Map() };
   }
-  async capture(owned: RemoteProcess): Promise<void> {
+  async capture(owned: RemoteProcess): Promise<readonly number[]> {
     if (
       (await this.shell(`/bin/ps -p ${owned.pid} -o pid=,lstart=,comm= || true`)) !== owned.identity
     )
@@ -230,6 +230,7 @@ export class Remote {
           if (!owned.descendants.has(pid)) owned.descendants.set(pid, match[3]);
         }
       }
+    return [...selected];
   }
   async stop(owned: RemoteProcess): Promise<void> {
     const observed = await this.shell(`/bin/ps -p ${owned.pid} -o pid=,lstart=,comm= || true`);

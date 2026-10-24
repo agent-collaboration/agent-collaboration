@@ -170,6 +170,7 @@ export class RouterMcp {
       throw new ObservationOpen(`MCP ${name} ${outcome.reason}; effect unknown, no replay`);
     throw new Error(
       `MCP ${name} returned ${outcome.kind}; inspect outcome() for its typed refusal`,
+      { cause: outcome },
     );
   }
 }

@@ -3,8 +3,11 @@ import { lstat, readFile, realpath } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
+import { parse } from "smol-toml";
+import { z } from "zod";
 import { declarationSchema, type Declaration } from "./declaration.ts";
-import { decode, encode } from "./exact-json.ts";
+import { encode } from "./exact-json.ts";
 import { casesFor, type RunnableCase } from "./case-registry.ts";
 import {
   collectOutcomes,
@@ -16,6 +19,29 @@ import {
 import { ObservationOpen, Receipt } from "./receipt.ts";
 import { prepareRun, type PreparedRun } from "./run-setup.ts";
 import { RunLifetime } from "./run-lifetime.ts";
+
+function lockGraph(text: string): unknown {
+  const value = z
+    .object({
+      package: z.array(
+        z
+          .object({
+            dependencies: z.array(z.string()).optional(),
+          })
+          .passthrough(),
+      ),
+    })
+    .passthrough()
+    .parse(parse(text));
+  return {
+    ...value,
+    package: value.package.map((entry) =>
+      entry.dependencies === undefined
+        ? entry
+        : { ...entry, dependencies: [...entry.dependencies].sort() },
+    ),
+  };
+}
 
 async function declarationFromArguments(): Promise<Declaration> {
   const path = process.argv[2];
@@ -30,7 +56,9 @@ async function declarationFromArguments(): Promise<Declaration> {
     info.size > 1024 * 1024
   )
     throw new ObservationOpen("bounded owner-private declaration required");
-  const declaration = declarationSchema.parse(decode(await readFile(path, "utf8")));
+  // Configuration numbers are bounded ports/timeouts. Wire/state integers keep
+  // using the lossless decoder in their owning clients.
+  const declaration = declarationSchema.parse(JSON.parse(await readFile(path, "utf8")));
   const local = declaration.machines.find((machine): boolean => machine.kind === "local");
   if (local === undefined) throw new ObservationOpen("local installation missing");
   const cache = resolve(userInfo().homedir, ".cache");
@@ -54,12 +82,17 @@ async function checkSource(declaration: Declaration): Promise<void> {
       timeout: 10_000,
       stdio: ["ignore", "pipe", "pipe"],
     }).trim();
-  // Discovery uses the current product and harness with inherited test/Python
-  // work left in place. Those files are not imported by this driver or built
-  // into its normal executables. Confirmation still requires the clean tree.
+  // Discovery permits inherited unbuilt test/example/Python work. Executed
+  // artifacts remain frozen by hash/signature. Confirmation requires the clean tree.
   const discoveryExclusions =
     declaration.purpose === "discovery"
-      ? [":(exclude)**/tests/**", ":(exclude)scripts/verification/*.py"]
+      ? [
+          ":(exclude)**/tests/**",
+          ":(exclude)**/examples/**",
+          ":(exclude)crates/codex-router-test-support",
+          ":(exclude)scripts/verification/*.py",
+          ":(exclude)Cargo.lock",
+        ]
       : [];
   if (
     git(["rev-parse", "HEAD"]) !== declaration.harnessPin ||
@@ -86,7 +119,16 @@ async function checkSource(declaration: Declaration): Promise<void> {
     ":(exclude)docs",
     ":(exclude)tmp",
     ":(exclude).agents",
+    ...discoveryExclusions,
   ]);
+  if (
+    declaration.purpose === "discovery" &&
+    !isDeepStrictEqual(
+      lockGraph(git(["show", `${declaration.productPin}:Cargo.lock`])),
+      lockGraph(await readFile(`${declaration.repository}/Cargo.lock`, "utf8")),
+    )
+  )
+    throw new ObservationOpen("discovery dependency graph differs from the frozen product");
   if (Date.parse(declaration.deadline) <= Date.now())
     throw new ObservationOpen("declared run deadline has passed");
 }
@@ -96,6 +138,11 @@ async function checkRun(context: PreparedRun): Promise<void> {
     await machine.installation.check();
     machine.recipient.connection.healthy();
   }
+}
+function failureDetails(error: unknown): unknown {
+  return error instanceof Error
+    ? { name: error.name, message: error.message, stack: error.stack, cause: error.cause }
+    : { kind: "nonErrorThrown", type: typeof error };
 }
 async function executeCases(input: {
   declaration: Declaration;
@@ -119,7 +166,9 @@ async function executeCases(input: {
       if (Date.now() >= Date.parse(input.declaration.deadline))
         throw new ObservationOpen("case exceeded the declared run deadline");
       input.results.set(scenario.id, { kind: "observed" });
+      await input.receipt.record("caseCompleted", { case: scenario.id });
     } catch (error: unknown) {
+      await input.receipt.save(`case-${scenario.id}-failure.json`, failureDetails(error));
       input.results.set(
         scenario.id,
         error instanceof ObservationOpen
@@ -130,7 +179,6 @@ async function executeCases(input: {
         case: scenario.id,
         category: error instanceof ObservationOpen ? "unconfirmed" : "failure",
       });
-      break;
     }
   }
 }
@@ -159,8 +207,9 @@ async function main(): Promise<void> {
       const context = await prepareRun({ declaration, receipt, lifetime });
       await executeCases({ declaration, cases, context, receipt, results });
       await checkSource(declaration);
-    } catch {
+    } catch (error: unknown) {
       setupUnconfirmed = true;
+      await receipt.save("composition-failure.json", failureDetails(error));
       await receipt.record("runUnconfirmed", {
         phase: "source-or-composition",
         automaticReplay: false,
@@ -178,8 +227,16 @@ async function main(): Promise<void> {
     selected: declaration.rows,
     outcomes: Object.fromEntries(outcomes),
     executedCases: results.size,
+    caseResults: Object.fromEntries(results),
     cleanupFailures,
     setupUnconfirmed,
+    configurationObservation: {
+      evidence: "observations.jsonl",
+      changedFilesStopCases: false,
+      ownedWriteAttribution: "notEstablished",
+      limit:
+        "Owned open-file descriptors sampled; syscall writes not traced. Changes alone are notes.",
+    },
     exit,
   });
   process.stdout.write(

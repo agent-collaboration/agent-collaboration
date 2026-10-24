@@ -89,7 +89,7 @@ fn database(fixture: &BoardFixture) -> FixtureResult<PathBuf> {
     database_for(fixture, &fixture.project)
 }
 
-fn database_for(fixture: &BoardFixture, project: &str) -> FixtureResult<PathBuf> {
+pub(super) fn database_for(fixture: &BoardFixture, project: &str) -> FixtureResult<PathBuf> {
     if fixture.host.is_some() {
         return Err("readback requires the owning Host to be joined first".into());
     }
@@ -344,8 +344,37 @@ pub async fn stopped_project_values(
     project: &str,
     statement: &'static str,
 ) -> FixtureResult<Vec<String>> {
+    read_file_values(database_for(fixture, project)?, statement).await
+}
+
+/// The caller keeps this read inside the token's stopped interval, before reopening the Host.
+pub async fn stopped_database_values(
+    stopped: &super::owned_host::StoppedHost,
+    relative_database: &std::path::Path,
+    statement: &'static str,
+) -> FixtureResult<Vec<String>> {
+    if relative_database.is_absolute()
+        || relative_database.components().any(|part| {
+            matches!(
+                part,
+                std::path::Component::ParentDir
+                    | std::path::Component::RootDir
+                    | std::path::Component::Prefix(_)
+            )
+        })
+    {
+        return Err("stopped database path is not a contained relative fixture path".into());
+    }
+    let path = stopped.directory().join(relative_database).canonicalize()?;
+    if !path.starts_with(stopped.directory()) || !path.is_file() {
+        return Err("stopped database readback escaped the joined Host directory".into());
+    }
+    read_file_values(path, statement).await
+}
+
+async fn read_file_values(path: PathBuf, statement: &'static str) -> FixtureResult<Vec<String>> {
     let mut connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(database_for(fixture, project)?)
+        .filename(path)
         .create_if_missing(false)
         .read_only(true)
         .connect()

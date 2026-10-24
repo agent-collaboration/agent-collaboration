@@ -1,6 +1,6 @@
 import { lstat, readFile } from "node:fs/promises";
 import { declarationSchema } from "./declaration.ts";
-import { decode, encode } from "./exact-json.ts";
+import { encode } from "./exact-json.ts";
 import {
   collectOutcomes,
   exitCode,
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
     (info.mode & 0o077) !== 0
   )
     throw new Error("declaration must be an owner-private regular file");
-  const declaration = declarationSchema.parse(decode(await readFile(path, "utf8")));
+  const declaration = declarationSchema.parse(JSON.parse(await readFile(path, "utf8")));
   const registeredCases: readonly CaseRegistration[] = casesFor();
   const receipt = new Receipt(declaration.evidenceDirectory);
   await receipt.begin(declaration);

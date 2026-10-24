@@ -128,7 +128,10 @@ async function enroll(input: {
   if (result.kind !== "published")
     throw new ObservationFailure("product CLI did not publish enrollment");
 }
-async function projectForCases(installation: Installation, actor: Identity): Promise<string> {
+export async function projectForCases(
+  installation: Installation,
+  actor: Identity,
+): Promise<string> {
   const workspaceId = boardIdentity(),
     boardId = boardIdentity(),
     projectId = boardIdentity();

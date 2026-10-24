@@ -15,6 +15,7 @@ import { ObservationOpen, ObservationFailure, type Receipt } from "../receipt.ts
 import type { JourneyMachine } from "../run-context.ts";
 import { submitRemoteMessage, finishAndRepeatRemoteMessage } from "./direct-messages.ts";
 import { notifyAndRepeat } from "./notifications.ts";
+import { projectForCases } from "../run-setup.ts";
 
 export const centralOutageCase = {
   id: "central-outage-local-independence",
@@ -85,6 +86,7 @@ export async function centralOutage(input: {
   receipt: Receipt;
 }): Promise<void> {
   const { source, target, receipt } = input;
+  const notificationProject = await projectForCases(source.installation, source.actor);
   const workspace = boardIdentity();
   const request = {
     ...writeHeader(source.actor),
@@ -141,8 +143,8 @@ export async function centralOutage(input: {
     await notifyAndRepeat({
       source: source.installation,
       actor: source.actor,
-      project: source.heldProject,
-      recipients: [source.recipient],
+      project: notificationProject,
+      recipients: [source],
       receipt,
     });
   } finally {

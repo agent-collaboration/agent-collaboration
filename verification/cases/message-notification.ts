@@ -59,7 +59,7 @@ export async function messagesAndNotifications(input: {
       source: source.installation,
       actor: source.actor,
       project: source.heldProject,
-      recipients: [source.recipient, target.recipient],
+      recipients: [source, target],
       receipt: input.receipt,
     });
   }
