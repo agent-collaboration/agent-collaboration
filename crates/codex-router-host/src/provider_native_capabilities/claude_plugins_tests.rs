@@ -2,6 +2,67 @@ use super::components::qualified_plugin_skill_components;
 use super::*;
 
 #[test]
+fn native_capabilities_non_strict_manifest_keeps_component_conflicts_and_unsafe_roots_unqualified()
+{
+    let root = tempfile::tempdir_in("/tmp").expect("fixture");
+    let package = read_claude_plugin_export("2.1.310", &serde_json::to_vec(&serde_json::json!([{
+        "id":"native-package@native-market","version":"1","scope":"user","enabled":true,"installPath":root.path()
+    }])).expect("export JSON")).expect("native export").remove(0);
+    let manifest: NativePluginManifest =
+        serde_json::from_value(serde_json::json!({"name":"native-package"})).expect("manifest");
+    for field in [
+        "commands",
+        "agents",
+        "skills",
+        "hooks",
+        "outputStyles",
+        "themes",
+        "experimental",
+    ] {
+        let mut entry = serde_json::json!({"name":"native-package","strict":false});
+        entry.as_object_mut().expect("entry").insert(
+            field.into(),
+            if field == "experimental" {
+                serde_json::json!({"themes":["unqualified"]})
+            } else {
+                serde_json::json!(["unqualified"])
+            },
+        );
+        let marketplace: NativeMarketplaceManifest =
+            serde_json::from_value(serde_json::json!({"name":"native-market","plugins":[entry]}))
+                .expect("marketplace");
+        assert_eq!(
+            qualified_plugin_skill_components(
+                root.path(),
+                &manifest,
+                &marketplace,
+                &package,
+                &CancellationToken::new()
+            ),
+            Err(CatalogueReadFailure::InvalidScope),
+            "entry component {field}"
+        );
+    }
+    let marketplace: NativeMarketplaceManifest = serde_json::from_value(serde_json::json!({"name":"native-market","plugins":[{"name":"native-package","strict":false,"lspServers":{}}]})).expect("LSP entry");
+    for declared in ["../outside", "/native/outside"] {
+        let manifest: NativePluginManifest =
+            serde_json::from_value(serde_json::json!({"name":"native-package","skills":declared}))
+                .expect("unqualified root");
+        assert_eq!(
+            qualified_plugin_skill_components(
+                root.path(),
+                &manifest,
+                &marketplace,
+                &package,
+                &CancellationToken::new()
+            ),
+            Err(CatalogueReadFailure::InvalidScope),
+            "unsafe root {declared}"
+        );
+    }
+}
+
+#[test]
 fn native_capabilities_malformed_present_package_retains_healthy_inventory_and_actual_error() {
     let fixture = tempfile::tempdir_in("/tmp").expect("native files");
     let config = fixture.path().join("config");

@@ -81,9 +81,8 @@ impl ProviderNativeReadContext {
 
     pub(crate) fn plugin_read_workspace(&self) -> Result<PathBuf, CatalogueUnsupported> {
         // The selector has no conversation/cwd and the provider socket serves
-        // multiple setups. User installation scope cannot identify one: native
-        // project/local overrides can change this same package's skill state.
-        // No existing context on this read path currently disambiguates it.
+        // multiple native setups. User installation scope does not supply the
+        // missing request context; no existing lookup here disambiguates it.
         Err(if self.provider == ProviderKind::ClaudeCode {
             CatalogueUnsupported::ScopeUnavailable
         } else {

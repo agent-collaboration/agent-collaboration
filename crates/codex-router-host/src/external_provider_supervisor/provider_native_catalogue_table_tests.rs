@@ -3,6 +3,96 @@
 use super::*;
 
 #[tokio::test]
+async fn native_capabilities_socket_synced_scope_does_not_gain_regular_package_availability() {
+    let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
+    fixture.install_package_fixture(false);
+    let mut exported: Vec<Value> =
+        serde_json::from_str(&fs::read_to_string(&fixture.export).expect("native export"))
+            .expect("rows");
+    exported.first_mut().expect("package row")["scope"] = json!("synced");
+    write(
+        &fixture.export,
+        &serde_json::to_string(&exported).expect("export JSON"),
+    );
+    for method in ["skills/list", "plugin/list"] {
+        let response = fixture.rpc(method).await;
+        assert_eq!(
+            response["error"]["message"],
+            "native filesystem catalogue cannot be represented completely: incomplete native filesystem view: partial native export (1 limitations)"
+        );
+        assert!(response.get("result").is_none());
+    }
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn native_capabilities_socket_lsp_only_present_manifest_keeps_independent_skill_coverage() {
+    let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
+    let manifest = fixture.install_package_fixture(false);
+    let package = manifest
+        .parent()
+        .expect("manifest directory")
+        .parent()
+        .expect("package");
+    write(
+        &manifest,
+        r#"{"name":"fixture-package","strict":false,"lspServers":{"native-lsp":{"command":"unused"}}}"#,
+    );
+    write(
+        &fixture._directory.path().join("marketplace.json"),
+        r#"{"name":"fixture-market","plugins":[{"name":"fixture-package","strict":false,"lspServers":{"native-lsp":{"command":"unused"}}}]}"#,
+    );
+    write(
+        &fixture.workspace.join(".claude/skills/healthy/SKILL.md"),
+        "Native healthy ordinary skill",
+    );
+    let read = fixture
+        .supervisor
+        .read_catalogue(fixture.read_request(CatalogueQuery::Workspace {
+            cwd: CapabilityPath::new(fixture.workspace.clone()).expect("cwd"),
+        }))
+        .await;
+    let CatalogueResult::Ready { report } = read else {
+        panic!("native sections")
+    };
+    let CatalogueSection::Supported { items: plugins, .. } = report.plugins else {
+        panic!("package section")
+    };
+    let plugin = plugins.first().expect("installed package");
+    assert!(
+        matches!(&plugin.components.skills, NativeComponentSection::Observed { items, coverage: CatalogueCoverage::Complete } if items.is_empty())
+    );
+    assert!(
+        matches!(plugin.components.other, NativeComponentSection::NotObserved),
+        "LSP semantics remain independently unqualified"
+    );
+    let empty_skills = fixture.rpc("skills/list").await;
+    assert_eq!(
+        empty_skills["result"]["data"][0]["skills"]
+            .as_array()
+            .expect("ordinary skill survives")
+            .len(),
+        1
+    );
+    assert_eq!(empty_skills["result"]["data"][0]["errors"], json!([]));
+    write(
+        &package.join("skills/installed/SKILL.md"),
+        "Native installed skill",
+    );
+    let native_skills = fixture.rpc("skills/list").await;
+    let rows = native_skills["result"]["data"][0]["skills"]
+        .as_array()
+        .expect("native default root remains usable");
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter()
+            .any(|row| row["name"] == "fixture-package:installed")
+    );
+    assert_eq!(native_skills["result"]["data"][0]["errors"], json!([]));
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn native_capabilities_socket_empty_and_clean_native_sections() {
     let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
     let empty = fixture.rpc("plugin/list").await;

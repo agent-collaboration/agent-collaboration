@@ -230,11 +230,10 @@ fn native_capabilities_claude_setup_plugin_components_cannot_disappear_into_ordi
 }
 
 #[test]
-fn native_capabilities_plugin_detail_selector_cannot_infer_home_over_project_skill_override() {
-    // Same installed user package/manifest is visible in both contexts. Its
-    // skill availability is configured differently; selector identity contains
-    // no cwd. The native files, not a candidate-provided disabled flag, supply
-    // this counterexample to the Home inference.
+fn native_capabilities_regular_plugin_ignores_ordinary_skill_overrides_in_both_contexts() {
+    // Native eke takes the regular plugin branch, not ordinary mze overrides.
+    // These files therefore do not establish different plugin availability or
+    // a valid reason to infer Home as plugin/read's missing setup context.
     let fixture = tempfile::tempdir_in("/tmp").expect("fixture");
     let home = fixture.path().join("home");
     let config = home.join(".claude");
@@ -274,7 +273,7 @@ fn native_capabilities_plugin_detail_selector_cannot_infer_home_over_project_ski
     assert_eq!(home_items[0].name.as_str(), "package:native");
     assert_eq!(project_items.len(), 1);
     assert_eq!(home_items[0].availability, NativeAvailability::Available);
-    assert_eq!(project_items[0].availability, NativeAvailability::Disabled);
+    assert_eq!(project_items[0].availability, NativeAvailability::Available);
     let launch = crate::ExternalProviderLaunch {
         executable: PathBuf::from("/native/adapter"),
         arguments: Vec::new(),

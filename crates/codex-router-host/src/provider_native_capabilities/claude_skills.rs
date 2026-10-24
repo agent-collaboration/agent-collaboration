@@ -196,12 +196,10 @@ fn read_native_claude_skill_section(
             if matches!(enumeration, SourceEnumeration::Incomplete { .. }) {
                 limitation = Some(CatalogueLimitation::PartialNativeExport);
             }
-            for mut skill in items {
-                if overrides.get(skill.name.as_str()) == Some(&ClaudeSkillOverride::Off) {
-                    skill.availability = NativeAvailability::Disabled;
-                }
-                skills.push(skill);
-            }
+            // Regular installed plugins use native eke's plugin branch. Their
+            // package enablement and author invocation restriction were already
+            // observed; ordinary skillOverrides do not govern these records.
+            skills.extend(items);
         }
         CatalogueSection::Unsupported { .. } => {
             limitation = Some(CatalogueLimitation::PartialNativeExport)

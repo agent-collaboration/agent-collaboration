@@ -163,8 +163,22 @@ pub(super) fn qualified_plugin_skill_components(
     let [entry] = entries.as_slice() else {
         return Err(CatalogueReadFailure::AmbiguousSelector);
     };
+    // Native y9n rejects a present manifest plus non-strict entry component
+    // declarations. Unrelated LSP metadata does not change the skill roots.
+    let unqualified_entry_components = [
+        "commands",
+        "agents",
+        "hooks",
+        "outputStyles",
+        "themes",
+        "experimental",
+    ]
+    .iter()
+    .any(|key| entry.additional.contains_key(*key));
     if entry.skills.is_some()
-        || entry.strict == Some(false) && manifest.origin != NativeManifestOrigin::MarketplaceEntry
+        || entry.strict == Some(false)
+            && manifest.origin != NativeManifestOrigin::MarketplaceEntry
+            && unqualified_entry_components
     {
         return Err(CatalogueReadFailure::InvalidScope);
     }
