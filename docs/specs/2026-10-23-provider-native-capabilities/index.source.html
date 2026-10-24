@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Start here — provider capabilities</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Start here</a>
+    <a href="requirements.html">Requirements</a>
+    <a href="specification.html">Behavior</a>
+    <a href="program-design.html">Design</a>
+    <a href="verification-design.html">Proof</a>
+    <a href="delivery-choice.html">Boundaries</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<p><a href="index.html">Start here</a> · <a href="requirements.html">Requirements</a> · <a href="specification.html">Behavior</a> · <a href="program-design.html">Design</a> · <a href="verification-design.html">Proof</a> · <a href="delivery-choice.html">Boundaries</a></p>
+<ex-markdown id="observations" label="What can Router deliver?" src="./observations.md"></ex-markdown>
+<details>
+<summary>Actual native probes, counts and limitations</summary>
+<ex-markdown id="evidence" label="Observed evidence" src="./observations-evidence.md"></ex-markdown>
+</details>
+</ex-document>
+  <ex-presentation id="skills-path" title="Skills, end to end" description="Follow the skill need through its contract, native boundary and planned proof.">
+    <ex-step to="requirements.html#requirements--user-journey">Start with the user's existing discovery and selection journey.</ex-step>
+    <ex-step to="specification.html#specification--obligations-and-their-references">Inspect the obligations that distinguish discovery from native execution.</ex-step>
+    <ex-step to="program-design.html#program--current-and-proposed-calls">Follow the changed calls and their failure path.</ex-step>
+    <ex-step to="program-design.html#program--requirement-realization-and-proof-seams">Locate the skill realization and its proof seam.</ex-step>
+    <ex-step to="verification-design.html#verification--coverage-rows">Find the planned observations and their explicit limits.</ex-step>
+  </ex-presentation>
+  <ex-presentation id="plugins-path" title="Plugins and native ownership" description="Follow native installation identity to provider wiring and component proof.">
+    <ex-step to="requirements.html#requirements--capabilities-and-authorized-needs">Read the provider-owned setup requirement.</ex-step>
+    <ex-step to="specification.html#specification--entities">Distinguish installed packages, loaded capabilities and selected identities.</ex-step>
+    <ex-step to="specification.html#specification--obligations-and-their-references">Read the plugin-intent obligation.</ex-step>
+    <ex-step to="program-design.html#program--native-routes-and-delivery-candidates">Inspect the existing native routes and missing seams.</ex-step>
+    <ex-step to="program-design.html#program--requirement-realization-and-proof-seams">Locate the plugin realization row.</ex-step>
+    <ex-step to="verification-design.html#verification--coverage-rows">Read what a native component observation must establish.</ex-step>
+  </ex-presentation>
+  <ex-presentation id="commands-path" title="Provider commands" description="Keep ACP enumeration, native invocation and consumer menu support distinct.">
+    <ex-step to="requirements.html#requirements--capabilities-and-authorized-needs">Locate the command discovery need.</ex-step>
+    <ex-step to="specification.html#specification--observable-contracts">Read the command contract and consumer limit.</ex-step>
+    <ex-step to="program-design.html#program--trigger-and-command-surfaces">Find the native and consumer boundaries.</ex-step>
+    <ex-step to="program-design.html#program--requirement-realization-and-proof-seams">Locate the command realization row.</ex-step>
+    <ex-step to="verification-design.html#verification--coverage-rows">Locate the command replacement and submission observations.</ex-step>
+  </ex-presentation>
+  <ex-presentation id="metadata-path" title="Preserve useful metadata" description="Follow the repaired metadata behavior through ownership and replay proof.">
+    <ex-step to="requirements.html#requirements--capabilities-and-authorized-needs">Start with the preserved metadata outcome.</ex-step>
+    <ex-step to="specification.html#specification--obligations-and-their-references">Read the state and genuine-output obligations.</ex-step>
+    <ex-step to="program-design.html#program--requirement-realization-and-proof-seams">Find the existing metadata owner and observation seam.</ex-step>
+    <ex-step to="verification-design.html#verification--shared-observations-and-real-fake-boundary">Inspect what stays real in the planned proof.</ex-step>
+  </ex-presentation>
+
+</body>
+</html>

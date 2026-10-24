@@ -33,6 +33,7 @@ pub use codex_acp_adapter::ConversationOperationRecorder;
 pub use codex_conversation_operation_recorder::{
     CodexConversationOperationRecorder, UnavailableConversationOperationRecorder,
 };
+pub mod provider_capabilities;
 mod provider_session_event_hub;
 mod provider_session_record;
 mod session_event_hub;

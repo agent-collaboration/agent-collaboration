@@ -36,6 +36,8 @@ pub struct RouterSessionAppServerContext {
     model_catalog: watch::Receiver<Vec<ProviderModelEntry>>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     project_trust: Option<Arc<dyn codex_native_integration::CodexProjectTrustLookup>>,
+    native_catalogue: Option<Arc<dyn crate::provider_capabilities::NativeCataloguePort>>,
+    catalogue_default_cwd: Option<crate::provider_capabilities::CapabilityPath>,
 }
 
 impl RouterSessionAppServerContext {
@@ -54,7 +56,20 @@ impl RouterSessionAppServerContext {
             model_catalog,
             interaction_broker: None,
             project_trust: None,
+            native_catalogue: None,
+            catalogue_default_cwd: None,
         }
+    }
+
+    #[must_use]
+    pub fn with_native_catalogue(
+        mut self,
+        port: Arc<dyn crate::provider_capabilities::NativeCataloguePort>,
+        default_cwd: Option<crate::provider_capabilities::CapabilityPath>,
+    ) -> Self {
+        self.native_catalogue = Some(port);
+        self.catalogue_default_cwd = default_cwd;
+        self
     }
 
     #[must_use]
@@ -343,7 +358,15 @@ async fn handle_app_server_rpc(
         .unwrap_or("")
         .to_owned();
     let catalog = context.model_catalog.borrow().clone();
-    let mut response = if matches!(
+    let mut response = if capabilities::is_capability_method(&method) {
+        capabilities::handle_capability_request(
+            &context,
+            id,
+            &method,
+            request.get("params").unwrap_or(&Value::Null),
+        )
+        .await
+    } else if matches!(
         method.as_str(),
         "thread/start"
             | "thread/list"
@@ -516,6 +539,8 @@ async fn attach_session_events(
     ))
 }
 
+#[path = "router_session_app_server_capabilities.rs"]
+mod capabilities;
 #[path = "router_session_app_server_methods.rs"]
 mod methods;
 pub(crate) use methods::thread_alias;
@@ -540,9 +565,20 @@ mod model_tests;
 #[path = "router_session_app_server_multichoice_tui_tests.rs"]
 mod multichoice_tui_tests;
 #[cfg(test)]
+#[path = "router_session_app_server_native_capabilities_tests.rs"]
+mod native_capabilities_tests;
+
+#[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 #[path = "router_session_app_server_order_tests.rs"]
 mod order_tests;
+#[cfg(test)]
+#[path = "router_session_app_server_plugin_tests.rs"]
+mod plugin_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_catalogue_source_tests.rs"]
+mod catalogue_source_tests;
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]
 #[path = "router_session_app_server_reattach_tests.rs"]

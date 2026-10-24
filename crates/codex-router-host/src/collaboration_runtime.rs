@@ -550,6 +550,11 @@ impl CollaborationRuntime {
                 let Some(owner_human_id) = owner_human_id.as_ref() else {
                     continue;
                 };
+                let catalogue_default_cwd =
+                    supervisor.native_catalogue_default_cwd(&description.endpoint);
+                let native_catalogue: std::sync::Arc<
+                    dyn collaboration_service::provider_capabilities::NativeCataloguePort,
+                > = std::sync::Arc::clone(supervisor) as _;
                 let context = collaboration_service::RouterSessionAppServerContext::new(
                     endpoint,
                     message_board::Identity::Human {
@@ -559,6 +564,7 @@ impl CollaborationRuntime {
                     std::sync::Arc::clone(&events),
                     catalog,
                 )
+                .with_native_catalogue(native_catalogue, catalogue_default_cwd)
                 .with_interaction_broker(std::sync::Arc::clone(&approval_broker))
                 .with_project_trust(std::sync::Arc::new(
                     codex_native_integration::CodexHomeProjectTrust::new(inputs.codex_home.clone()),

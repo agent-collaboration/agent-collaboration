@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Design — provider capabilities</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content">
+  <nav slot="pages" aria-label="Pages">
+    <a href="index.html">Start here</a>
+    <a href="requirements.html">Requirements</a>
+    <a href="specification.html">Behavior</a>
+    <a href="program-design.html">Design</a>
+    <a href="verification-design.html">Proof</a>
+    <a href="delivery-choice.html">Boundaries</a>
+  </nav>
+</ex-nav>
+<ex-document id="content">
+<p><a href="index.html">Start here</a> · <a href="requirements.html">Requirements</a> · <a href="specification.html">Behavior</a> · <a href="program-design.html">Design</a> · <a href="verification-design.html">Proof</a> · <a href="delivery-choice.html">Boundaries</a></p>
+<ex-markdown id="design-overview" label="How the connection works" src="./program-overview.md"></ex-markdown>
+<details>
+<summary>Implementation detail: catalogue reads, selection checks, failures and replay</summary>
+<ex-markdown id="program" label="Program Design" src="./program-design.md"></ex-markdown>
+</details>
+</ex-document>
+
+</body>
+</html>

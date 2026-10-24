@@ -76,9 +76,7 @@ pub(super) fn handle_app_server_request(
         "config/batchWrite" | "config/write" => {
             return json!({"id":id,"error":{"code":-32000,"message":"Provider session trust is read-only here; trust this project in Codex itself"}});
         }
-        "collaborationMode/list" | "hooks/list" | "skills/list" => {
-            Some(json!({"data":[],"nextCursor":null}))
-        }
+        "collaborationMode/list" | "hooks/list" => Some(json!({"data":[],"nextCursor":null})),
         _ => None,
     };
     match result {

@@ -114,6 +114,11 @@ pub(crate) async fn compose_provider_startup(
                     ))
                     .map_err(io::Error::other)?,
                 };
+                let mut native_read_context =
+                    crate::provider_native_capabilities::ProviderNativeReadContext::capture(
+                        binding.provider,
+                        &launch,
+                    );
                 let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
                     launch,
                     provider_model_picker(binding.provider),
@@ -126,7 +131,9 @@ pub(crate) async fn compose_provider_startup(
                 )
                 .await;
                 match runtime {
-                    Ok(runtime) => {
+                    Ok(mut runtime) => {
+                        native_read_context.confirm_launch_source();
+                        runtime.native_read_context = Some(native_read_context);
                         runtime
                             .set_endpoint_id(String::from(binding.endpoint_id.clone()))
                             .await;

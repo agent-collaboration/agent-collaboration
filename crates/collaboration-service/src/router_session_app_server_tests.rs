@@ -1,5 +1,7 @@
+use super::native_capabilities_tests::{ScriptedCatalogue, report_with_skills};
 use super::test_support::ScriptedSessionBackend;
 use super::*;
+use crate::provider_capabilities::{CapabilityPath, CatalogueResult};
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind, SessionState};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 use tokio::net::UnixListener;
@@ -41,13 +43,24 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
     let socket_path = directory.path().join("claude.sock");
     let listener = UnixListener::bind(&socket_path)?;
     let backend = ScriptedSessionBackend::new()?;
-    let context = Arc::new(RouterSessionAppServerContext::new(
-        backend.endpoint.clone(),
-        ScriptedSessionBackend::actor()?,
-        Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
-        Arc::clone(&backend) as Arc<dyn SessionEventHub>,
-        tokio::sync::watch::channel(Vec::new()).1,
-    ));
+    let context = Arc::new(
+        RouterSessionAppServerContext::new(
+            backend.endpoint.clone(),
+            ScriptedSessionBackend::actor()?,
+            Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
+            Arc::clone(&backend) as Arc<dyn SessionEventHub>,
+            tokio::sync::watch::channel(Vec::new()).1,
+        )
+        .with_native_catalogue(
+            Arc::new(ScriptedCatalogue {
+                requests: std::sync::Mutex::new(Vec::new()),
+                result: CatalogueResult::Ready {
+                    report: Box::new(report_with_skills(Vec::new())),
+                },
+            }),
+            Some(CapabilityPath::new("/tmp/workspace".into()).expect("scripted native cwd")),
+        ),
+    );
     let server = tokio::spawn(async move {
         for _ in 0..9 {
             let (stream, _) = listener.accept().await.expect("accept client");
@@ -73,7 +86,7 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
     scripted_exchange(
         &socket_path,
         "skills/list",
-        Some(json!({"data":[],"nextCursor":null})),
+        Some(json!({"data":[{"cwd":"/tmp/workspace","skills":[],"errors":[]}]})),
     )
     .await?;
     scripted_exchange(
