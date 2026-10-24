@@ -166,6 +166,18 @@ impl ProviderNativeReadContext {
             self.default_workspace()?,
         )
         .map_err(map_cursor_failure)?;
+        tracing::info!(
+            phase = "cursor-catalogue-context",
+            category = "captured-workspace-relation",
+            provider = "cursor",
+            requested_equals_captured_default = requested.as_path() == context.workspace(),
+            requested_equals_launch_process_cwd = ?self.cwd.as_ref()
+                .map(|cwd| cwd == &requested),
+            explicit_workspace_present = self.launch.arguments.iter().any(|argument| {
+                argument == "--workspace" || argument.starts_with("--workspace=")
+            }),
+            "native catalogue workspace relation checked"
+        );
         // Cursor ACP does not advertise agentInfo/version. Query the executable
         // of this actual launch, never a global command found independently.
         let source = self.cursor_executable.as_ref().ok_or_else(|| {
@@ -194,7 +206,9 @@ impl ProviderNativeReadContext {
             .map_err(|_| CatalogueReadFailure::InvalidNativeData)?
             .trim()
             .to_owned();
+        let read_span = tracing::Span::current();
         let catalogue = tokio::task::spawn_blocking(move || {
+            let _entered = read_span.enter();
             read_cursor_filesystem_skills(&context, &version, &requested, &cancelled)
         })
         .await

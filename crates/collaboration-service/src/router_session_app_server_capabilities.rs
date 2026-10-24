@@ -85,12 +85,14 @@ enum CapabilityCodecError {
     Incomplete { categories: String, count: usize },
 }
 
+#[tracing::instrument(name = "native_skills_list", skip_all)]
 async fn skills_list(
     context: &RouterSessionAppServerContext,
     params: &Value,
 ) -> Result<Value, CapabilityCodecError> {
     let params: SkillsListParams =
         serde_json::from_value(params.clone()).map_err(|_| CapabilityCodecError::InvalidParams)?;
+    let requested_cwds_present = !params.cwds.is_empty();
     let cwds = if params.cwds.is_empty() {
         vec![
             context
@@ -107,6 +109,19 @@ async fn skills_list(
     };
     let mut data = Vec::with_capacity(cwds.len());
     for cwd in cwds {
+        tracing::info!(
+            phase = "native-skills-list-codec",
+            category = "decoded-workspace-relation",
+            provider = match context.endpoint.endpoint_id.as_str() {
+                "cursor-local" => "cursor",
+                "claude-local" => "claude-code",
+                _ => "other",
+            },
+            requested_cwds_present,
+            requested_equals_captured_default = ?context.catalogue_default_cwd.as_ref()
+                .map(|default| default == &cwd),
+            "native catalogue workspace relation checked"
+        );
         let report = read_catalogue(
             context,
             CatalogueQuery::Workspace { cwd: cwd.clone() },

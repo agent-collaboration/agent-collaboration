@@ -123,6 +123,14 @@ pub fn read_cursor_filesystem_skills(
         );
         CursorFilesystemReadError::InvalidScope
     })?;
+    tracing::info!(
+        phase = "cursor-filesystem-scope",
+        category = "canonical-workspace-relation",
+        provider = "cursor",
+        requested_equals_launch_workspace = requested_workspace == context.workspace(),
+        canonical_workspaces_equal = requested == launched,
+        "native catalogue workspace relation checked"
+    );
     if requested != launched {
         tracing::warn!(
             phase = "cursor-filesystem-scope",
