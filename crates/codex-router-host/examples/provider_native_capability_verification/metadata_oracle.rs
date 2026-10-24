@@ -1,0 +1,138 @@
+//! J4 metadata oracle, the merged ACP metadata repair's check ported to Rust: provider
+//! metadata stays retained outside assistant items, and genuine prose appears in both
+//! history views and both installed-client captures with no raw metadata keys.
+use crate::conversation_oracle::{catalogue_names, require_complete, retained_items};
+use crate::verification_models::{HistoryThread, ProviderItem, ProviderObservation};
+use serde::Serialize;
+use serde_json::Value;
+
+const METADATA_KINDS: [&str; 4] = ["usage", "modeChange", "configChange", "sessionInfo"];
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MetadataCheck {
+    pub(crate) metadata_item_ids: Vec<String>,
+    pub(crate) command_catalogues: usize,
+    pub(crate) usage_items: usize,
+    pub(crate) assistant_item_ids: Vec<String>,
+}
+
+/// An actual Codex assistant row `• REPLY`, ending the line or followed by the composer.
+fn terminal_shows_reply(capture: &str, reply: &str) -> bool {
+    capture.lines().any(|line| {
+        let Some(rest) = line.trim_start().strip_prefix('•') else {
+            return false;
+        };
+        let rest = rest.trim_start_matches([' ', '\t']);
+        rest.strip_prefix(reply).is_some_and(|after| {
+            let after = after.trim_start_matches([' ', '\t']);
+            after.is_empty() || after.starts_with('›')
+        })
+    })
+}
+
+/// The merged ACP metadata repair's oracle (R7, R8): provider metadata retained outside
+/// assistant items, genuine prose in both history views and both installed-client
+/// captures, and no raw metadata keys in either capture.
+pub(crate) fn check_metadata_observation(
+    observation: &ProviderObservation,
+    views: &[HistoryThread],
+    live_capture: &str,
+    reopened_capture: &str,
+    expected_reply: &str,
+) -> Result<MetadataCheck, String> {
+    require_complete(observation)?;
+    let retained = retained_items(observation);
+    let metadata: Vec<&ProviderItem> = retained
+        .iter()
+        .filter(|item| {
+            METADATA_KINDS.contains(&item.kind.kind.as_str()) || catalogue_names(item).is_some()
+        })
+        .collect();
+    let command_catalogues = metadata
+        .iter()
+        .filter(|item| catalogue_names(item).is_some())
+        .count();
+    if command_catalogues == 0 {
+        return Err("required provider metadata was not retained".to_owned());
+    }
+    let assistant_ids: Vec<String> = retained
+        .iter()
+        .filter(|item| {
+            item.kind.kind == "agentMessage" && item.text.as_deref() == Some(expected_reply)
+        })
+        .map(|item| item.item_id.clone())
+        .collect();
+    if assistant_ids.is_empty() {
+        return Err("ordinary assistant reply absent from original provider events".to_owned());
+    }
+    if views.len() != 2
+        || views
+            .iter()
+            .any(|view| view.id != observation.target.session_id)
+    {
+        return Err("both read and resume views of the same thread are required".to_owned());
+    }
+    for view in views {
+        let rendered: Vec<_> = view
+            .turns
+            .iter()
+            .flat_map(|turn| turn.items.iter())
+            .collect();
+        if rendered
+            .iter()
+            .any(|item| metadata.iter().any(|meta| meta.item_id == item.id))
+        {
+            return Err("provider metadata leaked into a Codex transcript item".to_owned());
+        }
+        if !rendered.iter().any(|item| {
+            item.kind == "agentMessage"
+                && assistant_ids.contains(&item.id)
+                && item.text.as_deref() == Some(expected_reply)
+        }) {
+            return Err("ordinary assistant reply missing from Codex history".to_owned());
+        }
+    }
+    for capture in [live_capture, reopened_capture] {
+        if !terminal_shows_reply(capture, expected_reply) {
+            return Err(
+                "ordinary assistant reply absent from original installed-client PTY".to_owned(),
+            );
+        }
+        let compact: String = capture
+            .chars()
+            .filter(|character| !character.is_whitespace())
+            .collect();
+        for item in &metadata {
+            let Some(text) = item.text.as_deref() else {
+                continue;
+            };
+            match serde_json::from_str::<Value>(text) {
+                Ok(Value::Object(payload)) => {
+                    // Whitespace removal catches keys split across terminal wraps.
+                    if payload
+                        .keys()
+                        .any(|key| compact.contains(&format!("\"{key}\":")))
+                    {
+                        return Err(
+                            "raw provider metadata appeared in installed-client PTY".to_owned()
+                        );
+                    }
+                }
+                _ if terminal_shows_reply(capture, text) => {
+                    return Err("provider metadata appeared as terminal prose".to_owned());
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(MetadataCheck {
+        metadata_item_ids: metadata.iter().map(|item| item.item_id.clone()).collect(),
+        command_catalogues,
+        usage_items: metadata
+            .iter()
+            .filter(|item| item.kind.kind == "usage")
+            .count(),
+        assistant_item_ids: assistant_ids,
+    })
+}

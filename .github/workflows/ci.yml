@@ -182,6 +182,8 @@ jobs:
           cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros --no-run
           cargo nextest run --profile ci --locked -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-features --no-run
           cargo nextest run --profile ci --locked -p sqlx-turso-core --no-run
+      - name: Test native-capabilities verification apparatus
+        run: cargo test --locked -p codex-router-host --example verify-provider-native-capabilities
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
         background: true
