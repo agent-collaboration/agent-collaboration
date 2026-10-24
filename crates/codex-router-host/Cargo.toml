@@ -56,6 +56,7 @@ collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", feature
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40", features = ["test-observation"] }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }
 agent-client-protocol.workspace = true
+portable-pty = "0.9.0"
 sha2.workspace = true
 tempfile = "3.27.0"
 sqlx = { workspace = true, features = ["sqlite"] }

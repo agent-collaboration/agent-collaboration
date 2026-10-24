@@ -10,7 +10,7 @@ use session_event_model::{SessionItem, SessionItemKind};
 #[serde(deny_unknown_fields)]
 struct AvailableCommandsNotice {
     #[serde(rename = "availableCommands")]
-    _commands: Vec<AvailableCommand>,
+    commands: Vec<AvailableCommand>,
     #[serde(rename = "_meta")]
     _metadata: Option<serde::de::IgnoredAny>,
 }
@@ -19,7 +19,7 @@ struct AvailableCommandsNotice {
 #[serde(deny_unknown_fields)]
 struct AvailableCommand {
     #[serde(rename = "name")]
-    _name: String,
+    name: String,
     #[serde(rename = "description")]
     _description: String,
     #[serde(rename = "input")]
@@ -54,6 +54,23 @@ pub(crate) fn is_provider_metadata(item: &SessionItem) -> bool {
         | SessionItemKind::Plan
         | SessionItemKind::Unknown { .. } => false,
     }
+}
+
+/// Read one complete retained ACP replacement list, without interpreting prose.
+#[must_use]
+pub fn retained_available_command_names(item: &SessionItem) -> Option<Vec<String>> {
+    if item.kind != SessionItemKind::Notice {
+        return None;
+    }
+    serde_json::from_str::<AvailableCommandsNotice>(item.text.as_deref()?)
+        .ok()
+        .map(|notice| {
+            notice
+                .commands
+                .into_iter()
+                .map(|command| command.name)
+                .collect()
+        })
 }
 
 #[cfg(test)]

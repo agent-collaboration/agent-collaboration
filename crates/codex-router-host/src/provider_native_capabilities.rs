@@ -194,11 +194,20 @@ fn project_cursor_catalogue(
         .into_iter()
         .map(|skill| {
             let canonical_name = skill.canonical_name;
-            // A safe token alone does not establish native selection: Cursor
-            // resolves command and skill maps independently. S2 must qualify
-            // the actual loaded command list and reject same-name collisions.
-            let lowering = NativeSkillLowering::Unqualified {
-                reason: LoweringUnsupported::ScopeUnqualified,
+            // Native references recognize only a whole ASCII identifier; Host
+            // also checks the retained replacement list for command collisions.
+            let lowering = if !canonical_name.is_empty()
+                && canonical_name
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+            {
+                NativeSkillLowering::Qualified {
+                    canonical_command: NativeCommandName::new(canonical_name.clone())?,
+                }
+            } else {
+                NativeSkillLowering::Unqualified {
+                    reason: LoweringUnsupported::UnsupportedInputForm,
+                }
             };
             Ok(NativeSkill {
                 id: NativeSkillId::new(

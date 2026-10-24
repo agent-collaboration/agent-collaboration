@@ -2,6 +2,10 @@
 use super::*;
 use collaboration_service::provider_capabilities::*;
 
+#[cfg(all(test, target_os = "macos"))]
+#[path = "provider_native_catalogue_tests.rs"]
+mod tests;
+
 impl ExternalProviderSupervisor {
     pub(crate) fn native_catalogue_default_cwd(
         &self,
@@ -65,18 +69,24 @@ impl NativeCataloguePort for ExternalProviderSupervisor {
             let cancelled = binding.runtime.retirement().child_token();
             let _cancel_on_drop = cancelled.clone().drop_guard();
             if context.provider == collaboration_protocol::ProviderKind::ClaudeCode {
-                let plugins = match context.claude_plugins(cwd.clone(), cancelled.clone()).await {
-                    Ok(plugins) => plugins,
-                    Err(reason) => return CatalogueResult::Failed { reason },
-                };
+                let package_read =
+                    match context.claude_plugins(cwd.clone(), cancelled.clone()).await {
+                        Ok(plugins) => plugins,
+                        Err(reason) => return CatalogueResult::Failed { reason },
+                    };
                 let skills = match context
-                    .claude_skill_section(cwd, plugins.clone(), cancelled)
+                    .claude_skill_section(cwd, package_read.skills, cancelled)
                     .await
                 {
                     Ok(section) => section,
                     Err(reason) => CatalogueSection::Supported {
                         items: Vec::new(),
-                        enumeration: SourceEnumeration::Accounted,
+                        enumeration: SourceEnumeration::Incomplete {
+                            limitations: CatalogueLimitations::new(
+                                CatalogueLimitation::PartialNativeExport,
+                                Vec::new(),
+                            ),
+                        },
                         errors: vec![CatalogueSourceError {
                             source: NativeErrorSource::Unobserved,
                             reason,
@@ -92,30 +102,44 @@ impl NativeCataloguePort for ExternalProviderSupervisor {
                         },
                         observed_at: chrono::Utc::now(),
                         skills,
-                        plugins: CatalogueSection::Supported {
-                            items: plugins,
-                            enumeration: SourceEnumeration::Accounted,
-                            errors: Vec::new(),
-                        },
+                        plugins: package_read.plugins,
                     }),
                 };
             }
-            match context.skills(cwd, cancelled).await {
-                Ok(skills) => CatalogueResult::Ready {
-                    report: Box::new(CatalogueObservation {
-                        scope: CatalogueScope {
-                            binding: binding.identity.clone(),
-                            query: request.query,
-                            view: request.view,
-                        },
-                        observed_at: chrono::Utc::now(),
-                        skills,
-                        plugins: CatalogueSection::Unsupported {
-                            reason: CatalogueUnsupported::NativeOperationMissing,
-                        },
-                    }),
+            let skills = match context.skills(cwd, cancelled).await {
+                Ok(skills) => skills,
+                Err(CatalogueReadFailure::Cancelled) => {
+                    return CatalogueResult::Failed {
+                        reason: CatalogueReadFailure::Cancelled,
+                    };
+                }
+                Err(reason) => CatalogueSection::Supported {
+                    items: Vec::new(),
+                    errors: vec![CatalogueSourceError {
+                        source: NativeErrorSource::Unobserved,
+                        reason,
+                    }],
+                    enumeration: SourceEnumeration::Incomplete {
+                        limitations: CatalogueLimitations::new(
+                            CatalogueLimitation::MissingScope,
+                            Vec::new(),
+                        ),
+                    },
                 },
-                Err(reason) => CatalogueResult::Failed { reason },
+            };
+            CatalogueResult::Ready {
+                report: Box::new(CatalogueObservation {
+                    scope: CatalogueScope {
+                        binding: binding.identity.clone(),
+                        query: request.query,
+                        view: request.view,
+                    },
+                    observed_at: chrono::Utc::now(),
+                    skills,
+                    plugins: CatalogueSection::Unsupported {
+                        reason: CatalogueUnsupported::NativeOperationMissing,
+                    },
+                }),
             }
         })
     }
@@ -154,9 +178,21 @@ impl NativeCataloguePort for ExternalProviderSupervisor {
                 Ok(cwd) => cwd,
                 Err(reason) => return NativePluginReadResult::Failed { reason },
             };
-            let plugins = match context.claude_plugins(workspace, cancelled).await {
-                Ok(plugins) => plugins,
+            let package_read = match context.claude_plugins(workspace, cancelled).await {
+                Ok(package_read) => package_read,
                 Err(reason) => return NativePluginReadResult::Failed { reason },
+            };
+            let plugins = match package_read.plugins {
+                CatalogueSection::Supported {
+                    items,
+                    enumeration: SourceEnumeration::Accounted,
+                    errors,
+                } if errors.is_empty() => items,
+                _ => {
+                    return NativePluginReadResult::Failed {
+                        reason: CatalogueReadFailure::InvalidNativeData,
+                    };
+                }
             };
             let mut matching = plugins.into_iter().filter(|plugin| {
                 plugin.name == request.selector.plugin_name

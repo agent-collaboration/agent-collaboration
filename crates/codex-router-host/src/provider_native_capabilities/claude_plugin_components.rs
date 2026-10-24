@@ -1,5 +1,6 @@
 //! Per-kind native component coverage; absent exports alone never mean empty.
 use super::*;
+use std::collections::HashSet;
 
 pub(super) fn read_plugin_components(
     path: &Path,
@@ -7,25 +8,49 @@ pub(super) fn read_plugin_components(
     marketplace: &NativeMarketplaceManifest,
     package: &acp_client_runtime::native_capabilities::ClaudePluginExport,
     cancelled: &CancellationToken,
-) -> NativePluginComponents {
-    let (skills, has_skill_hooks) =
+) -> (NativePluginComponents, CatalogueSection<NativeSkill>) {
+    let (skill_sources, has_skill_hooks) =
         match qualified_plugin_skill_components(path, manifest, marketplace, package, cancelled) {
-            Ok((items, hooks)) => (
-                NativeComponentSection::Observed {
-                    items,
-                    coverage: CatalogueCoverage::Complete,
+            Ok((sources, hooks)) => (sources, Some(hooks)),
+            Err(_) => (
+                CatalogueSection::Supported {
+                    items: Vec::new(),
+                    errors: Vec::new(),
+                    enumeration: SourceEnumeration::Incomplete {
+                        limitations: CatalogueLimitations::new(
+                            CatalogueLimitation::PartialNativeExport,
+                            Vec::new(),
+                        ),
+                    },
                 },
-                Some(hooks),
+                None,
             ),
-            Err(_) => (NativeComponentSection::NotObserved, None),
         };
+    let skills = match &skill_sources {
+        CatalogueSection::Supported {
+            items,
+            enumeration: SourceEnumeration::Accounted,
+            errors,
+        } => NativeComponentSection::Observed {
+            items: items.clone(),
+            coverage: if errors.is_empty() {
+                CatalogueCoverage::Complete
+            } else {
+                CatalogueCoverage::Partial
+            },
+        },
+        _ => NativeComponentSection::NotObserved,
+    };
     let source_entry = marketplace
         .plugins
         .iter()
         .filter(|entry| entry.name == manifest.name)
         .collect::<Vec<_>>();
     let declared_by_entry = |keys: &[&str]| match source_entry.as_slice() {
-        [entry] if entry.strict != Some(false) => {
+        [entry]
+            if entry.strict != Some(false)
+                || manifest.origin == NativeManifestOrigin::MarketplaceEntry =>
+        {
             keys.iter().any(|key| entry.additional.contains_key(*key))
         }
         _ => true,
@@ -90,13 +115,16 @@ pub(super) fn read_plugin_components(
             ],
         )
     };
-    NativePluginComponents {
-        skills,
-        commands,
-        mcp,
-        hooks,
-        other,
-    }
+    (
+        NativePluginComponents {
+            skills,
+            commands,
+            mcp,
+            hooks,
+            other,
+        },
+        skill_sources,
+    )
 }
 
 fn empty_if_absent<T>(
@@ -126,7 +154,7 @@ pub(super) fn qualified_plugin_skill_components(
     marketplace: &NativeMarketplaceManifest,
     package: &acp_client_runtime::native_capabilities::ClaudePluginExport,
     cancelled: &CancellationToken,
-) -> Result<(Vec<NativeSkill>, bool), CatalogueReadFailure> {
+) -> Result<(CatalogueSection<NativeSkill>, bool), CatalogueReadFailure> {
     let entries = marketplace
         .plugins
         .iter()
@@ -135,7 +163,9 @@ pub(super) fn qualified_plugin_skill_components(
     let [entry] = entries.as_slice() else {
         return Err(CatalogueReadFailure::AmbiguousSelector);
     };
-    if entry.strict == Some(false) || entry.skills.is_some() {
+    if entry.skills.is_some()
+        || entry.strict == Some(false) && manifest.origin != NativeManifestOrigin::MarketplaceEntry
+    {
         return Err(CatalogueReadFailure::InvalidScope);
     }
     let mut roots = Vec::new();
@@ -199,10 +229,27 @@ pub(super) fn qualified_plugin_skill_components(
         cancelled,
     )
     .map_err(|_| CatalogueReadFailure::InvalidNativeData)?;
-    let has_skill_hooks = skills.iter().any(|skill| skill.has_hook_declarations);
+    // Failed files cannot establish hook absence, even alongside healthy files.
+    let hook_absence_unproven = !skills.errors.is_empty()
+        || skills
+            .skills
+            .iter()
+            .any(|skill| skill.has_hook_declarations);
+    let errors = skills.errors.into_iter().map(|failure| Ok(CatalogueSourceError {
+        source: NativeErrorSource::SkillSource { actual_path: CapabilityPath::new(failure.path)? },
+        reason: match failure.reason {
+            acp_client_runtime::native_capabilities::ClaudeFilesystemReadError::Unreadable => CatalogueReadFailure::Unavailable,
+            _ => CatalogueReadFailure::InvalidNativeData,
+        },
+    })).collect::<Result<Vec<_>, CatalogueReadFailure>>()?;
     let items = skills
+        .skills
         .into_iter()
         .map(|skill| {
+            let lowering = super::super::claude_skills::qualified_claude_command(
+                &skill.canonical_name,
+                skill.native_display_name.as_deref(),
+            );
             Ok(NativeSkill {
                 id: NativeSkillId::new(
                     skill
@@ -224,11 +271,16 @@ pub(super) fn qualified_plugin_skill_components(
                 },
                 display_version: None,
                 plugin_id: Some(NativePluginId::new(package.id.clone())?),
-                lowering: NativeSkillLowering::Unqualified {
-                    reason: LoweringUnsupported::ScopeUnqualified,
-                },
+                lowering,
             })
         })
         .collect::<Result<Vec<_>, CatalogueReadFailure>>()?;
-    Ok((items, has_skill_hooks))
+    Ok((
+        CatalogueSection::Supported {
+            items,
+            errors,
+            enumeration: SourceEnumeration::Accounted,
+        },
+        hook_absence_unproven,
+    ))
 }

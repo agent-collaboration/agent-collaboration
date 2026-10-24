@@ -44,7 +44,7 @@ impl ProviderNativeReadContext {
     pub(crate) async fn claude_skill_section(
         &self,
         workspace: PathBuf,
-        plugins: Vec<NativePlugin>,
+        plugin_skills: CatalogueSection<NativeSkill>,
         cancelled: CancellationToken,
     ) -> Result<CatalogueSection<NativeSkill>, CatalogueReadFailure> {
         if !self.claude_source_modes_qualified {
@@ -63,7 +63,13 @@ impl ProviderNativeReadContext {
             .clone()
             .ok_or(CatalogueReadFailure::InvalidScope)?;
         tokio::task::spawn_blocking(move || {
-            read_native_claude_skill_section(&home, &config_home, &workspace, &plugins, &cancelled)
+            read_native_claude_skill_section(
+                &home,
+                &config_home,
+                &workspace,
+                plugin_skills,
+                &cancelled,
+            )
         })
         .await
         .map_err(|_| CatalogueReadFailure::Unavailable)?
@@ -74,7 +80,7 @@ fn read_native_claude_skill_section(
     home: &Path,
     config_home: &Path,
     workspace: &Path,
-    plugins: &[NativePlugin],
+    plugin_skills: CatalogueSection<NativeSkill>,
     cancelled: &CancellationToken,
 ) -> Result<CatalogueSection<NativeSkill>, CatalogueReadFailure> {
     if cancelled.is_cancelled() {
@@ -180,21 +186,25 @@ fn read_native_claude_skill_section(
             skills.push(project_claude_file_skill(skill)?);
         }
     }
-    for plugin in plugins {
-        match &plugin.components.skills {
-            NativeComponentSection::Observed {
-                items,
-                coverage: CatalogueCoverage::Complete,
-            } => {
-                for skill in items {
-                    let mut skill = skill.clone();
-                    if overrides.get(skill.name.as_str()) == Some(&ClaudeSkillOverride::Off) {
-                        skill.availability = NativeAvailability::Disabled;
-                    }
-                    skills.push(skill);
-                }
+    match plugin_skills {
+        CatalogueSection::Supported {
+            items,
+            errors: plugin_errors,
+            enumeration,
+        } => {
+            errors.extend(plugin_errors);
+            if matches!(enumeration, SourceEnumeration::Incomplete { .. }) {
+                limitation = Some(CatalogueLimitation::PartialNativeExport);
             }
-            _ => limitation = Some(CatalogueLimitation::PartialNativeExport),
+            for mut skill in items {
+                if overrides.get(skill.name.as_str()) == Some(&ClaudeSkillOverride::Off) {
+                    skill.availability = NativeAvailability::Disabled;
+                }
+                skills.push(skill);
+            }
+        }
+        CatalogueSection::Unsupported { .. } => {
+            limitation = Some(CatalogueLimitation::PartialNativeExport)
         }
     }
     // Native ICr realpath dedup keeps the first source, without inventing a
@@ -274,6 +284,8 @@ fn map_claude_file_failure(
 }
 
 fn project_claude_file_skill(skill: ClaudeFileSkill) -> Result<NativeSkill, CatalogueReadFailure> {
+    let lowering =
+        qualified_claude_command(&skill.canonical_name, skill.native_display_name.as_deref());
     Ok(NativeSkill {
         id: NativeSkillId::new(
             skill
@@ -299,10 +311,27 @@ fn project_claude_file_skill(skill: ClaudeFileSkill) -> Result<NativeSkill, Cata
         },
         display_version: skill.display_version.map(CapabilityName::new).transpose()?,
         plugin_id: None,
-        lowering: NativeSkillLowering::Unqualified {
-            reason: LoweringUnsupported::ScopeUnqualified,
-        },
+        lowering,
     })
+}
+
+/// Qualify only canonical ASCII spellings. The Host also requires the exact
+/// native advertisement and rejects file/name collisions in the complete view.
+pub(super) fn qualified_claude_command(name: &str, display: Option<&str>) -> NativeSkillLowering {
+    if display.is_some_and(|display| display != name)
+        || name.to_ascii_lowercase().contains("anthropic-skills")
+        || name.len() > 256
+    {
+        return NativeSkillLowering::Unqualified {
+            reason: LoweringUnsupported::AmbiguousNativeName,
+        };
+    }
+    match NativeCommandName::new(name.to_owned()) {
+        Ok(canonical_command) => NativeSkillLowering::Qualified { canonical_command },
+        Err(_) => NativeSkillLowering::Unqualified {
+            reason: LoweringUnsupported::UnsupportedInputForm,
+        },
+    }
 }
 
 #[cfg(test)]

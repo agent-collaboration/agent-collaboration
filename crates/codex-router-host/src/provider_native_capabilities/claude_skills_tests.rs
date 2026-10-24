@@ -1,5 +1,34 @@
 use super::*;
 
+fn plugin_sources(plugins: &[NativePlugin]) -> CatalogueSection<NativeSkill> {
+    let mut items = Vec::new();
+    for plugin in plugins {
+        match &plugin.components.skills {
+            NativeComponentSection::Observed {
+                items: skills,
+                coverage: CatalogueCoverage::Complete,
+            } => items.extend(skills.clone()),
+            _ => {
+                return CatalogueSection::Supported {
+                    items,
+                    errors: Vec::new(),
+                    enumeration: SourceEnumeration::Incomplete {
+                        limitations: CatalogueLimitations::new(
+                            CatalogueLimitation::PartialNativeExport,
+                            Vec::new(),
+                        ),
+                    },
+                };
+            }
+        }
+    }
+    CatalogueSection::Supported {
+        items,
+        errors: Vec::new(),
+        enumeration: SourceEnumeration::Accounted,
+    }
+}
+
 fn write(path: &Path, contents: &str) {
     fs::create_dir_all(path.parent().expect("parent")).expect("fixture directory");
     fs::write(path, contents).expect("native source");
@@ -31,10 +60,14 @@ fn native_capabilities_claude_setup_reads_actual_roots_and_local_overrides_witho
     let config = home.join(".claude");
     let workspace = fixture.path().join("workspace");
     fs::create_dir_all(&workspace).expect("workspace");
+    let execution_marker = fixture.path().join("body-executed");
     write(&config.join("skills/user-skill/SKILL.md"), "# Native user");
     write(
         &workspace.join(".claude/skills/project-skill/SKILL.md"),
-        "# $ARGUMENTS !`never-execute`",
+        &format!(
+            "# Native project $ARGUMENTS\n!`touch '{}'`\n",
+            execution_marker.display()
+        ),
     );
     write(
         &workspace.join(".claude/commands/legacy.md"),
@@ -57,7 +90,7 @@ fn native_capabilities_claude_setup_reads_actual_roots_and_local_overrides_witho
             &home,
             &config,
             &workspace,
-            &[],
+            plugin_sources(&[]),
             &CancellationToken::new(),
         )
         .expect("native setup"),
@@ -75,9 +108,36 @@ fn native_capabilities_claude_setup_reads_actual_roots_and_local_overrides_witho
         .find(|skill| skill.name.as_str() == "project-skill")
         .expect("workspace skill");
     assert_eq!(project.availability, NativeAvailability::Available);
-    assert_eq!(project.description, "$ARGUMENTS !`never-execute`");
+    assert_eq!(project.description, "Native project $ARGUMENTS");
+    assert!(
+        matches!(&project.lowering, NativeSkillLowering::Qualified { canonical_command } if canonical_command.as_str() == "project-skill")
+    );
     assert!(items.iter().any(|skill| skill.name.as_str() == "legacy"));
-    assert!(!workspace.join("never-execute").exists());
+    assert!(
+        !execution_marker.exists(),
+        "reading metadata must not execute the skill body"
+    );
+}
+
+#[test]
+fn native_capabilities_claude_lowering_retains_unqualified_display_and_reserved_names() {
+    for (name, display) in [
+        ("native", Some("different-display")),
+        ("anthropic-skills:native", None),
+        ("Anthropic-Skills:native", None),
+        ("skill__anthropic-skills__native", None),
+        ("native with spaces", None),
+    ] {
+        assert!(matches!(
+            qualified_claude_command(name, display),
+            NativeSkillLowering::Unqualified { .. }
+        ));
+    }
+    for name in ["native", "plugin:native", "legacy:nested"] {
+        assert!(
+            matches!(qualified_claude_command(name, Some(name)), NativeSkillLowering::Qualified { canonical_command } if canonical_command.as_str() == name)
+        );
+    }
 }
 
 #[test]
@@ -97,7 +157,7 @@ fn native_capabilities_claude_setup_retains_real_candidate_error_and_marks_unqua
             &home,
             &config,
             &workspace,
-            &[],
+            plugin_sources(&[]),
             &CancellationToken::new(),
         )
         .expect("accounted candidates"),
@@ -123,7 +183,7 @@ fn native_capabilities_claude_setup_retains_real_candidate_error_and_marks_unqua
             &home,
             &config,
             &workspace,
-            &[],
+            plugin_sources(&[]),
             &CancellationToken::new(),
         )
         .expect("explicit partial source"),
@@ -146,7 +206,7 @@ fn native_capabilities_claude_setup_plugin_components_cannot_disappear_into_ordi
             &home,
             &config,
             &workspace,
-            std::slice::from_ref(&plugin),
+            plugin_sources(std::slice::from_ref(&plugin)),
             &CancellationToken::new(),
         )
         .expect("merged source"),
@@ -161,7 +221,7 @@ fn native_capabilities_claude_setup_plugin_components_cannot_disappear_into_ordi
             &home,
             &config,
             &workspace,
-            &[plugin],
+            plugin_sources(&[plugin]),
             &CancellationToken::new(),
         )
         .expect("explicit gap"),
@@ -195,7 +255,7 @@ fn native_capabilities_plugin_detail_selector_cannot_infer_home_over_project_ski
             &home,
             &config,
             &home,
-            std::slice::from_ref(&plugin),
+            plugin_sources(std::slice::from_ref(&plugin)),
             &CancellationToken::new(),
         )
         .expect("Home setup"),
@@ -205,7 +265,7 @@ fn native_capabilities_plugin_detail_selector_cannot_infer_home_over_project_ski
             &home,
             &config,
             &workspace,
-            std::slice::from_ref(&plugin),
+            plugin_sources(std::slice::from_ref(&plugin)),
             &CancellationToken::new(),
         )
         .expect("project setup"),
@@ -247,7 +307,8 @@ fn native_plugin_fixture(root: &Path, enabled: bool) -> NativePlugin {
             enabled,
             &CancellationToken::new(),
         )
-        .expect("native plugin file reader");
+        .expect("native plugin file reader")
+        .skills;
     let mut skill = project_claude_file_skill(native_skills.remove(0)).expect("native skill");
     skill.plugin_id = Some(NativePluginId::new("package@market".into()).expect("native key"));
     NativePlugin {

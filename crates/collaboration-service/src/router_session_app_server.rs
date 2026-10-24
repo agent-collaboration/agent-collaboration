@@ -156,6 +156,8 @@ enum ThreadMethodError {
     NotFound,
     #[error("provider session unavailable")]
     Unavailable,
+    #[error("{0}")]
+    SelectionRejected(crate::SelectionFailure),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -417,7 +419,9 @@ async fn handle_app_server_rpc(
                     | ThreadMethodError::PromptTooLarge
                     | ThreadMethodError::ImageUnsupportedType => -32602,
                     ThreadMethodError::NotFound => -32002,
-                    ThreadMethodError::Unavailable => -32000,
+                    ThreadMethodError::Unavailable | ThreadMethodError::SelectionRejected(_) => {
+                        -32000
+                    }
                 };
                 json!({"id":id,"error":{"code":code,"message":error.to_string()}})
             }
@@ -543,6 +547,8 @@ async fn attach_session_events(
 mod capabilities;
 #[path = "router_session_app_server_methods.rs"]
 mod methods;
+#[path = "router_session_app_server_selected_input.rs"]
+mod selected_input;
 pub(crate) use methods::thread_alias;
 use methods::{
     handle_app_server_request, handle_app_server_thread_request, handle_app_server_turn_request,
@@ -567,6 +573,10 @@ mod multichoice_tui_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_native_capabilities_tests.rs"]
 mod native_capabilities_tests;
+#[cfg(test)]
+#[allow(clippy::panic_in_result_fn)]
+#[path = "router_session_app_server_selected_input_tests.rs"]
+mod selected_input_tests;
 
 #[cfg(test)]
 #[allow(clippy::panic_in_result_fn)]

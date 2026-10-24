@@ -68,6 +68,7 @@ impl CursorExecutableSource {
             actual_executable.clone(),
             directory.join("index.js"),
             directory.join("7096.index.js"),
+            directory.join("5622.index.js"),
         ];
         let sources = paths
             .into_iter()
@@ -117,6 +118,11 @@ mod tests {
                 .expect("source identity fixture");
             fs::write(directory.join("index.js"), "native source fixture").expect("index fixture");
             fs::write(directory.join("7096.index.js"), "ACP source fixture").expect("ACP fixture");
+            fs::write(
+                directory.join("5622.index.js"),
+                "native loader source fixture",
+            )
+            .expect("loader fixture");
         }
         let launcher = root.path().join("agent");
         symlink(first.join("cursor-agent"), &launcher).expect("launcher");
@@ -139,5 +145,28 @@ mod tests {
         fs::write(first.join("7096.index.js"), "changed ACP payload fixture")
             .expect("payload change");
         assert!(source.executable_for_read().is_none());
+    }
+
+    #[test]
+    fn native_capabilities_cursor_loader_chunk_change_invalidates_running_binding() {
+        let root = tempfile::tempdir_in("/tmp").expect("fixture");
+        fs::write(root.path().join("cursor-agent"), [0xcf, 0xfa, 0xed, 0xfe])
+            .expect("binary identity fixture");
+        for file in ["index.js", "7096.index.js", "5622.index.js"] {
+            fs::write(root.path().join(file), "initial native source").expect("source fixture");
+        }
+        let mut source = CursorExecutableSource::capture(&root.path().join("cursor-agent"))
+            .expect("actual source set");
+        source.confirm_after_launch();
+        assert!(source.executable_for_read().is_some());
+        fs::write(
+            root.path().join("5622.index.js"),
+            "changed actual loader and skill reference parser",
+        )
+        .expect("loader change");
+        assert!(
+            source.executable_for_read().is_none(),
+            "the actual loaded native skill parser changed"
+        );
     }
 }

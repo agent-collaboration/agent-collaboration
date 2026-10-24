@@ -48,6 +48,7 @@ pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, r
 pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
 mod app_server_item_metadata;
+pub use app_server_item_metadata::retained_available_command_names;
 mod app_server_item_translation;
 mod app_server_model_catalog;
 pub use app_server_item_translation::{
@@ -103,7 +104,8 @@ pub use scheduled_run_contract::{
 };
 pub use session_command_port::{
     CommandContent, CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
-    QueueInputCommand, QueuedSessionInput, SessionCommandPort, SessionSettingsCommand,
+    QueueInputCommand, QueuedSessionInput, SelectedItem, SelectedPromptCommand,
+    SelectedPromptPreparation, SelectionFailure, SessionCommandPort, SessionSettingsCommand,
     SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand,
     SteerSessionCommand,
 };

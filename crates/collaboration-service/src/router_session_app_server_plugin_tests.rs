@@ -147,7 +147,21 @@ async fn native_capabilities_plugin_detail_requires_each_complete_component_sect
             _ => plugin.components.other = NativeComponentSection::NotObserved,
         }
         let (response, _) = request(plugin, "plugin/read", selector()).await;
-        assert!(response.get("error").is_some(), "{response}");
+        let category = match unknown_kind {
+            0 => "skill component coverage",
+            1 => "command component coverage",
+            2 => "MCP component coverage",
+            3 => "hook component coverage",
+            _ => "other component coverage",
+        };
+        assert_eq!(response["error"]["code"], -32000);
+        assert_eq!(
+            response["error"]["message"],
+            format!(
+                "native filesystem catalogue cannot be represented completely: {category} (count unobserved)"
+            )
+        );
+        assert!(response.get("result").is_none());
     }
 }
 
@@ -156,11 +170,19 @@ async fn native_capabilities_plugin_unknown_marketplace_policy_and_hook_cannot_b
     let mut plugin = package();
     plugin.marketplace = NativeMarketplaceObservation::Unobserved;
     let (response, _) = request(plugin, "plugin/list", json!({})).await;
-    assert!(response.get("error").is_some());
+    assert_eq!(
+        response["error"]["message"],
+        "native filesystem catalogue cannot be represented completely: native marketplace identity or manifest unobserved (1 entries)"
+    );
+    assert!(response.get("result").is_none());
     let mut plugin = package();
     plugin.authentication_policy = NativePolicyObservation::Unobserved;
     let (response, _) = request(plugin, "plugin/read", selector()).await;
-    assert!(response.get("error").is_some());
+    assert_eq!(
+        response["error"]["message"],
+        "native filesystem catalogue cannot be represented completely: native installation or authentication policy (1 entries)"
+    );
+    assert!(response.get("result").is_none());
     let mut plugin = package();
     plugin.components.hooks = NativeComponentSection::Observed {
         items: vec![NativeHook {
@@ -170,13 +192,34 @@ async fn native_capabilities_plugin_unknown_marketplace_policy_and_hook_cannot_b
         coverage: CatalogueCoverage::Complete,
     };
     let (response, _) = request(plugin, "plugin/read", selector()).await;
-    assert!(response.get("error").is_some());
-    assert!(
-        response["error"]["message"]
-            .as_str()
-            .expect("error message")
-            .contains("hook identity")
+    assert_eq!(
+        response["error"]["message"],
+        "native filesystem catalogue cannot be represented completely: native hook identity or event (1 entries)"
     );
+    assert!(response.get("result").is_none());
+}
+
+#[tokio::test]
+async fn native_capabilities_observed_hook_spelling_does_not_qualify_consumer_identity_or_event() {
+    let mut plugin = package();
+    plugin.components.hooks = NativeComponentSection::Observed {
+        items: vec![NativeHook {
+            native_key: Some(
+                CapabilityName::new("native-fixture-hook-key".into()).expect("native fixture key"),
+            ),
+            event: NativeHookEvent::Observed {
+                native_name: CapabilityName::new("PreToolUse".into()).expect("native event"),
+            },
+        }],
+        coverage: CatalogueCoverage::Complete,
+    };
+    let (response, _) = request(plugin, "plugin/read", selector()).await;
+    assert_eq!(response["error"]["code"], -32000);
+    assert_eq!(
+        response["error"]["message"],
+        "native filesystem catalogue cannot be represented completely: native hook identity or event (1 entries)"
+    );
+    assert!(response.get("result").is_none());
 }
 
 #[tokio::test]

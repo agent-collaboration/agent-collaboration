@@ -27,11 +27,9 @@ fn native_capabilities_cursor_context_uses_actual_launch_workspace_and_environme
         Ok(PathBuf::from("/fixture/workspace"))
     );
     assert_eq!(context.home, Some(PathBuf::from("/fixture/provider-home")));
+    let expected_launch_cwd = std::env::current_dir().expect("actual process launch cwd");
     let inherited = ProviderNativeReadContext::capture(ProviderKind::Cursor, &launch(&["acp"]));
-    assert_eq!(
-        inherited.default_workspace(),
-        inherited.cwd.ok_or(CatalogueReadFailure::InvalidScope)
-    );
+    assert_eq!(inherited.default_workspace(), Ok(expected_launch_cwd));
 }
 
 #[test]
@@ -79,6 +77,45 @@ async fn native_capabilities_export_bound_preserves_failure_and_rejects_oversize
         bounded_native_output(&mut command, 32, &cancelled).await,
         Err(CatalogueReadFailure::Cancelled)
     );
+}
+
+#[test]
+fn native_capabilities_cursor_lowering_requires_a_whole_native_reference_identifier() {
+    let directory = tempfile::tempdir_in("/tmp").expect("fixture");
+    let home = directory.path().join("home");
+    let workspace = directory.path().join("workspace");
+    std::fs::create_dir_all(&home).expect("home");
+    for name in ["chosen", "prefix:tail", "prefix.tail"] {
+        let path = workspace.join(".cursor/skills").join(name).join("SKILL.md");
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("skill directory");
+        std::fs::write(&path, "Native skill").expect("source");
+    }
+    let context = CursorFilesystemContext::new(home, workspace.clone()).expect("context");
+    let native = read_cursor_filesystem_skills(
+        &context,
+        "2026.10.22-27dcf5f",
+        &workspace,
+        &CancellationToken::new(),
+    )
+    .expect("native files");
+    let CatalogueSection::Supported { items, .. } =
+        project_cursor_catalogue(native).expect("Host projection")
+    else {
+        panic!("supported")
+    };
+    assert_eq!(items.len(), 3);
+    for skill in items {
+        if skill.name.as_str() == "chosen" {
+            assert!(
+                matches!(skill.lowering, NativeSkillLowering::Qualified { canonical_command } if canonical_command.as_str() == "chosen")
+            );
+        } else {
+            assert!(
+                matches!(skill.lowering, NativeSkillLowering::Unqualified { .. }),
+                "prefix matching must not select a different native skill"
+            );
+        }
+    }
 }
 
 #[test]

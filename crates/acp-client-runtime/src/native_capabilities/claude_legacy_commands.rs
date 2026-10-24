@@ -96,6 +96,7 @@ pub fn read_claude_legacy_skill_files(
                         super::claude_filesystem::normalise_claude_description(&description)?;
                     Ok(ClaudeFileSkill {
                         canonical_name: name.clone(),
+                        native_display_name: None,
                         description,
                         display_version: metadata.display_version,
                         has_hook_declarations: metadata.has_hook_declarations,

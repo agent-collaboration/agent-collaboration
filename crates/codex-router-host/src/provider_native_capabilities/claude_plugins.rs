@@ -1,16 +1,13 @@
 //! Native Claude package export joined only to its actual registered manifests.
 #[path = "claude_plugin_components.rs"]
 mod components;
+#[path = "claude_installed_packages.rs"]
+mod installed_packages;
 use super::*;
-use acp_client_runtime::native_capabilities::{
-    ClaudePluginExportScope, read_claude_plugin_export, regular_claude_plugin_key,
-};
+use acp_client_runtime::native_capabilities::read_claude_plugin_export;
+use installed_packages::read_installed_packages;
 use serde::Deserialize;
-use std::{
-    collections::{BTreeMap, HashSet},
-    fs,
-    path::Path,
-};
+use std::{collections::BTreeMap, fs, path::Path};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,16 +40,24 @@ struct NativeMarketplaceManifest {
 #[derive(Deserialize)]
 struct NativeMarketplacePluginEntry {
     name: String,
+    description: Option<String>,
     strict: Option<bool>,
-    skills: Option<serde::de::IgnoredAny>,
+    skills: Option<NativeSkillDirectories>,
     #[serde(flatten)]
     additional: BTreeMap<String, serde::de::IgnoredAny>,
 }
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(untagged)]
 enum NativeSkillDirectories {
     One(String),
     Many(Vec<String>),
+}
+
+#[derive(Default, Eq, PartialEq)]
+enum NativeManifestOrigin {
+    #[default]
+    PackageFile,
+    MarketplaceEntry,
 }
 
 #[derive(Deserialize)]
@@ -60,8 +65,16 @@ struct NativePluginManifest {
     name: String,
     description: Option<String>,
     skills: Option<NativeSkillDirectories>,
+    #[serde(skip)]
+    origin: NativeManifestOrigin,
     #[serde(flatten)]
     additional: BTreeMap<String, serde::de::IgnoredAny>,
+}
+
+/// Request-local results keep package facts and their skill-source accounting separate.
+pub(crate) struct ClaudePackageRead {
+    pub plugins: CatalogueSection<NativePlugin>,
+    pub skills: CatalogueSection<NativeSkill>,
 }
 
 impl ProviderNativeReadContext {
@@ -69,7 +82,7 @@ impl ProviderNativeReadContext {
         &self,
         workspace: PathBuf,
         cancelled: CancellationToken,
-    ) -> Result<Vec<NativePlugin>, CatalogueReadFailure> {
+    ) -> Result<ClaudePackageRead, CatalogueReadFailure> {
         let executable = self
             .launch
             .environment
@@ -121,89 +134,7 @@ impl ProviderNativeReadContext {
         let packages = read_claude_plugin_export("2.1.310", &output)
             .map_err(|_| CatalogueReadFailure::InvalidNativeData)?;
         tokio::task::spawn_blocking(move || {
-            if packages.is_empty() {
-                return Ok(Vec::new());
-            }
-            let registry_path = config_home.join("plugins/known_marketplaces.json");
-            let registered: BTreeMap<String, NativeMarketplaceRegistration> =
-                read_json(&registry_path)?;
-            let mut seen = HashSet::new();
-            let mut plugins = Vec::new();
-            for package in packages {
-                if cancelled.is_cancelled() {
-                    return Err(CatalogueReadFailure::Cancelled);
-                }
-                if !seen.insert(package.id.clone()) {
-                    return Err(CatalogueReadFailure::AmbiguousSelector);
-                }
-                if !package.errors.is_empty() || !package.notes.is_empty() {
-                    return Err(CatalogueReadFailure::InvalidNativeData);
-                }
-                let (name, marketplace_name) = regular_claude_plugin_key(&package.id)
-                    .map_err(|_| CatalogueReadFailure::InvalidNativeData)?;
-                let registration = registered
-                    .get(marketplace_name)
-                    .ok_or(CatalogueReadFailure::InvalidScope)?;
-                let marketplace_path = registration.manifest_path()?;
-                let marketplace: NativeMarketplaceManifest = read_json(&marketplace_path)?;
-                if marketplace.name != marketplace_name {
-                    return Err(CatalogueReadFailure::InvalidNativeData);
-                }
-                if package.scope != ClaudePluginExportScope::User || package.project_path.is_some()
-                {
-                    return Err(CatalogueReadFailure::InvalidScope);
-                }
-                let path = package
-                    .read_from_folder
-                    .as_ref()
-                    .unwrap_or(&package.install_path);
-                if !path.is_absolute() || !path.is_dir() {
-                    return Err(CatalogueReadFailure::InvalidNativeData);
-                }
-                let manifest: NativePluginManifest =
-                    read_json(&path.join(".claude-plugin/plugin.json"))?;
-                if manifest.name != name {
-                    return Err(CatalogueReadFailure::InvalidNativeData);
-                }
-                let version = package.folder_version.as_ref().unwrap_or(&package.version);
-                let components = components::read_plugin_components(
-                    path,
-                    &manifest,
-                    &marketplace,
-                    &package,
-                    &cancelled,
-                );
-                plugins.push(NativePlugin {
-                    id: NativePluginId::new(package.id.clone())?,
-                    name: CapabilityName::new(manifest.name)?,
-                    description: manifest.description,
-                    origin: NativeOrigin::Filesystem {
-                        actual_path: CapabilityPath::new(path.clone())?,
-                    },
-                    state: if package.enabled {
-                        NativePluginState::InstalledEnabled {
-                            loading: NativeLoadingState::NotObserved,
-                        }
-                    } else {
-                        NativePluginState::InstalledDisabled
-                    },
-                    display_version: if version == "unknown" {
-                        None
-                    } else {
-                        Some(CapabilityName::new(version.clone())?)
-                    },
-                    marketplace: NativeMarketplaceObservation::Qualified {
-                        native_name: CapabilityName::new(marketplace.name)?,
-                        source: NativeMarketplaceSource::Filesystem {
-                            manifest_path: CapabilityPath::new(marketplace_path)?,
-                        },
-                    },
-                    components,
-                    installation_policy: NativePolicyObservation::Undeclared,
-                    authentication_policy: NativePolicyObservation::Undeclared,
-                });
-            }
-            Ok(plugins)
+            read_installed_packages(packages, &config_home, &cancelled)
         })
         .await
         .map_err(|_| CatalogueReadFailure::Unavailable)?
@@ -315,119 +246,5 @@ fn qualify_native_export_environment(config_home: &Path) -> Result<(), Catalogue
 }
 
 #[cfg(test)]
-mod tests {
-    use super::components::qualified_plugin_skill_components;
-    use super::*;
-
-    #[test]
-    fn native_capabilities_marketplace_source_uses_native_manifest_resolution_order() {
-        let root = tempfile::tempdir_in("/tmp").expect("fixture");
-        let nested = root.path().join(".claude-plugin/marketplace.json");
-        fs::create_dir_all(nested.parent().expect("parent")).expect("manifest folder");
-        fs::write(&nested, r#"{"name":"native-marketplace"}"#).expect("manifest");
-        assert_eq!(actual_marketplace_manifest(root.path()), Ok(nested.clone()));
-        assert_eq!(actual_marketplace_manifest(&nested), Ok(nested));
-        assert_eq!(
-            actual_marketplace_manifest(Path::new("relative")),
-            Err(CatalogueReadFailure::InvalidScope)
-        );
-    }
-
-    #[test]
-    fn native_capabilities_named_catalog_cannot_be_reclassified_from_an_install_location() {
-        let registration = r#"{"installLocation":"/native/cache","source":{"source":"claudeai"}}"#;
-        let registered = serde_json::from_str::<NativeMarketplaceRegistration>(registration)
-            .expect("named source");
-        assert_eq!(
-            registered.manifest_path(),
-            Err(CatalogueReadFailure::InvalidScope)
-        );
-        let registration = r#"{"installLocation":"/native/market","source":{"source":"git"}}"#;
-        assert!(serde_json::from_str::<NativeMarketplaceRegistration>(registration).is_ok());
-    }
-    #[test]
-    fn native_capabilities_plugin_component_skill_uses_actual_manifest_roots_and_native_identity() {
-        let root = tempfile::tempdir_in("/tmp").expect("fixture");
-        fs::create_dir_all(root.path().join("skills/alpha")).expect("skill folder");
-        fs::write(
-            root.path().join("skills/alpha/SKILL.md"),
-            "---\nname: Display title\nuser-invocable: false\n---\n# Native alpha",
-        )
-        .expect("native skill");
-        let manifest: NativePluginManifest = serde_json::from_value(serde_json::json!({
-            "name":"native-package","skills":["./skills"]
-        }))
-        .expect("plugin manifest");
-        let marketplace: NativeMarketplaceManifest = serde_json::from_value(serde_json::json!({
-            "name":"native-marketplace","plugins":[{"name":"native-package"}]
-        }))
-        .expect("marketplace manifest");
-        let export = serde_json::to_vec(&serde_json::json!([{
-            "id":"native-package@native-marketplace","version":"1.0","scope":"user", "enabled":true,"installPath":root.path()
-        }])).expect("native export");
-        let packages = read_claude_plugin_export("2.1.310", &export).expect("export");
-        let (skills, _) = qualified_plugin_skill_components(
-            root.path(),
-            &manifest,
-            &marketplace,
-            &packages[0],
-            &CancellationToken::new(),
-        )
-        .expect("qualified skill sources");
-        assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].name.as_str(), "native-package:alpha");
-        assert_eq!(skills[0].availability, NativeAvailability::Disabled);
-        assert_eq!(
-            skills[0].plugin_id.as_ref().expect("plugin id").as_str(),
-            "native-package@native-marketplace"
-        );
-        assert!(matches!(
-            skills[0].lowering,
-            NativeSkillLowering::Unqualified { .. }
-        ));
-        let components = components::read_plugin_components(
-            root.path(),
-            &manifest,
-            &marketplace,
-            &packages[0],
-            &CancellationToken::new(),
-        );
-        assert!(
-            matches!(components.commands, NativeComponentSection::Observed { ref items, coverage: CatalogueCoverage::Complete } if items.is_empty())
-        );
-        assert!(
-            matches!(components.hooks, NativeComponentSection::Observed { ref items, coverage: CatalogueCoverage::Complete } if items.is_empty())
-        );
-        assert!(
-            matches!(components.mcp, NativeComponentSection::Observed { ref items, coverage: CatalogueCoverage::Complete } if items.is_empty())
-        );
-        assert!(
-            matches!(components.other, NativeComponentSection::Observed { ref items, coverage: CatalogueCoverage::Complete } if items.is_empty())
-        );
-        fs::create_dir(root.path().join("hooks")).expect("hook folder");
-        fs::write(root.path().join("hooks/hooks.json"), "{}").expect("present native source");
-        let components = components::read_plugin_components(
-            root.path(),
-            &manifest,
-            &marketplace,
-            &packages[0],
-            &CancellationToken::new(),
-        );
-        assert!(matches!(
-            components.hooks,
-            NativeComponentSection::NotObserved
-        ));
-        let mut entry_override = marketplace;
-        entry_override.plugins[0].skills = Some(serde::de::IgnoredAny);
-        assert_eq!(
-            qualified_plugin_skill_components(
-                root.path(),
-                &manifest,
-                &entry_override,
-                &packages[0],
-                &CancellationToken::new()
-            ),
-            Err(CatalogueReadFailure::InvalidScope)
-        );
-    }
-}
+#[path = "claude_plugins_tests.rs"]
+mod tests;

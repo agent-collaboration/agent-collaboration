@@ -33,6 +33,10 @@ fn native_capabilities_claude_file_name_is_canonical_and_effective_override_off_
     .skills;
     assert_eq!(skills.len(), 1);
     assert_eq!(skills[0].canonical_name, "alpha");
+    assert_eq!(
+        skills[0].native_display_name.as_deref(),
+        Some("Display title")
+    );
     assert_eq!(skills[0].path, path);
     assert_eq!(skills[0].description, "Native description");
     assert!(!skills[0].user_invocable);

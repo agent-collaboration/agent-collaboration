@@ -35,6 +35,8 @@ pub enum ClaudeSkillOverride {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaudeFileSkill {
     pub canonical_name: String,
+    /// Effective native display override; legacy commands ignore that header.
+    pub native_display_name: Option<String>,
     pub description: String,
     pub display_version: Option<String>,
     pub has_hook_declarations: bool,
@@ -170,6 +172,7 @@ pub fn read_claude_filesystem_skills(
                 let enabled_by_setting = overrides.get(&name) != Some(&ClaudeSkillOverride::Off);
                 Ok(ClaudeFileSkill {
                     canonical_name: name,
+                    native_display_name: metadata.display_name,
                     description,
                     display_version: metadata.display_version,
                     has_hook_declarations: metadata.has_hook_declarations,

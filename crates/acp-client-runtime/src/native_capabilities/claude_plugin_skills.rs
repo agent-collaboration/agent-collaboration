@@ -1,6 +1,7 @@
 //! Qualified native plugin skill roots use different names from ordinary roots.
 use super::{
-    ClaudeFileSkill, ClaudeFileSkillScope, ClaudeFilesystemReadError, read_claude_skill_metadata,
+    ClaudeFileSkill, ClaudeFileSkillScope, ClaudeFilesystemCatalogue, ClaudeFilesystemReadError,
+    ClaudeSkillFileFailure, read_claude_skill_metadata,
 };
 use super::{
     claude_filesystem::{native_body_description, normalise_claude_description},
@@ -22,7 +23,7 @@ pub fn read_claude_plugin_skill_roots(
     scope: ClaudeFileSkillScope,
     enabled: bool,
     cancelled: &CancellationToken,
-) -> Result<Vec<ClaudeFileSkill>, ClaudeFilesystemReadError> {
+) -> Result<ClaudeFilesystemCatalogue, ClaudeFilesystemReadError> {
     if version != "2.1.310" {
         return Err(ClaudeFilesystemReadError::UnsupportedVersion);
     }
@@ -36,6 +37,7 @@ pub fn read_claude_plugin_skill_roots(
     let mut seen_names = HashSet::new();
     let mut seen_origins = HashSet::new();
     let mut skills = Vec::new();
+    let mut errors = Vec::new();
     for root in roots {
         if cancelled.is_cancelled() {
             return Err(ClaudeFilesystemReadError::Cancelled);
@@ -76,85 +78,99 @@ pub fn read_claude_plugin_skill_roots(
             if cancelled.is_cancelled() {
                 return Err(ClaudeFilesystemReadError::Cancelled);
             }
-            let file = fs::metadata(&path).map_err(|_| ClaudeFilesystemReadError::Unreadable)?;
-            if !file.is_file() || file.len() > 1_048_576 {
-                return Err(ClaudeFilesystemReadError::InvalidMetadata);
-            }
-            let contents = super::skill_file::read_native_skill_file(&path, 1_048_576)
-                .map_err(super::claude_filesystem::map_skill_file_error)?;
-            let metadata = read_claude_skill_metadata(&contents)
-                .map_err(|_| ClaudeFilesystemReadError::InvalidMetadata)?;
-            let folder = path
-                .parent()
-                .and_then(Path::file_name)
-                .and_then(|name| name.to_str())
-                .ok_or(ClaudeFilesystemReadError::InvalidMetadata)?;
-            let explicit = if direct {
-                metadata
-                    .display_name
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|name| !name.is_empty())
-            } else {
-                None
-            };
-            let prefix = format!("{plugin_name}:");
-            let bare = match explicit {
-                Some(name) => {
-                    let name = name.strip_prefix(&prefix).unwrap_or(name);
-                    if name.is_empty() { folder } else { name }
+            let candidate = (|| {
+                let file =
+                    fs::metadata(&path).map_err(|_| ClaudeFilesystemReadError::Unreadable)?;
+                if !file.is_file() || file.len() > 1_048_576 {
+                    return Err(ClaudeFilesystemReadError::InvalidMetadata);
                 }
-                None => folder,
-            };
-            if bare.contains('\u{feff}') {
-                return Err(ClaudeFilesystemReadError::UnqualifiedSource);
-            }
-            let slug = bare
-                .encode_utf16()
-                .map(|unit| {
-                    let character = char::from_u32(u32::from(unit));
-                    match character {
-                        Some(character)
-                            if character.is_ascii_alphanumeric()
-                                || matches!(character, '_' | '-') =>
-                        {
-                            character
-                        }
-                        _ => '-',
+                let contents = super::skill_file::read_native_skill_file(&path, 1_048_576)
+                    .map_err(super::claude_filesystem::map_skill_file_error)?;
+                let metadata = read_claude_skill_metadata(&contents)
+                    .map_err(|_| ClaudeFilesystemReadError::InvalidMetadata)?;
+                let folder = path
+                    .parent()
+                    .and_then(Path::file_name)
+                    .and_then(|name| name.to_str())
+                    .ok_or(ClaudeFilesystemReadError::InvalidMetadata)?;
+                let explicit = if direct {
+                    metadata
+                        .display_name
+                        .as_deref()
+                        .map(str::trim)
+                        .filter(|name| !name.is_empty())
+                } else {
+                    None
+                };
+                let prefix = format!("{plugin_name}:");
+                let bare = match explicit {
+                    Some(name) => {
+                        let name = name.strip_prefix(&prefix).unwrap_or(name);
+                        if name.is_empty() { folder } else { name }
                     }
-                })
-                .collect::<String>();
-            let name = format!("{plugin_name}:{slug}");
-            let real_path =
-                fs::canonicalize(&path).map_err(|_| ClaudeFilesystemReadError::Unreadable)?;
-            if !seen_origins.insert(real_path) || !seen_names.insert(name.clone()) {
-                return Err(ClaudeFilesystemReadError::AmbiguousOrigin);
-            }
-            if metadata.fallback == Some(true) {
-                return Err(ClaudeFilesystemReadError::UnqualifiedSource);
-            }
-            let body = split_skill_document(&contents)
-                .map_err(|_| ClaudeFilesystemReadError::InvalidMetadata)?
-                .body;
-            let description = match metadata.description {
-                Some(description) if !description.trim().is_empty() => {
-                    description.trim().to_owned()
+                    None => folder,
+                };
+                if bare.contains('\u{feff}') {
+                    return Err(ClaudeFilesystemReadError::UnqualifiedSource);
                 }
-                _ => native_body_description(body, "Plugin skill")?,
-            };
-            skills.push(ClaudeFileSkill {
-                canonical_name: name,
-                description: normalise_claude_description(&description)?,
-                display_version: metadata.display_version,
-                has_hook_declarations: metadata.has_hook_declarations,
-                path,
-                scope,
-                user_invocable: enabled && metadata.user_invocable.unwrap_or(true),
-            });
+                let slug = bare
+                    .encode_utf16()
+                    .map(|unit| {
+                        let character = char::from_u32(u32::from(unit));
+                        match character {
+                            Some(character)
+                                if character.is_ascii_alphanumeric()
+                                    || matches!(character, '_' | '-') =>
+                            {
+                                character
+                            }
+                            _ => '-',
+                        }
+                    })
+                    .collect::<String>();
+                let name = format!("{plugin_name}:{slug}");
+                let real_path =
+                    fs::canonicalize(&path).map_err(|_| ClaudeFilesystemReadError::Unreadable)?;
+                if !seen_origins.insert(real_path) || !seen_names.insert(name.clone()) {
+                    return Err(ClaudeFilesystemReadError::AmbiguousOrigin);
+                }
+                if metadata.fallback == Some(true) {
+                    return Err(ClaudeFilesystemReadError::UnqualifiedSource);
+                }
+                let body = split_skill_document(&contents)
+                    .map_err(|_| ClaudeFilesystemReadError::InvalidMetadata)?
+                    .body;
+                let description = match metadata.description {
+                    Some(description) if !description.trim().is_empty() => {
+                        description.trim().to_owned()
+                    }
+                    _ => native_body_description(body, "Plugin skill")?,
+                };
+                Ok(ClaudeFileSkill {
+                    canonical_name: name,
+                    native_display_name: metadata.display_name.map(|display| {
+                        if display.starts_with(&prefix) {
+                            display
+                        } else {
+                            format!("{prefix}{display}")
+                        }
+                    }),
+                    description: normalise_claude_description(&description)?,
+                    display_version: metadata.display_version,
+                    has_hook_declarations: metadata.has_hook_declarations,
+                    path: path.clone(),
+                    scope,
+                    user_invocable: enabled && metadata.user_invocable.unwrap_or(true),
+                })
+            })();
+            match candidate {
+                Ok(skill) => skills.push(skill),
+                Err(reason) => errors.push(ClaudeSkillFileFailure { path, reason }),
+            }
         }
     }
     skills.sort_by(|left, right| left.canonical_name.cmp(&right.canonical_name));
-    Ok(skills)
+    Ok(ClaudeFilesystemCatalogue { skills, errors })
 }
 
 #[cfg(test)]
@@ -187,7 +203,8 @@ mod tests {
             true,
             &CancellationToken::new(),
         )
-        .expect("native roots");
+        .expect("native roots")
+        .skills;
         assert_eq!(
             skills
                 .iter()

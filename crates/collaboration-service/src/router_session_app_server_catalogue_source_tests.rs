@@ -124,6 +124,12 @@ async fn dispatch(method: Method, report: CatalogueObservation) -> Value {
     .response
 }
 
+fn assert_whole_method_error(response: &Value, expected_message: &str) {
+    assert_eq!(response["error"]["code"], -32000, "{response}");
+    assert_eq!(response["error"]["message"], expected_message, "{response}");
+    assert!(response.get("result").is_none(), "{response}");
+}
+
 #[tokio::test]
 async fn native_capabilities_source_table_accounted_located_failures_preserve_usable_rows_and_paths()
  {
@@ -166,7 +172,7 @@ async fn native_capabilities_source_table_wrong_role_unlocated_mixed_and_all_unr
             Method::Plugins => Method::Skills.matching_source(),
         };
         for source in [
-            other_role,
+            other_role.clone(),
             NativeErrorSource::OtherFilesystem {
                 actual_path: CapabilityPath::new("/native/real-package-directory".into())
                     .expect("real other role"),
@@ -181,23 +187,46 @@ async fn native_capabilities_source_table_wrong_role_unlocated_mixed_and_all_unr
                 }
                 method.with_section(&mut observed, true, SourceEnumeration::Accounted, errors);
                 let response = dispatch(method, observed).await;
-                assert!(
-                    response.get("error").is_some() && response.get("result").is_none(),
-                    "{response}"
+                assert_whole_method_error(
+                    &response,
+                    "native filesystem catalogue cannot be represented completely: native source-error role or location is unrepresentable (1 entries)",
                 );
             }
         }
         let mut observed = report();
         method.with_section(
             &mut observed,
-            false,
+            true,
             SourceEnumeration::Accounted,
-            vec![source_error(method.matching_source())],
+            vec![
+                source_error(other_role),
+                source_error(NativeErrorSource::OtherFilesystem {
+                    actual_path: CapabilityPath::new("/native/other-unrepresentable-source".into())
+                        .expect("actual other source"),
+                }),
+                source_error(NativeErrorSource::Unobserved),
+                source_error(method.matching_source()),
+            ],
         );
         let response = dispatch(method, observed).await;
-        assert!(
-            response.get("error").is_some() && response.get("result").is_none(),
-            "{response}"
+        assert_whole_method_error(
+            &response,
+            "native filesystem catalogue cannot be represented completely: native source-error role or location is unrepresentable (3 entries)",
+        );
+        let mut observed = report();
+        method.with_section(
+            &mut observed,
+            false,
+            SourceEnumeration::Accounted,
+            vec![
+                source_error(method.matching_source()),
+                source_error(NativeErrorSource::Unobserved),
+            ],
+        );
+        let response = dispatch(method, observed).await;
+        assert_whole_method_error(
+            &response,
+            "native filesystem catalogue cannot be represented completely: all native filesystem candidates are unrepresentable (2 entries)",
         );
     }
 }
@@ -225,9 +254,9 @@ async fn native_capabilities_source_table_empty_success_incomplete_and_section_i
                 let mut observed = report();
                 method.with_section(&mut observed, has_items, incomplete(), errors);
                 let response = dispatch(method, observed).await;
-                assert!(
-                    response.get("error").is_some() && response.get("result").is_none(),
-                    "{response}"
+                assert_whole_method_error(
+                    &response,
+                    "native filesystem catalogue cannot be represented completely: incomplete native filesystem view: source origin unobserved (1 limitations)",
                 );
             }
         }
@@ -270,6 +299,9 @@ async fn native_capabilities_source_table_empty_success_incomplete_and_section_i
             }
         }
         let response = dispatch(method, observed).await;
-        assert!(response.get("error").is_some() && response.get("result").is_none());
+        assert_whole_method_error(
+            &response,
+            "native capability discovery is unsupported for this provider binding",
+        );
     }
 }

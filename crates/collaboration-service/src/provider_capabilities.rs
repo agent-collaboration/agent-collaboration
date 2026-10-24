@@ -77,7 +77,7 @@ pub struct CapabilityPath(PathBuf);
 
 impl CapabilityPath {
     pub fn new(path: PathBuf) -> Result<Self, CatalogueReadFailure> {
-        if !path.is_absolute() {
+        if !path.is_absolute() || path.to_str().is_none_or(|value| value.contains('\0')) {
             return Err(CatalogueReadFailure::InvalidScope);
         }
         Ok(Self(path))
