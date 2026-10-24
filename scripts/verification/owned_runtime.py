@@ -72,10 +72,8 @@ def save_record(path: Path, value: object) -> None:
 
 
 def process_table() -> dict[int, ProcessIdentity]:
-    # Owner identity is ps(1) `ruid` (real user ID), compared with os.getuid();
-    # ps `uid` is the effective ID, which setuid descendants raise.
     completed = subprocess.run(
-        ["/bin/ps", "-axo", "pid=,ppid=,ruid=,pgid=,lstart=,comm="],
+        ["/bin/ps", "-axo", "pid=,ppid=,uid=,pgid=,lstart=,comm="],
         capture_output=True,
         text=True,
         check=True,
