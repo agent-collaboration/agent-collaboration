@@ -170,6 +170,57 @@ fn native_capabilities_selected_lowering_rejects_ambiguous_or_changed_identity()
 }
 
 #[test]
+fn native_capabilities_selected_lowering_rejects_punctuation_delimited_duplicate_references()
+-> Result<(), Box<dyn std::error::Error>> {
+    let skills = vec![
+        skill("chosen", "/native/chosen/SKILL.md")?,
+        skill("other", "/native/other/SKILL.md")?,
+    ];
+    let selected = vec![selection("chosen", "/native/chosen/SKILL.md")?];
+    // Codex0.163 scans dollar names until a non-name character, then
+    // deduplicates the Skill items; punctuation does not make a second
+    // occurrence disappear from the submitted Text.
+    for text in [
+        "$chosen args $chosen,",
+        "$chosen ($chosen)",
+        "$chosen [$chosen]",
+        "$chosen x$chosen",
+        "$chosen $$chosen",
+        "$chosen —$chosen。",
+        "$chosen $other!",
+        "$chosen $other.md",
+        "$chosen $other:extra",
+    ] {
+        assert_eq!(
+            lower_selection(
+                &[CommandContent::text(text.into())?],
+                &selected,
+                &skills,
+                &["chosen".into()]
+            ),
+            Err(SelectionFailure::UnsupportedForm),
+            "{text}"
+        );
+    }
+    for arguments in [
+        " $HOME $$HOME $$TAIL $",
+        " $chosen-extra $chosen2 $other_extra",
+        " x$other-suffix λ\n$$TAIL",
+    ] {
+        assert_eq!(
+            lower_selection(
+                &[CommandContent::text(format!("$chosen{arguments}"))?],
+                &selected,
+                &skills,
+                &["chosen".into()]
+            )?,
+            vec![CommandContent::text(format!("/chosen{arguments}"))?]
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn native_capabilities_selected_lowering_rejects_nonleading_duplicate_and_multiple_tokens()
 -> Result<(), Box<dyn std::error::Error>> {
     let skills = vec![

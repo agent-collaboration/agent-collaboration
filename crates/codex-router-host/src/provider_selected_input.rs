@@ -205,13 +205,14 @@ fn lower_selection(
 
 fn contains_token(text: &str, token: &str) -> bool {
     text.match_indices(token).any(|(offset, _)| {
-        let before = text
-            .get(..offset)
-            .and_then(|prefix| prefix.chars().next_back());
         let after = text
             .get(offset + token.len()..)
             .and_then(|suffix| suffix.chars().next());
-        before.is_none_or(char::is_whitespace) && after.is_none_or(char::is_whitespace)
+        // Codex scans each dollar and ends its plain name at punctuation;
+        // only a longer ASCII mention name prevents an exact token match.
+        after.is_none_or(|character| {
+            !character.is_ascii_alphanumeric() && !matches!(character, '_' | '-')
+        })
     })
 }
 
