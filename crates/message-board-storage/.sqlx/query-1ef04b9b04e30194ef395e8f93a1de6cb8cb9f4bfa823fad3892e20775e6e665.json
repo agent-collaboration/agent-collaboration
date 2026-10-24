@@ -1,0 +1,124 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT\n    f.entry_id AS \"entry_id?: String\",\n    f.epoch AS \"epoch?: i64\",\n    f.position AS \"position?: i64\",\n    f.record_kind AS \"record_kind?: String\",\n    f.record_id AS \"record_id?: String\",\n    f.request_id AS \"request_id?: String\",\n    f.actor_id AS \"actor_id?: String\",\n    f.origin_installation AS \"origin_installation?: String\",\n    f.origin_machine AS \"origin_machine?: String\",\n    f.router_time AS \"router_time?: String\",\n    f.time_basis AS \"time_basis?: String\",\n    f.content AS \"content?: String\",\n    a.canonical_identity AS \"actor_identity?: String\",\n    CASE WHEN f.record_kind='workTrailRow' THEN t.redacted END AS \"redacted?: i64\"\nFROM json_each(?) k CROSS JOIN project_feed f ON f.position=CAST(k.value AS INTEGER)\nLEFT JOIN actors a ON a.actor_id=f.actor_id\nLEFT JOIN work_trail_rows t ON t.row_id=f.record_id\nORDER BY f.position\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entry_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "position?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "record_kind?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "record_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "request_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "actor_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "origin_installation?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "origin_machine?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "router_time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "time_basis?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "content?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "actor_identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "redacted?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "1ef04b9b04e30194ef395e8f93a1de6cb8cb9f4bfa823fad3892e20775e6e665"
+}

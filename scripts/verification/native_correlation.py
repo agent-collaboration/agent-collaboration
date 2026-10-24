@@ -16,6 +16,7 @@ from scripts.verification.process_ownership import (
     lookup_process_identity,
     same_identity,
 )
+from scripts.verification.readonly_codex_home import register_guard_identifiers
 from scripts.verification.typed_observations import (
     IdentityRecord,
     JsonObject,
@@ -42,6 +43,7 @@ class CorrelationArguments(BaseModel):
     turn_id: str
     push_id: str
     output: Path
+    guard_directory: Path
 
 
 def correlate_message(thread: object, expected: object) -> JsonObject:
@@ -84,6 +86,14 @@ def correlate_message(thread: object, expected: object) -> JsonObject:
 
 
 def read_correlation(arguments: CorrelationArguments) -> JsonObject:
+    register_guard_identifiers(
+        arguments.guard_directory,
+        {
+            "sessionId": arguments.thread_id,
+            "turnId": arguments.turn_id,
+            "pushId": arguments.push_id,
+        },
+    )
     _ = lookup_process_identity(os.getpid())
     argv = [
         str(arguments.cli),
@@ -213,6 +223,7 @@ if __name__ == "__main__":
     _ = parser.add_argument("--turn-id", required=True)
     _ = parser.add_argument("--push-id", required=True)
     _ = parser.add_argument("--output", type=Path, required=True)
+    _ = parser.add_argument("--guard-directory", type=Path, required=True)
     arguments = CorrelationArguments.model_validate(vars(parser.parse_args()))
     result = read_correlation(arguments)
     with arguments.output.open("x") as output:

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"invalid!: i64\" FROM router_pushes WHERE retention != 'creationAge' OR cancelled_after_delivery_json IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "invalid!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f1692a22065b3837827f71239433b0fb29da69636a33d2ac0a753c96b5bda2a0"
+}

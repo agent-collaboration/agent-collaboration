@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM local_cancel_deliveries WHERE item_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "c566da890bf9e338836ef0a0bbbeb95d873eb9123c65dbce997f190c239ed21e"
+}

@@ -606,6 +606,7 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
     }
     let host_runtime = crate::CollaborationRuntime::start_with_external_providers(
         crate::CollaborationRuntimeInputs {
+            board_session: None,
             directory: host_directory.clone(),
             codex_home,
             backend_socket: root.path().join("backend.sock"),

@@ -1,7 +1,7 @@
 //! Separate location discovery and immutable-message text search.
 use crate::{
-    Board, BoardId, Message, MessageListScope, Page, PageRequest, Project, ProjectId, SearchQuery,
-    Topic,
+    Board, BoardId, Page, PageRequest, Post, PostListScope, ProjectDirectoryEntry, SearchQuery,
+    Workspace, WorkspaceId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -9,10 +9,10 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum DiscoveryScope {
-    AllProjects,
+    AllWorkspaces,
     #[serde(rename_all = "camelCase")]
-    Project {
-        project_id: ProjectId,
+    Workspace {
+        workspace_id: WorkspaceId,
     },
     #[serde(rename_all = "camelCase")]
     Board {
@@ -25,14 +25,14 @@ pub enum DiscoveryScope {
 pub enum DiscoveryKind {
     #[default]
     All,
-    Project,
+    Workspace,
     Board,
-    Topic,
+    ProjectDirectoryEntry,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub enum SearchMessageKind {
+pub enum SearchPostKind {
     #[default]
     Both,
     TopLevel,
@@ -54,17 +54,17 @@ pub struct DiscoverySearchRequest {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum DiscoveryHit {
-    Project {
-        project: Project,
+    Workspace {
+        workspace: Box<Workspace>,
     },
     Board {
-        project: Project,
-        board: Board,
+        workspace: Box<Workspace>,
+        board: Box<Board>,
     },
-    Topic {
-        project: Project,
-        board: Board,
-        topic: Topic,
+    Project {
+        workspace: Box<Workspace>,
+        board: Box<Board>,
+        project: Box<ProjectDirectoryEntry>,
     },
 }
 
@@ -76,11 +76,11 @@ pub struct DiscoverySearchResult {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MessageSearchRequest {
+pub struct PostSearchRequest {
     pub query: SearchQuery,
-    pub scope: MessageListScope,
+    pub scope: PostListScope,
     #[serde(default)]
-    pub kind: SearchMessageKind,
+    pub kind: SearchPostKind,
     #[serde(default)]
     pub include_archived: bool,
     pub page: PageRequest,
@@ -88,13 +88,13 @@ pub struct MessageSearchRequest {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct LocatedMessage {
-    pub project_id: ProjectId,
-    pub message: Message,
+pub struct LocatedPost {
+    pub workspace_id: WorkspaceId,
+    pub post: Post,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MessageSearchResult {
-    pub page: Page<LocatedMessage>,
+pub struct PostSearchResult {
+    pub page: Page<LocatedPost>,
 }

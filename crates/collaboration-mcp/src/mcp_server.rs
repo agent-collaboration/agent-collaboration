@@ -16,15 +16,16 @@ use collaboration_protocol::{
     AddressListParams, AddressPage, ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams,
     ApprovalListResponse, ConversationCloseRequest, ConversationCreateOutcome,
     ConversationOperationSubmission, ConversationResumeRequest, DeliveryOutcome, EndpointInventory,
-    JournalPage, JournalReadParams, JournalStatus, NativeInspectParams, NativeInspectResult,
-    NativeInterruptParams, NativeInterruptResult, NativeRenameParams, NativeRenameResult,
-    NativeSessionListParams, NativeSessionListResult, OperationId, ProviderInspectFailure,
-    ProviderSessionInspectRequest, ProviderSessionInspectResult, ProviderSessionListParams,
-    ProviderSessionListResult, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsResult, ProviderSettingsSetRequest, PushDeliveryState, PushMessageSendResult,
-    PushRecordHistoryParams, PushRecordListParams, PushRecordListResult, PushRecordShowParams,
-    PushRecordShowResult, RouterExecutableRelation, SessionMessageReplyResult,
-    ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult, router_build_warning,
+    InstallationIdentity, JournalPage, JournalReadParams, JournalStatus, MessageReplyResult,
+    MessageSendResult, NativeInspectParams, NativeInspectResult, NativeInterruptParams,
+    NativeInterruptResult, NativeRenameParams, NativeRenameResult, NativeSessionListParams,
+    NativeSessionListResult, OperationId, ProviderInspectFailure, ProviderSessionInspectRequest,
+    ProviderSessionInspectResult, ProviderSessionListParams, ProviderSessionListResult,
+    ProviderSettingsAcceptRequest, ProviderSettingsFailure, ProviderSettingsResult,
+    ProviderSettingsSetRequest, PushDeliveryState, PushMessageSendResult, PushRecordHistoryParams,
+    PushRecordListParams, PushRecordListResult, RouterExecutableRelation,
+    SessionMessageReplyResult, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
+    router_build_warning,
 };
 use collaboration_service::CollaborationApplication;
 use collaboration_service::collaboration_application::API_RESULT_BUDGET;
@@ -51,6 +52,7 @@ mod conversation_tool_requests;
 mod conversation_tool_results;
 mod interaction_tools;
 mod message_tools;
+mod project_tool_schemas;
 mod result_converters;
 mod schema_binding;
 mod session_tools;

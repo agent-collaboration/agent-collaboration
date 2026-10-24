@@ -1,0 +1,18 @@
+[package]
+name = "cross-machine-recipient-host"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[dependencies]
+codex-router-host = { path = "../../../crates/codex-router-host" }
+board-fleet-sync = { path = "../../../crates/board-fleet-sync" }
+fleet-sync-session = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+tokio = { version = "=1.53.3", features = ["macros", "rt-multi-thread", "signal"] }
+
+[lints.rust]
+unsafe_code = "forbid"

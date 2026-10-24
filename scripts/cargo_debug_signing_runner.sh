@@ -21,7 +21,7 @@ readonly DEVELOPER_ID_TEAM="974QD84WVC"
 
 debug_identifier_for() {
   case "$(basename "$1")" in
-    codex-router | agent-collaboration | agent-sessions)
+    codex-router | agent-collaboration | agent-sessions | codex-router-board-upgrade)
       echo "dev.shravansunder.$(basename "$1").debug"
       ;;
   esac

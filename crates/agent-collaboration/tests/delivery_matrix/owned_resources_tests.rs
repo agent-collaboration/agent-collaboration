@@ -5,9 +5,7 @@ use super::{
 };
 use crate::proof_context::ProofResult;
 use collaboration_client::{
-    board::{
-        EndpointId, Identity, MessageId, ServiceId, SessionEndpointRef, SessionId, SessionRef,
-    },
+    board::{EndpointId, Identity, ServiceId, SessionEndpointRef, SessionId, SessionRef, ThreadId},
     protocol::{InstructionId, OperationId, ScheduleId, WakeupId},
 };
 
@@ -74,8 +72,8 @@ fn actor(value: Actor) -> ProofResult<Identity> {
         },
     })
 }
-fn root_id(value: Root) -> ProofResult<MessageId> {
-    Ok(MessageId::try_from(
+fn root_id(value: Root) -> ProofResult<ThreadId> {
+    Ok(ThreadId::try_from(
         match value {
             Root::First => "019f0000-0000-7000-8000-000000000021",
             Root::Second => "019f0000-0000-7000-8000-000000000022",
@@ -106,7 +104,7 @@ struct PlanView {
     instruction: History,
     schedule: History,
 }
-fn pair_view(actor_value: &Identity, root: &MessageId) -> ProofResult<(Actor, Root)> {
+fn pair_view(actor_value: &Identity, root: &ThreadId) -> ProofResult<(Actor, Root)> {
     let actor_label = if *actor_value == actor(Actor::Sender)? {
         Actor::Sender
     } else if *actor_value == actor(Actor::Reader)? {

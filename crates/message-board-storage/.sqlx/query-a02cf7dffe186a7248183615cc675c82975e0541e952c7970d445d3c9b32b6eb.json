@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO project_feed(entry_id, epoch, position, record_kind, record_id, request_id, actor_id, origin_installation, origin_machine, router_time, time_basis, content, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "a02cf7dffe186a7248183615cc675c82975e0541e952c7970d445d3c9b32b6eb"
+}

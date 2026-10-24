@@ -34,9 +34,10 @@ async fn exercise_cursor(
     .with_automation_store(store.clone());
     let served = served_api::ServedApi::start(identity).await?;
     let client = served.client("cursor-test").await?;
-    for _ in 0..2 {
+    // MS-10: independent page records occupy independent target slots.
+    for index in 0..2 {
         let request: WakeSendRequest = serde_json::from_value(
-            json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture"},"content":{"kind":"humanUser","text":"x".repeat(text_bytes)},"delivery":"auto","generationGuard":null},"timing":{"kind":"after","seconds":60},"expiry":{"kind":"none"}}),
+            json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":format!("fixture-{index}")},"content":{"kind":"humanUser","text":"x".repeat(text_bytes)},"delivery":"auto","generationGuard":null},"timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
         )?;
         client.send_wakeup(request).await?;
     }

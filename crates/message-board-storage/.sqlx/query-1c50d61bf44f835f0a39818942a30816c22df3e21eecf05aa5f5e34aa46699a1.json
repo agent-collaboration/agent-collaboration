@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT canonical_hash AS \"canonical_hash!: String\", input AS \"input!: String\" FROM project_creation_inputs WHERE request_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "canonical_hash!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "input!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "1c50d61bf44f835f0a39818942a30816c22df3e21eecf05aa5f5e34aa46699a1"
+}

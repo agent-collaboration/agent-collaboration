@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT (SELECT MAX(position) FROM project_feed) AS \"feed?: i64\",(SELECT MAX(handoff_seq) FROM mail_handoffs) AS \"handoff?: i64\",(SELECT MAX(expansion_seq) FROM mail_cancel_expansions) AS \"expansion?: i64\",(SELECT MAX(settled_through) FROM handoff_frontier) AS \"frontier?: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "feed?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "handoff?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "expansion?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "frontier?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "29e5a6806e6e55aa3df6db4e04ccec113b3523254d2dc84b047f02c33b9e1dc7"
+}

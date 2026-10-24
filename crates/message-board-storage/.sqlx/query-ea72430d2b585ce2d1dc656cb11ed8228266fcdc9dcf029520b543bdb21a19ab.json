@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE subscription_memberships SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, policy=?, renewed_at=?, expires_at=?, generation=?, activated_epoch=?, activated_position=?, ended=? WHERE membership_id=? AND reader_actor=? AND scope_kind=? AND scope_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "ea72430d2b585ce2d1dc656cb11ed8228266fcdc9dcf029520b543bdb21a19ab"
+}

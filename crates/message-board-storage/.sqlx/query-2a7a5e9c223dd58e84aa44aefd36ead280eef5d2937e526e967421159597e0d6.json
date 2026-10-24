@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO tasks(task_id, workstream_id, actor_id, request_id, epoch, position, router_time, time_basis, title, body, status, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "2a7a5e9c223dd58e84aa44aefd36ead280eef5d2937e526e967421159597e0d6"
+}

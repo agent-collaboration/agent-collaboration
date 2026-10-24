@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT MAX(handoff_seq) AS \"highest?: i64\" FROM mail_handoffs",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "highest?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "be857af2653f2d3a8e9fe141b5651250db1db585205a91352ffdc238a4c19d04"
+}

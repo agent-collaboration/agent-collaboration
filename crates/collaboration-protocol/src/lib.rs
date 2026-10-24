@@ -1,4 +1,8 @@
 //! Public communication contracts without process, storage or transport ownership.
+mod wake_authority;
+pub use wake_authority::{WakeCreator, WakeRefusal};
+mod mail_boundary_conversions;
+pub use mail_boundary_conversions::MailBoundaryConversionError;
 mod thread_subscription_contract;
 mod thread_subscription_wait;
 pub use thread_subscription_contract::{
@@ -7,8 +11,9 @@ pub use thread_subscription_contract::{
     ThreadUnsubscribeRequest,
 };
 pub use thread_subscription_wait::{
-    InvalidSubscriptionWait, MAX_SUBSCRIPTION_WAIT_SECONDS, SubscriptionWaitBatch,
-    ThreadSubscriptionWaitFilter, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
+    InvalidSubscriptionWait, MAX_SUBSCRIPTION_WAIT_SECONDS, SubscriptionRenewalEntry,
+    SubscriptionRenewalOutcome, SubscriptionWaitBatch, ThreadSubscriptionWaitFilter,
+    ThreadSubscriptionWaitOutcome, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
 };
 mod cli_output_contract;
 pub use cli_output_contract::{
@@ -117,7 +122,7 @@ pub use delivery_rejection::{
 };
 mod session_delivery_receipt;
 mod session_message_send;
-pub use delivery_route_evidence::DeliveryRouteEvidence;
+pub use delivery_route_evidence::{DeliveryRouteEvidence, ProviderAcpRouteEvidence};
 pub use session_delivery_outcome::{
     DeliveryCorrelationId, DeliveryIdentityError, DeliveryOutcome, SessionReachability,
 };
@@ -125,6 +130,10 @@ pub use session_delivery_receipt::{DeliveryClientReceipt, DeliveryReceipt};
 pub use session_message_send::SessionMessageSendParams;
 mod session_message_reply;
 pub use session_message_reply::{SessionMessageReplyParams, SessionMessageReplyResult};
+mod message_mail_operations;
+mod message_send_result;
+pub use message_mail_operations::*;
+pub use message_send_result::{MessageReplyResult, MessageSendResult, QueuedMessageSend};
 mod native_schema_references;
 mod native_session_catalog;
 pub use message_content::{
@@ -147,16 +156,20 @@ pub use push_line::{
     render_push_line,
 };
 pub use push_record::{
-    MAX_DIRECT_MESSAGE_BODY_BYTES, MAX_PUSH_ACTIVITY_RANGES, PushActivityRange,
-    PushActivityRangeRead, PushActivitySnapshot, PushDeliveryState, PushMessageSendResult,
-    PushRecord, PushRecordDraft, PushRecordHistoryParams, PushRecordListParams,
-    PushRecordListResult, PushRecordNotice, PushRecordShowParams, PushRecordShowResult,
-    PushRecordValidationError,
+    CancelledAfterDelivery, MAX_DIRECT_MESSAGE_BODY_BYTES, MAX_PUSH_ACTIVITY_RANGES,
+    PushActivityRange, PushActivityRangeRead, PushActivitySnapshot, PushDeliveryState,
+    PushMessageSendResult, PushRecord, PushRecordDraft, PushRecordHistoryParams,
+    PushRecordListParams, PushRecordListResult, PushRecordNotice, PushRecordShowParams,
+    PushRecordShowResult, PushRecordValidationError,
 };
 pub use router_origin_ref::{InteractionId, InteractionPresentationId, RouterOriginRef};
 mod endpoint_inventory;
 pub use endpoint_inventory::EndpointInventory;
 mod identity_schemas;
+mod installation_peer_identity;
+pub use installation_peer_identity::{
+    InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
+};
 mod protocol_type_schemas;
 pub use protocol_type_schemas::protocol_type_schemas;
 mod native_control_contract;
@@ -316,3 +329,6 @@ pub use automation_configuration_contract::{
     AutomationConfiguration, AutomationConfigureRequest, AutomationStatus, ConfigurationFailure,
     ConfigurationFailureKind, ConfigurationFileState, ConfigurationNextAction,
 };
+
+// The facade preserves mail identity through every local message boundary.
+pub use collaboration_mail_protocol::{MailDigest, MailItemId};

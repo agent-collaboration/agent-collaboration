@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE local_cancel_deliveries SET outcome_json=? WHERE item_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "a44788ef1b29fc7a0b9d64503814e18661a547c0aba47e81d95a1640740e74b5"
+}

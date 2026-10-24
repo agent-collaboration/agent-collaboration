@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO mail_cancel_expansions(cancel_id,expansion_seq,group_handoff,target_item,envelope) VALUES(?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7c72f7610267694b905272b732aea734caf57b1f3012c0ef208871dc78017890"
+}

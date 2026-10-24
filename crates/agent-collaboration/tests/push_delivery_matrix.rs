@@ -4,8 +4,6 @@
     clippy::panic_in_result_fn
 )]
 //! Recipient-observed push-format matrix on an isolated debug Host.
-#[path = "delivery_matrix/cli_process.rs"]
-mod cli_process;
 #[path = "automation_live_support/debug_backend_restart.rs"]
 mod debug_backend_restart;
 #[path = "delivery_matrix/support.rs"]
@@ -19,6 +17,9 @@ mod held_subscription_producer;
 mod native_push_correlation;
 #[path = "delivery_matrix/native_push_receipt.rs"]
 mod native_push_receipt;
+#[path = "../../collaboration-service/tests/support/native_registry.rs"]
+#[allow(dead_code)]
+mod native_registry;
 #[path = "delivery_matrix/owned_resource_cleanup.rs"]
 mod owned_resource_cleanup;
 #[path = "delivery_matrix/owned_resources.rs"]
@@ -30,17 +31,17 @@ mod peer_fixture;
 mod proof_context;
 #[path = "delivery_matrix/public_push_receipt.rs"]
 mod public_push_receipt;
-#[path = "delivery_matrix/runner_finalization.rs"]
-mod runner_finalization;
+#[path = "delivery_matrix/settled_creation.rs"]
+mod settled_creation;
 #[path = "delivery_matrix/subscription_notice_observer.rs"]
 mod subscription;
 
-use automation_storage::AutomationStore;
 use chrono::{Duration as ChronoDuration, Utc};
 use collaboration_protocol::{
     FireReceipt, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft,
     PushRecordListParams, PushRecordShowParams, RouterOriginRef,
 };
+use interaction_storage::InteractionStore;
 #[path = "delivery_matrix/push_matrix_driver.rs"]
 mod push_matrix_driver;
 use native_push_receipt::record_push_input_correlation;
@@ -89,7 +90,7 @@ fn prepare_delivery_matrix_acp_target_fixture() -> ProofResult<()> {
 async fn push_delivery_matrix_covers_codex_and_claude_peer() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
     let mut peer_owner: Option<delivery_matrix_support::PeerFixture> = None;
-    runner_finalization::run_matrix_scenario(
+    codex_router_test_support::scenario_finalization::run_scenario(
         &mut peer_owner,
         async |owner: &mut &mut Option<delivery_matrix_support::PeerFixture>| {
             exercise_push_delivery_matrix(&config_guard, owner).await
@@ -115,12 +116,12 @@ async fn exercise_push_delivery_matrix(
         json!({"runId":uuid::Uuid::now_v7().to_string(),
         "cells":["S1","S1-long","S2","S3","S4","S5","S6","S7","S8","S9","S10"]}),
     )?;
-    *peer_owner = Some(delivery_matrix_support::PeerFixture::start(&proof).await?);
+    *peer_owner = Some(peer_fixture::start(&proof).await?);
     let peer = peer_owner
         .as_mut()
         .ok_or("actual peer missing from runner owner")?;
-    let mut automation =
-        AutomationStore::open(&proof.service_directory.join("automation.sqlite")).await?;
+    let interactions =
+        InteractionStore::open(proof.service_directory.join("interaction.sqlite")).await?;
     let sender = proof.start_thread("Push matrix sender").await?;
     let mut covered_cells = Vec::new();
 
@@ -294,7 +295,7 @@ async fn exercise_push_delivery_matrix(
     // S7: age a real-format push record in the private proof database, run the
     // production retention operation, and verify the recipient sees notFound.
     let stale_push_id: PushId = uuid::Uuid::now_v7().to_string().try_into()?;
-    automation
+    interactions
         .insert_push_record(PushRecordDraft {
             mode: Some(collaboration_protocol::MessageDelivery::Auto),
             guard: None,
@@ -317,8 +318,8 @@ async fn exercise_push_delivery_matrix(
         stale_before_prune.pointer("/result/record/pushId"),
         Some(&json!(stale_push_id))
     );
-    automation.prune_push_records(Utc::now(), 500).await?;
-    let stale_record = automation.get_push_record(&stale_push_id).await?;
+    interactions.prune_push_records(Utc::now(), 500).await?;
+    let stale_record = interactions.get_push_record(&stale_push_id).await?;
     if stale_record.is_some() {
         return Err("31-day push was not pruned by the production retention operation".into());
     }
@@ -347,7 +348,7 @@ async fn exercise_push_delivery_matrix(
 #[ignore = "requires a fresh isolated debug Host with the scripted ACP target fixture"]
 async fn push_delivery_matrix_reaches_scripted_acp_target() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
-    runner_finalization::run_matrix_scenario(
+    codex_router_test_support::scenario_finalization::run_scenario(
         (),
         async |_: &mut ()| exercise_scripted_acp_target(&config_guard).await,
         |_| async { Ok(()) },
@@ -388,6 +389,9 @@ async fn exercise_scripted_acp_target(
             reference: notice.push_id.as_str().to_owned(),
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(show) = show else {
+        return Err("native proof expected a stored local push".into());
+    };
     assert_eq!(show.record.body.as_deref(), Some(body.as_str()));
     assert!(
         serde_json::to_value(&show)?
@@ -414,11 +418,11 @@ async fn exercise_scripted_acp_target(
 }
 
 #[tokio::test]
-#[ignore = "requires the documented automation-debug-host with existing debug model access"]
+#[ignore = "requires the documented interactions-debug-host with existing debug model access"]
 async fn push_delivery_matrix_holds_codex_recipients() -> ProofResult<()> {
     let config_guard = delivery_matrix_support::ConfigHashGuard::capture()?;
     let mut resource_owner: Option<owned_resource_cleanup::OwnedMatrixScope> = None;
-    runner_finalization::run_matrix_scenario(
+    codex_router_test_support::scenario_finalization::run_scenario(
         &mut resource_owner,
         async |owner: &mut &mut Option<owned_resource_cleanup::OwnedMatrixScope>| {
             exercise_held_codex_recipients(&config_guard, owner).await
@@ -456,8 +460,8 @@ async fn exercise_held_codex_recipients(
     let unloaded_targets = held_cells::prepare_unloaded_targets(&mut proof).await?;
     let sender = proof.start_thread("Held matrix sender").await?;
     let machine_label = machine_label(&proof)?;
-    let mut automation =
-        AutomationStore::open(&proof.service_directory.join("automation.sqlite")).await?;
+    let interactions =
+        InteractionStore::open(proof.service_directory.join("interaction.sqlite")).await?;
     let mut covered_cells = Vec::new();
     // S3: a DM sent to an unloaded Codex conversation is stored as held and
     // arrives as the same line after an explicit conversation load.
@@ -493,7 +497,7 @@ async fn exercise_held_codex_recipients(
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id,
     };
-    let wake_record = automation
+    let wake_record = interactions
         .get_push_record_by_origin_reference(&wake_origin)
         .await?
         .ok_or("fired wake has no stored push record")?;
@@ -504,6 +508,9 @@ async fn exercise_held_codex_recipients(
             reference: wake_record.push_id.as_str().to_owned(),
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(wake_show) = wake_show else {
+        return Err("native proof expected a stored local push".into());
+    };
     let wake_expected = expected_push_line(&wake_show, &machine_label)?;
     let wake_deadline = tokio::time::Instant::now() + OBSERVATION_TIMEOUT;
     let wake_item = wait_for_codex_input(
@@ -530,13 +537,8 @@ async fn exercise_held_codex_recipients(
     let schedule_id =
         create_existing_session_schedule(&mut proof, &schedule_target, &schedule_marker, resources)
             .await?;
-    let (schedule_origin, schedule_record) = wait_for_schedule_push(
-        &mut proof,
-        &mut automation,
-        schedule_id,
-        OBSERVATION_TIMEOUT,
-    )
-    .await?;
+    let (schedule_origin, schedule_record) =
+        wait_for_schedule_push(&mut proof, &interactions, schedule_id, OBSERVATION_TIMEOUT).await?;
     let schedule_show = proof
         .client
         .router_show(PushRecordShowParams {
@@ -544,6 +546,10 @@ async fn exercise_held_codex_recipients(
             reference: schedule_record.push_id.as_str().to_owned(),
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(schedule_show) = schedule_show
+    else {
+        return Err("native proof expected a stored local push".into());
+    };
     let schedule_expected = expected_push_line(&schedule_show, &machine_label)?;
     let schedule_deadline = tokio::time::Instant::now() + OBSERVATION_TIMEOUT;
     let schedule_item = wait_for_codex_input(

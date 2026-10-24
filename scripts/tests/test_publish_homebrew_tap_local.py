@@ -1,12 +1,17 @@
+import subprocess
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
-from scripts.publish_homebrew_tap_local import PublishError
-from scripts.publish_homebrew_tap_local import install_action
-from scripts.publish_homebrew_tap_local import published_asset_sha256
-from scripts.publish_homebrew_tap_local import release_signature_problem
-from scripts.publish_homebrew_tap_local import release_asset_name
-from scripts.publish_homebrew_tap_local import workspace_version
-
+from scripts.publish_homebrew_tap_local import (
+    PublishError,
+    install_action,
+    published_asset_sha256,
+    release_asset_name,
+    release_signature_problem,
+    validate_installation,
+    workspace_version,
+)
 
 CARGO_TOML = """[workspace]
 resolver = "3"
@@ -62,7 +67,9 @@ class ReleaseAssetTests(unittest.TestCase):
     def test_refuses_a_missing_asset_or_a_malformed_digest(self) -> None:
         # Arrange
         name = release_asset_name("0.1.56")
-        missing: dict[str, object] = {"assets": [{"name": "other.tar.gz", "digest": None}]}
+        missing: dict[str, object] = {
+            "assets": [{"name": "other.tar.gz", "digest": None}]
+        }
         malformed: dict[str, object] = {"assets": [{"name": name, "digest": "md5:abc"}]}
         no_assets: dict[str, object] = {}
 
@@ -73,7 +80,9 @@ class ReleaseAssetTests(unittest.TestCase):
 
 
 class InstallActionTests(unittest.TestCase):
-    def test_installs_fresh_when_absent_and_upgrades_from_an_older_version(self) -> None:
+    def test_installs_fresh_when_absent_and_upgrades_from_an_older_version(
+        self,
+    ) -> None:
         # Act & Assert
         self.assertEqual(install_action("", "0.1.56"), "install")
         self.assertEqual(install_action("codex-router 0.1.55", "0.1.56"), "upgrade")
@@ -83,19 +92,73 @@ class InstallActionTests(unittest.TestCase):
         self.assertEqual(install_action("codex-router 0.1.56", "0.1.56"), "reinstall")
 
 
+class InstalledImporterTests(unittest.TestCase):
+    def test_install_validation_refuses_a_stale_importer_version(self) -> None:
+        for importer_version in ("0.1.56", "0.1.55"):
+            # Arrange: Homebrew and codesign are external; keep the real validator.
+            def installation_command(
+                command: list[str],
+                *,
+                installed_importer_version: str = importer_version,
+                **_options: object,
+            ) -> subprocess.CompletedProcess[str]:
+                output = ""
+                details = ""
+                if command == ["brew", "--prefix", "codex-router"]:
+                    output = "/isolated-install"
+                elif command[0] == "file":
+                    output = "Mach-O 64-bit executable arm64"
+                elif command[:2] == ["codesign", "-dv"]:
+                    name = Path(command[-1]).name
+                    details = f"Identifier=dev.shravansunder.{name}\nTeamIdentifier=974QD84WVC\n"
+                elif command[-1] == "--version":
+                    name = Path(command[0]).name
+                    version = (
+                        installed_importer_version
+                        if name == "codex-router-board-upgrade"
+                        else "0.1.56"
+                    )
+                    output = f"{name} {version}"
+                return subprocess.CompletedProcess(
+                    command, 0, stdout=output, stderr=details
+                )
+
+            # Act / Assert: accept the current importer and reject an older one.
+            with (
+                self.subTest(importer_version=importer_version),
+                patch(
+                    "scripts.publish_homebrew_tap_local.subprocess.run",
+                    side_effect=installation_command,
+                ),
+            ):
+                if importer_version == "0.1.56":
+                    validate_installation("0.1.56")
+                else:
+                    with self.assertRaisesRegex(
+                        PublishError, "codex-router-board-upgrade"
+                    ):
+                        validate_installation("0.1.56")
+
+
 class ReleaseSignatureTests(unittest.TestCase):
     def test_accepts_the_release_identifier_signed_by_the_release_team(self) -> None:
         # Arrange
-        details = "Identifier=dev.shravansunder.agent-sessions\nTeamIdentifier=974QD84WVC\n"
+        details = (
+            "Identifier=dev.shravansunder.agent-sessions\nTeamIdentifier=974QD84WVC\n"
+        )
 
         # Act & Assert
         self.assertIsNone(release_signature_problem(details, "agent-sessions"))
 
     def test_rejects_linker_signed_and_debug_identities(self) -> None:
         # Arrange
-        linker_signed = "Identifier=agent_sessions-349f0fe06f58ee87\nTeamIdentifier=not set\n"
+        linker_signed = (
+            "Identifier=agent_sessions-349f0fe06f58ee87\nTeamIdentifier=not set\n"
+        )
         debug_signed = "Identifier=dev.shravansunder.agent-sessions.debug\nTeamIdentifier=974QD84WVC\n"
-        other_team = "Identifier=dev.shravansunder.agent-sessions\nTeamIdentifier=AAAAAAAAAA\n"
+        other_team = (
+            "Identifier=dev.shravansunder.agent-sessions\nTeamIdentifier=AAAAAAAAAA\n"
+        )
 
         # Act & Assert
         for details in (linker_signed, debug_signed, other_team):

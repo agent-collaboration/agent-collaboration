@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT operation_id,method_name,final_result_json FROM operation_receipts WHERE method_name IN ('wake/send','wake/pause','wake/resume','wake/cancel') AND operation_status='succeeded' AND (? IS NULL OR operation_id>?) ORDER BY operation_id LIMIT 128",
+  "describe": {
+    "columns": [
+      {
+        "name": "operation_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "operation_receipts",
+            "name": "operation_id"
+          }
+        }
+      },
+      {
+        "name": "method_name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "operation_receipts",
+            "name": "method_name"
+          }
+        }
+      },
+      {
+        "name": "final_result_json",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "operation_receipts",
+            "name": "final_result_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "2dea2d27f44c3d0c344e53039c72de158463294eec865a7ef4d266754fb8ea91"
+}

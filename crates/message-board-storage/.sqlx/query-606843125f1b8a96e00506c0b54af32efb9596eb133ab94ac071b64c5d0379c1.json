@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT entry_id AS \"entry_id!: String\", epoch AS \"epoch!: i64\" FROM project_feed WHERE position=? LIMIT 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "entry_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "606843125f1b8a96e00506c0b54af32efb9596eb133ab94ac071b64c5d0379c1"
+}

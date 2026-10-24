@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT intent_id AS \"intent_id!: String\" FROM notify_intents WHERE cause_kind = ? AND cause_id = ? ORDER BY intent_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "intent_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7bcac2a4f321a5848df80d72f255b76580728db2d041ab226bb9798b115af886"
+}

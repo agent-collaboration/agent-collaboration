@@ -31,12 +31,15 @@ async fn listing_keeps_membership_stable_when_new_wakes_arrive()
         OperationId::generate().as_str()
     ));
     let mut store = AutomationStore::open(&path).await?;
+    // MS-10: distinct sessions preserve the list-membership scenario without occupying one slot twice.
     for now_ms in [0, 1000, 2000] {
         store
             .create_wakeup(&WakeCreate {
+                requested_by: collaboration_protocol::WakeCreator::Owner {},
+                replace: false,
                 operation_id: OperationId::generate(),
                 message: TestMessage {
-                    target: "B".into(),
+                    target: format!("B-{now_ms}"),
                     text: "Check".into(),
                 },
                 timing: TimingRule::After { seconds: 60 },
@@ -52,9 +55,11 @@ async fn listing_keeps_membership_stable_when_new_wakes_arrive()
     let cursor = first.next.ok_or("missing continuation")?;
     store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: TestMessage {
-                target: "B".into(),
+                target: "B-new".into(),
                 text: "new".into(),
             },
             timing: TimingRule::After { seconds: 60 },

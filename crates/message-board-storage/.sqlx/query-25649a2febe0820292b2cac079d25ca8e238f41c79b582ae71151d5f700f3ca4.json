@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_outbox_requests(request_id, canonical_hash, request, ids, state) VALUES (?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "25649a2febe0820292b2cac079d25ca8e238f41c79b582ae71151d5f700f3ca4"
+}

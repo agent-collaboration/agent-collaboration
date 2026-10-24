@@ -14,6 +14,7 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
     let root = std::env::temp_dir().join(format!("wake-cli-{suffix}"));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("absent.sock"),

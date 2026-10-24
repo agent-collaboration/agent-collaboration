@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT link_id AS \"link_id!: String\" FROM task_links WHERE from_task=? AND link_kind=? AND to_task=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "link_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "97e750bd8da5cd8794f61fd279e57faa0669da8716aff1a9a72ad1e63effdb6f"
+}

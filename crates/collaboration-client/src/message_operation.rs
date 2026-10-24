@@ -4,8 +4,8 @@ use crate::{
     operation_failure_from_client_error,
 };
 use collaboration_protocol::{
-    CodexGeneration, MessageContent, MessageDelivery, MessageText, PushMessageSendResult,
-    SessionMessageReplyParams, SessionMessageReplyResult, SessionMessageSendParams, SessionRef,
+    CodexGeneration, MessageContent, MessageDelivery, MessageReplyResult, MessageSendResult,
+    MessageText, SessionMessageReplyParams, SessionMessageSendParams, SessionRef,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct MessageSendRequest {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub item_id: Option<collaboration_protocol::MailItemId>,
     pub target: SessionRef,
     pub message: PublicMessageContent,
     #[serde(default)]
@@ -60,10 +62,12 @@ impl MessageReplyError {
                 operation_failure_from_client_error(*error, OperationEffect::None),
                 None,
             ),
-            Self::Submission { caller, source } => (
-                operation_failure_from_client_error(*source, OperationEffect::Unknown),
-                Some(caller),
-            ),
+            Self::Submission { caller, source } => {
+                let failure =
+                    operation_failure_from_client_error(*source, OperationEffect::Unknown);
+                let affected = (failure.effect != OperationEffect::None).then_some(caller);
+                (failure, affected)
+            }
         }
     }
 }
@@ -76,10 +80,12 @@ impl MessageSendError {
                 operation_failure_from_client_error(*error, OperationEffect::None),
                 None,
             ),
-            Self::Submission { target, source } => (
-                operation_failure_from_client_error(*source, OperationEffect::Unknown),
-                Some(target),
-            ),
+            Self::Submission { target, source } => {
+                let failure =
+                    operation_failure_from_client_error(*source, OperationEffect::Unknown);
+                let affected = (failure.effect != OperationEffect::None).then_some(target);
+                (failure, affected)
+            }
         }
     }
 }
@@ -122,20 +128,23 @@ impl CollaborationClient {
     pub async fn send_message(
         &self,
         request: MessageSendRequest,
-    ) -> Result<PushMessageSendResult, MessageSendError> {
-        if request.target.endpoint.service_id != self.identity().service_id {
+    ) -> Result<MessageSendResult, MessageSendError> {
+        if let PublicMessageContent::Agent { sender, .. } = &request.message
+            && sender.endpoint.service_id != self.identity().service_id
+        {
             return Err(MessageSendError::Preparation(Box::new(
-                ClientError::InvalidRequest("message target belongs to another service"),
+                ClientError::InvalidRequest("message sender belongs to another service"),
             )));
         }
         let target = request.target.clone();
         let params = SessionMessageSendParams {
+            item_id: request.item_id,
             target: request.target,
             message: request.message.into(),
             mode: request.delivery,
             generation_guard: request.generation_guard,
         };
-        self.submit_message_with_push(params)
+        self.submit_message(params)
             .await
             .map_err(|source| MessageSendError::Submission {
                 target,
@@ -146,7 +155,7 @@ impl CollaborationClient {
     pub async fn reply_to_push(
         &self,
         request: MessageReplyRequest,
-    ) -> Result<SessionMessageReplyResult, MessageReplyError> {
+    ) -> Result<MessageReplyResult, MessageReplyError> {
         let caller = request.caller.clone();
         let params = SessionMessageReplyParams {
             caller: request.caller,
@@ -167,9 +176,12 @@ impl CollaborationClient {
 
     pub async fn router_show(
         &self,
-        request: collaboration_protocol::PushRecordShowParams,
-    ) -> Result<collaboration_protocol::PushRecordShowResult, ClientError> {
-        if request.caller.endpoint.service_id != self.identity().service_id {
+        request: impl Into<collaboration_protocol::MessageShowRequest>,
+    ) -> Result<collaboration_protocol::MessageShowResult, ClientError> {
+        let request = request.into();
+        if let collaboration_protocol::MessageReadCaller::Session(caller) = &request.caller
+            && caller.endpoint.service_id != self.identity().service_id
+        {
             return Err(ClientError::InvalidRequest(
                 "push show caller belongs to another service",
             ));
@@ -180,6 +192,18 @@ impl CollaborationClient {
             .await?;
         serde_json::from_value(value)
             .map_err(|_| ClientError::Protocol("invalid Router push show result"))
+    }
+    pub async fn message_cancel(
+        &self,
+        request: collaboration_protocol::MessageCancelRequest,
+    ) -> Result<collaboration_protocol::RequestedCancelResult, ClientError> {
+        let value = self
+            .connection
+            .call("message_cancel", serde_json::json!(request))
+            .await?;
+        serde_json::from_value(value).map_err(|_| {
+            ClientError::Protocol("invalid requested cancel result; inspect before retrying")
+        })
     }
 
     pub async fn message_inbox(
@@ -202,12 +226,10 @@ impl CollaborationClient {
     pub async fn message_history(
         &self,
         request: collaboration_protocol::PushRecordHistoryParams,
-    ) -> Result<collaboration_protocol::PushRecordListResult, ClientError> {
-        if request.caller.endpoint.service_id != self.identity().service_id
-            || request.with.endpoint.service_id != self.identity().service_id
-        {
+    ) -> Result<collaboration_protocol::MessageHistoryResult, ClientError> {
+        if request.caller.endpoint.service_id != self.identity().service_id {
             return Err(ClientError::InvalidRequest(
-                "message history sessions must belong to this service",
+                "message history caller must belong to this service",
             ));
         }
         let value = self
@@ -234,6 +256,7 @@ fn is_reply_pre_dispatch_rejection(error: &ClientError) -> bool {
                     | "notDirectMessage"
                     | "ownerReplyUnsupported"
                     | "invalidField"
+                    | "mailboxFull"
             )
         ),
         ClientError::Rejected { data: None, .. } => false,

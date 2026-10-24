@@ -470,7 +470,7 @@ mod provider_actor_tests {
             &'a self,
             _: collaboration_service::layer_zero::DeliveryRequest,
             _: &'a dyn collaboration_service::AttemptEvidenceSink,
-        ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt>
+        ) -> collaboration_service::DeliveryFuture<'a, collaboration_service::NativeDeliveryResult>
         {
             let entered = Arc::clone(&self.entered);
             let dropped = Arc::clone(&self.dropped);

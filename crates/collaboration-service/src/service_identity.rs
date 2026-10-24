@@ -6,11 +6,16 @@ pub mod subscription_delivery;
 
 #[derive(Clone)]
 pub struct ServiceIdentity {
-    pub(crate) board: Option<std::sync::Arc<tokio::sync::Mutex<message_board_storage::BoardStore>>>,
+    pub(crate) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
+    pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
+    pub(crate) project_claim: Option<std::sync::Arc<dyn crate::ProjectClaim>>,
+    pub(crate) project_replication: std::sync::Arc<dyn crate::ProjectReplicationPosition>,
+    pub(crate) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
     pub(crate) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
     pub(crate) subscription_presence: Option<std::sync::Arc<dyn crate::TargetPresenceProbe>>,
     pub(crate) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
     pub(crate) service_id: UuidIdentity,
+    pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
     pub(crate) machine_identity: crate::MachineIdentity,
     pub(crate) configuration: crate::AutomationConfigurationHandle,
     pub(crate) configuration_backend:
@@ -26,6 +31,7 @@ pub struct ServiceIdentity {
     pub(crate) approval_broker: Option<std::sync::Arc<crate::ServiceInteractionBroker>>,
     pub(crate) automation:
         Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
+    pub(crate) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(crate) provider_operations:
         Option<std::sync::Arc<tokio::sync::Mutex<crate::ProviderOperationStore>>>,
     pub(crate) provider_session_hub: Option<std::sync::Arc<dyn crate::SessionEventHub>>,
@@ -39,6 +45,60 @@ pub struct ServiceIdentity {
         Option<std::sync::Arc<dyn crate::ProviderConversationBackend>>,
 }
 impl ServiceIdentity {
+    pub fn with_mail_delivery_runtime(
+        mut self,
+        runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
+    ) -> Result<Self, String> {
+        if !runtime.matches_identity(&self) {
+            return Err(
+                "mail runtime has a different service, installation peer or physical store owner"
+                    .to_owned(),
+            );
+        }
+        if let Some(store) = &self.automation {
+            runtime.attach_wake_owner(crate::mail_delivery_runtime::LocalWakeOwner {
+                service: self.service_id.clone(),
+                store: store.clone(),
+                permits: self.wake_wait_permits.clone(),
+            })?;
+        }
+        runtime.attach_reader_readiness()?;
+        runtime.attach_project_replication(self.project_replication.clone())?;
+        self.mail_delivery = Some(runtime);
+        Ok(self)
+    }
+
+    pub fn with_installation_peer(
+        mut self,
+        peer: fleet_sync_protocol::PeerId,
+    ) -> Result<Self, String> {
+        if self
+            .installation_peer
+            .is_some_and(|existing| existing != peer)
+        {
+            return Err("installation peer is already configured with a different identity".into());
+        }
+        self.installation_peer = Some(peer);
+        Ok(self)
+    }
+
+    #[must_use]
+    pub fn installation_peer(&self) -> Option<fleet_sync_protocol::PeerId> {
+        self.installation_peer
+    }
+
+    pub fn with_project_claim(mut self, claim: std::sync::Arc<dyn crate::ProjectClaim>) -> Self {
+        self.project_claim = Some(claim);
+        self
+    }
+
+    pub fn with_project_replication(
+        mut self,
+        replication: std::sync::Arc<dyn crate::ProjectReplicationPosition>,
+    ) -> Self {
+        self.project_replication = replication;
+        self
+    }
     pub fn with_machine_identity(
         mut self,
         machine_identity: crate::MachineIdentity,
@@ -50,11 +110,21 @@ impl ServiceIdentity {
         Ok(self)
     }
 
-    pub fn with_board_store(
+    pub fn with_notification_publisher(
         mut self,
-        store: std::sync::Arc<tokio::sync::Mutex<message_board_storage::BoardStore>>,
+        publisher: std::sync::Arc<crate::NotificationPublisher>,
     ) -> Self {
-        self.board = Some(store);
+        self.notification_publisher = Some(publisher);
+        self.attach_follow_admission();
+        self
+    }
+
+    pub fn with_project_admission(
+        mut self,
+        admission: std::sync::Arc<crate::ProjectAdmission>,
+    ) -> Self {
+        self.project_admission = Some(admission);
+        self.attach_follow_admission();
         self
     }
     pub fn with_subscription_delivery_service(
@@ -65,11 +135,29 @@ impl ServiceIdentity {
         self.subscription_clock = service.subscription_clock();
         self.subscription_delivery = Some(service);
         self.subscription_presence = Some(presence);
+        self.attach_follow_admission();
         self
     }
+    fn attach_follow_admission(&self) {
+        if let (Some(service), Some(admission), Some(publisher)) = (
+            &self.subscription_delivery,
+            &self.project_admission,
+            &self.notification_publisher,
+        ) {
+            service.attach_follow_admission(
+                std::sync::Arc::downgrade(admission),
+                std::sync::Arc::downgrade(publisher),
+            );
+        }
+    }
+
     pub fn automation_retention_worker(&self) -> Option<crate::AutomationRetentionWorker> {
         self.automation.as_ref().map(|store| {
             let worker = crate::AutomationRetentionWorker::new(std::sync::Arc::clone(store));
+            let worker = match self.interaction_store.as_ref() {
+                Some(store) => worker.with_native_push_store(std::sync::Arc::clone(store)),
+                None => worker,
+            };
             match self.approval_broker.as_ref() {
                 Some(broker) => worker.with_interaction_broker(std::sync::Arc::clone(broker)),
                 None => worker,
@@ -90,9 +178,11 @@ impl ServiceIdentity {
         self.automation
             .as_ref()
             .zip(self.scheduled_run_execution.as_ref())
-            .map(|(store, execution)| {
+            .zip(self.interaction_store.as_ref())
+            .map(|((store, execution), interactions)| {
                 crate::ScheduleTimingWorker::new(
                     std::sync::Arc::clone(store),
+                    std::sync::Arc::clone(interactions),
                     std::sync::Arc::clone(execution),
                     self.native_backend.clone(),
                     self.configuration.clone(),
@@ -105,13 +195,15 @@ impl ServiceIdentity {
         self.automation
             .as_ref()
             .zip(self.session_delivery.as_ref())
-            .map(|(store, delivery)| {
+            .zip(self.interaction_store.as_ref())
+            .map(|((store, delivery), interactions)| {
                 crate::WakeTimingWorker::new(
                     std::sync::Arc::clone(store),
                     crate::wakeup_delivery_sender::WakeDeliverySender {
                         delivery: std::sync::Arc::clone(delivery),
                         configuration: self.configuration.clone(),
                         machine_identity: self.machine_identity.clone(),
+                        interactions: std::sync::Arc::clone(interactions),
                     },
                 )
             })
@@ -123,6 +215,26 @@ impl ServiceIdentity {
     ) -> Self {
         self.automation = Some(store);
         self
+    }
+
+    pub fn with_interaction_store(
+        mut self,
+        store: std::sync::Arc<interaction_storage::InteractionStore>,
+    ) -> Self {
+        self.interaction_store = Some(store);
+        self
+    }
+
+    pub fn push_handoff_worker(&self) -> Option<crate::PushHandoffWorker> {
+        self.automation
+            .as_ref()
+            .zip(self.interaction_store.as_ref())
+            .map(|(automation, interactions)| {
+                crate::PushHandoffWorker::new(
+                    std::sync::Arc::clone(automation),
+                    std::sync::Arc::clone(interactions),
+                )
+            })
     }
 
     pub fn with_provider_operation_store(
@@ -221,10 +333,9 @@ impl ServiceIdentity {
         broker: std::sync::Arc<crate::ServiceInteractionBroker>,
     ) -> Self {
         broker.install_display_names(self.display_names.clone());
-        if let Some(store) = self.automation.as_ref() {
-            broker
-                .install_push_context(std::sync::Arc::clone(store), self.machine_identity.clone());
-        }
+        let interactions = broker.interaction_store();
+        self.interaction_store = Some(interactions.clone());
+        broker.install_push_context(interactions, self.machine_identity.clone());
         self.approval_broker = Some(broker);
         self
     }
@@ -278,9 +389,14 @@ impl ServiceIdentity {
         let machine_identity = crate::MachineIdentity::new(service_id.clone(), None)
             .map_err(|error| error.to_string())?;
         Ok(Self {
+            notification_publisher: None,
+            project_replication: std::sync::Arc::new(crate::UnacknowledgedProjectReplication),
+            project_claim: None,
             configuration: crate::AutomationConfigurationHandle::default(),
             configuration_backend: None,
             service_id: service_id.clone(),
+            installation_peer: None,
+            mail_delivery: None,
             machine_identity,
             service_epoch: UuidIdentity::try_from(service_epoch.to_owned())
                 .map_err(|error| error.to_string())?,
@@ -292,13 +408,14 @@ impl ServiceIdentity {
             approval_broker: None,
             wake_wait_permits: std::sync::Arc::new(tokio::sync::Semaphore::new(16)),
             automation: None,
+            interaction_store: None,
             provider_operations: None,
             provider_session_hub: None,
             claude_code_sessions: None,
             claude_background_jobs: None,
             codex_conversation_recorder: None,
             provider_conversations: None,
-            board: None,
+            project_admission: None,
             subscription_delivery: None,
             subscription_presence: None,
             subscription_clock: std::sync::Arc::new(crate::SystemSubscriptionClock),

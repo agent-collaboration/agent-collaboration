@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT row_id AS \"id!: String\", subject AS \"subject!: String\" FROM work_trail_rows WHERE row_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "subject!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "45079a5f91ce26f84c497dc2797b7c0c8369d82c68a6a329bc8677fe4cb68e8d"
+}

@@ -1,10 +1,7 @@
 use super::{MessageSendError, MessageSendRequest, PublicMessageContent};
 use crate::scripted_api::{ScriptedApi, ScriptedCalls};
 use crate::{ClientError, CollaborationClient};
-use collaboration_protocol::{
-    CodexGeneration, EndpointId, EndpointRef, MessageDelivery, MessageText, SessionId, SessionRef,
-    UuidIdentity,
-};
+use collaboration_protocol::{CodexGeneration, MessageDelivery, SessionRef};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -34,36 +31,24 @@ fn published_delivery_failure(mut receipt: Value, kind: &str, effect: &str) -> V
 }
 
 #[tokio::test]
-async fn wrong_service_is_rejected_before_endpoint_discovery_or_submission() {
+async fn foreign_sender_is_rejected_before_submission() {
     let (_api, client, mut calls) = connected_client().await;
-    let request = MessageSendRequest {
-        target: SessionRef {
-            endpoint: EndpointRef {
-                service_id: UuidIdentity::try_from(
-                    "00000000-0000-4000-8000-000000000099".to_owned(),
-                )
-                .expect("service id"),
-                endpoint_id: EndpointId::try_from("codex-local".to_owned()).expect("endpoint id"),
-            },
-            session_id: SessionId::try_from("target".to_owned()).expect("session id"),
-        },
-        message: PublicMessageContent::HumanUser {
-            text: MessageText::try_from("hello".to_owned()).expect("message text"),
-        },
-        delivery: MessageDelivery::Auto,
-        generation_guard: None,
+    let mut request = fixture_request(None);
+    let mut sender = request.target.clone();
+    sender.endpoint.service_id = "00000000-0000-4000-8000-000000000099"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    request.message = PublicMessageContent::Agent {
+        sender,
+        text: "hello".to_owned().try_into().unwrap(),
     };
     let error = client
         .send_message(request)
         .await
-        .expect_err("foreign service");
-    assert!(matches!(
-        error,
-        MessageSendError::Preparation(source)
-            if matches!(source.as_ref(), ClientError::InvalidRequest(
-                "message target belongs to another service"
-            ))
-    ));
+        .expect_err("foreign sender");
+    assert!(matches!(error, MessageSendError::Preparation(source)
+        if matches!(source.as_ref(), ClientError::InvalidRequest("message sender belongs to another service"))));
     assert!(calls.none_within(Duration::from_millis(50)).await);
 }
 
@@ -100,6 +85,7 @@ async fn strict_generation_guard_reaches_the_service_and_reports_known_none() {
         .send_message(request)
         .await
         .expect("stale guard is an E5 result");
+    let receipt = local_result(receipt);
     assert!(matches!(
         receipt.receipt.outcome,
         collaboration_protocol::DeliveryOutcome::NotSubmitted { retryable: false, reason }
@@ -132,17 +118,19 @@ async fn unpinned_send_uses_service_route_without_native_catalog_precheck() {
     let request = fixture_request(None);
     assert!(matches!(
         client.send_message(request).await,
-        Ok(collaboration_protocol::PushMessageSendResult {
-            receipt: collaboration_protocol::DeliveryReceipt {
-                outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
-                    retryable: true,
-                    ..
+        Ok(collaboration_protocol::MessageSendResult::Local(
+            collaboration_protocol::PushMessageSendResult {
+                receipt: collaboration_protocol::DeliveryReceipt {
+                    outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
+                        retryable: true,
+                        ..
+                    },
+                    reachability: None,
+                    client: None
                 },
-                reachability: None,
-                client: None
-            },
-            ..
-        })
+                ..
+            }
+        ))
     ));
     peer.await.expect("join peer");
 }
@@ -232,6 +220,14 @@ async fn successful_push_response_link_must_match_its_push_id() {
 }
 
 #[tokio::test]
+async fn successful_push_response_must_echo_the_supplied_mail_identity() {
+    let mut request = fixture_request(None);
+    request.item_id = Some(OTHER_PUSH_ID.to_owned().try_into().expect("mail identity"));
+    let response = push_result(&request.target, PUSH_ID, PUSH_ID);
+    assert_inconsistent_response(request, response).await;
+}
+
+#[tokio::test]
 async fn native_push_receipt_matches_target_generation_mode_and_push_id() {
     let expected_generation = generation(1);
     let request = fixture_request(Some(expected_generation.clone()));
@@ -249,7 +245,7 @@ async fn native_push_receipt_matches_target_generation_mode_and_push_id() {
         .send_message(request)
         .await
         .expect("matching native delivery receipt");
-    assert_eq!(result.push_id.as_str(), PUSH_ID);
+    assert_eq!(local_result(result).push_id.as_str(), PUSH_ID);
     peer.await.expect("join peer");
 
     let request = fixture_request(Some(expected_generation.clone()));
@@ -439,7 +435,7 @@ fn explicit_mode_receipt(request: &MessageSendRequest, resume: &str) -> Value {
 async fn single_send_result(
     request: MessageSendRequest,
     response: Value,
-) -> Result<collaboration_protocol::PushMessageSendResult, MessageSendError> {
+) -> Result<collaboration_protocol::MessageSendResult, MessageSendError> {
     let (_api, client, mut calls) = connected_client().await;
     let (completed, completion) = tokio::sync::oneshot::channel::<()>();
     let peer = tokio::spawn(async move {
@@ -468,6 +464,7 @@ async fn explicit_queue_and_steer_accept_truthful_resume_effects() {
             let receipt = single_send_result(request, response)
                 .await
                 .expect("truthful receipt");
+            let receipt = local_result(receipt);
             assert_eq!(receipt.push_id.as_str(), PUSH_ID);
             let Some(collaboration_protocol::DeliveryClientReceipt::CodexAppServer(native)) =
                 receipt.receipt.client
@@ -565,3 +562,17 @@ async fn explicit_native_receipt_guards_remain_strict_without_replay() {
         }
     }
 }
+
+fn local_result(
+    result: collaboration_protocol::MessageSendResult,
+) -> collaboration_protocol::PushMessageSendResult {
+    match result {
+        collaboration_protocol::MessageSendResult::Local(receipt) => receipt,
+        collaboration_protocol::MessageSendResult::Queued { .. } => {
+            panic!("native receipt proof returned remote custody")
+        }
+    }
+}
+
+#[path = "message_queue_result_tests.rs"]
+mod queued_results;

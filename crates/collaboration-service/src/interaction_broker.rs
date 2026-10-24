@@ -22,13 +22,12 @@ use std::{
 };
 use tokio::sync::{Mutex, oneshot};
 
-mod interaction_history;
 mod legacy_provider_projection;
 mod native_approval;
 mod typed_interaction_notice;
 mod typed_interactions;
-use interaction_history::InteractionHistoryStore;
-pub use interaction_history::{
+use interaction_storage::InteractionHistoryStore;
+pub use interaction_storage::{
     InteractionHistoryError, InteractionHistoryRecord, InteractionHistoryState,
     LegacyApprovalMetadata, QuestionHistoryState, QuestionResponse, RefusedApprovalOption,
     RefusedTypedApproval,
@@ -168,6 +167,7 @@ pub struct ServiceInteractionBroker {
     history_path: PathBuf,
     history: Arc<Mutex<Vec<ApprovalRequestRecord>>>,
     interaction_history: InteractionHistoryStore,
+    interaction_store: Arc<interaction_storage::InteractionStore>,
     typed_operations: Mutex<()>,
     typed_pending_approvals: Mutex<BTreeMap<String, TypedPendingApproval>>,
     pending_questions: Mutex<BTreeMap<String, PendingQuestion>>,
@@ -179,7 +179,7 @@ pub struct ServiceInteractionBroker {
 
 #[derive(Clone)]
 pub(crate) struct InteractionPushContext {
-    pub store: Arc<Mutex<automation_storage::AutomationStore>>,
+    pub store: Arc<interaction_storage::InteractionStore>,
     pub machine_identity: crate::MachineIdentity,
 }
 
@@ -297,8 +297,19 @@ impl ServiceInteractionBroker {
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => Vec::new(),
             Err(_) => return Err(ApprovalBrokerError::Unavailable),
         };
+        let interaction_store = Arc::new(
+            interaction_storage::InteractionStore::open(
+                routes_path.with_file_name("interaction.sqlite"),
+            )
+            .await
+            .map_err(|_| ApprovalBrokerError::Unavailable)?,
+        );
+        interaction_store
+            .recover_interrupted_interaction_notices(chrono::Utc::now())
+            .await
+            .map_err(|_| ApprovalBrokerError::Unavailable)?;
         let interaction_history =
-            InteractionHistoryStore::load(routes_path.with_file_name("interaction.sqlite"))
+            InteractionHistoryStore::from_owner(Arc::clone(&interaction_store))
                 .await
                 .map_err(|_| ApprovalBrokerError::Unavailable)?;
         interaction_history
@@ -317,6 +328,7 @@ impl ServiceInteractionBroker {
             history_path,
             history: Arc::new(Mutex::new(history)),
             interaction_history,
+            interaction_store,
             typed_operations: Mutex::new(()),
             typed_pending_approvals: Mutex::new(BTreeMap::new()),
             pending_questions: Mutex::new(BTreeMap::new()),
@@ -325,6 +337,10 @@ impl ServiceInteractionBroker {
             #[cfg(test)]
             question_before_send: Mutex::new(None),
         }))
+    }
+
+    pub fn interaction_store(&self) -> Arc<interaction_storage::InteractionStore> {
+        Arc::clone(&self.interaction_store)
     }
 
     pub fn install_session_delivery(
@@ -342,7 +358,7 @@ impl ServiceInteractionBroker {
 
     pub(crate) fn install_push_context(
         &self,
-        store: Arc<Mutex<automation_storage::AutomationStore>>,
+        store: Arc<interaction_storage::InteractionStore>,
         machine_identity: crate::MachineIdentity,
     ) {
         if machine_identity.service_id() != &self.service_id {
@@ -866,6 +882,9 @@ impl ServiceInteractionBroker {
 #[cfg(test)]
 #[path = "interaction_broker_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod native_history_fault_fixture;
 
 #[cfg(test)]
 #[path = "interaction_broker/turn_cancellation_tests.rs"]

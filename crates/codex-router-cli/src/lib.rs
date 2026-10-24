@@ -25,6 +25,7 @@ pub mod account;
 mod credential_runtime;
 mod credential_upkeep_worker;
 pub mod doctor;
+mod fleet_command;
 mod host_command;
 mod live;
 mod presentation;
@@ -36,6 +37,7 @@ mod telemetry;
 pub mod token;
 
 use account::AccountCommand;
+use fleet_command::FleetCommand;
 use host_command::HostCommand;
 use live::LiveCommand;
 use profile::CodexRouterProfile;
@@ -98,7 +100,10 @@ pub async fn run_async() -> i32 {
     let context = CliContext::from_process();
     let parsed_command = CliCommand::parse(args.clone());
     let uses_async_dispatch = matches!(&parsed_command, Ok(CliCommand::Quota(_)))
-        || matches!(&parsed_command, Ok(CliCommand::Host(_)));
+        || matches!(
+            &parsed_command,
+            Ok(CliCommand::Host(_) | CliCommand::Fleet(_))
+        );
     if !uses_async_dispatch {
         return std::thread::spawn(move || run_sync_process_args(args))
             .join()
@@ -214,6 +219,10 @@ where
                 context.stdout_terminal_width(),
             )
             .await?;
+            stderr.flush().map_err(CliError::Stderr)
+        }
+        CliCommand::Fleet(command) => {
+            fleet_command::run_fleet_command(command, context, stdout).await?;
             stderr.flush().map_err(CliError::Stderr)
         }
         CliCommand::Host(command) => {
@@ -601,6 +610,9 @@ where
         CliCommand::Quota(_) => return Err(QuotaCommandError::AsyncDispatchRequired.into()),
         CliCommand::Live(command) => live::run_live_command(stdout, command)?,
         CliCommand::Host(_) => return Err(CliError::HostRequiresAsyncDispatch),
+        CliCommand::Fleet(_) => {
+            return Err(fleet_command::FleetCommandError::AsyncDispatchRequired.into());
+        }
         CliCommand::Version => {
             writeln!(stdout, "codex-router {}", env!("CARGO_PKG_VERSION"))
                 .map_err(CliError::Stdout)?;
@@ -807,6 +819,8 @@ commands:
   host app-server restart        Restart managed Codex without updating it
   host app-server update         Update managed Codex and activate it if changed
   host router restart            Restart the router when host-owned
+  fleet enroll                  Enroll this installation; active at the next Router start
+  fleet status                  Inspect enrollment metadata without restarting
   doctor                        Diagnose local router setup
   profile print                 Print the Codex profile snippet
 

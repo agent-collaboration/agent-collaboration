@@ -1,0 +1,296 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_record_reads.rs",
+  "metadata": "fleet-record-read-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_canonical_fleet_record",
+      "sql": "sql/fleet/read_canonical_fleet_record.sql",
+      "row": "StoredFleetRecord",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_name",
+      "sql": "sql/fleet/read_workspace_name.sql",
+      "row": "FleetNameRecord",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_board_name",
+      "sql": "sql/fleet/read_board_name.sql",
+      "row": "FleetNameRecord",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_project_name",
+      "sql": "sql/fleet/read_project_name.sql",
+      "row": "FleetNameRecord",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_workspace_boards",
+      "sql": "sql/fleet/list_workspace_boards.sql",
+      "row": "StoredFleetRecord",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_global_definition",
+      "sql": "sql/fleet/read_global_definition.sql",
+      "row": "StoredFleetRecord",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "version",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_directory_summary",
+      "sql": "sql/fleet/read_directory_summary.sql",
+      "row": "StoredDirectorySummary",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_workspace_snapshot_keys",
+      "sql": "sql/fleet/read_workspace_snapshot_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_board_snapshot_keys",
+      "sql": "sql/fleet/read_board_snapshot_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_project_snapshot_keys",
+      "sql": "sql/fleet/read_project_snapshot_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_adr_snapshot_keys",
+      "sql": "sql/fleet/read_adr_snapshot_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_process_definition_snapshot_keys",
+      "sql": "sql/fleet/read_process_definition_snapshot_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_request_snapshot_keys",
+      "sql": "sql/fleet/read_request_snapshot_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_board_projects",
+      "sql": "sql/fleet/list_board_projects.sql",
+      "row": "StoredFleetRecord",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "board_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_directory_keys",
+      "sql": "sql/fleet/read_directory_keys.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "read_directory_key_page",
+      "sql": "sql/fleet/read_directory_key_page.sql",
+      "row": "StoredFleetRecordKey",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

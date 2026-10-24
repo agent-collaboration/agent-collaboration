@@ -36,6 +36,8 @@ async fn two_workers_claim_one_delivery_and_reopen_never_reclaims_dispatching()
     let mut first = AutomationStore::open(&path).await?;
     let wake = first
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),

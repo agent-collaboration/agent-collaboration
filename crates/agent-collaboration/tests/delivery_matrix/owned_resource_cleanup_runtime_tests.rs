@@ -1,4 +1,5 @@
 //! L3 normal-prefix and unavailable-socket cases through the real local Runtime and SQLite.
+use crate::owned_resource_cleanup::readback::CleanupReadback;
 use crate::{
     owned_resource_cleanup::{
         CleanupAction, CleanupObservation, CleanupOutcome, MatrixCleanupReport,
@@ -10,13 +11,12 @@ use crate::{
 use automation_storage::AutomationStore;
 use collaboration_client::{
     CollaborationClient,
-    board::{EndReason, SubscriptionScope, SubscriptionState, ThreadShowRequest},
+    board::{EndReason, SubscriptionState, ThreadShowRequest},
     protocol::{
         EndpointRef, SavedMessage, ScheduleShowRequest, SessionRef, ThreadSubscriptionState,
         ThreadSubscriptionsRequest, WakeShowRequest, WakeState,
     },
 };
-use message_board_storage::BoardStore;
 use std::{fmt, path::Path};
 
 #[path = "owned_resource_cleanup_producer_report.rs"]
@@ -29,6 +29,15 @@ use runtime_fixture::{
     ActorRootExpectation, ExpectedResources, FixtureCleanupIssue, RuntimeCleanupFixture,
     RuntimePrefix, ensure,
 };
+
+#[path = "owned_resource_cleanup_state_checks.rs"]
+mod state_checks;
+use state_checks::{
+    StoreExpectation, check_fixture_stores, check_public_absent_roots, check_public_state,
+    check_reopened_absent_roots, check_reopened_stores,
+};
+#[path = "owned_resource_cleanup_producer_runtime_tests.rs"]
+mod producer_runtime_tests;
 
 #[tokio::test]
 async fn runtime_error_after_wake_receipt_retires_known_prefix() -> ProofResult<()> {
@@ -60,7 +69,16 @@ async fn run_case(prefix: RuntimePrefix, expected_counts: [usize; 4]) -> ProofRe
         async {
             fixture.start().await?;
             fixture.build_prefix(prefix).await?;
-            check_fixture_stores(&mut fixture, StoreExpectation::Unchanged(prefix)).await?;
+            check_public_state(
+                &fixture
+                    .owned
+                    .as_ref()
+                    .ok_or("fixture client missing")?
+                    .client,
+                &fixture.expected,
+                StoreExpectation::Unchanged(prefix),
+            )
+            .await?;
             match prefix {
                 RuntimePrefix::FirstReader
                 | RuntimePrefix::WakeReceipt
@@ -96,7 +114,7 @@ async fn run_case(prefix: RuntimePrefix, expected_counts: [usize; 4]) -> ProofRe
             prefix == RuntimePrefix::UnavailableApi,
         )?;
         if prefix != RuntimePrefix::UnavailableApi {
-            check_public_state(&owned.client, &expected).await?;
+            check_public_state(&owned.client, &expected, StoreExpectation::Retired).await?;
         }
         check_fixture_stores(&mut fixture, store_expectation).await
     }
@@ -221,12 +239,10 @@ fn check_report(
                         matches!(
                             &attempt.outcome,
                             CleanupOutcome::Returned(CleanupObservation::Subscription {
-                                state: ThreadSubscriptionState::Ended,
-                                end_reason: Some(EndReason::Cancelled),
-                                pending_count: 0,
+                                delivery_eligible: false,
                             })
                         ),
-                        "explicit unsubscribe did not report Ended/Cancelled",
+                        "explicit unsubscribe remained delivery-eligible",
                     )?;
                 }
             }
@@ -291,204 +307,6 @@ fn check_report(
         )?;
     }
     Ok(())
-}
-
-async fn check_public_state(
-    client: &CollaborationClient,
-    expected: &ExpectedResources,
-) -> ProofResult<()> {
-    if let Some((_, wakeup_id)) = &expected.wake {
-        let wake = client
-            .read_wakeup(WakeShowRequest {
-                wakeup_id: wakeup_id.clone(),
-            })
-            .await?;
-        ensure(
-            wake.definition.wakeup_id == *wakeup_id
-                && wake.state == WakeState::Cancelled
-                && wake.next_due_at.is_none(),
-            "public wake read did not confirm exact Cancelled state",
-        )?;
-    }
-    if let Some((_, schedule_id)) = &expected.schedule {
-        let schedule = client
-            .read_schedule(ScheduleShowRequest {
-                schedule_id: schedule_id.clone(),
-            })
-            .await?;
-        ensure(
-            schedule.schedule_id == *schedule_id
-                && !schedule.definition.enabled
-                && schedule.next_due_at.is_none()
-                && schedule.active_run_id.is_none()
-                && schedule.waiting_run_id.is_none(),
-            "public schedule read was not disabled",
-        )?;
-    }
-    let mut checked_actors = Vec::new();
-    for pair in &expected.pairs {
-        if !checked_actors.contains(&&pair.actor) {
-            let subscriptions = client
-                .board_thread_subscriptions(ThreadSubscriptionsRequest {
-                    actor: pair.actor.clone(),
-                })
-                .await?;
-            ensure(
-                subscriptions.subscriptions.is_empty(),
-                "public active/draining subscription list was not empty",
-            )?;
-            checked_actors.push(&pair.actor);
-        }
-    }
-    if let Some(pair) = expected.pairs.first() {
-        let thread = client
-            .board_thread_show(ThreadShowRequest {
-                root_message_id: pair.root_message_id.clone(),
-                reader: Some(pair.actor.clone()),
-            })
-            .await?;
-        ensure(
-            thread.thread.root_message_id == pair.root_message_id
-                && thread.watch_status.is_some_and(|watch| !watch.watching),
-            "public exact-reader Watch was not inactive",
-        )?;
-    }
-    Ok(())
-}
-
-#[derive(Clone, Copy)]
-enum StoreExpectation {
-    Retired,
-    Unchanged(RuntimePrefix),
-}
-
-async fn check_fixture_stores(
-    fixture: &mut RuntimeCleanupFixture,
-    expectation: StoreExpectation,
-) -> ProofResult<()> {
-    let board = fixture
-        .board
-        .as_mut()
-        .ok_or("fixture-owned BoardStore was not opened")?;
-    let automation = fixture
-        .automation
-        .as_mut()
-        .ok_or("fixture-owned AutomationStore was not opened")?;
-    check_store_state(board, automation, &fixture.expected, expectation).await
-}
-async fn check_store_state(
-    board: &mut BoardStore,
-    automation: &mut AutomationStore,
-    expected: &ExpectedResources,
-    expectation: StoreExpectation,
-) -> ProofResult<()> {
-    let retired = matches!(expectation, StoreExpectation::Retired);
-    for pair in &expected.pairs {
-        let record = board
-            .get_thread_subscription_record(
-                &pair.actor,
-                &SubscriptionScope::thread(pair.root_message_id.clone()),
-            )
-            .await?
-            .ok_or("exact actor/root subscription history disappeared")?;
-        let state_matches = matches!(
-            (retired, record.state()),
-            (
-                true,
-                SubscriptionState::Ended {
-                    reason: EndReason::Cancelled
-                }
-            ) | (false, SubscriptionState::Active)
-        );
-        ensure(
-            state_matches,
-            "exact SQLite subscription was not the literal expected local state",
-        )?;
-        let thread = board
-            .show_thread(ThreadShowRequest {
-                root_message_id: pair.root_message_id.clone(),
-                reader: Some(pair.actor.clone()),
-            })
-            .await?;
-        ensure(
-            thread
-                .watch_status
-                .is_some_and(|watch| watch.watching != retired),
-            "exact SQLite Watch state changed unexpectedly",
-        )?;
-    }
-    if let Some((_, wakeup_id)) = &expected.wake {
-        let wake = automation.read_wakeup::<SavedMessage>(wakeup_id).await?;
-        let state = if retired {
-            agent_automation::WakeState::Cancelled
-        } else {
-            agent_automation::WakeState::Active
-        };
-        ensure(
-            wake.definition.wakeup_id == *wakeup_id
-                && wake.state == state
-                && wake.pending_delivery_id.is_none()
-                && wake.next_due_at_ms.is_none() == retired,
-            "SQLite wake did not preserve exact local state",
-        )?;
-    }
-    if let Some((_, schedule_id)) = &expected.schedule {
-        let schedule = automation
-            .inspect_schedule::<SessionRef, EndpointRef>(schedule_id)
-            .await?;
-        let enabled = matches!(
-            expectation,
-            StoreExpectation::Unchanged(RuntimePrefix::EnabledSchedule)
-        );
-        ensure(
-            schedule.record.schedule_id == *schedule_id
-                && schedule.record.definition.enabled == enabled
-                && schedule.record.next_due_at_ms.is_some() == enabled
-                && schedule.active_run_id.is_none()
-                && schedule.waiting_run_id.is_none(),
-            "SQLite schedule changed or invented run cancellation",
-        )?;
-    }
-    Ok(())
-}
-
-async fn check_reopened_stores(
-    directory: &Path,
-    expected: &ExpectedResources,
-    expectation: StoreExpectation,
-) -> ProofResult<()> {
-    let mut board = None;
-    let mut automation = None;
-    let observed: ProofResult<()> = async {
-        board = Some(BoardStore::open(&directory.join("project-board.sqlite")).await?);
-        automation = Some(AutomationStore::open(&directory.join("automation.sqlite")).await?);
-        check_store_state(
-            board.as_mut().ok_or("reopened BoardStore missing")?,
-            automation
-                .as_mut()
-                .ok_or("reopened AutomationStore missing")?,
-            expected,
-            expectation,
-        )
-        .await
-    }
-    .await;
-    let board_close: ProofResult<()> = match board {
-        Some(board) => board.close().await.map_err(Into::into),
-        None => Ok(()),
-    };
-    let automation_close: ProofResult<()> = match automation {
-        Some(automation) => automation.close().await.map_err(Into::into),
-        None => Ok(()),
-    };
-    match (observed, board_close, automation_close) {
-        (Ok(()), Ok(()), Ok(())) => Ok(()),
-        (observed, board_close, automation_close) => Err(Box::new(ReopenFailure {
-            observed: observed.err(),
-            board_close: board_close.err(),
-            automation_close: automation_close.err(),
-        })),
-    }
 }
 
 #[derive(Debug)]
@@ -562,324 +380,3 @@ impl std::error::Error for RuntimeCaseFailure {
             .map(|issue| issue.error.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
-#[derive(Debug)]
-struct ReopenFailure {
-    observed: Option<CaseError>,
-    board_close: Option<CaseError>,
-    automation_close: Option<CaseError>,
-}
-impl fmt::Display for ReopenFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "fixture SQLite reopen failed (read={}, board close={}, automation close={})",
-            self.observed.is_some(),
-            self.board_close.is_some(),
-            self.automation_close.is_some()
-        )
-    }
-}
-impl std::error::Error for ReopenFailure {}
-
-#[tokio::test]
-async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant_acl()
--> ProofResult<()> {
-    use collaboration_client::{
-        BoardClientError,
-        board::{
-            BoardFailureKind, Identity, MessageId, MessagePostRequest, MessageReferences,
-            MessageShowRequest, Placement,
-        },
-        protocol::{EndpointId, SessionId},
-    };
-    let directory = tempfile::Builder::new()
-        .prefix("u6-l3-producer-")
-        .tempdir_in("/tmp")?;
-    let mut fixture = RuntimeCleanupFixture::allocate(directory.path())?;
-    let mut actors = None;
-    let mut produced = None;
-    let startup: ProofResult<()> = async {
-        fixture.start().await?;
-        let reader = fixture.peer_target()?;
-        // Fixture identity only; this does not allocate or load a native session.
-        let mut sender = reader.clone();
-        sender.endpoint.endpoint_id = EndpointId::try_from("codex-local".to_owned())?;
-        sender.session_id = SessionId::try_from("fixture-cleanup-sender".to_owned())?;
-        actors = Some([
-            serde_json::from_value::<Identity>(
-                serde_json::json!({"kind":"session","session":sender}),
-            )?,
-            serde_json::from_value::<Identity>(
-                serde_json::json!({"kind":"session","session":reader}),
-            )?,
-        ]);
-        let owned = fixture
-            .owned
-            .as_mut()
-            .ok_or("actual producer client missing")?;
-        // Same actual client and authoritative pre-dispatch owner; no second accumulator.
-        produced = Some(
-            crate::held_subscription_producer::board_two_thread_subscription_push(
-                &owned.client,
-                &sender,
-                &reader,
-                ["L3-FIRST-ROOT-MARKER", "L3-SECOND-ROOT-MARKER"],
-                &mut owned.resources,
-            )
-            .await,
-        );
-        Ok(())
-    }
-    .await;
-    let prefix = match produced.as_ref() {
-        Some(Ok(_)) => ActualHelperPrefix::Completed,
-        Some(Err(error))
-            if matches!(error.downcast_ref::<BoardClientError>(),
-            Some(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::TopLevelMessageCooldown) =>
-        {
-            ActualHelperPrefix::Cooldown
-        }
-        _ => ActualHelperPrefix::Unqualified,
-    };
-    // Independent installed-row observations do not adopt, replace or trim cleanup ownership.
-    let ownership_inspection = match &actors {
-        Some(actors) => fixture.observe_actual_helper_pairs(actors).await,
-        None => Err("actual helper actors were not established".into()),
-    };
-    let producer: ProofResult<()> = async {
-        startup?;
-        let roots = match produced.take().ok_or("actual helper was not invoked")? {
-            Ok(roots) => roots,
-            Err(error) => {
-                let typed_cooldown = matches!(error.downcast_ref::<BoardClientError>(),
-                    Some(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::TopLevelMessageCooldown);
-                return Err(Box::new(ActualProducerFailure { typed_cooldown, cause: error }) as CaseError);
-            }
-        };
-        let [first_root, second_root] = roots.as_slice() else { return Err("actual helper did not return exactly two roots".into()); };
-        ensure(first_root != second_root && fixture.expected.pairs.len() == 4,
-            "actual helper did not establish four distinct sender/reader root pairs")?;
-        let board = fixture.board.as_mut().ok_or("fixture-owned board missing")?;
-        let first = board.show_message(MessageShowRequest { message_id: first_root.clone() }).await?;
-        let second = board.show_message(MessageShowRequest { message_id: second_root.clone() }).await?;
-        ensure(first.0.message_id == *first_root && second.0.message_id == *second_root
-            && first.0.board_id != second.0.board_id, "actual helper did not create roots on distinct boards")?;
-        for actor in actors.as_ref().ok_or("actual helper actors missing")? {
-            for root in roots.iter() {
-                ensure(fixture.expected.pairs.iter().any(|pair| pair.actor == *actor && pair.root_message_id == *root),
-                    "actual helper lost a sender/reader root subscription")?;
-            }
-        }
-        let mut outsider = fixture.peer_target()?;
-        outsider.session_id = SessionId::try_from("fixture-cleanup-outsider".to_owned())?;
-        let outsider_actor = serde_json::from_value(serde_json::json!({"kind":"session","session":outsider}))?;
-        let denied = fixture.owned.as_ref().ok_or("actual producer client missing")?.client.board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(), placement: Placement::Thread { root_message_id: first_root.clone() },
-            actor: outsider_actor, acting_for: None,
-            text: collaboration_client::board::MessageText::try_from("Rejected unjoined fixture post".to_owned())?,
-            references: MessageReferences::try_from(Vec::new())?,
-        }).await;
-        ensure(matches!(denied, Err(BoardClientError::Rejected(failure)) if failure.kind == BoardFailureKind::ParticipantRequired),
-            "unjoined fixture session bypassed thread participant ACL")
-    }.await;
-    let expected = fixture.expected.clone();
-    let mut missing_pairs = Vec::new();
-    let cleanup: ProofResult<()> = async {
-        let owned = fixture
-            .owned
-            .take()
-            .ok_or("actual producer cleanup owner missing")?;
-        let plan = owned.resources.into_cleanup_plan();
-        missing_pairs = missing_installed_pairs(&plan.history, &expected);
-        let before_absence = check_fixture_absent_roots(&mut fixture, &missing_pairs).await;
-        // Even failed absence/readback assertions never prevent any owned cleanup attempt.
-        let report = cleanup_owned_resources(&owned.client, plan).await;
-        let report_validation =
-            check_actual_helper_report(&report, &expected, actors.as_ref(), prefix);
-        let public_state = check_public_state(&owned.client, &expected).await;
-        let store_state = check_fixture_stores(&mut fixture, StoreExpectation::Retired).await;
-        let after_absence = check_fixture_absent_roots(&mut fixture, &missing_pairs).await;
-        let not_returned = report
-            .attempts
-            .iter()
-            .any(|attempt| !matches!(&attempt.outcome, CleanupOutcome::Returned(_)));
-        if before_absence.is_ok()
-            && report_validation.is_ok()
-            && public_state.is_ok()
-            && store_state.is_ok()
-            && after_absence.is_ok()
-            && !not_returned
-            && report.unresolved.is_empty()
-        {
-            Ok(())
-        } else {
-            Err(Box::new(ActualProducerCleanupFailure {
-                report,
-                before_absence: before_absence.err(),
-                report_validation: report_validation.err(),
-                public_state: public_state.err(),
-                store_state: store_state.err(),
-                after_absence: after_absence.err(),
-            }) as CaseError)
-        }
-    }
-    .await;
-    let teardown = fixture.finish().await;
-    let reopen =
-        check_reopened_stores(directory.path(), &expected, StoreExpectation::Retired).await;
-    let absent_reopen = check_reopened_absent_roots(directory.path(), &missing_pairs).await;
-    match (
-        producer,
-        ownership_inspection,
-        cleanup,
-        teardown,
-        reopen,
-        absent_reopen,
-    ) {
-        (Ok(()), Ok(()), Ok(()), teardown, Ok(()), Ok(())) if teardown.is_empty() => Ok(()),
-        (producer, ownership_inspection, cleanup, teardown, reopen, absent_reopen) => {
-            Err(Box::new(ActualProducerCaseFailure {
-                producer: producer.err(),
-                ownership_inspection: ownership_inspection.err(),
-                cleanup: cleanup.err(),
-                teardown,
-                reopen: reopen.err(),
-                absent_reopen: absent_reopen.err(),
-            }) as CaseError)
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ActualProducerFailure {
-    typed_cooldown: bool,
-    cause: CaseError,
-}
-impl fmt::Display for ActualProducerFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.typed_cooldown {
-            formatter.write_str("actual two-root helper rejected TopLevelMessageCooldown")
-        } else {
-            formatter.write_str("actual two-root helper failed before returning both roots")
-        }
-    }
-}
-impl std::error::Error for ActualProducerFailure {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(self.cause.as_ref())
-    }
-}
-#[derive(Debug)]
-struct ActualProducerCaseFailure {
-    producer: Option<CaseError>,
-    ownership_inspection: Option<CaseError>,
-    cleanup: Option<CaseError>,
-    teardown: Vec<FixtureCleanupIssue>,
-    reopen: Option<CaseError>,
-    absent_reopen: Option<CaseError>,
-}
-impl fmt::Display for ActualProducerCaseFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "actual producer case failed (producer={}, ownership={}, cleanup={}, teardown={}, reopen={}, absent reopen={})",
-            self.producer.is_some(),
-            self.ownership_inspection.is_some(),
-            self.cleanup.is_some(),
-            self.teardown.len(),
-            self.reopen.is_some(),
-            self.absent_reopen.is_some()
-        )
-    }
-}
-impl std::error::Error for ActualProducerCaseFailure {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.producer
-            .as_ref()
-            .map(|error| error.as_ref() as &(dyn std::error::Error + 'static))
-    }
-}
-
-async fn check_fixture_absent_roots(
-    fixture: &mut RuntimeCleanupFixture,
-    pairs: &[ActorRootExpectation],
-) -> ProofResult<()> {
-    check_absent_roots(
-        fixture
-            .board
-            .as_mut()
-            .ok_or("fixture-owned BoardStore missing")?,
-        pairs,
-    )
-    .await
-}
-async fn check_absent_roots(
-    board: &mut BoardStore,
-    pairs: &[ActorRootExpectation],
-) -> ProofResult<()> {
-    use collaboration_client::board::{BoardFailureKind, BoardFailureStage, MessageShowRequest};
-    for pair in pairs {
-        ensure(
-            board
-                .get_thread_subscription_record(
-                    &pair.actor,
-                    &SubscriptionScope::thread(pair.root_message_id.clone()),
-                )
-                .await?
-                .is_none(),
-            "never-created helper subscription appeared",
-        )?;
-        let message = board
-            .show_message(MessageShowRequest {
-                message_id: pair.root_message_id.clone(),
-            })
-            .await;
-        ensure(
-            matches!(message, Err(error) if error.kind == BoardFailureKind::ResourceNotFound
-            && error.stage == BoardFailureStage::Inspection),
-            "never-created helper root appeared or absence read was inconclusive",
-        )?;
-    }
-    Ok(())
-}
-async fn check_reopened_absent_roots(
-    directory: &Path,
-    pairs: &[ActorRootExpectation],
-) -> ProofResult<()> {
-    let mut board = BoardStore::open(&directory.join("project-board.sqlite")).await?;
-    let observed = check_absent_roots(&mut board, pairs).await;
-    let board_close: ProofResult<()> = board.close().await.map_err(Into::into);
-    match (observed, board_close) {
-        (Ok(()), Ok(())) => Ok(()),
-        (observed, board_close) => Err(Box::new(ReopenFailure {
-            observed: observed.err(),
-            board_close: board_close.err(),
-            automation_close: None,
-        })),
-    }
-}
-
-#[derive(Debug)]
-struct ActualProducerCleanupFailure {
-    report: MatrixCleanupReport,
-    before_absence: Option<CaseError>,
-    report_validation: Option<CaseError>,
-    public_state: Option<CaseError>,
-    store_state: Option<CaseError>,
-    after_absence: Option<CaseError>,
-}
-impl fmt::Display for ActualProducerCleanupFailure {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "actual helper cleanup report: {:?}; evidence failures (before absence={}, report={}, public={}, store={}, after absence={})",
-            self.report,
-            self.before_absence.is_some(),
-            self.report_validation.is_some(),
-            self.public_state.is_some(),
-            self.store_state.is_some(),
-            self.after_absence.is_some()
-        )
-    }
-}
-impl std::error::Error for ActualProducerCleanupFailure {}

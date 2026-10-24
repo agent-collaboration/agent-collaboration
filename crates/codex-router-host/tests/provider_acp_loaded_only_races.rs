@@ -253,7 +253,7 @@ async fn loaded_only_rechecks_after_reclaim_when_conversation_close_unloads_sess
         .expect("loaded-only delivery receipt");
 
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ref reason,
@@ -310,7 +310,7 @@ async fn loaded_only_reports_non_retryable_unsupported_load_after_can_load_claim
         .expect("loaded-only receipt");
 
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: false,
             ref reason,
@@ -360,7 +360,7 @@ async fn loaded_only_preserves_live_elsewhere_reason_after_can_load_claim() {
         .expect("loaded-only receipt");
 
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ref reason,
@@ -449,7 +449,7 @@ async fn loaded_only_reports_non_retryable_missing_record_after_can_load_claim()
         .expect("loaded-only receipt");
 
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: false,
             ref reason,
@@ -544,7 +544,7 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
         .expect("loaded-only queue receipt");
 
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ref reason,

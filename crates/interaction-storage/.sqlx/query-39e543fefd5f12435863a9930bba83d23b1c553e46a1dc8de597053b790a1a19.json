@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT item_id AS \"item_id!\",recipient_service_id AS \"recipient_service_id!\",recipient_endpoint_id AS \"recipient_endpoint_id!\",recipient_session_id AS \"recipient_session_id!\",membership_id AS \"membership_id!\",received_at AS \"received_at!\" FROM pending_poll_mail WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "recipient_service_id!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "recipient_endpoint_id!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recipient_session_id!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "membership_id!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "received_at!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "39e543fefd5f12435863a9930bba83d23b1c553e46a1dc8de597053b790a1a19"
+}

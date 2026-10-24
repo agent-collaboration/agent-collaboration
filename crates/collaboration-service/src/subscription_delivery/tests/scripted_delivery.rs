@@ -9,8 +9,8 @@ impl crate::SessionDeliveryRoute for PreparedRecordingRoute {
     fn reachability(&self) -> collaboration_protocol::SessionReachability {
         self.reachability
     }
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, crate::RouteClaim> {
-        Box::pin(async { Ok(crate::RouteClaim::Holds) })
+    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim> {
+        Box::pin(async { Ok(crate::NativeRouteClaim::holds()) })
     }
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, crate::RoutePresence> {
         Box::pin(async { Ok(crate::RoutePresence::Running) })
@@ -19,7 +19,7 @@ impl crate::SessionDeliveryRoute for PreparedRecordingRoute {
         &'a self,
         request: crate::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
         self.delivery.deliver(request, sink)
     }
     fn reconcile_attempt(
@@ -31,6 +31,8 @@ impl crate::SessionDeliveryRoute for PreparedRecordingRoute {
 }
 
 pub(super) struct ScriptedDelivery {
+    pub(super) sent_pushes: Arc<StdMutex<Vec<collaboration_protocol::PushId>>>,
+    pub(super) completed_native_calls: Arc<std::sync::atomic::AtomicUsize>,
     pub(super) requests: mpsc::UnboundedSender<crate::layer_zero::DeliveryRequest>,
     pub(super) completions: Mutex<mpsc::UnboundedReceiver<DeliveryOutcome>>,
     pub(super) reconciliations: mpsc::UnboundedSender<(
@@ -43,10 +45,14 @@ impl SessionMessageDelivery for ScriptedDelivery {
         &'a self,
         request: crate::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
         Box::pin(async move {
             let target = request.target.clone();
             let attempt_id = request.attempt.clone();
+            self.sent_pushes
+                .lock()
+                .unwrap()
+                .push(request.payload.push_id.clone());
             self.requests.send(request).unwrap();
             let outcome = self.completions.lock().await.recv().await.unwrap();
             let reachability = if outcome == DeliveryOutcome::Queued {
@@ -76,11 +82,15 @@ impl SessionMessageDelivery for ScriptedDelivery {
             } else {
                 collaboration_protocol::SessionReachability::CodexAppServer
             };
-            Ok(DeliveryReceipt {
-                outcome,
-                reachability: Some(reachability),
-                client: None,
-            })
+            self.completed_native_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(crate::native_delivery_result::scripted_delivery_result(
+                DeliveryReceipt {
+                    outcome,
+                    reachability: Some(reachability),
+                    client: None,
+                },
+            ))
         })
     }
     fn reconcile_attempt(

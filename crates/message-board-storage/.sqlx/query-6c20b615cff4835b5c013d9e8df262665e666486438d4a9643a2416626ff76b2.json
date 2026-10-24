@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE work_trail_rows SET redacted=? WHERE row_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "6c20b615cff4835b5c013d9e8df262665e666486438d4a9643a2416626ff76b2"
+}

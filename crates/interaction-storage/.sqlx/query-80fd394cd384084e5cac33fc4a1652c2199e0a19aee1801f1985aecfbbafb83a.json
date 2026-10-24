@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE retention='creationAge' AND push_id=? AND delivery_state='attempted'",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "80fd394cd384084e5cac33fc4a1652c2199e0a19aee1801f1985aecfbbafb83a"
+}

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO actors(actor_id, canonical_identity) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "224f82d4b6f445724da7bab41fdb54be7e9b78f885ac7c5c715ecba05e2e6845"
+}

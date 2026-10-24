@@ -63,6 +63,95 @@ stream_max_retries = 2
 "#;
 
 #[test]
+fn endpoint_projection_preserves_every_other_native_override() {
+    for source in [PROFILE, NETWORK_PROFILE] {
+        // Arrange: preserve all supported model, permission, project and provider controls.
+        let source = format!("model_reasoning_summary = \"http://127.0.0.1:18787/v1\"\n{source}");
+        let original = DebugCodexProfile::parse(&source, 18787).unwrap();
+        let paths = CodexPaths::from_codex_home("/unused-native-home".into());
+        let command = AppServerCommandSpec::new(
+            &paths,
+            &CodexRouterProfile::new(28787),
+            Path::new("/tmp/debug-proof/backend.sock"),
+        );
+        let original_command = command.clone().with_debug_profile(&original);
+
+        // Act: use the shared projection consumed by both Host launchers.
+        let projected =
+            codex_native_integration::project_debug_profile_endpoint(&source, 28787).unwrap();
+        let parsed = DebugCodexProfile::parse(&projected, 28787).unwrap();
+        let projected_command = command.with_debug_profile(&parsed);
+
+        // Assert: exact emitted bytes change only at the sole provider endpoint.
+        let expected_arguments: Vec<std::ffi::OsString> = original_command
+            .arguments()
+            .iter()
+            .map(|argument| {
+                let text = argument.to_str().unwrap();
+                if text.starts_with("model_providers=") {
+                    text.replace("http://127.0.0.1:18787/v1", "http://127.0.0.1:28787/v1")
+                        .into()
+                } else {
+                    argument.clone()
+                }
+            })
+            .collect();
+        assert_eq!(projected_command.arguments(), expected_arguments);
+        assert_ne!(projected_command.arguments(), original_command.arguments());
+        assert_eq!(
+            projected_command.environment(),
+            original_command.environment()
+        );
+    }
+}
+
+#[test]
+fn endpoint_projection_validates_saved_profile_before_replacing_route() {
+    let oversized = format!("{PROFILE}\n#{}", "x".repeat(64 * 1024));
+    for invalid in [
+        "not a TOML profile".to_owned(),
+        oversized,
+        PROFILE.replace("127.0.0.1", "0.0.0.0"),
+        PROFILE.replace("18787/v1", "0/v1"),
+        PROFILE.replace("18787/v1", "19741/v1"),
+        PROFILE.replace("18787/v1", "018787/v1"),
+        PROFILE.replace("codex-router-debug", "codex-router"),
+        PROFILE.replace("name = \"OpenAI\"", "name = \"other\""),
+        PROFILE.replace(
+            "requires_openai_auth = false",
+            "literal_token = \"fixture-secret\"",
+        ),
+        PROFILE.replace("supports_websockets = true", "supports_websockets = false"),
+        PROFILE.replace(
+            "enable_request_compression = false",
+            "enable_request_compression = true",
+        ),
+        NETWORK_PROFILE.replace("credential_broker = false", "credential_broker = true"),
+    ] {
+        let error = codex_native_integration::project_debug_profile_endpoint(&invalid, 28787)
+            .expect_err("invalid saved profile must be refused before projection");
+        assert!(!error.to_string().contains("fixture-secret"));
+    }
+    for port in [0, codex_native_integration::DEFAULT_ROUTER_PORT] {
+        assert!(codex_native_integration::project_debug_profile_endpoint(PROFILE, port).is_err());
+    }
+}
+
+#[test]
+fn endpoint_projection_at_saved_port_preserves_all_profile_values() {
+    let source =
+        format!("approval_policy = \"never\"\napprovals_reviewer = \"local\"\n{NETWORK_PROFILE}\n");
+    let projected =
+        codex_native_integration::project_debug_profile_endpoint(&source, 18787).unwrap();
+    assert_eq!(
+        projected.parse::<toml::Table>().unwrap(),
+        source.parse::<toml::Table>().unwrap()
+    );
+    // Strict parsing stays strict: selecting another port alone never redirects it.
+    assert!(DebugCodexProfile::parse(&source, 28787).is_err());
+}
+
+#[test]
 fn backend_overrides_preserve_supported_debug_profile_values() {
     // Arrange.
     let profile = DebugCodexProfile::parse(PROFILE, 18787).unwrap();

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET cancelled_after_delivery_json=? WHERE push_id=? AND cancelled_after_delivery_json IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "05d23d88d28b72d5e44d69fdf97a3dbe267cdc150a7f68a37aa517d36d78fd43"
+}

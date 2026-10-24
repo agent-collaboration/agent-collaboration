@@ -127,10 +127,14 @@ async fn missing_thread_without_holder_is_known_not_submitted()
             &DiscardEvidence,
         )
         .await?;
-    if !matches!(receipt.outcome, DeliveryOutcome::NotSubmitted { retryable: false, ref reason }
+    if !matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::NotSubmitted { retryable: false, ref reason }
         if reason == "thread not found or never started; if it was created without a first message, it was lost when the Host restarted — create it again")
     {
-        return Err(format!("missing thread outcome: {:?}", receipt.outcome).into());
+        return Err(format!(
+            "missing thread outcome: {:?}",
+            receipt.receipt().outcome.clone()
+        )
+        .into());
     }
     backend.await??;
     std::fs::remove_file(socket)?;

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE notify_intents SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, recipient_key=?, recipient=?, state=? WHERE intent_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "d36d1c56fbb6e4e388a8e22d1b62aeb493a3e1025f3e633c4c20e54618db10ac"
+}

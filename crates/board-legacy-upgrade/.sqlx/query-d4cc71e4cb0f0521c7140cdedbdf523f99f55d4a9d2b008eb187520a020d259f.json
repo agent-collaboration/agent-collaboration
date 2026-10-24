@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO board_intent_scan_cursors(project_id,epoch,position) VALUES (?,?,?) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "d4cc71e4cb0f0521c7140cdedbdf523f99f55d4a9d2b008eb187520a020d259f"
+}

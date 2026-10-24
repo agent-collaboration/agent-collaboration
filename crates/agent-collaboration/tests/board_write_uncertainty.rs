@@ -100,10 +100,11 @@ async fn run_lost_project_create(
 
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));
     command.args([
-        "board",
         "project",
         "create",
-        "--name",
+        "--board-id",
+        "01900000-0000-7000-8000-000000000002",
+        "--title",
         "Uncertain write proof",
         "--actor",
         HUMAN_ACTOR,
@@ -122,10 +123,10 @@ async fn run_lost_project_create(
     let write = watched.calls.first().ok_or("the CLI made no write")?;
     assert_eq!(
         write.get("tool").and_then(Value::as_str),
-        Some("board_project_create")
+        Some("project_create")
     );
     assert_eq!(
-        write.pointer("/arguments/name").and_then(Value::as_str),
+        write.pointer("/arguments/title").and_then(Value::as_str),
         Some("Uncertain write proof")
     );
     assert_eq!(
@@ -156,10 +157,11 @@ async fn run_known_project_rejection() -> TestResult<std::process::Output> {
     }))]);
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
-            "board",
             "project",
             "create",
-            "--name",
+            "--board-id",
+            "01900000-0000-7000-8000-000000000002",
+            "--title",
             "Known rejection",
             "--actor",
             HUMAN_ACTOR,

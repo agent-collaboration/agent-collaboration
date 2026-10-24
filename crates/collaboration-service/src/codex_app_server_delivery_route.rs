@@ -5,9 +5,8 @@ use crate::native_message_dispatch::{
 };
 use crate::{
     AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, DeliveryReceipt,
-    EndpointDirectory, LoadPolicy, NativeControlBackend, RouteClaim, RoutePresence,
-    RouteUnavailableReason, SessionDeliveryRoute,
+    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, EndpointDirectory, LoadPolicy,
+    NativeControlBackend, RoutePresence, RouteUnavailableReason, SessionDeliveryRoute,
 };
 use agent_automation::{
     CessationEvidence, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
@@ -16,7 +15,7 @@ use agent_automation::{
 use codex_acp_adapter::{HeldBindingCheckout, UnmaterializedBindingStore};
 use codex_native_integration::NativeProtocolConnection;
 use collaboration_protocol::{
-    ChannelDescription, DeliveryCorrelationId, DeliveryOutcome, MachineId, MessageDelivery,
+    ChannelDescription, DeliveryCorrelationId, DeliveryRejectionReason, MachineId, MessageDelivery,
     NativeSendAcceptance, RouterLink, SessionReachability, SessionRef, UuidIdentity,
 };
 use serde_json::{Value, json};
@@ -72,14 +71,26 @@ impl CodexAppServerDeliveryRoute {
         &self,
         request: NativeRouteDeliveryRequest,
         sink: &dyn AttemptEvidenceSink,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
+    ) -> Result<crate::NativeDeliveryResult, DeliveryContractError> {
         let Ok(admission) = self.backend.gate.acquire() else {
-            return Ok(not_submitted("Native backend unavailable", true));
+            return Ok(not_submitted(
+                "Native backend unavailable",
+                true,
+                crate::UnsentCause::Holdable {
+                    otherwise: crate::NativeRefusalCode::NativeUnavailable,
+                },
+            ));
         };
         if let DeliveryPrecondition::EndpointGeneration { expected } = &request.precondition
             && expected != admission.generation()
         {
-            return Ok(not_submitted("staleGeneration", false));
+            return Ok(not_submitted(
+                "staleGeneration",
+                false,
+                crate::UnsentCause::Refused(crate::NativeRefusalCode::Rejection(
+                    DeliveryRejectionReason::StaleGeneration,
+                )),
+            ));
         }
         let generation = admission.generation().clone();
         let deadline = tokio::time::Instant::now() + Duration::from_secs(30);
@@ -147,7 +158,13 @@ impl CodexAppServerDeliveryRoute {
                     effects.resume = PreparationEffect::NotRequested;
                     sink.record(RouteEffectEvidence::CodexAppServer(effects))
                         .await?;
-                    return Ok(not_submitted("staleGeneration", false));
+                    return Ok(not_submitted(
+                        "staleGeneration",
+                        false,
+                        crate::UnsentCause::Refused(crate::NativeRefusalCode::Rejection(
+                            DeliveryRejectionReason::StaleGeneration,
+                        )),
+                    ));
                 }
                 effects.permission_differences = binding.permission_differences().to_vec();
                 sink.record(RouteEffectEvidence::CodexAppServer(effects.clone()))
@@ -191,6 +208,7 @@ impl CodexAppServerDeliveryRoute {
                     crate::native_message_dispatch::NativeMessageOutcome::Failed(failure)
                         if matches!(
                             failure
+                                .response
                                 .pointer("/error/data/effects/submission")
                                 .and_then(Value::as_str),
                             Some("notDispatched" | "rejected")
@@ -208,7 +226,13 @@ impl CodexAppServerDeliveryRoute {
                 effects.resume = PreparationEffect::NotRequested;
                 sink.record(RouteEffectEvidence::CodexAppServer(effects))
                     .await?;
-                return Ok(not_submitted("Held session is busy", true));
+                return Ok(not_submitted(
+                    "Held session is busy",
+                    true,
+                    crate::UnsentCause::Holdable {
+                        otherwise: crate::NativeRefusalCode::HeldSessionBusy,
+                    },
+                ));
             }
             HeldBindingCheckout::Missing => {
                 let response = crate::native_message_dispatch::dispatch_message(
@@ -235,7 +259,7 @@ impl CodexAppServerDeliveryRoute {
                 (response, false)
             }
         };
-        let receipt = crate::native_delivery_receipt::interpret_native_response(
+        let receipt = interpret_native_response(
             &request.target,
             response,
             held_idle_submission,
@@ -246,11 +270,8 @@ impl CodexAppServerDeliveryRoute {
             .await
             .is_err()
         {
-            return Ok(DeliveryReceipt {
-                outcome: DeliveryOutcome::Unknown,
-                reachability: Some(SessionReachability::CodexAppServer),
-                client: None,
-            });
+            return Ok(crate::NativeDeliveryResult::unknown()
+                .with_reachability(SessionReachability::CodexAppServer));
         }
         Ok(receipt)
     }
@@ -372,19 +393,22 @@ impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
         SessionReachability::CodexAppServer
     }
 
-    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
+    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim> {
         let claim = if target.endpoint != self.backend.endpoint {
-            RouteClaim::NotMine
+            crate::NativeRouteClaim::not_mine()
         } else if self.backend.gate.acquire().is_ok() {
-            RouteClaim::Holds
+            crate::NativeRouteClaim::holds()
         } else {
-            RouteClaim::Unavailable {
-                reason: RouteUnavailableReason {
+            crate::NativeRouteClaim::unavailable(
+                RouteUnavailableReason {
                     reason: "Native backend unavailable".into(),
                     fix: "retry when the app-server is available".into(),
                 },
-                retryable: true,
-            }
+                true,
+                crate::UnsentCause::Holdable {
+                    otherwise: crate::NativeRefusalCode::NativeUnavailable,
+                },
+            )
         };
         Box::pin(async move { Ok(claim) })
     }
@@ -398,7 +422,7 @@ impl SessionDeliveryRoute for CodexAppServerDeliveryRoute {
         &'a self,
         request: crate::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
         Box::pin(async move {
             let push_id = &request.payload.push_id;
             let expected_link =
@@ -476,13 +500,6 @@ fn preview_has_only_escaped_quotes(preview: &str) -> bool {
     !escaped
 }
 
-fn not_submitted(reason: &str, retryable: bool) -> DeliveryReceipt {
-    DeliveryReceipt {
-        outcome: DeliveryOutcome::NotSubmitted {
-            retryable,
-            reason: reason.into(),
-        },
-        reachability: Some(SessionReachability::CodexAppServer),
-        client: None,
-    }
-}
+#[path = "codex_app_server_delivery_result.rs"]
+mod native_result;
+use native_result::{interpret_native_response, not_submitted};

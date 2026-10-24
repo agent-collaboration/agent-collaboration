@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT item_id AS \"item_id!: String\",target_item AS \"target_item!: String\",attribution_json AS \"attribution_json!: String\",outcome_json,recorded_at AS \"recorded_at!: String\" FROM local_cancel_deliveries WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target_item!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "attribution_json!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "outcome_json",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "recorded_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e1f1bfe61ed96753955b2a13d3a44b3f4f7993037eda90479ed37abc80ab2e3e"
+}

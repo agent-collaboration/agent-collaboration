@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO work_trail_rows(row_id, actor_id, request_id, epoch, position, router_time, time_basis, subject, text, redacted) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "9e6a9e7a1cd073167d26e3df3090851719f2741120a8d2a6e5a184b75491f911"
+}

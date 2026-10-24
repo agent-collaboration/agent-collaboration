@@ -61,7 +61,7 @@ async fn unix_mcp_refuses_browser_origins_but_accepts_an_origin_free_client() {
         .await
         .expect("Origin-free inventory completes")
         .expect("Origin-free inventory succeeds");
-    assert!(tools.iter().any(|tool| tool.name == "board_project_list"));
+    assert!(tools.iter().any(|tool| tool.name == "workspace_list"));
     client
         .cancel()
         .await

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT EXISTS(SELECT 1 FROM work_trail_tags t JOIN work_trail_rows r ON r.row_id = t.row_id WHERE t.tag = 'owner-question' AND r.redacted = 0) AS \"present!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9704cc15103057c56ef91c6abccc1ad03f40fee3c22e106744bf95ee076f0aee"
+}

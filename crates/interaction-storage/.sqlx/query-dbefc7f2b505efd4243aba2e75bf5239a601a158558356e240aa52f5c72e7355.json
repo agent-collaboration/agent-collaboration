@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET last_route_evidence_json=? WHERE push_id=? AND retention='mailTerminalAge'",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "dbefc7f2b505efd4243aba2e75bf5239a601a158558356e240aa52f5c72e7355"
+}

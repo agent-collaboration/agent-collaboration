@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE wakeup_definitions SET wakeup_status='cancelled',next_due_at_ms=NULL,updated_at_ms=? WHERE wakeup_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "050c88381352bf659f75b0ccbdf1f333347f66fad50af674beeb35ce2f5be8ea"
+}

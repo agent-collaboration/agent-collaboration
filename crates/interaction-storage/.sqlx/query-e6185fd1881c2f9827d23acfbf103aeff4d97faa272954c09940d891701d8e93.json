@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM pending_poll_mail WHERE item_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e6185fd1881c2f9827d23acfbf103aeff4d97faa272954c09940d891701d8e93"
+}

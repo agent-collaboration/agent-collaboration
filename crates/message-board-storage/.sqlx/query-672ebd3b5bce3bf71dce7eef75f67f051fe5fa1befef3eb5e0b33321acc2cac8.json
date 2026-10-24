@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT record_kind AS \"record_kind!: String\", record_id AS \"record_id!: String\", COUNT(*) OVER () AS \"unread_count!: i64\" FROM project_feed WHERE position > ? AND position <= ? ORDER BY position DESC LIMIT 50",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "record_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "unread_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "672ebd3b5bce3bf71dce7eef75f67f051fe5fa1befef3eb5e0b33321acc2cac8"
+}

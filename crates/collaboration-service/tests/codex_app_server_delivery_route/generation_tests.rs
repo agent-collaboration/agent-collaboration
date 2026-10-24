@@ -34,8 +34,17 @@ async fn stale_strict_generation_stops_before_evidence_or_native_io()
     let mut request = prepared_request(target, "hello", MessageDelivery::Auto)?;
     request.precondition = DeliveryPrecondition::EndpointGeneration { expected: stale };
     let receipt = route.deliver(request, sink.as_ref()).await?;
+    if receipt.unsent_cause()
+        != Some(collaboration_service::UnsentCause::Refused(
+            collaboration_service::NativeRefusalCode::Rejection(
+                collaboration_protocol::DeliveryRejectionReason::StaleGeneration,
+            ),
+        ))
+    {
+        return Err("stale strict generation lost its emitter-owned refusal cause".into());
+    }
     if !matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: false,
             ..
@@ -420,12 +429,13 @@ async fn exercise_prepared_push_route(
         ),
     )
     .await??;
-    if !matches!(receipt.outcome, DeliveryOutcome::Queued)
-        || receipt.reachability != Some(collaboration_protocol::SessionReachability::CodexAppServer)
+    if !matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Queued)
+        || receipt.receipt().reachability
+            != Some(collaboration_protocol::SessionReachability::CodexAppServer)
     {
         return Err("prepared push did not use the selected Codex app-server route".into());
     }
-    if !matches!(receipt.client.as_ref(), Some(DeliveryClientReceipt::CodexAppServer(native)) if native.target == target && String::from(native.client_user_message_id.clone()) == push_id.as_str() && native.input_kind == MessageInputKind::Agent && native.representation == MessageRepresentation::DeclaredAgentText && matches!(&native.acceptance, collaboration_protocol::NativeSendAcceptance::QueueAccepted { submission_id } if String::from(submission_id.clone()) == "queued-one"))
+    if !matches!(receipt.receipt().client.as_ref(), Some(DeliveryClientReceipt::CodexAppServer(native)) if native.target == target && String::from(native.client_user_message_id.clone()) == push_id.as_str() && native.input_kind == MessageInputKind::Agent && native.representation == MessageRepresentation::DeclaredAgentText && matches!(&native.acceptance, collaboration_protocol::NativeSendAcceptance::QueueAccepted { submission_id } if String::from(submission_id.clone()) == "queued-one"))
     {
         return Err("prepared push did not retain its Codex route evidence and receipt".into());
     }
@@ -636,7 +646,7 @@ async fn retiring_during_thread_read_returns_retryable_unavailable()
     server.await??;
 
     if !matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ref reason,

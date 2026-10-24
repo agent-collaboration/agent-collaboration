@@ -22,18 +22,19 @@ pub(super) async fn verify() -> ProofResult<()> {
     validate_restarted_host(&root, &state, &marker).await?;
 
     let service_directory = root.join("agent-communication");
-    let first_project_id = required_string(&state, "firstProjectId")?;
+    let first_workspace_id = required_string(&state, "firstWorkspaceId")?;
     let first_board_id = required_string(&state, "firstBoardId")?;
-    let second_project_id = required_string(&state, "secondProjectId")?;
+    let second_workspace_id = required_string(&state, "secondWorkspaceId")?;
     let second_board_id = required_string(&state, "secondBoardId")?;
-    let root_message_id = required_string(&state, "rootMessageId")?;
+    let thread_id = required_string(&state, "threadId")?;
     let contribution_message_id = required_string(&state, "contributionMessageId")?;
     let cross_project_message_id = required_string(&state, "crossProjectMessageId")?;
     let range_upper = state
-        .get("rangeUpperActivitySequence")
-        .and_then(Value::as_u64)
-        .ok_or("saved range upper activity sequence missing")?
+        .get("rangeUpper")
+        .ok_or("saved range upper cursor missing")?
         .to_string();
+    let range_start =
+        serde_json::json!({"kind":"aggregate","cursor":{"perProject":{}}}).to_string();
     let alpha_identity = serde_json::to_string(
         state
             .get("alphaIdentity")
@@ -45,84 +46,82 @@ pub(super) async fn verify() -> ProofResult<()> {
             .ok_or("saved beta identity missing")?,
     )?;
 
-    for project_id in [first_project_id, second_project_id] {
+    for workspace_id in [first_workspace_id, second_workspace_id] {
         let shown = run_board_cli(
             &service_directory,
-            ["project", "show", "--project-id", project_id],
+            ["workspace", "show", "--workspace-id", workspace_id],
         )
         .await?;
-        if result(&shown, "/project/projectId")?.as_str() != Some(project_id) {
+        if result(&shown, "/workspace/workspaceId")?.as_str() != Some(workspace_id) {
             return Err(
-                format!("resumed Host returned a different project for {project_id}").into(),
+                format!("resumed Host returned a different project for {workspace_id}").into(),
             );
         }
     }
-    let archived_board =
-        run_board_cli(&service_directory, ["show", "--board-id", first_board_id]).await?;
+    let archived_board = run_board_cli(
+        &service_directory,
+        ["board", "show", "--board-id", first_board_id],
+    )
+    .await?;
     if result(&archived_board, "/board/state")?.as_str() != Some("archived") {
         return Err("archived board state did not survive Host restart".into());
     }
-    let active_board =
-        run_board_cli(&service_directory, ["show", "--board-id", second_board_id]).await?;
+    let active_board = run_board_cli(
+        &service_directory,
+        ["board", "show", "--board-id", second_board_id],
+    )
+    .await?;
     if result(&active_board, "/board/state")?.as_str() != Some("active") {
         return Err("second project's active board did not survive Host restart".into());
     }
-    for message_id in [
-        root_message_id,
-        contribution_message_id,
-        cross_project_message_id,
-    ] {
-        let shown = run_board_cli(
-            &service_directory,
-            ["message", "show", "--message-id", message_id],
-        )
-        .await?;
-        if result(&shown, "/message/messageId")?.as_str() != Some(message_id) {
-            return Err(
-                format!("resumed Host returned a different message for {message_id}").into(),
-            );
+    for post_id in [thread_id, contribution_message_id, cross_project_message_id] {
+        let shown =
+            run_board_cli(&service_directory, ["post", "show", "--post-id", post_id]).await?;
+        if result(&shown, "/post/postId")?.as_str() != Some(post_id) {
+            return Err(format!("resumed Host returned a different message for {post_id}").into());
         }
     }
     let cross_project_message = run_board_cli(
         &service_directory,
-        ["message", "show", "--message-id", cross_project_message_id],
+        ["post", "show", "--post-id", cross_project_message_id],
     )
     .await?;
-    let references = result(&cross_project_message, "/message/references")?
+    let references = result(&cross_project_message, "/post/references")?
         .as_array()
         .ok_or("cross-project references were not an array")?;
     if !references.iter().any(|reference| {
-        reference.get("messageId").and_then(Value::as_str) == Some(contribution_message_id)
-    }) || !references.iter().any(|reference| {
-        reference.get("rootMessageId").and_then(Value::as_str) == Some(root_message_id)
-    }) {
+        reference.get("postId").and_then(Value::as_str) == Some(contribution_message_id)
+    }) || !references
+        .iter()
+        .any(|reference| reference.get("threadId").and_then(Value::as_str) == Some(thread_id))
+    {
         return Err("cross-project references did not survive Host restart".into());
     }
 
     let history = run_board_cli(
         &service_directory,
         [
-            "message",
+            "post",
             "list",
             "--scope",
-            "all-projects",
+            "all-workspaces",
             "--selection",
             "range",
-            "--from-activity-sequence",
-            "0",
-            "--to-activity-sequence",
+            "--from",
+            &range_start,
+            "--to",
             &range_upper,
         ],
     )
     .await?;
-    require_record_message_ids(&history, &[root_message_id, cross_project_message_id])?;
+    require_record_message_ids(&history, &[thread_id, cross_project_message_id])?;
     let watched_thread = run_board_cli(
         &service_directory,
         [
             "thread",
             "show",
-            "--root-message-id",
-            root_message_id,
+            "--thread-id",
+            thread_id,
             "--reader",
             &beta_identity,
         ],
@@ -137,9 +136,9 @@ pub(super) async fn verify() -> ProofResult<()> {
             "inbox",
             "fetch",
             "--scope",
-            "project",
-            "--project-id",
-            first_project_id,
+            "workspace",
+            "--workspace-id",
+            first_workspace_id,
             "--reader",
             &alpha_identity,
         ],

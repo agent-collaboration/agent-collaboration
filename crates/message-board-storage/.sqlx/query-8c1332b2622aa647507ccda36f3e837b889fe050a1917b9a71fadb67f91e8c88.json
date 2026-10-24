@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE plan_revisions SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, content_hash=?, document=?, superseded_by=?, revision=? WHERE revision_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "8c1332b2622aa647507ccda36f3e837b889fe050a1917b9a71fadb67f91e8c88"
+}

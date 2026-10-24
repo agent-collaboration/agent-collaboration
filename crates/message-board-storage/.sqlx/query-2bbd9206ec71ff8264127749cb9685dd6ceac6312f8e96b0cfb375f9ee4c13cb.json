@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "WITH reader AS (SELECT actor_id FROM actors WHERE canonical_identity=?)\nSELECT EXISTS(SELECT 1 FROM thread_watches WHERE reader_actor=(SELECT actor_id FROM reader) AND active=1)\n OR EXISTS(SELECT 1 FROM project_watches WHERE reader_actor=(SELECT actor_id FROM reader) AND active=1) AS \"active!: bool\",\n (SELECT active FROM thread_watches WHERE reader_actor=(SELECT actor_id FROM reader) AND active NOT IN (0,1) LIMIT 1) AS \"thread_invalid: i64\",\n (SELECT active FROM project_watches WHERE reader_actor=(SELECT actor_id FROM reader) AND active NOT IN (0,1) LIMIT 1) AS \"project_invalid: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "active!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "thread_invalid: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "project_invalid: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "2bbd9206ec71ff8264127749cb9685dd6ceac6312f8e96b0cfb375f9ee4c13cb"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT p.push_id AS \"push_id!: String\"\nFROM router_pushes p\nWHERE target_service_id = ? AND target_endpoint_id = ? AND target_session_id = ?\n  AND retention = 'mailTerminalAge' AND delivery_state = 'held'\n  AND NOT EXISTS (\n    SELECT 1 FROM local_delivery_retries r\n    WHERE r.item_id = p.push_id AND r.scheduled_retry_at IS NOT NULL\n  )\n  AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id=p.push_id)\nORDER BY created_at, push_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0ba557be5c958e58973048e35be2d4920b08971e8d9669cb496c02828562af1f"
+}

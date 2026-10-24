@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(DISTINCT CASE WHEN f.request_id IS NULL THEN '=' || f.record_id ELSE '?' || f.request_id END) AS \"changes!: i64\" FROM role_assignments a JOIN project_feed f ON f.record_kind = 'roleAssignment' AND f.record_id = a.assignment_id WHERE a.project_subject = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "changes!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "160a130c011260bb0454f265a87a5b688eef5c04f4de2865c705b66749cb04b3"
+}

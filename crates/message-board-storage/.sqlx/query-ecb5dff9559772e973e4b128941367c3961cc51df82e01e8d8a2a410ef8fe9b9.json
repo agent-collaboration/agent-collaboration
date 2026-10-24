@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT workstream_id AS \"id!: String\" FROM workstreams WHERE workstream_id>? ORDER BY workstream_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ecb5dff9559772e973e4b128941367c3961cc51df82e01e8d8a2a410ef8fe9b9"
+}

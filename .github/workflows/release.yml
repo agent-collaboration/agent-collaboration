@@ -95,13 +95,13 @@ jobs:
 
       - name: Build release binary
         working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration --bins
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins
 
       - name: Reject test Keychain support in the release dependency graph
         working-directory: release-source
         run: |
           set -euo pipefail
-          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -e normal,build,features -i codex-router-secret-store)"
+          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features -i codex-router-secret-store)"
           if grep -q 'keychain-test-guard' <<<"${dependency_features}"; then
             echo "release dependency graph includes keychain-test-guard" >&2
             exit 1
@@ -152,7 +152,7 @@ jobs:
             echo "no Developer ID Application identity for team ${DEVELOPER_ID_TEAM}" >&2
             exit 1
           fi
-          for executable in codex-router agent-collaboration agent-sessions; do
+          for executable in codex-router agent-collaboration agent-sessions codex-router-board-upgrade; do
             codesign --force --sign "${signing_identity}" \
               --identifier "${CODE_IDENTIFIER_PREFIX}.${executable}" \
               --options runtime --timestamp \
@@ -214,6 +214,17 @@ jobs:
             exit 1
           fi
 
+          upgrade_binary="target/release/codex-router-board-upgrade"
+          if [[ "$(file "${upgrade_binary}")" != *"Mach-O 64-bit executable arm64"* ]]; then
+            echo "codex-router-board-upgrade binary is not Mach-O arm64" >&2
+            exit 1
+          fi
+          verify_release_signature "${upgrade_binary}"
+          if [[ "$("${upgrade_binary}" --version)" != "codex-router-board-upgrade ${RELEASE_VERSION}" ]]; then
+            echo "codex-router-board-upgrade version does not match release tag" >&2
+            exit 1
+          fi
+
           asset_name="codex-router-v${RELEASE_VERSION}-aarch64-apple-darwin.tar.gz"
           release_directory="${RUNNER_TEMP}/codex-router-release"
           payload_directory="${release_directory}/payload"
@@ -221,12 +232,14 @@ jobs:
           install -m 0755 "${release_binary}" "${payload_directory}/codex-router"
           install -m 0755 "${collaboration_binary}" "${payload_directory}/agent-collaboration"
           install -m 0755 "${session_binary}" "${payload_directory}/agent-sessions"
+          install -m 0755 "${upgrade_binary}" "${payload_directory}/codex-router-board-upgrade"
           cp -R target/protocol-schemas "${payload_directory}/protocol-schemas"
           install -m 0644 docs/agent-guidance/agent-collaboration.md "${payload_directory}/agent-collaboration-guide.md"
           COPYFILE_DISABLE=1 tar \
             -C "${payload_directory}" \
             -czf "${release_directory}/${asset_name}" \
-            codex-router agent-collaboration agent-sessions protocol-schemas agent-collaboration-guide.md
+            codex-router agent-collaboration agent-sessions codex-router-board-upgrade \
+            protocol-schemas agent-collaboration-guide.md
           asset_sha256="$(shasum -a 256 "${release_directory}/${asset_name}" | cut -d ' ' -f 1)"
 
           {
@@ -409,7 +422,7 @@ jobs:
             exit 1
           fi
 
-          for executable in agent-collaboration agent-sessions; do
+          for executable in agent-collaboration agent-sessions codex-router-board-upgrade; do
             installed_executable="$(brew --prefix codex-router)/bin/${executable}"
             if [[ ! -x "${installed_executable}" ]]; then
               echo "Homebrew did not install ${executable}" >&2

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO mail_submission_epochs(item_id,project,epoch,recorded_at) VALUES (?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "5b07541844acbf5e9b1e11ed66106508848aa80ce9f69e419ee7e8869b4188f9"
+}

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO thread_watches(watch_id, reader_actor, thread_id, start_epoch, start_position, active) VALUES (?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "3b6475a1559bfb6377854e8fc11789cc4f74949359f588e5b9dc3e2d903c1dac"
+}

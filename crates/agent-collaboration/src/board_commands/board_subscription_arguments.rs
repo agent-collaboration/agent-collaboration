@@ -1,19 +1,22 @@
 //! Clap arguments for subscription scope and policy commands.
 use super::board_arguments::CommonArguments;
+use super::board_request_arguments::RequestMetadataArguments;
 use clap::{Args, ValueEnum};
 
 #[derive(Args)]
 pub(super) struct ThreadSubscriptionScopeArguments {
-    /// Root Thread UUIDv7. Mutually exclusive with --topic-id.
-    #[arg(long, conflicts_with = "topic_id")]
-    pub root_message_id: Option<String>,
-    /// Topic UUIDv7. Mutually exclusive with --root-message-id.
-    #[arg(long, conflicts_with = "root_message_id")]
-    pub topic_id: Option<String>,
+    /// Root Thread UUIDv7. Mutually exclusive with --project-id.
+    #[arg(long, conflicts_with = "project_id")]
+    pub thread_id: Option<String>,
+    /// Project UUIDv7. Mutually exclusive with --thread-id.
+    #[arg(long, conflicts_with = "thread_id")]
+    pub project_id: Option<String>,
 }
 
 #[derive(Args)]
 pub(super) struct ThreadSubscribeArguments {
+    #[command(flatten)]
+    pub request: RequestMetadataArguments,
     #[command(flatten)]
     pub scope: ThreadSubscriptionScopeArguments,
     /// Typed Reader Identity JSON, or self for the current session.
@@ -38,6 +41,8 @@ pub(super) struct ThreadSubscribeArguments {
 
 #[derive(Args)]
 pub(super) struct ThreadUnsubscribeArguments {
+    #[command(flatten)]
+    pub request: RequestMetadataArguments,
     #[command(flatten)]
     pub scope: ThreadSubscriptionScopeArguments,
     /// Typed Reader Identity JSON, or self for the current session.

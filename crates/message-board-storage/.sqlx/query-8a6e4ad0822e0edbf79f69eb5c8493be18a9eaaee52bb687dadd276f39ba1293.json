@@ -1,0 +1,100 @@
+{
+  "db_name": "Turso",
+  "query": "WITH cursors AS (\n SELECT CAST(json_extract(value,'$[0]') AS INTEGER) AS cursor_epoch,\n        CAST(json_extract(value,'$[1]') AS INTEGER) AS cursor_position FROM json_each(?)\n), facts AS (\n SELECT c.cursor_epoch,c.cursor_position,\n  (SELECT COUNT(*) FROM project_feed f WHERE f.position=c.cursor_position) AS retained_count,\n  (SELECT MIN(f.epoch) FROM project_feed f WHERE f.position=c.cursor_position) AS retained_epoch,\n  k.line_id AS known_line_id,\n  n.line_id AS later_line_id,n.epoch AS later_epoch,n.inherited_through AS inherited_through\n FROM cursors c\n LEFT JOIN epoch_lines k ON k.epoch=c.cursor_epoch\n LEFT JOIN epoch_lines n ON n.epoch=(SELECT MIN(next.epoch) FROM epoch_lines next WHERE next.epoch>c.cursor_epoch)\n)\nSELECT cursor_epoch AS \"cursor_epoch!: i64\",cursor_position AS \"cursor_position!: i64\",\n retained_count AS \"retained_count!: i64\",retained_epoch AS \"retained_epoch?: i64\",\n known_line_id AS \"known_line_id?: String\",later_line_id AS \"later_line_id?: String\",\n later_epoch AS \"later_epoch?: i64\",inherited_through AS \"inherited_through?: i64\",\n (SELECT COUNT(*) FROM project_feed r WHERE r.position=facts.inherited_through) AS \"resume_count!: i64\",\n (SELECT MIN(r.epoch) FROM project_feed r WHERE r.position=facts.inherited_through) AS \"resume_epoch?: i64\",\n (SELECT MIN(r.entry_id) FROM project_feed r WHERE r.position=facts.inherited_through) AS \"resume_entry_id?: String\"\nFROM facts ORDER BY cursor_epoch,cursor_position\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cursor_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "cursor_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "retained_count!: i64",
+        "type_info": {
+          "name": "BLOB"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "retained_epoch?: i64",
+        "type_info": {
+          "name": "BLOB"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "known_line_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "later_line_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "later_epoch?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "inherited_through?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "resume_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "resume_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "resume_entry_id?: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "8a6e4ad0822e0edbf79f69eb5c8493be18a9eaaee52bb687dadd276f39ba1293"
+}

@@ -11,7 +11,7 @@ pub struct WakeListPosition {
     pub wakeup_id: WakeupId,
 }
 pub struct WakeListPage<TMessage> {
-    pub records: Vec<WakeRecord<TMessage>>,
+    pub records: Vec<WakeRecord<TMessage, collaboration_protocol::WakeCreator>>,
     pub next: Option<WakeListPosition>,
 }
 impl AutomationStore {

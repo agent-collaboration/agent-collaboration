@@ -9,6 +9,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
 session-event-model = { path = "../session-event-model", version = "0.1.39" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }

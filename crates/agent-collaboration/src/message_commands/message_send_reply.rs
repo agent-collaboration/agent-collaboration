@@ -6,7 +6,10 @@ use crate::failure_line::{
     render_failure_line, render_held_line, render_rejection_line, render_unknown_line,
 };
 use crate::message_input_arguments::prepare_message_send;
-use collaboration_client::protocol::{DeliveryOutcome, MessageText, PushDeliveryState};
+use collaboration_client::protocol::{
+    DeliveryOutcome, MessageReplyResult, MessageSendResult, MessageText, PushDeliveryState,
+    QueuedMessageSend,
+};
 use collaboration_client::{
     ClientError, CollaborationClient, MessageReplyError, MessageReplyRequest, MessageSendError,
     MessageSendRequest, OperationEffect,
@@ -16,6 +19,22 @@ use std::io::{self, Read, Write};
 
 pub(super) fn run_message_send(args: MessageSendArguments) -> i32 {
     let machine = args.json;
+    let item_id = match args
+        .item_id
+        .clone()
+        .map(collaboration_client::protocol::MailItemId::try_from)
+        .transpose()
+    {
+        Ok(id) => id.unwrap_or_else(collaboration_client::protocol::MailItemId::generate),
+        Err(_) => {
+            return report_message_failure(
+                "invalidShape",
+                "--item-id must be a canonical UUIDv7",
+                2,
+                machine,
+            );
+        }
+    };
     let prepared = prepare_message_send(&args);
     let (directory, prepared) = match prepared {
         Ok(value) => value,
@@ -23,6 +42,9 @@ pub(super) fn run_message_send(args: MessageSendArguments) -> i32 {
             return report_message_failure("invalidField", &message, 2, machine);
         }
     };
+    if writeln!(io::stderr(), "itemId: {}", item_id.as_str()).is_err() {
+        return 5;
+    }
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -41,13 +63,14 @@ pub(super) fn run_message_send(args: MessageSendArguments) -> i32 {
         .await
         .map_err(|error| MessageSendError::Preparation(Box::new(error)))?;
         let saved = prepared
-            .resolve(&client.identity().service_id)
+            .resolve_direct_message(&client.identity().service_id)
             .map_err(|_| {
                 MessageSendError::Preparation(Box::new(ClientError::InvalidRequest(
                     "invalid session target",
                 )))
             })?;
         let request = MessageSendRequest {
+            item_id: Some(item_id),
             target: saved.target,
             message: saved
                 .content
@@ -150,12 +173,10 @@ fn read_reply_text(args: &ReplyArguments) -> Result<MessageText, String> {
         .map_err(|_| "Invalid or oversized message text".to_owned())
 }
 
-fn report_reply(
-    result: Result<collaboration_client::protocol::SessionMessageReplyResult, MessageReplyError>,
-    machine: bool,
-) -> i32 {
+fn report_reply(result: Result<MessageReplyResult, MessageReplyError>, machine: bool) -> i32 {
     let (record, exit_code, confirmation, failure_line, write_failure_code) = match result {
-        Ok(reply) => {
+        Ok(MessageSendResult::Queued { queued }) => queued_report(queued),
+        Ok(MessageSendResult::Local(reply)) => {
             let exit_code = receipt_exit_status(reply.delivery_state);
             let failure_line = receipt_failure_line(
                 reply.delivery_state,
@@ -208,6 +229,26 @@ fn report_reply(
     }
 }
 
+fn queued_report(
+    queued: QueuedMessageSend,
+) -> (serde_json::Value, i32, Option<String>, Option<String>, i32) {
+    let confirmation = format!(
+        "queued item {} to {} {}",
+        queued.item.as_str(),
+        queued.target_identity,
+        serde_json::to_string(&queued.target)
+            .unwrap_or_else(|_| "SessionRef unavailable".to_owned())
+    );
+    let result: MessageSendResult = MessageSendResult::Queued { queued };
+    (
+        crate::endpoint_commands::result_envelope(json!(result)),
+        0,
+        Some(confirmation),
+        None,
+        5,
+    )
+}
+
 fn reply_confirmation_line(
     reply: &collaboration_client::protocol::SessionMessageReplyResult,
 ) -> String {
@@ -225,10 +266,7 @@ fn session_ref_text(reply: &collaboration_client::protocol::SessionMessageReplyR
     serde_json::to_string(&reply.target).unwrap_or_else(|_| "SessionRef unavailable".to_owned())
 }
 
-fn report(
-    result: Result<collaboration_client::protocol::PushMessageSendResult, MessageSendError>,
-    machine: bool,
-) -> i32 {
+fn report(result: Result<MessageSendResult, MessageSendError>, machine: bool) -> i32 {
     if let Err(MessageSendError::Preparation(error)) = &result
         && let Some(code) = crate::permission_diagnostic_reporting::report_actionable_client_error(
             error,
@@ -239,7 +277,8 @@ fn report(
         return code;
     }
     let (record, code, confirmation, failure_line, write_failure_code) = match result {
-        Ok(push) => {
+        Ok(MessageSendResult::Queued { queued }) => queued_report(queued),
+        Ok(MessageSendResult::Local(push)) => {
             let exit = receipt_exit_status(push.delivery_state);
             let failure_line = receipt_failure_line(
                 push.delivery_state,
@@ -358,227 +397,8 @@ fn receipt_failure_line(
 }
 
 #[cfg(test)]
-mod reply_argument_tests {
-    use super::super::{
-        HistoryArguments, InboxArguments, MessageArguments, MessageCommand, ReplyArguments,
-    };
-    use super::reply_confirmation_line;
-    use clap::Parser;
-
-    #[test]
-    fn reply_requires_a_reference_and_keeps_text_file_input() {
-        const PUSH_ID: &str = "019f0000-0000-7000-8000-000000000101";
-
-        let text_request = MessageArguments::try_parse_from([
-            "agent-collaboration message",
-            "reply",
-            PUSH_ID,
-            "hello",
-        ])
-        .expect("positional reply arguments parse");
-        assert!(matches!(
-            text_request.command,
-            MessageCommand::Reply(ReplyArguments {
-                reference,
-                text: Some(ref text),
-                text_file: None,
-                ..
-            }) if reference == PUSH_ID && text == "hello"
-        ));
-
-        let file_request = MessageArguments::try_parse_from([
-            "agent-collaboration message",
-            "reply",
-            PUSH_ID,
-            "--text-file",
-            "reply.md",
-        ])
-        .expect("file reply arguments parse");
-        assert!(matches!(
-            file_request.command,
-            MessageCommand::Reply(ReplyArguments {
-                reference,
-                text: None,
-                text_file: Some(_),
-                ..
-            }) if reference == PUSH_ID
-        ));
-
-        assert!(
-            MessageArguments::try_parse_from([
-                "agent-collaboration message",
-                "reply",
-                "--text",
-                "hello",
-            ])
-            .is_err()
-        );
-
-        assert!(
-            MessageArguments::try_parse_from([
-                "agent-collaboration message",
-                "reply",
-                PUSH_ID,
-                "hello",
-                "--expect-sender",
-                "{\"endpoint\":{},\"sessionId\":\"sender\"}",
-            ])
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn inbox_and_history_are_message_subcommands() {
-        assert!(matches!(
-            MessageArguments::try_parse_from(["agent-collaboration message", "inbox"])
-                .expect("inbox arguments parse")
-                .command,
-            MessageCommand::Inbox(InboxArguments { .. })
-        ));
-        assert!(matches!(
-            MessageArguments::try_parse_from([
-                "agent-collaboration message",
-                "history",
-                "--with",
-                "{\"endpoint\":{},\"sessionId\":\"other\"}",
-            ])
-            .expect("history arguments parse")
-            .command,
-            MessageCommand::History(HistoryArguments { .. })
-        ));
-    }
-
-    #[test]
-    fn reply_confirmation_names_the_recipient_push_and_delivery_outcome() {
-        const PUSH_ID: &str = "019f0000-0000-7000-8000-000000000101";
-        const PUSH_LINK: &str = "router://00000000-0000-4000-8000-000000000001/push/019f0000-0000-7000-8000-000000000101";
-        let target: collaboration_client::protocol::SessionRef = serde_json::from_value(
-            serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},
-                "sessionId":"reply-target"
-            }),
-        )
-        .expect("reply target");
-        let reply = collaboration_client::protocol::SessionMessageReplyResult {
-            target: target.clone(),
-            target_identity: "✳️ Claude Main".to_owned(),
-            push_id: PUSH_ID.to_owned().try_into().expect("push id"),
-            link: PUSH_LINK.to_owned(),
-            delivery_state: collaboration_client::protocol::PushDeliveryState::Delivered,
-            receipt: collaboration_client::protocol::DeliveryReceipt {
-                outcome: collaboration_client::protocol::DeliveryOutcome::PeerMessageWritten,
-                reachability: Some(
-                    collaboration_client::protocol::SessionReachability::ClaudeCodePeer,
-                ),
-                client: Some(collaboration_client::protocol::DeliveryClientReceipt::ClaudeCodePeer),
-            },
-        };
-
-        assert_eq!(
-            reply_confirmation_line(&reply),
-            format!(
-                "replied to ✳️ Claude Main {} (push {PUSH_ID} {PUSH_LINK}): peer message written",
-                serde_json::to_string(&target).expect("target JSON"),
-            ),
-        );
-    }
-}
-
+#[path = "message_reply_argument_tests.rs"]
+mod reply_argument_tests;
 #[cfg(test)]
-mod tests {
-    use super::super::operation_failure_exit;
-    use super::receipt_exit_status;
-    use collaboration_client::{ClientError, MessageSendError, OperationEffect};
-
-    #[test]
-    fn cli_receipt_keeps_foreign_writer_reason_action_and_rejected_exit() {
-        let receipt: collaboration_client::protocol::DeliveryReceipt =
-            serde_json::from_value(serde_json::json!({
-                "outcome":{
-                    "kind":"rejected","reason":"heldByAnotherClient",
-                    "nextAction":"messageFromHoldingCodexClient","clientCode":-32600,
-                    "detail":"Message it from the Codex client that holds it."
-                },
-                "reachability":"codexAppServer","client":null
-            }))
-            .expect("typed receipt");
-        assert_eq!(
-            receipt_exit_status(collaboration_client::protocol::PushDeliveryState::Rejected),
-            4
-        );
-        let output = crate::endpoint_commands::result_envelope(serde_json::json!(receipt));
-        assert_eq!(
-            output["result"]["record"]["outcome"]["reason"],
-            "heldByAnotherClient"
-        );
-        assert_eq!(
-            output["result"]["record"]["outcome"]["nextAction"],
-            "messageFromHoldingCodexClient"
-        );
-    }
-
-    #[test]
-    fn adapter_distinguishes_preparation_loss_from_post_dispatch_loss() {
-        let transport = || {
-            ClientError::Transport(std::io::Error::new(
-                std::io::ErrorKind::ConnectionReset,
-                "fixture",
-            ))
-        };
-        let (preparation, preparation_target) =
-            MessageSendError::Preparation(Box::new(transport()))
-                .into_operation_failure_and_target();
-        assert!(preparation_target.is_none());
-        assert_eq!(preparation.effect, OperationEffect::None);
-        assert_eq!(
-            preparation.kind,
-            collaboration_client::OperationFailureKind::Unavailable
-        );
-
-        let (submission, submission_target) = MessageSendError::Submission {
-            target: serde_json::from_value(serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
-                "sessionId":"target"
-            }))
-            .expect("target"),
-            source: Box::new(transport()),
-        }
-        .into_operation_failure_and_target();
-        assert!(submission_target.is_some());
-        assert_eq!(submission.effect, OperationEffect::Unknown);
-        assert_eq!(
-            submission.kind,
-            collaboration_client::OperationFailureKind::Unavailable
-        );
-
-        let (malformed_after_dispatch, malformed_target) = MessageSendError::Submission {
-            target: serde_json::from_value(serde_json::json!({
-                "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},
-                "sessionId":"target"
-            }))
-            .expect("target"),
-            source: Box::new(ClientError::Protocol("malformed result")),
-        }
-        .into_operation_failure_and_target();
-        assert!(malformed_target.is_some());
-        assert_eq!(malformed_after_dispatch.effect, OperationEffect::Unknown);
-        assert_eq!(operation_failure_exit(&malformed_after_dispatch), 5);
-    }
-
-    #[test]
-    fn adapter_preserves_established_service_rejection_exit_codes() {
-        for (service_kind, expected) in [
-            ("outcomeUnknown", 5),
-            ("unsupportedCapability", 2),
-            ("unavailable", 3),
-            ("nativeRejected", 4),
-        ] {
-            let (failure, _) = MessageSendError::Preparation(Box::new(ClientError::Rejected {
-                code: -32050,
-                data: Some(serde_json::json!({"kind":service_kind})),
-            }))
-            .into_operation_failure_and_target();
-            assert_eq!(operation_failure_exit(&failure), expected, "{service_kind}");
-        }
-    }
-}
+#[path = "message_send_result_tests.rs"]
+mod tests;

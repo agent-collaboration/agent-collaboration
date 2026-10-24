@@ -19,7 +19,8 @@ use tokio::net::UnixListener;
 #[tokio::test]
 async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_reappears() {
     let proof: ProofResult = async {
-        let mut fixture = ClaudePeerSubscriptionFixture::start().await?;
+        // Central's grant is fixture-arranged; this case proves peer delivery, not enrollment.
+        let fixture = ClaudePeerSubscriptionFixture::start().await?;
         std::fs::set_permissions(
             fixture.socket_path().parent().expect("registry directory"),
             std::fs::Permissions::from_mode(0o700),
@@ -37,33 +38,34 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         );
 
         let posted_message = fixture.post_activity().await?;
-        let held_sleep = fixture
-            .next_owner_sleep("held Batch quiescence", Some(PRESENCE_RECHECK))
-            .await?;
-        assert_eq!(
-            held_sleep.duration_since(fixture.current_monotonic()?),
-            PRESENCE_RECHECK
-        );
+        let message_board::RecordPlacement::Project(posted_position) = posted_message.position
+        else {
+            return Err(std::io::Error::other("posted activity is not project-qualified").into());
+        };
+        let posted_position = posted_position.cursor;
+        let held = tokio::time::timeout(OWNER_EVENT_TIMEOUT, async {
+            loop {
+                let records = fixture.held_push_records().await?;
+                if !records.is_empty() { break Ok::<_, Box<dyn std::error::Error + Send + Sync>>(records); }
+                tokio::task::yield_now().await;
+            }
+        }).await.map_err(|_| std::io::Error::other("actual SDK Held item did not appear"))??;
         let held_subscription = fixture.subscription().await?;
-        let held_root = held_subscription
-            .roots()
-            .first()
-            .ok_or_else(|| std::io::Error::other("held subscription lost its pending root"))?;
-        assert_eq!(held_root.root_message_id(), fixture.root_message_id());
-        assert_eq!(held_root.pending_count(), 1);
-        assert!(held_root.held_since().is_some());
-        assert_eq!(held_root.next_retry_at(), None);
-        assert!(matches!(
-            held_subscription.last_outcome(),
-            Some(SubscriptionDeliveryOutcome::NotSubmitted {
-                retryable: true,
-                reason,
-            }) if reason == "target is not running"
-        ));
-        assert!(
-            fixture.pending_push_records().await?.is_empty(),
-            "closed Claude peers hold Board activity before creating a Router notice"
-        );
+        assert_eq!(held_subscription.scope, message_board::SubscriptionScope::thread(fixture.thread_id().clone()));
+        assert_eq!(held_subscription.pending_count, 1);
+        assert!(held_subscription.held_since.is_some());
+        assert_eq!(held_subscription.next_retry_at, None);
+        assert!(matches!(held_subscription.last_outcome,
+            Some(SubscriptionDeliveryOutcome::NotSubmitted { retryable: true, ref reason }) if reason == "target is not running; follow batch held"));
+        assert_eq!(held.len(), 1, "closed Claude peer retains the SDK-owned frozen item");
+        let held_notice = &held[0];
+        assert_eq!(held_notice.delivery_state, PushDeliveryState::Held);
+        assert_eq!(held_notice.kind, PushKind::SubscriptionActivity);
+        assert_eq!(held_notice.target, *fixture.target());
+        let frozen_activity = held_notice.activity.clone().expect("frozen activity");
+        assert_eq!(frozen_activity.ranges.len(), 1);
+        assert_eq!(frozen_activity.ranges[0].from, posted_position);
+        assert_eq!(frozen_activity.ranges[0].through, posted_position);
 
         let (listener, writable_peer) = fixture.publish_writable_peer()?;
         assert_eq!(String::from(writable_peer.session_id.clone()), SESSION_ID);
@@ -77,13 +79,6 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
             ClaudePeerSubscriptionFixture::receive_one_peer_batch(Arc::clone(&listener));
 
         fixture.advance(PRESENCE_RECHECK)?;
-        let settled_sleep = fixture
-            .next_owner_sleep("accepted Batch quiescence", None)
-            .await?;
-        assert!(
-            settled_sleep > fixture.current_monotonic()?,
-            "after accepting the Batch the owner waits for its next storage deadline"
-        );
         let frames = tokio::time::timeout(OWNER_EVENT_TIMEOUT, peer_receiver)
             .await
             .map_err(|_| std::io::Error::other("peer frame task did not finish"))???;
@@ -109,10 +104,10 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
             .ok_or_else(|| std::io::Error::other("notice line omitted its Router link"))?;
         let link = RouterLink::parse(link_text)?;
         let push_id = link.push_id().clone();
-        let delivered_notice = fixture
-            .push_record(&push_id)
-            .await?
-            .ok_or_else(|| std::io::Error::other("peer link has no stored push notice"))?;
+        assert_eq!(push_id, held_notice.push_id, "the real peer receives the original frozen identity");
+        let delivered_notice = fixture.await_push_state(&push_id, PushDeliveryState::Delivered).await?;
+        assert_eq!(delivered_notice.activity, Some(frozen_activity));
+        assert_eq!(delivered_notice.origin_router_ref, held_notice.origin_router_ref);
         assert_eq!(delivered_notice.kind, PushKind::SubscriptionActivity);
         assert_eq!(
             delivered_notice.delivery_state,
@@ -136,15 +131,16 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         assert!(!batch_activity.draining);
         assert_eq!(batch_activity.ranges.len(), 1);
         assert_eq!(
-            batch_activity.ranges[0].root_message_id,
-            *fixture.root_message_id()
+            batch_activity.ranges[0].project_id,
+            posted_message.project_id
         );
+        assert_eq!(batch_activity.ranges[0].thread_id, *fixture.thread_id());
         assert_eq!(
-            batch_activity.ranges[0].from_activity_sequence, posted_message.activity_sequence,
+            batch_activity.ranges[0].from, posted_position,
             "the stored root range starts at the only posted message"
         );
         assert_eq!(
-            batch_activity.ranges[0].through_activity_sequence, posted_message.activity_sequence,
+            batch_activity.ranges[0].through, posted_position,
             "the stored root range ends at the only posted message"
         );
 
@@ -177,13 +173,13 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         assert_eq!(unread_inbox.records.len(), 1);
         assert!(matches!(
             unread_inbox.records.as_slice(),
-            [InboxActivity::MessageCreated { message, .. }]
-                if message.message_id == posted_message.message_id
+            [InboxActivity::PostCreated { post, .. }]
+                if post.post_id == posted_message.post_id
         ));
         let settled_subscription = fixture.subscription().await?;
-        assert!(settled_subscription.roots().is_empty());
+        assert_eq!(settled_subscription.pending_count, 0);
         assert_eq!(
-            settled_subscription.last_outcome(),
+            settled_subscription.last_outcome.as_ref(),
             Some(&SubscriptionDeliveryOutcome::Accepted)
         );
         assert!(fixture.pending_push_records().await?.is_empty());
@@ -196,13 +192,6 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
         let duplicate_connection = tokio::spawn(async move { duplicate_listener.accept().await });
         fixture.advance(PRESENCE_RECHECK)?;
         fixture.reconcile_reader().await?;
-        let second_interval_sleep = fixture
-            .next_owner_sleep("duplicate-free recheck", None)
-            .await?;
-        assert!(
-            second_interval_sleep > fixture.current_monotonic()?,
-            "the owner completes its next presence interval"
-        );
         assert!(
             !duplicate_connection.is_finished(),
             "the real peer listener receives no duplicate Batch during the following owner cycle"

@@ -25,7 +25,7 @@ impl ClaudeCodePeerDeliveryRoute {
         if !self.serves(target) {
             return Err(DeliveryContractError::ClientOperation);
         }
-        let PeerSessionLookup::Writable(peer) = self.lookup(target).await else {
+        let Ok(PeerSessionLookup::Writable(peer)) = self.lookup(target).await else {
             return Err(DeliveryContractError::ClientOperation);
         };
         Self::evidence(&peer, PeerWriteEffect::NotDispatched)
@@ -181,15 +181,20 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
                 ));
             }
             let peer = match self.lookup(&run.target).await {
-                PeerSessionLookup::Writable(peer) if peer.process_id == recorded.process_id => peer,
-                PeerSessionLookup::LiveUnsupported { .. } | PeerSessionLookup::Ambiguous { .. } => {
+                Ok(PeerSessionLookup::Writable(peer)) if peer.process_id == recorded.process_id => {
+                    peer
+                }
+                Err(_)
+                | Ok(
+                    PeerSessionLookup::LiveUnsupported { .. } | PeerSessionLookup::Ambiguous { .. },
+                ) => {
                     return Ok(rejected(
                         DeliveryRejectionReason::LiveElsewhere,
                         DeliveryNextAction::InspectTarget,
                         "Claude Code session is live but not writable",
                     ));
                 }
-                PeerSessionLookup::Absent | PeerSessionLookup::Writable(_) => {
+                Ok(PeerSessionLookup::Absent | PeerSessionLookup::Writable(_)) => {
                     return Ok(rejected(
                         DeliveryRejectionReason::EndpointUnavailable,
                         DeliveryNextAction::RetryLater,
@@ -228,7 +233,7 @@ impl ScheduledRunExecution for ClaudeCodePeerDeliveryRoute {
                         })),
                     )
                 }
-                PeerSocketWriteOutcome::NotSubmitted { reason } => (
+                PeerSocketWriteOutcome::NotSubmitted { reason, .. } => (
                     PeerWriteEffect::NotDispatched,
                     rejected(
                         DeliveryRejectionReason::EndpointUnavailable,

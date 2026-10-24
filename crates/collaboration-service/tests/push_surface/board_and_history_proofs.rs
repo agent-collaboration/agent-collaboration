@@ -1,3 +1,4 @@
+#![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
 //! Real Control proofs for off-board DMs and retained conversation views.
 use super::*;
 use chrono::{DateTime, Duration, Utc};
@@ -6,13 +7,15 @@ use collaboration_service::{
     AutomationRetentionWorker, BoardAvailability, MachineIdentity, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
 };
-use message_board_storage::BoardStore;
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
+use sqlx::{ConnectOptions, Connection};
 use std::path::PathBuf;
 
 struct BoardControlFixture {
-    pushes: Arc<TokioMutex<AutomationStore>>,
+    _fleet_runtime: board_central_test_support::FleetTestRuntime,
+    pushes: Arc<interaction_storage::InteractionStore>,
     board_path: PathBuf,
+    baseline: message_board::FeedCursor,
     retention: AutomationRetentionWorker,
     control: ControlHarness,
     _directory: tempfile::TempDir,
@@ -21,46 +24,164 @@ struct BoardControlFixture {
 impl BoardControlFixture {
     async fn start() -> Self {
         let directory = tempfile::tempdir().expect("isolated Control databases");
-        let board_path = directory.path().join("board.sqlite");
-        let board = Arc::new(TokioMutex::new(
-            BoardStore::open(&board_path)
-                .await
-                .expect("real board store"),
-        ));
-        let pushes = Arc::new(TokioMutex::new(
+        let registry = board_fixture::new_registry(directory.path()).expect("fixture enrollment");
+        let origin = message_board::ActorOrigin {
+            installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
+                .expect("fixture service"),
+            machine: message_board::MachineLabel::try_from("off-board proof".to_owned())
+                .expect("fixture machine"),
+        };
+        let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
+            directory.path(),
+            Arc::new(board_fixture::PendingRegistration),
+            &origin,
+        )
+        .await
+        .expect("real central fixture");
+        let fleet = Arc::new(fleet);
+        let admission = Arc::new(
+            ProjectAdmission::new(ProjectAdmissionProps {
+                registry: registry.clone(),
+                fleet: fleet.clone(),
+                identity: MachineIdentity::new(
+                    UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("UUID"),
+                    Some("off-board proof"),
+                )
+                .expect("identity"),
+            })
+            .expect("admission"),
+        );
+        let automation = Arc::new(TokioMutex::new(
             AutomationStore::open(&directory.path().join("automation.sqlite"))
                 .await
                 .expect("real automation store"),
         ));
+        let pushes = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("native push store"),
+        );
         let delivery = Arc::new(RecordingDelivery::new(Arc::clone(&pushes)));
         let presence = Arc::new(RunningPresence);
+        let machine = MachineIdentity::new(
+            UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
+            Some("off-board-proof"),
+        )
+        .expect("machine identity");
         let owner = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
-            board_availability: BoardAvailability::Available(Arc::clone(&board)),
-            push_store: Arc::clone(&pushes),
+            board_availability: BoardAvailability::Available(Arc::new(TokioMutex::new(
+                admission.subscription_window_store(pushes.clone()),
+            ))),
+            push_store: pushes.clone(),
             delivery: delivery.clone(),
             presence: presence.clone(),
-            machine_identity: MachineIdentity::new(
-                UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
-                Some("off-board-proof"),
-            )
-            .expect("machine identity"),
+            machine_identity: machine.clone(),
             clock: Arc::new(SystemSubscriptionClock),
         });
         owner.start().await.expect("real reader owner starts");
         let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
             .expect("service identity")
-            .with_board_store(board)
-            .with_automation_store(Arc::clone(&pushes))
+            .with_project_admission(admission)
+            .with_automation_store(automation.clone())
             .with_session_delivery(delivery)
-            .with_subscription_delivery_service(owner.clone(), presence);
+            .with_subscription_delivery_service(owner.clone(), presence.clone());
+        let (identity, mail) = native_mail_owner::NativeMailOwner::start(
+            identity,
+            board_fixture::fixture_peer().expect("fixture installation"),
+            collaboration_service::MailPushDeliveryProps {
+                interactions: pushes.clone(),
+                actors: owner.clone(),
+                presence,
+                machine,
+                clock: Arc::new(SystemSubscriptionClock),
+            },
+        )
+        .expect("compose native push owner");
         let retention = identity
             .automation_retention_worker()
             .expect("real retention worker");
         let mut control = ControlHarness::start(identity).await;
-        control.owner = Some(owner);
+        control.lifetime = PushFixtureLifetime::NativeDelivery {
+            actors: owner,
+            mail,
+            automation,
+        };
+        let actor = json!({"kind":"human","humanId":"fixture"});
+        let header = || json!({"requestId":message_board::RequestId::generate(),"protocolVersion":1,"actor":actor,"actingFor":null});
+        let workspace = message_board::WorkspaceId::generate();
+        let board = message_board::BoardId::generate();
+        let project = message_board::ProjectId::generate();
+        let mut create = header();
+        create["workspaceId"] = json!(workspace);
+        create["name"] = json!("workspace");
+        create["description"] = json!("");
+        assert!(
+            control
+                .served
+                .call("workspace_create", create)
+                .await
+                .expect("workspace")
+                .get("result")
+                .is_some()
+        );
+        let mut create = header();
+        create["workspaceId"] = json!(workspace);
+        create["boardId"] = json!(board);
+        create["name"] = json!("board");
+        create["description"] = json!("");
+        create["kind"] = json!({"kind":"area"});
+        assert!(
+            control
+                .served
+                .call("board_create", create)
+                .await
+                .expect("board")
+                .get("result")
+                .is_some()
+        );
+        let mut create = header();
+        create["boardId"] = json!(board);
+        create["projectId"] = json!(project);
+        create["title"] = json!("project");
+        board_fixture::prepare_registered_creation(
+            &fleet,
+            &registry,
+            &serde_json::from_value(create.clone()).expect("typed creation input"),
+            &message_board::ActorOrigin {
+                installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
+                    .expect("service UUID"),
+                machine: message_board::MachineLabel::try_from("off-board proof".to_owned())
+                    .expect("machine label"),
+            },
+            &runtime_primitives::SystemClock,
+        )
+        .await
+        .expect("registered project fixture");
+        assert!(
+            control
+                .served
+                .call("project_create", create)
+                .await
+                .expect("project")
+                .get("result")
+                .is_some()
+        );
+        let store = registry
+            .existing_project(&project)
+            .await
+            .expect("registry")
+            .expect("native project");
+        let board_path = store.path().to_owned();
+        let read = store.snapshot().await.expect("snapshot");
+        let baseline = read.high_water();
+        read.finish().await.expect("finish");
         Self {
+            _fleet_runtime: fleet_runtime,
             pushes,
             board_path,
+            baseline,
             retention,
             control,
             _directory: directory,
@@ -69,36 +190,38 @@ impl BoardControlFixture {
 
     async fn close(self) {
         let Self {
+            _fleet_runtime,
             pushes,
             retention,
             control,
             _directory,
             ..
         } = self;
-        control.close().await;
         drop(retention);
-        Arc::try_unwrap(pushes)
-            .ok()
-            .expect("Control and owner must release automation storage")
-            .into_inner()
-            .close()
+        drop(pushes);
+        control.close().await;
+        _fleet_runtime
+            .shutdown()
             .await
-            .expect("close automation database before its directory");
+            .expect("stop real central fixture");
         drop(_directory);
     }
 }
 
-async fn board_content_counts(path: &std::path::Path) -> (i64, i64) {
-    let mut observer = SqliteConnection::connect_with(
-        &SqliteConnectOptions::new()
-            .filename(path)
-            .foreign_keys(true),
-    )
-    .await
-    .expect("open real board observer");
+async fn board_content_counts(
+    path: &std::path::Path,
+    baseline: message_board::FeedCursor,
+) -> (i64, i64) {
+    let mut observer = sqlx_turso::TursoConnectOptions::new()
+        .filename(path)
+        .create_if_missing(false)
+        .connect()
+        .await
+        .expect("native observer");
     let counts = sqlx::query_as::<_, (i64, i64)>(
-        "SELECT (SELECT count(*) FROM board_messages),(SELECT count(*) FROM board_activity)",
+        "SELECT (SELECT count(*) FROM posts),(SELECT count(*) FROM project_feed WHERE position > ?)",
     )
+    .bind(i64::try_from(baseline.position.get()).expect("position"))
     .fetch_one(&mut observer)
     .await
     .expect("count stored board content");
@@ -109,7 +232,10 @@ async fn board_content_counts(path: &std::path::Path) -> (i64, i64) {
 #[tokio::test]
 async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
     let mut fixture = BoardControlFixture::start().await;
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     let sender = session("claude-local", "off-board-sender");
     let target = session("codex-local", "off-board-recipient");
     let sent = fixture
@@ -129,7 +255,10 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
         .and_then(Value::as_str)
         .expect("Control send created a push")
         .to_owned();
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     let shown = fixture
         .control
         .call("router/show", json!({"caller":target,"reference":push_id}))
@@ -138,7 +267,10 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
         shown.pointer("/result/record/body").and_then(Value::as_str),
         Some("off-board body")
     );
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     fixture.close().await;
 }
 
@@ -152,8 +284,6 @@ async fn stored_dm(
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push ID");
     fixture
         .pushes
-        .lock()
-        .await
         .insert_push_record(PushRecordDraft {
             push_id: push_id.clone(),
             kind: PushKind::DirectMessage,
@@ -171,7 +301,7 @@ async fn stored_dm(
             created_at,
         })
         .await
-        .expect("persist a typed DM in real SQLite");
+        .expect("persist a typed DM in the native store");
     push_id
 }
 
@@ -344,8 +474,6 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
     assert!(
         fixture
             .pushes
-            .lock()
-            .await
             .get_push_record(&expired)
             .await
             .expect("inspect expired ID")
@@ -380,6 +508,9 @@ async fn control_inbox_and_history_order_retained_dms_and_omit_expired_records()
     assert!(history.iter().all(|record| record.created_at >= cutoff));
     assert!(history.iter().any(|record| record.target == correspondent));
     assert!(history.iter().any(|record| record.read_at.is_some()));
-    assert_eq!(board_content_counts(&fixture.board_path).await, (0, 0));
+    assert_eq!(
+        board_content_counts(&fixture.board_path, fixture.baseline).await,
+        (0, 0)
+    );
     fixture.close().await;
 }

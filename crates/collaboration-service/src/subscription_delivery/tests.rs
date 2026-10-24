@@ -1,30 +1,41 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
+mod activity_scope_proofs;
 mod control_view_proofs;
 mod direct_message_proofs;
 mod f6_held_record_proofs;
 mod flight_proofs;
 mod lifecycle_proofs;
-mod owner_fixture;
+mod local_mail_proofs;
+mod native_mail_attempt_proofs;
+use crate::native_worker_faults;
+mod owner_activity_proofs;
+pub(in crate::service_identity::subscription_delivery) mod owner_fixture;
 mod push_store_proofs;
 mod queued_proofs;
 mod restore_corruption_proofs;
 mod stall_diagnosis;
+pub(in crate::service_identity::subscription_delivery) mod startup_fixture;
+mod startup_retry_proofs;
 mod timing_proofs;
+mod transient_scan_proofs;
 mod wait_proofs;
-mod write_retry_proofs;
 use owner_fixture::*;
 
 #[tokio::test(start_paused = true)]
 async fn running_reader_stores_one_neutral_push_before_layer_zero_and_keeps_inbox_unread() {
+    let before_setup = tokio::time::Instant::now();
     let fixture = OwnerFixture::new().await;
+    assert_eq!(
+        tokio::time::Instant::now(),
+        before_setup,
+        "real fixture setup advanced the paused subscription clock"
+    );
     let root = fixture.root.clone();
-    let runtime = fixture.runtime().await;
+    let runtime = fixture.native_runtime().await;
     fixture.post(&root, "PRIVATE BODY MUST NOT BE PUSHED").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
     let record = fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .get_push_record(&request.payload.push_id)
         .await
         .unwrap()

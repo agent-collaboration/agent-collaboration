@@ -19,7 +19,7 @@ fn main() {
     if let Some(argument) = arguments.first().and_then(|argument| argument.to_str())
         && argument.starts_with("board ")
     {
-        let message = "The board command was passed as one argument. Pass each word as a separate argument, for example: agent-collaboration board project list --json";
+        let message = "The board command was passed as one argument. Pass each word as a separate argument, for example: agent-collaboration workspace list --json";
         if argument
             .split_ascii_whitespace()
             .any(|word| word == "--json")
@@ -37,8 +37,40 @@ fn main() {
         }
         std::process::exit(2);
     }
-    if arguments.first().is_some_and(|arg| arg == "board") {
+    if arguments
+        .first()
+        .and_then(|arg| arg.to_str())
+        .is_some_and(|arg| {
+            matches!(
+                arg,
+                "board"
+                    | "request-effects"
+                    | "workspace"
+                    | "project"
+                    | "repository"
+                    | "post"
+                    | "thread"
+                    | "inbox"
+                    | "search"
+                    | "workstream"
+                    | "task"
+                    | "subtask"
+                    | "work-trail"
+                    | "adr"
+                    | "process"
+                    | "move"
+                    | "fact"
+                    | "feed"
+                    | "role"
+                    | "view"
+                    | "hook"
+            )
+        })
+    {
         std::process::exit(agent_collaboration::run_board_command(arguments));
+    }
+    if arguments.first().is_some_and(|arg| arg == "central") {
+        std::process::exit(agent_collaboration::run_central_command(arguments));
     }
     if arguments.first().is_some_and(|arg| arg == "automation") {
         std::process::exit(agent_collaboration::run_automation_command(arguments));

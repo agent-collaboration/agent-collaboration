@@ -1,20 +1,20 @@
 //! Selects one injected client route for an attempt, then keeps that choice fixed.
 use crate::{
     AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, DeliveryReceipt, RouteClaim, RoutePresence,
-    SessionDeliveryRoute, SessionMessageDelivery, TargetPresence, TargetPresenceProbe,
+    DeliveryContractError, DeliveryFuture, NativeDeliveryResult, RouteClaim, RoutePresence,
+    SessionDeliveryRoute, SessionMessageDelivery, TargetPresence, TargetPresenceProbe, UnsentCause,
 };
 use agent_automation::RouteEffectEvidence;
 use collaboration_protocol::{
-    DeliveryNextAction, DeliveryOutcome, DeliveryRejection, DeliveryRejectionReason,
-    MessageDelivery, SessionReachability, SessionRef,
+    DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, MessageDelivery,
+    SessionReachability, SessionRef,
 };
 use futures_util::future::join_all;
 use std::sync::Arc;
 
 enum RouteDecision {
     Selected(usize),
-    Complete(Box<DeliveryReceipt>),
+    Complete(Box<NativeDeliveryResult>),
 }
 
 pub struct SessionDeliveryRouter {
@@ -31,7 +31,7 @@ impl SessionDeliveryRouter {
         &self,
         request: crate::layer_zero::DeliveryRequest,
         evidence: &dyn AttemptEvidenceSink,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
+    ) -> Result<NativeDeliveryResult, DeliveryContractError> {
         match self.select_route(&request.target).await? {
             RouteDecision::Selected(index) => self.deliver_through(index, request, evidence).await,
             RouteDecision::Complete(receipt) => Ok(*receipt),
@@ -46,121 +46,142 @@ impl SessionDeliveryRouter {
             .await
             .into_iter()
             .collect::<Result<Vec<_>, _>>()?;
-        if let Some((index, rejection)) =
+        if let Some((index, rejection, cause)) =
             claims
                 .iter()
                 .enumerate()
-                .find_map(|(index, claim)| match claim {
-                    RouteClaim::Rejected { rejection } => Some((index, rejection)),
+                .find_map(|(index, claim)| match claim.claim() {
+                    RouteClaim::Rejected { rejection } => {
+                        Some((index, rejection, claim.unsent_cause()))
+                    }
                     _ => None,
                 })
         {
             let Some(route) = self.routes.get(index) else {
                 return Err(DeliveryContractError::InvalidEvidence);
             };
-            return Ok(RouteDecision::Complete(Box::new(DeliveryReceipt {
-                outcome: DeliveryOutcome::Rejected(rejection.clone()),
-                reachability: Some(route.reachability()),
-                client: None,
-            })));
+            return Ok(RouteDecision::Complete(Box::new(
+                NativeDeliveryResult::rejected(
+                    rejection.clone(),
+                    cause.ok_or(DeliveryContractError::InvalidEvidence)?,
+                )
+                .with_reachability(route.reachability()),
+            )));
         }
         if let Some(index) = claims
             .iter()
-            .position(|claim| matches!(claim, RouteClaim::Holds))
+            .position(|claim| matches!(claim.claim(), RouteClaim::Holds))
         {
             return Ok(RouteDecision::Selected(index));
         }
-        if let Some(detail) = claims.iter().find_map(|claim| match claim {
-            RouteClaim::LiveElsewhere { detail, .. } => detail.as_deref(),
+        if let Some((detail, cause)) = claims.iter().find_map(|claim| match claim.claim() {
+            RouteClaim::LiveElsewhere {
+                detail: Some(detail),
+                ..
+            } => Some((detail.as_str(), claim.unsent_cause())),
             _ => None,
         }) {
-            return Ok(RouteDecision::Complete(Box::new(DeliveryReceipt {
-                outcome: DeliveryOutcome::Rejected(DeliveryRejection {
-                    reason: DeliveryRejectionReason::LiveElsewhere,
-                    next_action: DeliveryNextAction::InspectTarget,
-                    client_code: None,
-                    detail: Some(detail.to_owned()),
-                    claims: None,
-                    native_failure: None,
-                }),
-                reachability: None,
-                client: None,
-            })));
+            return Ok(RouteDecision::Complete(Box::new(
+                NativeDeliveryResult::rejected(
+                    DeliveryRejection {
+                        reason: DeliveryRejectionReason::LiveElsewhere,
+                        next_action: DeliveryNextAction::InspectTarget,
+                        client_code: None,
+                        detail: Some(detail.to_owned()),
+                        claims: None,
+                        native_failure: None,
+                    },
+                    cause.ok_or(DeliveryContractError::InvalidEvidence)?,
+                ),
+            )));
         }
-        if claims
+        if let Some(claim) = claims
             .iter()
-            .any(|claim| matches!(claim, RouteClaim::LiveElsewhere { .. }))
+            .find(|claim| matches!(claim.claim(), RouteClaim::LiveElsewhere { .. }))
         {
-            return Ok(RouteDecision::Complete(Box::new(DeliveryReceipt {
-                outcome: DeliveryOutcome::Rejected(DeliveryRejection {
-                    reason: DeliveryRejectionReason::LiveElsewhere,
-                    next_action: DeliveryNextAction::InspectTarget,
-                    client_code: None,
-                    detail: Some(
-                        "session is live in a Claude Code process Router cannot message".into(),
-                    ),
-                    claims: None,
-                    native_failure: None,
-                }),
-                reachability: None,
-                client: None,
-            })));
+            return Ok(RouteDecision::Complete(Box::new(
+                NativeDeliveryResult::rejected(
+                    DeliveryRejection {
+                        reason: DeliveryRejectionReason::LiveElsewhere,
+                        next_action: DeliveryNextAction::InspectTarget,
+                        client_code: None,
+                        detail: Some(
+                            "session is live in a Claude Code process Router cannot message".into(),
+                        ),
+                        claims: None,
+                        native_failure: None,
+                    },
+                    claim
+                        .unsent_cause()
+                        .ok_or(DeliveryContractError::InvalidEvidence)?,
+                ),
+            )));
         }
         if let Some(index) = claims
             .iter()
-            .position(|claim| matches!(claim, RouteClaim::CanLoad))
+            .position(|claim| matches!(claim.claim(), RouteClaim::CanLoad))
         {
             return Ok(RouteDecision::Selected(index));
         }
-        if let Some(reason) = claims.iter().find_map(|claim| match claim {
+        if let Some((reason, cause)) = claims.iter().find_map(|claim| match claim.claim() {
             RouteClaim::Unavailable {
                 reason,
                 retryable: true,
-            } => Some(reason),
+            } => Some((reason, claim.unsent_cause())),
             _ => None,
         }) {
-            return Ok(RouteDecision::Complete(Box::new(DeliveryReceipt {
-                outcome: DeliveryOutcome::NotSubmitted {
-                    retryable: true,
-                    reason: reason.reason.clone(),
-                },
-                reachability: None,
-                client: None,
-            })));
+            return Ok(RouteDecision::Complete(Box::new(
+                NativeDeliveryResult::not_submitted(
+                    reason.reason.clone(),
+                    true,
+                    cause.ok_or(DeliveryContractError::InvalidEvidence)?,
+                ),
+            )));
         }
         let reasons: Vec<_> = claims
             .iter()
-            .filter_map(|claim| match claim {
+            .filter_map(|claim| match claim.claim() {
                 RouteClaim::Unavailable { reason, .. } => {
                     Some(format!("{}; {}", reason.reason, reason.fix))
                 }
                 _ => None,
             })
             .collect();
-        Ok(RouteDecision::Complete(Box::new(DeliveryReceipt {
-            outcome: DeliveryOutcome::Rejected(DeliveryRejection {
-                reason: if reasons.is_empty() {
-                    DeliveryRejectionReason::NoRoute
-                } else {
-                    DeliveryRejectionReason::EndpointUnavailable
+        let reason = if reasons.is_empty() {
+            DeliveryRejectionReason::NoRoute
+        } else {
+            DeliveryRejectionReason::EndpointUnavailable
+        };
+        let cause = if reasons.is_empty() {
+            UnsentCause::RecipientUnknown
+        } else {
+            claims
+                .iter()
+                .find(|claim| matches!(claim.claim(), RouteClaim::Unavailable { .. }))
+                .and_then(crate::NativeRouteClaim::unsent_cause)
+                .ok_or(DeliveryContractError::InvalidEvidence)?
+        };
+        Ok(RouteDecision::Complete(Box::new(
+            NativeDeliveryResult::rejected(
+                DeliveryRejection {
+                    reason,
+                    next_action: if reasons.is_empty() {
+                        DeliveryNextAction::CorrectRequest
+                    } else {
+                        DeliveryNextAction::RetryLater
+                    },
+                    client_code: None,
+                    detail: Some(if reasons.is_empty() {
+                        "no route serves this endpoint".into()
+                    } else {
+                        reasons.join("; ")
+                    }),
+                    claims: None,
+                    native_failure: None,
                 },
-                next_action: if reasons.is_empty() {
-                    DeliveryNextAction::CorrectRequest
-                } else {
-                    DeliveryNextAction::RetryLater
-                },
-                client_code: None,
-                detail: Some(if reasons.is_empty() {
-                    "no route serves this endpoint".into()
-                } else {
-                    reasons.join("; ")
-                }),
-                claims: None,
-                native_failure: None,
-            }),
-            reachability: None,
-            client: None,
-        })))
+                cause,
+            ),
+        )))
     }
 
     async fn deliver_through(
@@ -168,14 +189,15 @@ impl SessionDeliveryRouter {
         index: usize,
         request: crate::layer_zero::DeliveryRequest,
         evidence: &dyn AttemptEvidenceSink,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
+    ) -> Result<NativeDeliveryResult, DeliveryContractError> {
         let route = self
             .routes
             .get(index)
             .ok_or(DeliveryContractError::InvalidEvidence)?;
-        let mut receipt = route.deliver(request, evidence).await?;
-        receipt.reachability = Some(route.reachability());
-        Ok(receipt)
+        Ok(route
+            .deliver(request, evidence)
+            .await?
+            .with_reachability(route.reachability()))
     }
 }
 
@@ -190,7 +212,7 @@ impl SessionMessageDelivery for SessionDeliveryRouter {
         &'a self,
         request: crate::layer_zero::DeliveryRequest,
         evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, NativeDeliveryResult> {
         Box::pin(async move { self.deliver_once(request, evidence).await })
     }
 
@@ -282,8 +304,8 @@ mod tests {
     use super::{RouteDecision, SessionDeliveryRouter};
     use crate::{
         AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-        DeliveryPrecondition, DeliveryReceipt, LoadPolicy, RouteClaim, RoutePresence,
-        SessionDeliveryRoute, SessionMessageDelivery,
+        DeliveryPrecondition, DeliveryReceipt, LoadPolicy, RoutePresence, SessionDeliveryRoute,
+        SessionMessageDelivery,
     };
     use agent_automation::AttemptId;
     use collaboration_protocol::{
@@ -296,7 +318,7 @@ mod tests {
     #[derive(Default)]
     struct CapturingRoute {
         requests: Mutex<Vec<crate::layer_zero::DeliveryRequest>>,
-        claim: Option<RouteClaim>,
+        claim: Option<crate::NativeRouteClaim>,
     }
 
     impl SessionDeliveryRoute for CapturingRoute {
@@ -304,8 +326,11 @@ mod tests {
             SessionReachability::ClaudeCodePeer
         }
 
-        fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
-            let claim = self.claim.clone().unwrap_or(RouteClaim::Holds);
+        fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim> {
+            let claim = self
+                .claim
+                .clone()
+                .unwrap_or_else(crate::NativeRouteClaim::holds);
             Box::pin(async move { Ok(claim) })
         }
 
@@ -317,17 +342,19 @@ mod tests {
             &'a self,
             request: crate::layer_zero::DeliveryRequest,
             _: &'a dyn AttemptEvidenceSink,
-        ) -> DeliveryFuture<'a, DeliveryReceipt> {
+        ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
             self.requests
                 .lock()
                 .expect("captured requests")
                 .push(request);
             Box::pin(async {
-                Ok(DeliveryReceipt {
-                    outcome: DeliveryOutcome::Started,
-                    reachability: None,
-                    client: None,
-                })
+                Ok(crate::native_delivery_result::scripted_delivery_result(
+                    DeliveryReceipt {
+                        outcome: DeliveryOutcome::Started,
+                        reachability: None,
+                        client: None,
+                    },
+                ))
             })
         }
 
@@ -355,11 +382,14 @@ mod tests {
             }]),
         };
         let holds = Arc::new(CapturingRoute {
-            claim: Some(RouteClaim::Holds),
+            claim: Some(crate::NativeRouteClaim::holds()),
             ..CapturingRoute::default()
         });
         let rejected = Arc::new(CapturingRoute {
-            claim: Some(RouteClaim::Rejected { rejection }),
+            claim: Some(crate::NativeRouteClaim::rejected(
+                rejection,
+                crate::UnsentCause::for_rejection(DeliveryRejectionReason::LiveElsewhere),
+            )),
             ..CapturingRoute::default()
         });
         let router = SessionDeliveryRouter::new(vec![holds, rejected]);
@@ -374,9 +404,9 @@ mod tests {
         let RouteDecision::Complete(receipt) = decision else {
             return Err("typed rejection did not stop route selection".into());
         };
-        if receipt.reachability != Some(SessionReachability::ClaudeCodePeer)
+        if receipt.receipt().reachability != Some(SessionReachability::ClaudeCodePeer)
             || !matches!(
-            receipt.outcome,
+            receipt.receipt().outcome.clone(),
             DeliveryOutcome::Rejected(rejection)
                 if rejection.claims.as_ref().is_some_and(|claims| claims.len() == 1)
             )
@@ -426,9 +456,9 @@ mod tests {
             .await
             .expect("prepared push delivery");
 
-        assert_eq!(receipt.outcome, DeliveryOutcome::Started);
+        assert_eq!(receipt.receipt().outcome.clone(), DeliveryOutcome::Started);
         assert_eq!(
-            receipt.reachability,
+            receipt.receipt().reachability,
             Some(SessionReachability::ClaudeCodePeer)
         );
         let requests = route.requests.lock().expect("captured requests");

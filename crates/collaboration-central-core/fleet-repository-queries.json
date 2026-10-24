@@ -1,0 +1,73 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_repositories.rs",
+  "metadata": "fleet-repository-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_repository_attachments",
+      "sql": "sql/fleet/read_repository_attachments.sql",
+      "row": "StoredRepositoryAttachment",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "attach_repository",
+      "sql": "sql/fleet/attach_repository.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "attachment_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "repository_reference",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record_header",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_digest",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "detach_repository",
+      "sql": "sql/fleet/detach_repository.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "repository_reference",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

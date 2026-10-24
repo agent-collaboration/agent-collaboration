@@ -11,6 +11,9 @@ use automation_storage::{
 };
 use sqlx::Connection;
 
+#[path = "run_route_transitions/push_operations.rs"]
+mod push_operations;
+
 async fn admitted_run(store: &mut AutomationStore) -> Result<RunId, Box<dyn std::error::Error>> {
     let instruction = store
         .create_instruction(

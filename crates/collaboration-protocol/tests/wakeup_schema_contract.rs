@@ -15,7 +15,7 @@ fn wake_creation_preserves_message_modes_and_rejects_invalid_timing()
     let request = json!({
         "operationId":"019f0000-0000-7000-8000-000000000002",
         "message":{"target":target,"content":{"kind":"humanUser","text":"Check progress"},"delivery":"steer","generationGuard":null},
-        "timing":{"kind":"after","seconds":60},"expiry":{"kind":"none"}
+        "timing":{"kind":"after","seconds":60},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}
     });
     if !validator.is_valid(&request) {
         return Err(format!(

@@ -1,0 +1,59 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_bootstrap_probes.rs",
+  "metadata": "bootstrap-probe-query-metadata.json",
+  "queries": [
+    {
+      "name": "bootstrap_probe_tables",
+      "sql": "sql/bootstrap_probe_tables.sql",
+      "row": "BootstrapTableRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "bootstrap_probe_history",
+      "sql": "sql/bootstrap_probe_history.sql",
+      "row": "BootstrapHistoryRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "bootstrap_probe_checksum",
+      "sql": "sql/bootstrap_probe_checksum.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "corpus",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version",
+      "sql": "sql/bootstrap_probe_version.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "corpus",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@ struct FakeApprovalDelivery(DeliveryOutcome);
 struct CapturingInteractionDelivery {
     notices: Arc<Mutex<Vec<crate::layer_zero::DeliveryRequest>>>,
     delivered: Arc<tokio::sync::Notify>,
-    push_store: Option<Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
+    push_store: Option<Arc<interaction_storage::InteractionStore>>,
     prepared_pushes_at_delivery: Arc<Mutex<Vec<CapturedInteractionPush>>>,
 }
 
@@ -20,12 +20,10 @@ impl crate::SessionMessageDelivery for CapturingInteractionDelivery {
         &'a self,
         request: crate::layer_zero::DeliveryRequest,
         _: &'a dyn crate::AttemptEvidenceSink,
-    ) -> crate::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+    ) -> crate::DeliveryFuture<'a, crate::NativeDeliveryResult> {
         Box::pin(async move {
             let record_at_delivery = match &self.push_store {
                 Some(push_store) => push_store
-                    .lock()
-                    .await
                     .get_push_record(&request.payload.push_id)
                     .await
                     .ok()
@@ -41,11 +39,13 @@ impl crate::SessionMessageDelivery for CapturingInteractionDelivery {
                 });
             self.notices.lock().await.push(request);
             self.delivered.notify_one();
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: DeliveryOutcome::Started,
-                reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-                client: None,
-            })
+            Ok(crate::native_delivery_result::scripted_delivery_result(
+                collaboration_protocol::DeliveryReceipt {
+                    outcome: DeliveryOutcome::Started,
+                    reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
+                    client: None,
+                },
+            ))
         })
     }
 
@@ -59,12 +59,8 @@ impl crate::SessionMessageDelivery for CapturingInteractionDelivery {
 
 #[tokio::test]
 async fn typed_approval_and_question_notify_their_session_approver() {
-    let (broker, _, directory) = fixture_broker().await;
-    let push_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .expect("push store reader"),
-    ));
+    let (broker, _, _directory) = fixture_broker().await;
+    let push_store = broker.interaction_store();
     let requester =
         board_session_ref(&session(&broker.service_id, "provider-session")).expect("requester");
     let approver =
@@ -510,13 +506,15 @@ impl crate::SessionMessageDelivery for FakeApprovalDelivery {
         &'a self,
         _: crate::layer_zero::DeliveryRequest,
         _: &'a dyn crate::AttemptEvidenceSink,
-    ) -> crate::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+    ) -> crate::DeliveryFuture<'a, crate::NativeDeliveryResult> {
         Box::pin(async move {
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: self.0.clone(),
-                reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-                client: None,
-            })
+            Ok(crate::native_delivery_result::scripted_delivery_result(
+                collaboration_protocol::DeliveryReceipt {
+                    outcome: self.0.clone(),
+                    reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
+                    client: None,
+                },
+            ))
         })
     }
 
@@ -572,14 +570,10 @@ async fn approval_notice_uses_selected_delivery_outcome() {
 
 #[tokio::test]
 async fn legacy_approval_record_is_stored_and_delivered_as_an_interaction_push() {
-    let (broker, generation, directory) = fixture_broker().await;
+    let (broker, generation, _directory) = fixture_broker().await;
     let requester = session(&broker.service_id, "legacy-requester");
     let approver = session(&broker.service_id, "legacy-approver");
-    let push_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .expect("push store reader"),
-    ));
+    let push_store = broker.interaction_store();
     let notices = Arc::new(Mutex::new(Vec::new()));
     let delivered = Arc::new(tokio::sync::Notify::new());
     let prepared_pushes_at_delivery = Arc::new(Mutex::new(Vec::new()));
@@ -632,7 +626,7 @@ async fn legacy_approval_record_is_stored_and_delivered_as_an_interaction_push()
         .expect("approval push stored before delivery");
     assert_eq!(
         stored_at_delivery.delivery_state,
-        automation_storage::PushDeliveryState::Attempted
+        collaboration_protocol::PushDeliveryState::Attempted
     );
     assert_eq!(
         stored_at_delivery.kind,
@@ -701,15 +695,13 @@ async fn legacy_approval_record_is_stored_and_delivered_as_an_interaction_push()
     );
 
     let stored_after_delivery = push_store
-        .lock()
-        .await
         .get_push_record(&stored_at_delivery.push_id)
         .await
         .expect("read delivered approval push")
         .expect("approval push persists");
     assert_eq!(
         stored_after_delivery.delivery_state,
-        automation_storage::PushDeliveryState::Delivered
+        collaboration_protocol::PushDeliveryState::Delivered
     );
 }
 

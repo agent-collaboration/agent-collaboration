@@ -9,6 +9,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", features = ["keychain-test-support"] }
 codex-native-integration.workspace = true
 codex-router-core.workspace = true
@@ -25,4 +26,5 @@ tokio-tungstenite.workspace = true
 tungstenite = "0.28.0"
 
 [dev-dependencies]
+tempfile = "3.27.0"
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }

@@ -1,0 +1,33 @@
+{
+  "migrations": [
+    "copy_migrations"
+  ],
+  "output": "src/generated_copy_summary.rs",
+  "metadata": "copy-summary-query-metadata.json",
+  "queries": [
+    {
+      "name": "store_copy_summary",
+      "sql": "sql/copy_summary/store_copy_summary.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "database_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_copy_summary",
+      "sql": "sql/copy_summary/read_copy_summary.sql",
+      "row": "StoredCopySummary",
+      "result": "many",
+      "parameters": []
+    }
+  ]
+}

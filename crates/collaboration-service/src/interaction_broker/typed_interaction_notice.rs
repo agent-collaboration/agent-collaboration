@@ -170,17 +170,13 @@ async fn deliver_interaction_push_record(
 ) -> Result<DeliveryOutcome, InteractionHistoryError> {
     let record = push_context
         .store
-        .lock()
-        .await
         .insert_push_record(draft)
         .await
         .map_err(|_| InteractionHistoryError::Unavailable)?;
     let prepared = prepared_interaction_push(push_context, &record)?;
     push_context
         .store
-        .lock()
-        .await
-        .mark_push_attempted(&prepared.push_id)
+        .mark_interaction_notice_attempted(&prepared.push_id)
         .await
         .map_err(|_| InteractionHistoryError::Unavailable)?;
 
@@ -201,7 +197,7 @@ async fn deliver_interaction_push_record(
     )
     .await
     {
-        Ok(Ok(receipt)) => receipt,
+        Ok(Ok(receipt)) => receipt.into_receipt(),
         Ok(Err(_)) | Err(_) => unknown_receipt(),
     };
     settle_interaction_push(push_context, &record.push_id, &receipt).await;
@@ -240,9 +236,7 @@ async fn settle_interaction_push(
     loop {
         let result = push_context
             .store
-            .lock()
-            .await
-            .settle_push_record(push_id, receipt.clone(), chrono::Utc::now())
+            .settle_interaction_notice(push_id, receipt.clone(), chrono::Utc::now())
             .await;
         if result.is_ok() {
             return;

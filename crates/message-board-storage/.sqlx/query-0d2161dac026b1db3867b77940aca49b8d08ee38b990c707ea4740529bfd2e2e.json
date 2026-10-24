@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT fact_id AS \"id!: String\" FROM facts WHERE json_extract(fact, '$.kind') = 'lifecycle' AND json_extract(fact, '$.fact.kind') = 'projectCreated' AND json_extract(fact, '$.fact.creatingRequest') = ? ORDER BY fact_id LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "0d2161dac026b1db3867b77940aca49b8d08ee38b990c707ea4740529bfd2e2e"
+}

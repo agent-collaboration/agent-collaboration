@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT move_id AS \"id!: String\" FROM moves WHERE move_name=? AND requester=? AND json_extract(outcome, '$.kind')='rejected' ORDER BY move_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7ebd96606a77d244fa4747d2845990b0c0fe8b13bf056a5cb84d7f70b8bc1fcb"
+}

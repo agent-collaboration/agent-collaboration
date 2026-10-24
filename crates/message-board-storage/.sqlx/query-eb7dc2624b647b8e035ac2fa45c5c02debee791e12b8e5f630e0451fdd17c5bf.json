@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT move_id AS \"id!: String\" FROM moves WHERE move_id>? AND position>=COALESCE((SELECT MAX(position) FROM moves WHERE json_extract(outcome,'$.kind')='accepted'),0) ORDER BY move_id LIMIT 101",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "eb7dc2624b647b8e035ac2fa45c5c02debee791e12b8e5f630e0451fdd17c5bf"
+}

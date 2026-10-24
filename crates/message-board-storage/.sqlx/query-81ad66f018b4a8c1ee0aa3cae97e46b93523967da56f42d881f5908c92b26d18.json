@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE thread_participation SET role=?, note=?, last_seen_epoch=?, last_seen_position=?, closed_epoch=?, closed_position=?, closed_reason=?, replaced_by=? WHERE participation_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "81ad66f018b4a8c1ee0aa3cae97e46b93523967da56f42d881f5908c92b26d18"
+}

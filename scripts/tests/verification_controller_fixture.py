@@ -58,6 +58,7 @@ class LifecycleFixture:
     owner_profile: t.ClassVar[bytes] = (
         b'url="http://127.0.0.1:43127/v1"\n# owner edit\n'
     )
+    owner_config: t.ClassVar[bytes] = b'model = "owner-selected-model"\n'
 
     def __init__(self, root: Path, scenario: str, *, mismatch: bool = False) -> None:
         self.scenario: str = scenario
@@ -65,8 +66,10 @@ class LifecycleFixture:
         self.ready: bool = False
         self.exited: bool = False
         self.prelaunch_expired: bool = False
+        self.inventory_timeout_emitted: bool = False
         self.phases: list[str] = []
         self.launched: list[str] = []
+        self.configuration_writes: list[str] = []
         self.children: list[subprocess.Popen[bytes]] = []
         self.identities: dict[int, IdentityRecord] = {}
         self.datetime: LifecycleFixture = self
@@ -96,6 +99,11 @@ class LifecycleFixture:
         _ = qualification.write_text(json.dumps({"binaries": binaries}))
         profile = root / "debug-profile"
         _ = profile.write_text('url="http://127.0.0.1:43127/v1"\n')
+        self.codex_config: Path = root / "config.toml"
+        _ = self.codex_config.write_text(
+            'model = "fixture-model"\n'
+            + f'[projects.{json.dumps(str(root.resolve()))}]\ntrust_level = "trusted"\n'
+        )
         self.global_bin: Path = root / "global-bin"
         self.global_bin.mkdir()
         claude = self.global_bin / "claude"
@@ -112,9 +120,10 @@ class LifecycleFixture:
             router_root=root_dir,
             evidence=root / "evidence",
             port=43128,
-            original_port=43127,
             expected_version="fixture",
             profile=profile,
+            codex_config=self.codex_config,
+            native_cwd=root,
             claude_node=Path(sys.executable),
             claude_adapter=root / "unused-adapter",
             claude_executable=planned,
@@ -164,6 +173,13 @@ class LifecycleFixture:
             )
         if command[0] != "/bin/ps":
             raise AssertionError(f"unexpected external command: {command[0]}")
+        if (
+            self.scenario == "inventory-timeout"
+            and self.ready
+            and not self.inventory_timeout_emitted
+        ):
+            self.inventory_timeout_emitted = True
+            raise subprocess.TimeoutExpired(command, 5)
         return subprocess.run(
             command, capture_output=True, text=True, check=True, timeout=5
         )
@@ -204,18 +220,30 @@ class LifecycleFixture:
 
     def save(self, path: Path, value: object) -> None:
         self.original_save(path, value)
-        if path.name == "router-ready.json" and self.scenario == "profile-beforewrite":
+        if path.name == "router-ready.json" and self.scenario == "profile-before-host":
             _ = self.plan.profile.write_bytes(self.owner_profile)
+        if path.name == "router-ready.json" and self.scenario == "config-before-host":
+            _ = self.codex_config.write_bytes(self.owner_config)
         if path.name == "host-A-ready.json":
             self.ready = True
-            if self.scenario == "profile-afterwrite":
+            if self.scenario == "profile-after-host":
                 _ = self.plan.profile.write_bytes(self.owner_profile)
+            if self.scenario == "config-after-host":
+                _ = self.codex_config.write_bytes(self.owner_config)
+            if self.scenario == "external-desktop-after-host":
+                _ = self.codex_config.write_text(
+                    self.codex_config.read_text()
+                    + "[desktop.preferences]\nopen = true\n"
+                )
             if self.scenario in {
                 "stop",
                 "reopen",
                 "reopen-expired",
-                "profile-beforewrite",
-                "profile-afterwrite",
+                "profile-before-host",
+                "profile-after-host",
+                "config-before-host",
+                "config-after-host",
+                "external-desktop-after-host",
             }:
                 _ = (
                     self.plan.evidence
@@ -278,8 +306,28 @@ class LifecycleFixture:
         }.items():
             setattr(owned_runtime, name, replacement)
         failure: Exception | None = None
+        original_open = Path.open
+
+        def observed_open(
+            path: Path,
+            mode: str = "r",
+            buffering: int = -1,
+            encoding: str | None = None,
+            errors: str | None = None,
+            newline: str | None = None,
+        ) -> t.IO[bytes] | t.IO[str]:
+            if path in {self.plan.profile, self.codex_config} and any(
+                flag in mode for flag in "wax+"
+            ):
+                self.configuration_writes.append(str(path))
+            return t.cast(
+                t.IO[bytes] | t.IO[str],
+                original_open(path, mode, buffering, encoding, errors, newline),
+            )
+
         try:
-            owned_runtime.run_lifecycle(self.plan)
+            with patch.object(Path, "open", observed_open):
+                owned_runtime.run_lifecycle(self.plan)
         except (RuntimeError, OSError, ValueError, subprocess.SubprocessError) as error:
             failure = error
         finally:

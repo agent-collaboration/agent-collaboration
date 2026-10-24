@@ -4,8 +4,7 @@ use crate::provider_acp_session_loading::{
 };
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use collaboration_protocol::{
-    DeliveryOutcome, DeliveryReceipt, OperationId, ProviderOperationEffect, ProviderOperationStage,
-    SessionReachability, SessionRef,
+    OperationId, ProviderOperationEffect, ProviderOperationStage, SessionReachability, SessionRef,
 };
 use collaboration_service::{
     AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
@@ -29,7 +28,10 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
         SessionReachability::ProviderAcp
     }
 
-    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
+    fn claim(
+        &self,
+        target: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
         let target = target.clone();
         Box::pin(async move { Ok(self.claim.claim(&target).await) })
     }
@@ -40,7 +42,7 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
             if !self.serves(&target) {
                 return Ok(RoutePresence::NotMine);
             }
-            let presence = match self.claim.claim(&target).await {
+            let presence = match self.claim.claim(&target).await.into_claim() {
                 RouteClaim::NotMine => RoutePresence::NotMine,
                 RouteClaim::Holds => RoutePresence::Running,
                 RouteClaim::Rejected { rejection } => RoutePresence::LiveElsewhere {
@@ -89,7 +91,7 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
         &'a self,
         request: collaboration_service::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
         Box::pin(async move { self.deliver_provider(request.into(), sink).await })
     }
 
@@ -130,14 +132,14 @@ impl SessionDeliveryRoute for ProviderAcpDeliveryRoute {
             Ok(match (record.stage, record.effect) {
                 (ProviderOperationStage::Terminal, ProviderOperationEffect::Applied) => {
                     let outcome = if provider.submission == SubmissionEffect::RouterQueued {
-                        DeliveryOutcome::Queued
+                        collaboration_service::NativeObservedOutcome::Queued
                     } else {
-                        DeliveryOutcome::Started
+                        collaboration_service::NativeObservedOutcome::Started
                     };
-                    AttemptReconciliation::Accepted(Box::new(ProviderAcpDeliveryRoute::receipt(
-                        outcome,
-                        Some(operation_id),
-                    )))
+                    AttemptReconciliation::Accepted(Box::new(
+                        ProviderAcpDeliveryRoute::observed(outcome, Some(operation_id))
+                            .into_receipt(),
+                    ))
                 }
                 (ProviderOperationStage::Terminal, ProviderOperationEffect::None) => {
                     AttemptReconciliation::KnownNotSubmitted

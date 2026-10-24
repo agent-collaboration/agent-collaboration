@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT snapshot_identity AS \"identity?: String\" FROM capture_feed_marks WHERE epoch=? AND captured_position=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5a568fd5a56422862cba0db1c4aa321a318b7d8b07dc21aab703c602e2887a2e"
+}

@@ -1,18 +1,30 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/board-central-test-support",
+    "crates/board-legacy-upgrade",
+    "crates/board-fleet-sync",
+    "crates/board-sync-protocol",
     "crates/message-board",
+    "crates/fleet-admission",
     "crates/session-event-model",
     "crates/acp-client-runtime",
     "crates/message-board-storage",
     "crates/agent-automation",
     "crates/automation-storage",
+    "crates/interaction-storage",
     "crates/codex-acp-adapter",
     "crates/lifecycle-observation",
     "crates/collaboration-client",
     "crates/collaboration-mcp",
     "crates/collaboration-service",
     "crates/collaboration-protocol",
+    "crates/collaboration-central-admin-protocol",
+    "crates/collaboration-central-core",
+    "crates/collaboration-central-cloudflare",
+    "crates/collaboration-central-tokio",
+    "crates/collaboration-central-conformance",
+    "crates/collaboration-mail-protocol",
     "crates/claude-code-peer-messaging",
     "crates/agent-collaboration",
     "crates/codex-router-auth",
@@ -28,19 +40,27 @@ members = [
     "crates/codex-router-selection",
     "crates/codex-router-state",
     "crates/codex-router-test-support",
-    "crates/sqlx-turso",
-    "crates/sqlx-turso-core",
-    "crates/sqlx-turso-macros",
     "prototypes/ux_prototype",
 ]
 
 [workspace.package]
-version = "0.1.101"
+version = "0.1.102"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+fleet-sync-protocol = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+durable-steps = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+fleet-sync-query-gen = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+runtime-primitives = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+fleet-sync-lease = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+fleet-sync-session = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+fleet-sync-tokio-runner = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+fleet-sync-service = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+fleet-sync-receiver = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+fleet-sync-writer = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+fleet-sync-delivery = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
 aes-gcm = { version = "=0.11.1", features = ["zeroize"] }
 apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
 agent-client-protocol = "=2.2.0"
@@ -54,7 +74,7 @@ codex-router-tui = { path = "crates/codex-router-tui", version = "0.1.96" }
 codex-native-integration = { path = "crates/codex-native-integration", version = "0.1.6" }
 codex-router-host = { path = "crates/codex-router-host", version = "0.1.6" }
 codex-router-quota = { path = "crates/codex-router-quota", version = "0.1.6" }
-axum = { version = "0.8.8", default-features = false, features = ["http1", "tokio"] }
+axum = { version = "0.8.8", default-features = false }
 base64 = "0.22.1"
 bytes = "1.11.0"
 chrono = "0.4.45"
@@ -104,9 +124,6 @@ security-framework = "3.7"
 sqlx = { version = "=0.9.0", default-features = false, features = ["runtime-tokio"] }
 sqlx-core = { version = "=0.9.0", default-features = false }
 sqlx-macros-core = { version = "=0.9.0", default-features = false }
-sqlx-turso = { path = "crates/sqlx-turso", version = "0.1.63" }
-sqlx-turso-core = { path = "crates/sqlx-turso-core", version = "0.1.63", default-features = false }
-sqlx-turso-macros = { path = "crates/sqlx-turso-macros", version = "0.1.63" }
 syn = { version = "2.0.118", features = ["full", "parsing"] }
 thiserror = "2.0.18"
 tokio = { version = "1.48.0", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "process", "io-util"] }
@@ -118,6 +135,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "jso
 trybuild = "1.0.116"
 # Exact engine pin; default features would add mimalloc and FTS (Tantivy).
 turso = { version = "=0.8.1", default-features = false }
+turso_parser = "=0.8.1"
 unicode-width = "0.2.2"
 url = "2.5.8"
 zeroize = "1.9.0"
@@ -151,6 +169,14 @@ incremental = false
 [profile.test]
 debug = "line-tables-only"
 incremental = false
+
+# Preserve the Worker's former standalone release settings without changing
+# the native Router release profile.
+[profile.worker-release]
+inherits = "release"
+lto = true
+opt-level = "s"
+codegen-units = 1
 
 [profile.dev.package."*"]
 debug = 0

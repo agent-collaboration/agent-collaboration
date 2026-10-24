@@ -25,6 +25,7 @@ impl DurableMessage for ReminderMessage {
         "auto"
     }
 }
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn worker_inventory_selects_due_wakes_and_eligible_deliveries_only()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -35,26 +36,28 @@ async fn worker_inventory_selects_due_wakes_and_eligible_deliveries_only()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: ReminderMessage {
                 target: "B".into(),
                 text: "Check".into(),
             },
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::None,
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 7200 },
             now_ms: 0,
         })
         .await?;
-    if !store.due_wakeup_ids(59999, 100).await?.is_empty() {
+    if !store.due_wakeup_ids(299999, 100).await?.is_empty() {
         return Err("wake was selected before due time".into());
     }
-    if store.due_wakeup_ids(60000, 100).await? != vec![wake.definition.wakeup_id.clone()] {
+    if store.due_wakeup_ids(300000, 100).await? != vec![wake.definition.wakeup_id.clone()] {
         return Err("due wake was not selected".into());
     }
     let id = match store
         .evaluate_wakeup::<ReminderMessage>(
             &wake.definition.wakeup_id,
-            60000,
+            300000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?
@@ -62,17 +65,17 @@ async fn worker_inventory_selects_due_wakes_and_eligible_deliveries_only()
         WakeEvaluation::Fired { delivery_id, .. } => delivery_id,
         _ => return Err("missing fire".into()),
     };
-    if !store.due_wakeup_ids(60000, 100).await?.is_empty() {
+    if !store.due_wakeup_ids(300000, 100).await?.is_empty() {
         return Err("handled timing boundary remained due".into());
     }
-    if store.eligible_delivery_ids(60000, 100).await? != vec![id.clone()] {
+    if store.eligible_delivery_ids(300000, 100).await? != vec![id.clone()] {
         return Err("eligible delivery missing".into());
     }
     let _claim = store
-        .claim_delivery::<String, String, String>(&id, 60000)
+        .claim_delivery::<String, String, String>(&id, 300000)
         .await?
         .ok_or("missing claim")?;
-    if !store.eligible_delivery_ids(100000, 100).await?.is_empty() {
+    if !store.eligible_delivery_ids(500000, 100).await?.is_empty() {
         return Err("in-flight dispatch selected for replay".into());
     }
     store.close().await?;

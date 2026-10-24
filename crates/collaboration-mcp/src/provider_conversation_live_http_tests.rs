@@ -41,6 +41,7 @@ async fn live_current_source_catalog_is_accepted_by_cursor_and_claude() {
             .expect("private fixture directory");
     }
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.path().join("router"),
         codex_home: root.path().join("codex-home"),
         backend_socket: root.path().join("backend.sock"),
@@ -179,6 +180,7 @@ async fn live_provider_create_and_prompt_through_stateless_http() {
     }
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),

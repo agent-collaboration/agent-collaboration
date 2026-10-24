@@ -6,13 +6,20 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum WakeFailureReason {
-    InvalidField { field: String, constraint: String },
+    InvalidField {
+        field: String,
+        constraint: String,
+    },
     OperationConflict,
+    RemoteUnavailable,
+    DeadlineExpired,
     AutomationUnavailable,
     ResourceNotFound,
     InvalidRecord,
     LifecycleConflict,
     Overloaded,
+    #[serde(untagged)]
+    Refused(#[schemars(schema_with = "crate::WakeRefusal::json_schema")] crate::WakeRefusal),
 }
 #[derive(Clone, Copy, Debug, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,10 +59,7 @@ impl<'de> Deserialize<'de> for WakeFailure {
     ) -> Result<Self, TDeserializer::Error> {
         #[derive(Deserialize)]
         #[serde(rename_all = "camelCase", deny_unknown_fields)]
-        struct WireFailure {
-            kind: String,
-            field: Option<String>,
-            constraint: Option<String>,
+        struct Envelope {
             stage: WakeFailureStage,
             message: String,
             #[serde(deserialize_with = "Option::deserialize")]
@@ -65,33 +69,50 @@ impl<'de> Deserialize<'de> for WakeFailure {
             effects: LocalMutationEvidence,
             next_action: WakeNextAction,
         }
-        let wire = WireFailure::deserialize(deserializer)?;
         let invalid = || serde::de::Error::custom("invalid wake failure kind or field guidance");
-        let reason = if wire.kind == "invalidField" {
-            WakeFailureReason::InvalidField {
-                field: wire
-                    .field
-                    .filter(|text| !text.is_empty())
-                    .ok_or_else(invalid)?,
-                constraint: wire
-                    .constraint
-                    .filter(|text| !text.is_empty())
-                    .ok_or_else(invalid)?,
+        let mut fields = serde_json::Map::<String, serde_json::Value>::deserialize(deserializer)?;
+        let mut reason_fields = serde_json::Map::new();
+        for name in [
+            "kind",
+            "field",
+            "constraint",
+            "wakeup",
+            "creator",
+            "max",
+            "min",
+        ] {
+            if let Some(value) = fields.remove(name) {
+                reason_fields.insert(name.into(), value);
             }
-        } else {
-            if wire.field.is_some() || wire.constraint.is_some() {
-                return Err(invalid());
-            }
-            match wire.kind.as_str() {
-                "operationConflict" => WakeFailureReason::OperationConflict,
-                "automationUnavailable" => WakeFailureReason::AutomationUnavailable,
-                "resourceNotFound" => WakeFailureReason::ResourceNotFound,
-                "invalidRecord" => WakeFailureReason::InvalidRecord,
-                "lifecycleConflict" => WakeFailureReason::LifecycleConflict,
-                "overloaded" => WakeFailureReason::Overloaded,
-                _ => return Err(invalid()),
-            }
-        };
+        }
+        // Preserve presence, including null: irrelevant fields may not disappear.
+        let kind = reason_fields
+            .get("kind")
+            .and_then(serde_json::Value::as_str)
+            .ok_or_else(invalid)?;
+        if matches!(
+            kind,
+            "operationConflict"
+                | "automationUnavailable"
+                | "resourceNotFound"
+                | "invalidRecord"
+                | "lifecycleConflict"
+                | "overloaded"
+                | "remoteUnavailable"
+                | "deadlineExpired"
+        ) && reason_fields.len() != 1
+        {
+            return Err(invalid());
+        }
+        let reason: WakeFailureReason =
+            serde_json::from_value(serde_json::Value::Object(reason_fields))
+                .map_err(serde::de::Error::custom)?;
+        if matches!(&reason, WakeFailureReason::InvalidField { field, constraint } if field.is_empty() || constraint.is_empty())
+        {
+            return Err(invalid());
+        }
+        let wire: Envelope = serde_json::from_value(serde_json::Value::Object(fields))
+            .map_err(serde::de::Error::custom)?;
         Ok(Self {
             reason,
             stage: wire.stage,

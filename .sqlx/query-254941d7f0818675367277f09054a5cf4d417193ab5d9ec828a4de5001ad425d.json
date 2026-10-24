@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE remote_wake_requests SET wakeup_id=?,snapshot_json=?,created_at_ms=? WHERE operation_id=? AND target_json=? AND (wakeup_id IS NULL OR wakeup_id=?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 6
+    },
+    "nullable": []
+  },
+  "hash": "254941d7f0818675367277f09054a5cf4d417193ab5d9ec828a4de5001ad425d"
+}

@@ -1,6 +1,42 @@
 //! Owner-local communication service, independent of the Host executable.
 pub mod collaboration_application;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
+mod project_store_paths;
+mod project_store_registry;
+pub use project_store_registry::{NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry};
+mod central_project_reads;
+mod project_read_handle;
+pub use central_project_reads::{
+    CentralReadError, ProjectReadCopyFuture, ProjectReadCopySource, PulledProjectReadCopy,
+};
+pub use project_read_handle::{ProjectReadHandle, ProjectReadSnapshot};
+mod fleet_client;
+pub use fleet_client::{FleetClient, FleetClientError, FleetReply};
+mod project_claim;
+mod project_claim_store;
+pub use project_claim::{ProjectClaim, ProjectClaimError, ProjectClaimFuture};
+mod project_registration;
+pub use project_registration::{
+    ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
+    ProjectRegistrationState,
+};
+mod board_views;
+mod notification_publisher;
+mod project_admission;
+mod project_replication_position;
+pub use notification_publisher::NotificationPublisher;
+mod project_commit_publication;
+#[cfg(feature = "runtime-test-support")]
+pub use project_admission::ProjectAdmissionTestContext;
+pub use project_admission::{
+    IntentHandoffInput, IntentRecipientEnrollment, IntentReply, ProjectAdmission,
+    ProjectAdmissionError, ProjectAdmissionProps, ProjectArchiveObservation,
+};
+pub use project_commit_publication::after_project_commit_publish_and_reconcile;
+pub use project_replication_position::{
+    AcknowledgedMailChangesFuture, ProjectReplicationPosition, ReplicatedPositionFuture,
+    UnacknowledgedProjectReplication, project_replication_cursor,
+};
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
 mod automation_retention_worker;
@@ -9,8 +45,8 @@ pub use automation_retention_worker::AutomationRetentionWorker;
 pub use service_identity::ServiceIdentity;
 pub use service_identity::subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SubscriptionWaitFilter, SubscriptionWaitResult,
-    SystemSubscriptionClock,
+    SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
+    SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
 };
 mod endpoint_directory;
 pub use endpoint_directory::{EndpointDirectory, EndpointInventoryReader, EndpointSnapshot};
@@ -42,7 +78,6 @@ pub use provider_operation_store::{
 };
 mod delivery_acceptance_effect;
 mod delivery_route_projection;
-mod native_delivery_receipt;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
 pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
@@ -82,7 +117,13 @@ pub use router_session_app_server::{
     AppServerConnectionError, RouterSessionAppServerContext, RouterSessionAppServerListener,
     serve_router_session_app_server_connection,
 };
+mod native_delivery_result;
+mod native_route_claim;
+pub use native_route_claim::NativeRouteClaim;
 mod session_delivery_contract;
+pub use native_delivery_result::{
+    NativeDeliveryResult, NativeObservedOutcome, NativeRefusalCode, UnsentCause,
+};
 mod session_delivery_router;
 mod stored_delivery_receipt;
 mod stored_run_receipt;
@@ -119,7 +160,9 @@ pub use session_event_hub::{
     SessionEventHubError,
 };
 mod service_identity_storage;
-pub use service_identity_storage::{load_service_identity, new_service_uuid};
+pub use service_identity_storage::{
+    load_installation_peer, load_service_identity, new_service_uuid, read_service_identity,
+};
 mod manifest_publication;
 pub use manifest_publication::ManifestPublication;
 mod native_control_backend;
@@ -161,8 +204,36 @@ mod native_claude_catalogue;
 mod provider_session_inventory;
 mod stored_inventory_observation;
 
+mod interaction_storage_failure;
 mod wakeup_projection;
 mod wakeup_timing_worker;
+pub(crate) use interaction_storage_failure::map_interaction_storage_error;
+mod push_handoff_worker;
+pub use push_handoff_worker::{PushHandoffError, PushHandoffWorker};
+mod router_delivery_types;
+pub use router_delivery_types::{
+    RouterConsumerProtocol, RouterDeliveryTypes, RouterLocalObservation,
+};
+mod received_mail_push;
+pub use received_mail_push::received_mail_push;
+mod outgoing_mail_message;
+pub use outgoing_mail_message::outgoing_mail_message;
+mod mail_push_preparation;
+pub use mail_push_preparation::{MailPushPreparation, prepare_mail_push};
+mod mail_push_delivery;
+mod mail_push_outcome;
+pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
+mod mail_delivery_runtime;
+pub use mail_delivery_runtime::{LocalCancelReference, MailDeliveryRuntime};
+mod mail_delivery_session;
+pub use mail_delivery_session::MailDeliverySession;
+mod mail_delivery_projection;
+#[cfg(test)]
+mod mail_fetch_budget_tests;
+pub use mail_delivery_projection::{
+    project_cancelled_after_delivery, project_mail_cancel_outcome, project_mail_outcome,
+    project_received_mail,
+};
 pub use wakeup_timing_worker::WakeTimingWorker;
 
 mod delivery_projection;
@@ -199,3 +270,14 @@ mod automation_inspection_failure;
 mod delivery_reconciliation;
 mod operation_receipt_projection;
 mod run_reconciliation;
+
+#[cfg(test)]
+#[path = "../tests/support/native_worker_faults.rs"]
+mod native_worker_faults;
+#[cfg(test)]
+mod test_project_runtime;
+#[cfg(test)]
+mod test_subject_workstream;
+
+#[cfg(test)]
+mod frozen_mail_query_fixture;

@@ -25,6 +25,7 @@ impl DurableMessage for Message {
         "auto"
     }
 }
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn pause_discards_unsent_input_and_resume_keeps_original_timing()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -36,13 +37,15 @@ async fn pause_discards_unsent_input_and_resume_keeps_original_timing()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
                 text: "Check".into(),
             },
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::After { seconds: 600 },
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 3000 },
             now_ms: 0,
         })
         .await?;
@@ -50,7 +53,7 @@ async fn pause_discards_unsent_input_and_resume_keeps_original_timing()
     let first = match store
         .evaluate_wakeup::<Message>(
             &id,
-            60000,
+            300000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?
@@ -64,7 +67,7 @@ async fn pause_discards_unsent_input_and_resume_keeps_original_timing()
             operation_id: OperationId::generate(),
             wakeup_id: id.clone(),
             action: WakeAction::Pause,
-            now_ms: 70000,
+            now_ms: 350000,
         })
         .await?;
     if paused.wake.state != WakeState::Paused
@@ -78,13 +81,13 @@ async fn pause_discards_unsent_input_and_resume_keeps_original_timing()
             operation_id: OperationId::generate(),
             wakeup_id: id.clone(),
             action: WakeAction::Resume,
-            now_ms: 190000,
+            now_ms: 950000,
         })
         .await?;
     // Assert: next original tick 240s, original expiry 600s, first-fire history preserved.
     if resumed.wake.state != WakeState::Active
-        || resumed.wake.next_due_at_ms != Some(240000)
-        || resumed.wake.definition.expires_at_ms != Some(600000)
+        || resumed.wake.next_due_at_ms != Some(1200000)
+        || resumed.wake.definition.expires_at_ms != Some(3000000)
         || resumed.wake.first_fire != Some(first)
     {
         return Err("resume changed anchor/expiry/history".into());
@@ -104,6 +107,8 @@ async fn paused_one_shot_finishes_without_firing_after_its_due_time()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),

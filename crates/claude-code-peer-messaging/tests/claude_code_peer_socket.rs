@@ -3,7 +3,8 @@
 
 use agent_automation::PeerProcessId;
 use claude_code_peer_messaging::{
-    ClaudeCodePeerSocket, PeerSessionRecord, PeerSessionStatus, PeerSocketWriteOutcome,
+    ClaudeCodePeerSocket, PeerSessionRecord, PeerSessionStatus, PeerSocketUnsentCause,
+    PeerSocketWriteOutcome,
 };
 use collaboration_protocol::SessionId;
 use serde_json::{Value, json};
@@ -78,7 +79,10 @@ async fn refused_peer_socket_is_known_not_submitted() {
 
     assert!(matches!(
         outcome,
-        PeerSocketWriteOutcome::NotSubmitted { .. }
+        PeerSocketWriteOutcome::NotSubmitted {
+            cause: PeerSocketUnsentCause::ConnectFailed,
+            ..
+        }
     ));
 }
 
@@ -92,7 +96,7 @@ async fn missing_published_key_is_known_not_submitted() {
         .await;
 
     assert!(
-        matches!(outcome, PeerSocketWriteOutcome::NotSubmitted { reason } if reason.contains("authentication key"))
+        matches!(outcome, PeerSocketWriteOutcome::NotSubmitted { reason, cause: PeerSocketUnsentCause::AuthenticationUnavailable } if reason.contains("authentication key"))
     );
 }
 

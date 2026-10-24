@@ -1,5 +1,21 @@
 use super::*;
 
+#[tokio::test]
+async fn installation_read_without_a_configured_peer_does_not_mint_an_identity() {
+    let server = CollaborationMcpServer::catalog_only();
+    assert!(server.application.installation_peer().is_none());
+    let result = server
+        .installation_show(super::super::Parameters(super::super::EmptyToolInput {}))
+        .await;
+    assert_eq!(result.is_error, Some(true));
+    let error = result
+        .structured_content
+        .expect("installation unavailable result");
+    assert_eq!(error["effect"], "none");
+    assert!(!error.to_string().contains("peerId"));
+    assert!(server.application.installation_peer().is_none());
+}
+
 #[test]
 fn inspect_tool_exposes_native_rejection_message() {
     let message = "native thread is unreadable: fixture refusal";
@@ -7,8 +23,8 @@ fn inspect_tool_exposes_native_rejection_message() {
         collaboration_service::collaboration_application::NativeSessionFailure::NativeRejected {
             stage: collaboration_service::collaboration_application::NativeSessionStage::Inspect,
             message: message.to_owned(),
-            reason: "unknown",
-            next_action: "inspectTarget",
+            reason: collaboration_protocol::DeliveryRejectionReason::Unknown,
+            next_action: collaboration_protocol::DeliveryNextAction::InspectTarget,
             native_code: Some(-32600),
         },
     );
@@ -109,8 +125,8 @@ fn success_schema_branches_match_main_golden_snapshot() {
         std::fs::write(snapshot_path, snapshot).expect("write resolved MCP success schemas");
         return;
     }
-    assert_eq!(actual.len(), 107);
-    assert_eq!(expected.len(), 107);
+    assert_eq!(actual.len(), 176);
+    assert_eq!(expected.len(), 176);
     for (name, success) in actual {
         assert_eq!(success, expected[&name], "{name} success schema drifted");
     }

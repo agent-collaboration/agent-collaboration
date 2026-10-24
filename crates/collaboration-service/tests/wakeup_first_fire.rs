@@ -26,7 +26,7 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
     let served = served_api::ServedApi::start(identity).await?;
     let client = served.client("wake-control").await?;
     let request: WakeSendRequest = serde_json::from_value(
-        json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only"},"content":{"kind":"humanUser","text":"Check"},"delivery":"auto","generationGuard":null},"timing":{"kind":"interval","seconds":60},"expiry":{"kind":"none"}}),
+        json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only"},"content":{"kind":"humanUser","text":"Check"},"delivery":"auto","generationGuard":null},"timing":{"kind":"interval","seconds":300},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"after","seconds":7200}}),
     )?;
     let wake = client.send_wakeup(request).await?;
     let wait = served
@@ -61,7 +61,7 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
         .await
         .evaluate_wakeup::<collaboration_protocol::SavedMessage>(
             &wake.definition.wakeup_id,
-            chrono::Utc::now().timestamp_millis() + 60000,
+            chrono::Utc::now().timestamp_millis() + 300000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?;

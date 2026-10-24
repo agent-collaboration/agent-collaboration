@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO posts(post_id, thread_id, actor_id, request_id, epoch, position, router_time, time_basis, placement_kind, acting_for, text, posted_as_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "66a2ab066d67eba4d8729adf66119de3564a20bface6dd64298fd8b640b35656"
+}

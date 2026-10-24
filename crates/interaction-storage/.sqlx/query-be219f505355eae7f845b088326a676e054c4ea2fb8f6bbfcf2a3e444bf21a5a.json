@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT item_id AS \"item_id!: String\",target_identity AS \"target_identity!: String\",result,recorded_at AS \"recorded_at!: String\" FROM message_send_answers WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "target_identity!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "result",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recorded_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "be219f505355eae7f845b088326a676e054c4ea2fb8f6bbfcf2a3e444bf21a5a"
+}

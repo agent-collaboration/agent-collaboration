@@ -143,6 +143,9 @@ async fn exercise_input_validation(
     )?;
     let worker = ScheduledRunWorker {
         store: store.clone(),
+        interactions: Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        ),
         execution: Arc::new(crate::CodexAppServerScheduledRuns::new(
             backend.clone(),
             Arc::new(crate::UnmaterializedThreadHolder::new()),

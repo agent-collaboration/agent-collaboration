@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO message_send_answers(item_id,target_identity,result,recorded_at) VALUES (?,?,NULL,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "c91dc4f42adf743462f8e1e68e41eea5840486c8d4fad8d40469770ddc639e95"
+}

@@ -13,6 +13,7 @@ async fn host_supplies_automation_storage_without_native_backend()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("absent-native.sock"),

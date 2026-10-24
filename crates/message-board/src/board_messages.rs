@@ -1,6 +1,6 @@
 use crate::{
-    BoardId, HumanId, Identity, ImplementerHolder, MessageId, MessageText, OrchestratorHolder,
-    ParticipantRole, ProjectId, ThreadState, TopicId,
+    BoardId, HumanId, Identity, ImplementerHolder, OrchestratorHolder, ParticipantRole, PostId,
+    PostText, ProjectId, ThreadId, ThreadState, WorkspaceId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -11,61 +11,61 @@ pub const MAX_MESSAGE_REFERENCES: usize = 64;
 
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 #[error("references must contain at most 64 distinct targets")]
-pub struct InvalidMessageReferences;
+pub struct InvalidPostReferences;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MessageReferences(Vec<ReferenceTarget>);
+pub struct PostReferences(Vec<ReferenceTarget>);
 
 #[derive(JsonSchema)]
 #[schemars(transparent)]
 #[allow(dead_code)]
-struct MessageReferencesSchema(#[schemars(length(max = 64))] Vec<ReferenceTarget>);
+struct PostReferencesSchema(#[schemars(length(max = 64))] Vec<ReferenceTarget>);
 
-impl JsonSchema for MessageReferences {
+impl JsonSchema for PostReferences {
     fn schema_name() -> std::borrow::Cow<'static, str> {
-        "MessageReferences".into()
+        "PostReferences".into()
     }
     fn json_schema(generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        MessageReferencesSchema::json_schema(generator)
+        PostReferencesSchema::json_schema(generator)
     }
 }
 
-impl Serialize for MessageReferences {
+impl Serialize for PostReferences {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         self.0.serialize(serializer)
     }
 }
 
-impl<'de> Deserialize<'de> for MessageReferences {
+impl<'de> Deserialize<'de> for PostReferences {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let references = Vec::<ReferenceTarget>::deserialize(deserializer)?;
         Self::try_from(references).map_err(serde::de::Error::custom)
     }
 }
 
-impl TryFrom<Vec<ReferenceTarget>> for MessageReferences {
-    type Error = InvalidMessageReferences;
+impl TryFrom<Vec<ReferenceTarget>> for PostReferences {
+    type Error = InvalidPostReferences;
     fn try_from(references: Vec<ReferenceTarget>) -> Result<Self, Self::Error> {
         if references.len() > MAX_MESSAGE_REFERENCES
             || references.iter().collect::<HashSet<_>>().len() != references.len()
         {
-            return Err(InvalidMessageReferences);
+            return Err(InvalidPostReferences);
         }
         Ok(Self(references))
     }
 }
-impl From<MessageReferences> for Vec<ReferenceTarget> {
-    fn from(references: MessageReferences) -> Self {
+impl From<PostReferences> for Vec<ReferenceTarget> {
+    fn from(references: PostReferences) -> Self {
         references.0
     }
 }
-impl Deref for MessageReferences {
+impl Deref for PostReferences {
     type Target = [ReferenceTarget];
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl MessageReferences {
+impl PostReferences {
     #[must_use]
     pub fn as_slice(&self) -> &[ReferenceTarget] {
         &self.0
@@ -121,9 +121,9 @@ pub enum ActingForIdentity {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum Placement {
     #[serde(rename_all = "camelCase")]
-    Topic { topic_id: TopicId },
+    Project { project_id: ProjectId },
     #[serde(rename_all = "camelCase")]
-    Thread { root_message_id: MessageId },
+    Thread { thread_id: ThreadId },
 }
 
 #[derive(
@@ -132,112 +132,99 @@ pub enum Placement {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReferenceTarget {
     #[serde(rename_all = "camelCase")]
-    Message { message_id: MessageId },
+    Post { post_id: PostId },
     #[serde(rename_all = "camelCase")]
-    Thread { root_message_id: MessageId },
+    Thread { thread_id: ThreadId },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum ReadScope {
     #[serde(rename_all = "camelCase")]
-    Topic { topic_id: TopicId },
+    Project { project_id: ProjectId },
     #[serde(rename_all = "camelCase")]
-    Thread { root_message_id: MessageId },
+    Thread { thread_id: ThreadId },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum InboxScope {
     #[serde(rename_all = "camelCase")]
-    Project { project_id: ProjectId },
+    Workspace { workspace_id: WorkspaceId },
     #[serde(rename_all = "camelCase")]
     Board { board_id: BoardId },
     #[serde(rename_all = "camelCase")]
-    Topic { topic_id: TopicId },
+    Project { project_id: ProjectId },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-pub enum MessageListScope {
+pub enum PostListScope {
     #[serde(rename_all = "camelCase")]
-    Topic {
-        topic_id: TopicId,
+    Project {
+        project_id: ProjectId,
     },
     #[serde(rename_all = "camelCase")]
     Thread {
-        root_message_id: MessageId,
+        thread: crate::ThreadRef,
     },
     #[serde(rename_all = "camelCase")]
     Board {
         board_id: BoardId,
     },
     #[serde(rename_all = "camelCase")]
-    Project {
-        project_id: ProjectId,
+    Workspace {
+        workspace_id: WorkspaceId,
     },
-    AllProjects,
+    AllWorkspaces,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-pub enum MessageSelection {
+pub enum PostSelection {
     Latest,
     #[serde(rename_all = "camelCase")]
     AfterPosition {
-        after_activity_sequence: ActivitySequence,
+        after: crate::ReadPosition,
     },
     #[serde(rename_all = "camelCase")]
     Range {
-        from_activity_sequence: ActivitySequence,
-        to_activity_sequence: ActivitySequence,
+        from: crate::ReadPosition,
+        to: crate::ReadPosition,
     },
 }
 
 #[derive(Deserialize)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-enum MessageSelectionWire {
-    Latest,
+enum PostSelectionWire {
+    Latest {},
     #[serde(rename_all = "camelCase")]
     AfterPosition {
-        after_activity_sequence: ActivitySequence,
+        after: crate::ReadPosition,
     },
     #[serde(rename_all = "camelCase")]
     Range {
-        from_activity_sequence: ActivitySequence,
-        to_activity_sequence: ActivitySequence,
+        from: crate::ReadPosition,
+        to: crate::ReadPosition,
     },
 }
 
-impl<'de> Deserialize<'de> for MessageSelection {
+impl<'de> Deserialize<'de> for PostSelection {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
-        let selection = match MessageSelectionWire::deserialize(deserializer)? {
-            MessageSelectionWire::Latest => Self::Latest,
-            MessageSelectionWire::AfterPosition {
-                after_activity_sequence,
-            } => Self::AfterPosition {
-                after_activity_sequence,
-            },
-            MessageSelectionWire::Range {
-                from_activity_sequence,
-                to_activity_sequence,
-            } => Self::Range {
-                from_activity_sequence,
-                to_activity_sequence,
-            },
+        let selection = match PostSelectionWire::deserialize(deserializer)? {
+            PostSelectionWire::Latest {} => Self::Latest,
+            PostSelectionWire::AfterPosition { after } => Self::AfterPosition { after },
+            PostSelectionWire::Range { from, to } => Self::Range { from, to },
         };
         selection.validate().map_err(serde::de::Error::custom)?;
         Ok(selection)
     }
 }
 
-impl MessageSelection {
-    pub fn validate(&self) -> Result<(), InvalidMessageSelection> {
+impl PostSelection {
+    pub fn validate(&self) -> Result<(), InvalidPostSelection> {
         match self {
-            Self::Range {
-                from_activity_sequence,
-                to_activity_sequence,
-            } if from_activity_sequence > to_activity_sequence => Err(InvalidMessageSelection),
+            Self::Range { from, to } if !from.precedes_or_equals(to) => Err(InvalidPostSelection),
             _ => Ok(()),
         }
     }
@@ -245,27 +232,28 @@ impl MessageSelection {
 
 #[derive(Debug, thiserror::Error, Clone, Eq, PartialEq)]
 #[error("range start must not exceed range end")]
-pub struct InvalidMessageSelection;
+pub struct InvalidPostSelection;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-pub enum MessageOrdering {
+pub enum PostOrdering {
     NewestFirst,
     OldestFirst,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Message {
-    pub message_id: MessageId,
+pub struct Post {
+    pub envelope: crate::RecordEnvelope,
+    pub post_id: PostId,
     pub board_id: BoardId,
-    pub topic_id: TopicId,
+    pub project_id: ProjectId,
     pub placement: Placement,
     pub actor: Identity,
     pub acting_for: Option<ActingForIdentity>,
-    pub text: MessageText,
-    pub references: MessageReferences,
-    pub activity_sequence: ActivitySequence,
+    pub text: PostText,
+    pub references: PostReferences,
+    pub position: crate::RecordPlacement,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub posted_as_role: Option<ParticipantRole>,
 }
@@ -273,7 +261,10 @@ pub struct Message {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Thread {
-    pub root_message_id: MessageId,
+    pub envelope: crate::RecordEnvelope,
+    pub thread_id: ThreadId,
+    pub about: crate::ThreadSubject,
+    pub imported: bool,
     pub state: ThreadState,
     pub orchestrator: Option<OrchestratorHolder>,
     pub implementer: Option<ImplementerHolder>,
@@ -282,15 +273,15 @@ pub struct Thread {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct HistoryRange {
-    pub scope: MessageListScope,
-    pub selection: MessageSelection,
+    pub scope: PostListScope,
+    pub selection: PostSelection,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WatchStatus {
     pub watching: bool,
-    pub starts_after_activity_sequence: Option<ActivitySequence>,
+    pub starts_after: Option<crate::FeedCursor>,
     pub earlier_unwatched_range: Option<HistoryRange>,
     pub message: String,
 }
@@ -299,20 +290,20 @@ pub struct WatchStatus {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum InboxActivity {
     #[serde(rename_all = "camelCase")]
-    MessageCreated {
-        project_id: ProjectId,
-        activity_sequence: ActivitySequence,
+    PostCreated {
+        workspace_id: WorkspaceId,
+        position: crate::RecordPlacement,
         acknowledgement_scope: ReadScope,
-        message: Message,
+        post: Box<Post>,
     },
     #[serde(rename_all = "camelCase")]
     ThreadStateChanged {
-        project_id: ProjectId,
+        workspace_id: WorkspaceId,
         board_id: BoardId,
-        activity_sequence: ActivitySequence,
+        position: crate::RecordPlacement,
         acknowledgement_scope: ReadScope,
-        root_message_id: MessageId,
-        topic_id: TopicId,
+        thread_id: ThreadId,
+        project_id: ProjectId,
         actor: Identity,
         state: ThreadState,
     },
@@ -320,8 +311,8 @@ pub enum InboxActivity {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProjectUnreadSummary {
-    pub project_id: ProjectId,
+pub struct WorkspaceUnreadSummary {
+    pub workspace_id: WorkspaceId,
     pub has_unread: bool,
     pub main_tracking_initialized: bool,
 }
@@ -331,7 +322,7 @@ pub struct ProjectUnreadSummary {
 pub struct Bookmark {
     pub reader: Identity,
     pub scope: ReadScope,
-    pub through_activity_sequence: ActivitySequence,
+    pub through: crate::FeedCursor,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -341,34 +332,39 @@ pub enum InboxInitializationStatus {
     Existing,
     #[serde(rename_all = "camelCase")]
     Initialized {
-        starts_after_activity_sequence: ActivitySequence,
-        earlier_history_range: Option<HistoryRange>,
+        starts_after: crate::FeedCursor,
+        earlier_history_range: Option<Box<HistoryRange>>,
         message: String,
     },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MessagePage {
-    pub scope: MessageListScope,
-    pub selection: MessageSelection,
-    pub ordering: MessageOrdering,
-    pub records: Vec<Message>,
+pub struct PostPage {
+    pub scope: PostListScope,
+    pub selection: PostSelection,
+    pub ordering: PostOrdering,
+    pub records: Vec<Post>,
+    pub next: crate::AggregateCursor,
+    pub high_water: std::collections::BTreeMap<ProjectId, crate::FeedCursor>,
+    pub unavailable: Vec<ProjectId>,
     pub next_cursor: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct InboxPage {
-    pub project_id: ProjectId,
+    pub workspace_id: WorkspaceId,
     pub scope: InboxScope,
     pub reader: Identity,
     pub read_mode: InboxReadMode,
-    pub ordering: MessageOrdering,
-    pub upper_activity_sequence: ActivitySequence,
+    pub ordering: PostOrdering,
+    pub high_water: std::collections::BTreeMap<ProjectId, crate::FeedCursor>,
+    pub next: crate::AggregateCursor,
+    pub unavailable: Vec<ProjectId>,
     pub records: Vec<InboxActivity>,
     pub next_cursor: Option<String>,
-    pub initialization: InboxInitializationStatus,
+    pub initializations: Vec<crate::ReadInitializationOutcome>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

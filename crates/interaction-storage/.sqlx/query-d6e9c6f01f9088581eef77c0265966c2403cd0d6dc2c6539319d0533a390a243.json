@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO typed_interaction_history (request_id, record_json, created_at) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "d6e9c6f01f9088581eef77c0265966c2403cd0d6dc2c6539319d0533a390a243"
+}

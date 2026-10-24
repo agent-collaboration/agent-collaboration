@@ -19,7 +19,10 @@ impl SessionDeliveryRouter {
         let claims = join_all(self.routes.iter().map(|route| route.claim(target)))
             .await
             .into_iter()
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .map(crate::NativeRouteClaim::into_claim)
+            .collect::<Vec<_>>();
         if claims
             .iter()
             .any(|claim| matches!(claim, RouteClaim::Rejected { .. }))

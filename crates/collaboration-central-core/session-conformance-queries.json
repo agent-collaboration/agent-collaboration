@@ -1,0 +1,21 @@
+{
+  "migrations": ["session_migrations"],
+  "output": "src/generated_session_conformance.rs",
+  "metadata": "session-conformance-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_session_conformance_changes",
+      "sql": "sql/session_conformance/read_changes.sql",
+      "row": "SessionConformanceChanges",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "session_conformance_sql_failure",
+      "sql": "sql/session_conformance/sql_failure.sql",
+      "row": "SessionConformanceSqlResult",
+      "result": "optional",
+      "parameters": [{"name":"value","kind":"text","nullable":false}]
+    }
+  ]
+}

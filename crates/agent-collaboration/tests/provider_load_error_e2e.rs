@@ -11,7 +11,8 @@ use collaboration_protocol::{
 };
 use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
 use serde_json::{Value, json};
-use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx::Connection;
+use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{
     io::{self, Write},
     os::unix::fs::PermissionsExt as _,
@@ -83,6 +84,7 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         .expect("private Host root");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -181,11 +183,11 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         Some(&json!("wakeFired"))
     );
 
-    let automation_database = root.path().join("automation.sqlite");
+    let interaction_database = root.path().join("interaction.sqlite");
     let mut connection =
-        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&automation_database))
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&interaction_database))
             .await
-            .expect("automation database connection");
+            .expect("native interaction database observer");
     let (push_id, delivery_state, stored_outcome) = tokio::time::timeout(
         Duration::from_secs(5),
         async {
@@ -225,6 +227,9 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         })
         .await
         .expect("stored wake push inspection");
+    let collaboration_protocol::MessageShowResult::Local(stored) = stored else {
+        panic!("native proof expected a stored local push");
+    };
     let link = stored.link;
 
     let show = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))

@@ -10,6 +10,7 @@ async fn cli_creates_and_inspects_disabled_schedule() -> Result<(), Box<dyn std:
         .join(format!("schedule-cli-{}", OperationId::generate().as_str()));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("unavailable.sock"),

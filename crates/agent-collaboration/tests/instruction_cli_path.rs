@@ -12,6 +12,7 @@ async fn cli_creates_and_reads_instruction_through_host() -> Result<(), Box<dyn 
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("absent.sock"),

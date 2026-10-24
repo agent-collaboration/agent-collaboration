@@ -13,8 +13,16 @@ schemars = { workspace = true, features = ["chrono04"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+uuid = { version = "=1.26.0", default-features = false, features = ["std", "v5"] }
+chrono = { version = "=0.4.45", default-features = false, features = ["std", "serde"] }
+sha2.workspace = true
+petgraph = { version = "0.8.3", default-features = false, features = ["std"] }
+url.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 uuid.workspace = true
-chrono = { workspace = true, features = ["serde"] }
+chrono.workspace = true
 
 [dev-dependencies]
+proptest.workspace = true
 serde_json.workspace = true

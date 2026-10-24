@@ -1,0 +1,51 @@
+[package]
+name = "board-upgrade-native-observer"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[workspace]
+
+[[bin]]
+name = "board-upgrade-central"
+path = "src/central.rs"
+
+[[bin]]
+name = "board-request-shapes"
+path = "src/request_shapes.rs"
+
+[dependencies]
+board-legacy-upgrade = { path = "../../../crates/board-legacy-upgrade" }
+collaboration-protocol = { path = "../../../crates/collaboration-protocol" }
+message-board = { path = "../../../crates/message-board" }
+message-board-storage = { path = "../../../crates/message-board-storage" }
+fleet-admission = { path = "../../../crates/fleet-admission" }
+fleet-sync-protocol = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+fleet-sync-lease = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+sqlx-turso = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
+collaboration-central-tokio = { path = "../../../crates/collaboration-central-tokio", features = ["conformance"] }
+collaboration-central-conformance = { path = "../../../crates/collaboration-central-conformance" }
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
+tokio = { version = "=1.53.3", features = ["macros", "rt-multi-thread", "io-std", "io-util"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+manual_ok_or = "deny"
+manual_unwrap_or = "deny"
+needless_collect = "deny"
+panic = "deny"
+panic_in_result_fn = "deny"
+redundant_clone = "deny"
+string_slice = "deny"
+todo = "deny"
+uninlined_format_args = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"

@@ -163,6 +163,7 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
     ];
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().join("service"),
             codex_home: root.path().join("unused-codex-home"),
             backend_socket: root.path().join("unused-backend.sock"),

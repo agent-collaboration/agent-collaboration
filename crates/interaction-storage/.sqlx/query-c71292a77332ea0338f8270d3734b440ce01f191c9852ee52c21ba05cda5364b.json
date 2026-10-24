@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT progress_id AS \"progress_id!: String\" FROM board_intent_progress WHERE project_id = ? AND intent_id = ? AND state_epoch = ? AND state_position = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "progress_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c71292a77332ea0338f8270d3734b440ce01f191c9852ee52c21ba05cda5364b"
+}

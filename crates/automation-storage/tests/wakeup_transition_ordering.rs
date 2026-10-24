@@ -23,6 +23,7 @@ impl DurableMessage for Message {
         "auto"
     }
 }
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn attached_wait_observes_pause_even_after_resume() -> Result<(), Box<dyn std::error::Error>>
 {
@@ -33,17 +34,19 @@ async fn attached_wait_observes_pause_even_after_resume() -> Result<(), Box<dyn 
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
                 text: "Check".into(),
             },
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::None,
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 7200 },
             now_ms: 0,
         })
         .await?;
-    for (action, at) in [(WakeAction::Pause, 1000), (WakeAction::Resume, 2000)] {
+    for (action, at) in [(WakeAction::Pause, 5000), (WakeAction::Resume, 10000)] {
         store
             .mutate_wakeup::<Message>(&WakeMutation {
                 operation_id: OperationId::generate(),

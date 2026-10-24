@@ -27,6 +27,7 @@ use codex_router_host::ManagedUpdateInputs;
 use codex_router_host::PreExecTelemetry;
 
 use super::HostCommandError;
+mod debug_profile_loader;
 mod router_child_command;
 
 use crate::CliContext;
@@ -75,14 +76,7 @@ pub(super) async fn run_foreground_host(
     let launch_started_at = std::time::Instant::now();
     let codex_home = resolve_codex_home(context)?;
     let isolated_debug = launch_mode.is_isolated();
-    let debug_profile = if isolated_debug {
-        let path = codex_home.join("codex-router-debug.config.toml");
-        let profile = codex_native_integration::DebugCodexProfile::read(&codex_home, port)
-            .map_err(|source| HostCommandError::IsolatedDebugProfile { path, source })?;
-        Some(profile)
-    } else {
-        None
-    };
+    let debug_profile = debug_profile_loader::load_debug_profile(&codex_home, launch_mode, port)?;
     if isolated_debug {
         let protected_root = owner_home
             .ok_or(HostCommandError::OwnerHomeUnavailable)?
@@ -94,7 +88,7 @@ pub(super) async fn run_foreground_host(
     let app_server_socket =
         crate::app_server_socket_or_default(context, &codex_paths, isolated_debug)
             .map_err(|message| HostCommandError::AppServerSocket(message.to_owned()))?;
-    let collaboration_directory = router_root.join("agent-communication");
+    let collaboration_directory = codex_router_host::router_collaboration_directory(&router_root);
     let profile = CodexRouterProfile::new(port);
     let app_server_spec = AppServerCommandSpec::new(&codex_paths, &profile, &app_server_socket);
     let app_server_spec = match debug_profile.as_ref() {
@@ -138,7 +132,7 @@ pub(super) async fn run_foreground_host(
     }
     let app_server =
         AppServerLaunchPlan::new(app_server_command, running_identity, running_version)
-            .with_schema_directory(router_root.join("agent-communication"));
+            .with_schema_directory(collaboration_directory.clone());
     codex_router_host::record_debug_readiness_timing("appServerPlanBuilt", launch_started_at);
     // Schema export is optional raw-native enrichment; do not delay app-server
     // socket startup on this best-effort operation.

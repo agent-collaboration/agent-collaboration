@@ -26,6 +26,9 @@ impl CollaborationRuntime {
             };
             self.manifest.take();
             self.shutdown.cancel();
+            if let Some(publisher) = &self.notification_publisher {
+                publisher.cancel();
+            }
             if let Some(service) = &self.subscription_delivery {
                 service.cancel();
             }
@@ -42,6 +45,9 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(error);
         }
+        if let Some(publisher) = self.notification_publisher.take() {
+            publisher.shutdown().await;
+        }
         if let Some(service) = self.subscription_delivery.take() {
             service.shutdown().await;
         }
@@ -49,6 +55,11 @@ impl CollaborationRuntime {
             failure.get_or_insert(error);
         }
         if let Err(error) = self.publication.admission_gate().retire() {
+            failure.get_or_insert(error);
+        }
+        if let Some(session) = self.board_session.take()
+            && let Err(error) = session.shutdown().await
+        {
             failure.get_or_insert(error);
         }
         if let Some(route) = self.provider_delivery_route.take() {
@@ -128,10 +139,10 @@ impl CollaborationRuntime {
                 }
             }
         }
-        if let Some(store) = self.board_store.take() {
+        if let Some(store) = self.project_admission.take() {
             match std::sync::Arc::try_unwrap(store) {
                 Ok(store) => {
-                    if store.into_inner().close().await.is_err() {
+                    if store.close().await.is_err() {
                         failure.get_or_insert(io::Error::other("board storage close failed"));
                     }
                 }

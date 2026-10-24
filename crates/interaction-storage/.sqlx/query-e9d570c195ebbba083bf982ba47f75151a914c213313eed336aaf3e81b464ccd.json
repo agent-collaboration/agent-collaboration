@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE typed_interaction_history SET record_json = ? WHERE request_id = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e9d570c195ebbba083bf982ba47f75151a914c213313eed336aaf3e81b464ccd"
+}

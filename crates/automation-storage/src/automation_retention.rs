@@ -43,7 +43,7 @@ impl AutomationStore {
     }
 }
 
-fn retention_cutoff_ms(now_ms: i64) -> Result<i64, StorageError> {
+pub(crate) fn retention_cutoff_ms(now_ms: i64) -> Result<i64, StorageError> {
     let duration_ms = RETENTION_DAYS
         .checked_mul(MILLIS_PER_DAY)
         .ok_or(StorageError::InvalidRecord)?;

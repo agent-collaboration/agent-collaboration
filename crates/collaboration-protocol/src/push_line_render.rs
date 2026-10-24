@@ -10,11 +10,7 @@ struct DisplayLimits {
 
 impl DisplayLimits {
     fn for_input(input: &PushLineInput) -> Self {
-        let body_scalars = input.body.as_deref().map_or(0, |body| body.chars().count());
-        let preview = input
-            .body
-            .as_ref()
-            .map(|_| body_scalars.min(PREVIEW_MAX_SCALARS));
+        let preview = preview_text(input).map(|body| body.chars().count().min(PREVIEW_MAX_SCALARS));
         let name = match (&input.header_facts, &input.origin) {
             (
                 PushHeaderFacts::DirectMessage {
@@ -160,10 +156,16 @@ impl DisplayLimits {
                 "🧵 Router: subscription expired @{machine_label} · {}",
                 escape_field(scope)
             ),
+            (
+                PushHeaderFacts::BoardNotification { .. },
+                PushOrigin::Router(PushKind::BoardNotification),
+            ) => {
+                format!("📋 Router: board notification @{machine_label}")
+            }
             _ => return String::new(),
         };
 
-        if let Some(body) = &input.body {
+        if let Some(body) = preview_text(input) {
             let total_scalars = body.chars().count();
             let shown_scalars = self.preview.unwrap_or_default().min(total_scalars);
             let preview = escaped_prefix(body, shown_scalars, shown_scalars < total_scalars);
@@ -188,6 +190,14 @@ impl DisplayLimits {
             DisplayField::Name => self.name.as_mut(),
             DisplayField::Preview => self.preview.as_mut(),
         }
+    }
+}
+
+fn preview_text(input: &PushLineInput) -> Option<&str> {
+    if let PushHeaderFacts::BoardNotification { summary, .. } = &input.header_facts {
+        Some(summary.as_str())
+    } else {
+        input.body.as_deref()
     }
 }
 
@@ -257,7 +267,7 @@ fn validate_input(input: &PushLineInput) -> Result<(), PushLineError> {
 
     let subscription_kind = matches!(
         kind,
-        PushKind::SubscriptionActivity | PushKind::SubscriptionExpiry
+        PushKind::SubscriptionActivity | PushKind::SubscriptionExpiry | PushKind::BoardNotification
     );
     match (subscription_kind, input.body.is_some()) {
         (false, false) => return Err(PushLineError::MissingBody),
@@ -374,6 +384,8 @@ pub fn parse_push_line_header(text: &str) -> Option<ParsedPushLineHeader> {
         PushKind::SubscriptionActivity
     } else if header.starts_with("🧵 Router: subscription expired") {
         PushKind::SubscriptionExpiry
+    } else if header.starts_with("📋 Router: board notification") {
+        PushKind::BoardNotification
     } else {
         return None;
     };

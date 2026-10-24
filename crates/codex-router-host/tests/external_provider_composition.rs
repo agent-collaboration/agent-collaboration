@@ -51,6 +51,7 @@ sys.stdin.read()
 
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -175,6 +176,7 @@ sys.stdin.read()
 
     let receipt = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target,
             message: PublicMessageContent::HumanUser {
                 text: MessageText::try_from("routed provider message".to_owned()).expect("message"),
@@ -184,6 +186,9 @@ sys.stdin.read()
         })
         .await
         .expect("message receipt");
+    let collaboration_protocol::MessageSendResult::Local(receipt) = receipt else {
+        panic!("local provider returned remote sender custody");
+    };
     assert!(
         matches!(receipt.receipt.outcome, DeliveryOutcome::Started),
         "{receipt:?}"
@@ -213,6 +218,7 @@ print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion'
         .expect("provider executable");
     let start = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),

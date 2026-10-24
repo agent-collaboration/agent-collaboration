@@ -7,18 +7,27 @@ use super::{
 };
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{
-    MAX_PUSH_LINE_BYTES, MessageText, PushId, SubscriptionWaitBatch, ThreadSubscriptionWaitResult,
+    MAX_PUSH_LINE_BYTES, MessageText, PushId, SubscriptionWaitBatch, ThreadSubscriptionWaitOutcome,
+    ThreadSubscriptionWaitResult,
 };
-use message_board::{ActivitySequence, MessageId, PendingRootNotice, TopicId};
+use message_board::{
+    EpochNumber, FeedCursor, FeedPosition, PendingRootNotice, ProjectId, ThreadId,
+};
 use std::error::Error;
 
 fn maximal_root() -> Result<PendingRootNotice, Box<dyn Error>> {
     let maximum_activity_sequence = u64::try_from(i64::MAX)?;
     Ok(PendingRootNotice::new(
-        MessageId::generate(),
-        TopicId::generate(),
-        ActivitySequence::try_from(maximum_activity_sequence)?,
-        ActivitySequence::try_from(maximum_activity_sequence)?,
+        ThreadId::generate(),
+        ProjectId::generate(),
+        FeedCursor {
+            epoch: EpochNumber::try_from(maximum_activity_sequence)?,
+            position: FeedPosition::try_from(maximum_activity_sequence)?,
+        },
+        FeedCursor {
+            epoch: EpochNumber::try_from(maximum_activity_sequence)?,
+            position: FeedPosition::try_from(maximum_activity_sequence)?,
+        },
         u64::MAX,
     )?)
 }
@@ -28,17 +37,20 @@ fn largest_notice(
     roots: Vec<PendingRootNotice>,
 ) -> Result<ThreadSubscriptionWaitResult, Box<dyn Error>> {
     Ok(ThreadSubscriptionWaitResult {
-        batch: Some(SubscriptionWaitBatch::Notice {
-            push_id: PushId::try_from("01890f2e-7b4c-7cc0-98c4-000000000002".to_owned())?,
-            line: MessageText::try_from("\\".repeat(MAX_PUSH_LINE_BYTES))?,
-            held: true,
-            held_since: Some(
-                DateTime::<Utc>::from_timestamp(253_402_300_799, 999_999_999)
-                    .ok_or("valid maximum RFC 3339 timestamp")?,
-            ),
-            draining: true,
-            roots,
-        }),
+        renewals: Vec::new(),
+        outcome: ThreadSubscriptionWaitOutcome::Batch {
+            batch: SubscriptionWaitBatch::Notice {
+                push_id: PushId::try_from("01890f2e-7b4c-7cc0-98c4-000000000002".to_owned())?,
+                line: MessageText::try_from("\\".repeat(MAX_PUSH_LINE_BYTES))?,
+                held: true,
+                held_since: Some(
+                    DateTime::<Utc>::from_timestamp(253_402_300_799, 999_999_999)
+                        .ok_or("valid maximum RFC 3339 timestamp")?,
+                ),
+                draining: true,
+                roots,
+            },
+        },
     })
 }
 

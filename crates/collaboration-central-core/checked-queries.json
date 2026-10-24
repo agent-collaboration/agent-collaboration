@@ -1,0 +1,145 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_statements.rs",
+  "metadata": "checked-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_fleet_decision",
+      "sql": "sql/read_fleet_decision.sql",
+      "row": "StoredFleetDecision",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_fleet_decision",
+      "sql": "sql/insert_fleet_decision.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "canonical_hash",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_fleet_decision_receipt",
+      "sql": "sql/insert_fleet_decision_receipt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "receipt_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "ordinal",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "effect",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_fleet_decision_receipts",
+      "sql": "sql/read_fleet_decision_receipts.sql",
+      "row": "StoredFleetDecisionReceipt",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_fleet_receipt_page",
+      "sql": "sql/read_fleet_receipt_page.sql",
+      "row": "FleetReceiptPageRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after_ordinal",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_creation_decision",
+      "sql": "sql/read_creation_decision.sql",
+      "row": "StoredProjectCreationDecision",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_creation_decision",
+      "sql": "sql/insert_creation_decision.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "creating_request",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "carrier_installation",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

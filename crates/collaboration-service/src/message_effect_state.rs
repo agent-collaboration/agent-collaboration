@@ -1,8 +1,76 @@
 //! Request-local effect evidence; never a replay or delivery store.
+use crate::{NativeRefusalCode, UnsentCause};
 use collaboration_protocol::{
-    CodexGeneration, NativeDeliveryFailureCause, PermissionDifference, SessionRef,
+    CodexGeneration, DeliveryNextAction, DeliveryRejectionReason, NativeDeliveryFailureCause,
+    PermissionDifference, SessionRef,
 };
 use serde_json::{Value, json};
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum NativeFailureKind {
+    WrongService,
+    EndpointNotFound,
+    UnsupportedCapability,
+    Unavailable,
+    StaleGeneration,
+    OutcomeUnknown,
+    ThreadMissingOrUnmaterialized,
+    LocalRejection(UnsentCause),
+    NotLoaded,
+    ThreadNotLoaded,
+    NoActiveTurn,
+}
+impl NativeFailureKind {
+    fn wire_kind(self) -> &'static str {
+        match self {
+            Self::WrongService => "wrongService",
+            Self::EndpointNotFound => "endpointNotFound",
+            Self::UnsupportedCapability => "unsupportedCapability",
+            Self::Unavailable => "unavailable",
+            Self::StaleGeneration => "staleGeneration",
+            Self::OutcomeUnknown => "outcomeUnknown",
+            Self::ThreadMissingOrUnmaterialized => "threadMissingOrUnmaterialized",
+            Self::LocalRejection(_) => "localRejection",
+            Self::NotLoaded => crate::NOT_LOADED_REASON,
+            Self::ThreadNotLoaded => "threadNotLoaded",
+            Self::NoActiveTurn => "noActiveTurn",
+        }
+    }
+    fn disposition(self) -> NativeFailureDisposition {
+        use DeliveryRejectionReason as Reason;
+        use NativeRefusalCode as Code;
+        NativeFailureDisposition::Unsent(match self {
+            Self::WrongService => UnsentCause::InvalidInput,
+            Self::EndpointNotFound | Self::ThreadMissingOrUnmaterialized => {
+                UnsentCause::RecipientUnknown
+            }
+            Self::UnsupportedCapability => {
+                UnsentCause::Refused(Code::Rejection(Reason::UnsupportedCapability))
+            }
+            Self::Unavailable => UnsentCause::Holdable {
+                otherwise: Code::NativeUnavailable,
+            },
+            Self::StaleGeneration => UnsentCause::Refused(Code::Rejection(Reason::StaleGeneration)),
+            Self::LocalRejection(cause) => cause,
+            Self::NotLoaded => UnsentCause::Holdable {
+                otherwise: Code::ThreadNotLoaded,
+            },
+            Self::ThreadNotLoaded => UnsentCause::Refused(Code::ThreadNotLoaded),
+            Self::NoActiveTurn => UnsentCause::Refused(Code::NoActiveTurn),
+            Self::OutcomeUnknown => return NativeFailureDisposition::Uncertain,
+        })
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum NativeFailureDisposition {
+    Unsent(UnsentCause),
+    Uncertain,
+}
+#[derive(Debug)]
+pub(crate) struct NativeMessageFailure {
+    pub response: Value,
+    pub disposition: NativeFailureDisposition,
+}
 
 pub(crate) const HELD_BY_ANOTHER_CLIENT_GUIDANCE: &str =
     "Message it from the Codex client that holds it.";
@@ -11,7 +79,6 @@ pub(crate) struct NativeMessageAttemptEvidence<'a> {
     pub effects: &'a mut agent_automation::NativeEffectEvidence<SessionRef, CodexGeneration>,
     pub sink: &'a dyn crate::AttemptEvidenceSink,
 }
-
 impl NativeMessageAttemptEvidence<'_> {
     pub async fn observe_permission_differences(
         &mut self,
@@ -38,22 +105,58 @@ impl MessageEffects {
             correlation: None,
         }
     }
-    pub fn failure(&self, kind: &str, stage: &str) -> Value {
+    pub fn failure(&self, kind: NativeFailureKind, stage: &str) -> NativeMessageFailure {
+        let disposition = kind.disposition();
+        let kind = kind.wire_kind();
         let mut data = json!({"kind":kind,"stage":stage,"message":"Message operation failed",
             "effects":{"resume":self.resume,"submission":self.submission}});
         if let (Some(fields), Some(id)) = (data.as_object_mut(), &self.correlation) {
             fields.insert("clientUserMessageId".to_owned(), json!(id));
         }
-        json!({"jsonrpc":"2.0","id":self.id,"error":{"code":-32050,"message":"Message operation failed","data":data}})
+        self.classified_failure(json!({"jsonrpc":"2.0","id":self.id,"error":{"code":-32050,"message":"Message operation failed","data":data}}), disposition)
+    }
+    pub fn recorded_policy_failure(
+        &self,
+        error: &codex_acp_adapter::SessionSetupError,
+        stage: &str,
+        failure_cause: NativeDeliveryFailureCause,
+    ) -> NativeMessageFailure {
+        use codex_acp_adapter::SessionSetupError as Error;
+        let cause = match error {
+            Error::InvalidParameters => UnsentCause::InvalidInput,
+            Error::ConfigurationMismatch
+            | Error::ModelMismatch { .. }
+            | Error::AccessMismatch { .. } => UnsentCause::Refused(NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::SettingsUnresolved,
+            )),
+            Error::Busy => {
+                UnsentCause::Refused(NativeRefusalCode::Rejection(DeliveryRejectionReason::Busy))
+            }
+            Error::SchemaUnavailable => UnsentCause::Refused(NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::UnsupportedCapability,
+            )),
+            Error::NativeRejected => UnsentCause::Refused(NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::Unknown,
+            )),
+            Error::Unavailable | Error::CancellationUnresolved => {
+                UnsentCause::Refused(NativeRefusalCode::NativeUnavailable)
+            }
+            Error::HostLocationsUnavailable { .. }
+            | Error::NativeThreadStatusUnavailable
+            | Error::OutcomeUnknown => UnsentCause::ProcessingFailure,
+        };
+        self.local_rejection("thread/resume", stage, failure_cause, cause)
     }
     pub fn local_rejection(
         &self,
         operation: &str,
         stage: &str,
         cause: NativeDeliveryFailureCause,
-    ) -> Value {
-        let mut response = self.failure("localRejection", stage);
+        unsent: UnsentCause,
+    ) -> NativeMessageFailure {
+        let mut response = self.failure(NativeFailureKind::LocalRejection(unsent), stage);
         if let Some(data) = response
+            .response
             .pointer_mut("/error/data")
             .and_then(Value::as_object_mut)
         {
@@ -62,14 +165,18 @@ impl MessageEffects {
         }
         response
     }
-    pub fn unsupported_method(&self, operation: &str, stage: &str) -> Value {
-        let mut response = self.local_rejection(
-            operation,
-            stage,
-            NativeDeliveryFailureCause::NativeMethodUnavailable,
-        );
-        if let Some(kind) = response.pointer_mut("/error/data/kind") {
-            *kind = json!("unsupportedCapability");
+    pub fn unsupported_method(&self, operation: &str, stage: &str) -> NativeMessageFailure {
+        let mut response = self.failure(NativeFailureKind::UnsupportedCapability, stage);
+        if let Some(data) = response
+            .response
+            .pointer_mut("/error/data")
+            .and_then(Value::as_object_mut)
+        {
+            data.insert("operation".to_owned(), json!(operation));
+            data.insert(
+                "cause".to_owned(),
+                json!(NativeDeliveryFailureCause::NativeMethodUnavailable),
+            );
         }
         response
     }
@@ -79,9 +186,9 @@ impl MessageEffects {
         stage: &str,
         code: i64,
         native: Option<&Value>,
-    ) -> Value {
+    ) -> NativeMessageFailure {
         let (reason, next_action) = classify_native_rejection(code, native);
-        let message = if reason == "heldByAnotherClient" {
+        let message = if reason == DeliveryRejectionReason::HeldByAnotherClient {
             HELD_BY_ANOTHER_CLIENT_GUIDANCE
         } else {
             "Message operation failed"
@@ -89,7 +196,7 @@ impl MessageEffects {
         let mut data = json!({"kind":"nativeRejected","operation":operation,"stage":stage,"cause":"nativeRejected","message":message,
             "reason":reason,"nextAction":next_action,"clientCode":code,
             "effects":{"resume":self.resume,"submission":self.submission}});
-        if reason == "unknown"
+        if reason == DeliveryRejectionReason::Unknown
             && let Some(fields) = data.as_object_mut()
         {
             fields.insert("nativeCode".into(), json!(code));
@@ -97,7 +204,21 @@ impl MessageEffects {
         if let (Some(fields), Some(id)) = (data.as_object_mut(), &self.correlation) {
             fields.insert("clientUserMessageId".to_owned(), json!(id));
         }
-        json!({"jsonrpc":"2.0","id":self.id,"error":{"code":-32050,"message":"Message operation failed","data":data}})
+        self.classified_failure(json!({"jsonrpc":"2.0","id":self.id,"error":{"code":-32050,"message":"Message operation failed","data":data}}),NativeFailureDisposition::Unsent(UnsentCause::for_rejection(reason)))
+    }
+    fn classified_failure(
+        &self,
+        response: Value,
+        disposition: NativeFailureDisposition,
+    ) -> NativeMessageFailure {
+        NativeMessageFailure {
+            response,
+            disposition: if self.resume == "unknown" || self.submission == "unknown" {
+                NativeFailureDisposition::Uncertain
+            } else {
+                disposition
+            },
+        }
     }
 }
 
@@ -106,7 +227,7 @@ impl MessageEffects {
 pub(crate) fn classify_native_rejection(
     code: i64,
     native: Option<&Value>,
-) -> (&'static str, &'static str) {
+) -> (DeliveryRejectionReason, DeliveryNextAction) {
     let native_message = native
         .and_then(|value| value.get("message"))
         .and_then(Value::as_str);
@@ -120,24 +241,45 @@ pub(crate) fn classify_native_rejection(
                 })
         })
     {
-        return ("heldByAnotherClient", "messageFromHoldingCodexClient");
+        return (
+            DeliveryRejectionReason::HeldByAnotherClient,
+            DeliveryNextAction::MessageFromHoldingCodexClient,
+        );
     }
     let description = native
         .map(Value::to_string)
         .unwrap_or_default()
         .to_lowercase();
     if description.contains("subagent") || description.contains("child") {
-        ("childThread", "inspectTarget")
+        (
+            DeliveryRejectionReason::ChildThread,
+            DeliveryNextAction::InspectTarget,
+        )
     } else if description.contains("busy") || description.contains("active turn") {
-        ("busy", "useDeliverySteer")
+        (
+            DeliveryRejectionReason::Busy,
+            DeliveryNextAction::UseDeliverySteer,
+        )
     } else if description.contains("resume") {
-        ("notResumable", "inspectTarget")
+        (
+            DeliveryRejectionReason::NotResumable,
+            DeliveryNextAction::InspectTarget,
+        )
     } else if description.contains("permission") || code == -32001 {
-        ("permissionDenied", "requestApproval")
+        (
+            DeliveryRejectionReason::PermissionDenied,
+            DeliveryNextAction::RequestApproval,
+        )
     } else if code == -32601 || description.contains("unsupported") {
-        ("unsupportedCapability", "correctRequest")
+        (
+            DeliveryRejectionReason::UnsupportedCapability,
+            DeliveryNextAction::CorrectRequest,
+        )
     } else {
-        ("unknown", "retryLater")
+        (
+            DeliveryRejectionReason::Unknown,
+            DeliveryNextAction::RetryLater,
+        )
     }
 }
 
@@ -195,20 +337,25 @@ mod tests {
         ] {
             let rejection = effects.native_rejection("turn/start", "start", code, Some(&native));
             assert_eq!(
-                rejection.pointer("/error/data/reason"),
+                rejection.response.pointer("/error/data/reason"),
                 Some(&json!(reason))
             );
             assert_eq!(
-                rejection.pointer("/error/data/nextAction"),
+                rejection.response.pointer("/error/data/nextAction"),
                 Some(&json!(action))
             );
             if reason == "unknown" {
                 assert_eq!(
-                    rejection.pointer("/error/data/nativeCode"),
+                    rejection.response.pointer("/error/data/nativeCode"),
                     Some(&json!(code))
                 );
             } else {
-                assert!(rejection.pointer("/error/data/nativeCode").is_none());
+                assert!(
+                    rejection
+                        .response
+                        .pointer("/error/data/nativeCode")
+                        .is_none()
+                );
             }
         }
     }
@@ -234,8 +381,12 @@ mod tests {
             (-32600, "thread target not found", ("unknown", "retryLater")),
         ] {
             assert_eq!(
-                classify_native_rejection(code, Some(&json!({"message":message}))),
-                expected,
+                serde_json::to_value(classify_native_rejection(
+                    code,
+                    Some(&json!({"message":message}))
+                ))
+                .unwrap(),
+                serde_json::to_value(expected).unwrap(),
                 "unrelated native error: {message}"
             );
         }

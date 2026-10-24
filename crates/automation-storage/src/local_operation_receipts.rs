@@ -18,6 +18,16 @@ pub(crate) async fn replay<TResult: DeserializeOwned>(
     connection: &mut SqliteConnection,
     operation: LocalOperation<'_>,
 ) -> Result<Option<TResult>, StorageError> {
+    if sqlx::query!(
+        "SELECT operation_id FROM remote_wake_requests WHERE operation_id=?",
+        operation.id.as_str()
+    )
+    .fetch_optional(&mut *connection)
+    .await?
+    .is_some()
+    {
+        return Err(StorageError::OperationConflict);
+    }
     let Some(row)=sqlx::query("SELECT method_name,canonical_request,operation_status,final_result_json FROM operation_receipts WHERE operation_id=?").bind(operation.id.as_str()).fetch_optional(connection).await? else{return Ok(None);};
     if row.try_get::<String, _>("method_name")? != operation.method
         || row.try_get::<Vec<u8>, _>("canonical_request")? != operation.canonical

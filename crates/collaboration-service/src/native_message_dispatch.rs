@@ -1,7 +1,9 @@
 //! Native message composition with explicit delivery and retained partial effects.
 use crate::{
-    LoadPolicy, NOT_LOADED_REASON, NativeControlBackend,
-    message_effect_state::{MessageEffects, NativeMessageAttemptEvidence},
+    LoadPolicy, NativeControlBackend,
+    message_effect_state::{
+        MessageEffects, NativeFailureKind, NativeMessageAttemptEvidence, NativeMessageFailure,
+    },
 };
 use codex_native_integration::{
     NativeConnectionError, NativeOperation, NativePayloadSchemas, NativeProtocolConnection,
@@ -153,7 +155,7 @@ fn render_native_message(body: &NativeMessageBody) -> RenderedMessage {
 
 pub(crate) enum NativeMessageOutcome {
     Accepted(NativeSendReceipt),
-    Failed(Value),
+    Failed(NativeMessageFailure),
 }
 
 pub(crate) async fn dispatch_message(
@@ -166,14 +168,18 @@ pub(crate) async fn dispatch_message(
     let load_policy = request.load_policy;
     let params = request.params;
     if &params.target.endpoint.service_id != request.service_id {
-        return NativeMessageOutcome::Failed(effects.failure("wrongService", "inspect"));
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::WrongService, "inspect"),
+        );
     }
     let Some(endpoint) = request
         .endpoints
         .iter()
         .find(|e| e.endpoint == params.target.endpoint)
     else {
-        return NativeMessageOutcome::Failed(effects.failure("endpointNotFound", "inspect"));
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::EndpointNotFound, "inspect"),
+        );
     };
     let backend = request.backend;
     if backend.endpoint != params.target.endpoint {
@@ -181,19 +187,29 @@ pub(crate) async fn dispatch_message(
             "nativeAdmission",
             "inspect",
             NativeDeliveryFailureCause::BackendEndpointMismatch,
+            crate::UnsentCause::for_rejection(
+                collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+            ),
         ));
     }
     let Ok(admission) = backend.gate.acquire() else {
-        return NativeMessageOutcome::Failed(effects.failure("unavailable", "inspect"));
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::Unavailable, "inspect"),
+        );
     };
     if admission.generation() != &params.generation {
-        return NativeMessageOutcome::Failed(effects.failure("staleGeneration", "inspect"));
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::StaleGeneration, "inspect"),
+        );
     }
     let Some(schemas) = admission.schemas() else {
         return NativeMessageOutcome::Failed(effects.local_rejection(
             "nativeAdmission",
             "inspect",
             NativeDeliveryFailureCause::NativeSchemaUnavailable,
+            crate::UnsentCause::for_rejection(
+                collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+            ),
         ));
     };
     let advertised = endpoint.channels.iter().any(|c| matches!(c, ChannelDescription::NativeCodex { schema_digest: Some(d), generation: Some(g), .. } if g == admission.generation() && String::from(d.clone()) == schemas.schema_digest()));
@@ -202,6 +218,9 @@ pub(crate) async fn dispatch_message(
             "nativeAdmission",
             "inspect",
             NativeDeliveryFailureCause::NativeSchemaMismatch,
+            crate::UnsentCause::for_rejection(
+                collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+            ),
         ));
     }
     if params.delivery == MessageDelivery::Queue
@@ -217,7 +236,9 @@ pub(crate) async fn dispatch_message(
         None => match crate::new_service_uuid() {
             Ok(id) => String::from(id),
             Err(_) => {
-                return NativeMessageOutcome::Failed(effects.failure("unavailable", "inspect"));
+                return NativeMessageOutcome::Failed(
+                    effects.failure(NativeFailureKind::Unavailable, "inspect"),
+                );
             }
         },
     };
@@ -234,7 +255,9 @@ pub(crate) async fn dispatch_message(
         },
     };
     if retired.is_cancelled() || tokio::time::Instant::now() >= deadline {
-        return NativeMessageOutcome::Failed(effects.failure("unavailable", "inspect"));
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::Unavailable, "inspect"),
+        );
     }
     let held = request.held_connection.is_some();
     let mut opened_connection = None;
@@ -249,7 +272,9 @@ pub(crate) async fn dispatch_message(
         .await
         .unwrap_or(Err(NativeConnectionError::Unavailable));
         let Ok(connection) = connection else {
-            return NativeMessageOutcome::Failed(effects.failure("unavailable", "inspect"));
+            return NativeMessageOutcome::Failed(
+                effects.failure(NativeFailureKind::Unavailable, "inspect"),
+            );
         };
         opened_connection = Some(connection);
     }
@@ -257,7 +282,11 @@ pub(crate) async fn dispatch_message(
         Some(connection) => connection,
         None => match opened_connection.as_mut() {
             Some(connection) => connection,
-            None => return NativeMessageOutcome::Failed(effects.failure("unavailable", "inspect")),
+            None => {
+                return NativeMessageOutcome::Failed(
+                    effects.failure(NativeFailureKind::Unavailable, "inspect"),
+                );
+            }
         },
     };
     let mut session = MessageSession {
@@ -284,7 +313,11 @@ pub(crate) async fn dispatch_message(
         Err(value) => return NativeMessageOutcome::Failed(value),
     };
     let Ok(correlation) = NonEmptyText::try_from(correlation) else {
-        return NativeMessageOutcome::Failed(session.effects.failure("outcomeUnknown", "start"));
+        return NativeMessageOutcome::Failed(
+            session
+                .effects
+                .failure(NativeFailureKind::OutcomeUnknown, "start"),
+        );
     };
     let receipt = NativeSendReceipt {
         target: params.target,
@@ -328,9 +361,9 @@ impl MessageSession<'_> {
         operation: NativeOperation,
         params: Value,
         stage: &'static str,
-    ) -> Result<Value, Value> {
+    ) -> Result<Value, NativeMessageFailure> {
         if self.retired.is_cancelled() || tokio::time::Instant::now() >= self.deadline {
-            return Err(self.effects.failure("unavailable", stage));
+            return Err(self.effects.failure(NativeFailureKind::Unavailable, stage));
         }
         let mutation = matches!(stage, "resume" | "start" | "steer" | "queue");
         if stage == "resume" {
@@ -374,20 +407,19 @@ impl MessageSession<'_> {
                         } else {
                             NativeDeliveryFailureCause::NativeRequestUnavailable
                         };
-                        return Err(self.effects.local_rejection(
-                            operation.method_name(),
-                            stage,
-                            cause,
-                        ));
+                        return Err(self.effects.local_rejection(operation.method_name(), stage, cause, crate::UnsentCause::for_rejection(collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability)));
                     }
-                    _ if mutation => "outcomeUnknown",
-                    _ => "unavailable",
+                    _ if mutation => NativeFailureKind::OutcomeUnknown,
+                    _ => NativeFailureKind::Unavailable,
                 };
                 Err(self.effects.failure(kind, stage))
             }
         }
     }
-    async fn read_thread_status(&mut self, id: &str) -> Result<NativeThreadSnapshot, Value> {
+    async fn read_thread_status(
+        &mut self,
+        id: &str,
+    ) -> Result<NativeThreadSnapshot, NativeMessageFailure> {
         match read_native_thread_status(
             self.connection,
             self.schemas.as_ref(),
@@ -400,24 +432,32 @@ impl MessageSession<'_> {
             Ok(snapshot) => Ok(snapshot),
             Err(NativeThreadStatusReadError::Missing) => Err(self
                 .effects
-                .failure("threadMissingOrUnmaterialized", "inspect")),
+                .failure(NativeFailureKind::ThreadMissingOrUnmaterialized, "inspect")),
             Err(NativeThreadStatusReadError::Rejected { code, native }) => Err(self
                 .effects
                 .native_rejection("thread/read", "inspect", code, native.as_ref())),
-            Err(NativeThreadStatusReadError::LocalRejection(cause)) => Err(self
-                .effects
-                .local_rejection("thread/read", "inspect", cause)),
-            Err(NativeThreadStatusReadError::Unavailable) => {
-                Err(self.effects.failure("unavailable", "inspect"))
+            Err(NativeThreadStatusReadError::LocalRejection(cause)) => {
+                Err(self.effects.local_rejection(
+                    "thread/read",
+                    "inspect",
+                    cause,
+                    crate::UnsentCause::for_rejection(
+                        collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+                    ),
+                ))
             }
+            Err(NativeThreadStatusReadError::Unavailable) => Err(self
+                .effects
+                .failure(NativeFailureKind::Unavailable, "inspect")),
             Err(NativeThreadStatusReadError::InvalidResponse) => Err(self.effects.local_rejection(
                 "thread/read",
                 "inspect",
                 NativeDeliveryFailureCause::InvalidThreadResponse,
+                crate::UnsentCause::ProcessingFailure,
             )),
         }
     }
-    async fn read_active_turn_id(&mut self, id: &str) -> Result<String, Value> {
+    async fn read_active_turn_id(&mut self, id: &str) -> Result<String, NativeMessageFailure> {
         let result = self
             .call(
                 NativeOperation::ListTurns,
@@ -443,13 +483,16 @@ impl MessageSession<'_> {
                     "thread/turns/list",
                     "steer",
                     NativeDeliveryFailureCause::MissingActiveTurn,
+                    crate::UnsentCause::for_rejection(
+                        collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+                    ),
                 )
             })
     }
     async fn deliver(
         &mut self,
         request: &NativeMessageDeliveryContext<'_>,
-    ) -> Result<NativeSendAcceptance, Value> {
+    ) -> Result<NativeSendAcceptance, NativeMessageFailure> {
         let thread_snapshot = if request.held_unmaterialized {
             None
         } else {
@@ -462,16 +505,20 @@ impl MessageSession<'_> {
             .map_or(NativeThreadStatus::Idle, |snapshot| snapshot.status);
         if status == NativeThreadStatus::NotLoaded && request.load_policy == LoadPolicy::LoadedOnly
         {
-            return Err(self.effects.failure(NOT_LOADED_REASON, "start"));
+            return Err(self.effects.failure(NativeFailureKind::NotLoaded, "start"));
         }
         if request.params.delivery == MessageDelivery::Queue
             && status == NativeThreadStatus::NotLoaded
         {
-            return Err(self.effects.failure("threadNotLoaded", "queue"));
+            return Err(self
+                .effects
+                .failure(NativeFailureKind::ThreadNotLoaded, "queue"));
         }
         if request.params.delivery == MessageDelivery::Steer && status != NativeThreadStatus::Active
         {
-            return Err(self.effects.failure("noActiveTurn", "steer"));
+            return Err(self
+                .effects
+                .failure(NativeFailureKind::NoActiveTurn, "steer"));
         }
         let prepared = if request.held_unmaterialized {
             None
@@ -495,12 +542,14 @@ impl MessageSession<'_> {
                 .await?;
             self.effects.resume = "accepted";
             if resumed.pointer("/thread/id").and_then(Value::as_str) != Some(request.thread_id) {
-                return Err(self.effects.failure("outcomeUnknown", "resume"));
+                return Err(self
+                    .effects
+                    .failure(NativeFailureKind::OutcomeUnknown, "resume"));
             }
             if let Some(prepared) = prepared {
                 let validation = tokio::select! {
                     biased;
-                    () = self.retired.cancelled() => return Err(self.effects.failure("unavailable", "resume")),
+                    () = self.retired.cancelled() => return Err(self.effects.failure(NativeFailureKind::Unavailable, "resume")),
                     result = tokio::time::timeout_at(self.deadline, prepared.validate_response(&resumed)) => result,
                 };
                 match validation {
@@ -511,21 +560,29 @@ impl MessageSession<'_> {
                                 .await
                                 .is_err()
                         {
-                            return Err(self.effects.failure("unavailable", "resume"));
+                            return Err(self
+                                .effects
+                                .failure(NativeFailureKind::Unavailable, "resume"));
                         }
                         self.permission_differences = differences;
                     }
                     Ok(Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown)) => {
-                        return Err(self.effects.failure("outcomeUnknown", "resume"));
+                        return Err(self
+                            .effects
+                            .failure(NativeFailureKind::OutcomeUnknown, "resume"));
                     }
-                    Ok(Err(_)) => {
-                        return Err(self.effects.local_rejection(
-                            "thread/resume",
+                    Ok(Err(error)) => {
+                        return Err(self.effects.recorded_policy_failure(
+                            &error,
                             "resume",
                             NativeDeliveryFailureCause::InvalidResumeResponse,
                         ));
                     }
-                    Err(_) => return Err(self.effects.failure("unavailable", "resume")),
+                    Err(_) => {
+                        return Err(self
+                            .effects
+                            .failure(NativeFailureKind::Unavailable, "resume"));
+                    }
                 }
             }
         }
@@ -545,7 +602,9 @@ impl MessageSession<'_> {
             let result = self.call(NativeOperation::SteerTurn, json!({"threadId":request.thread_id,"expectedTurnId":turn,"input":input,"clientUserMessageId":request.correlation}), "steer").await?;
             let turn_id = self.receipt_id(&result, "/turnId", "steer")?;
             if String::from(turn_id.clone()) != turn {
-                return Err(self.effects.failure("outcomeUnknown", "steer"));
+                return Err(self
+                    .effects
+                    .failure(NativeFailureKind::OutcomeUnknown, "steer"));
             }
             return Ok(NativeSendAcceptance::SteerAccepted {
                 turn_id,
@@ -570,7 +629,7 @@ impl MessageSession<'_> {
         &self,
         request: &NativeMessageDeliveryContext<'_>,
         snapshot: Option<&NativeThreadSnapshot>,
-    ) -> Result<Option<codex_acp_adapter::RecordedSessionResume>, Value> {
+    ) -> Result<Option<codex_acp_adapter::RecordedSessionResume>, NativeMessageFailure> {
         let preparation = crate::native_recorded_policy::prepare_classified_native_policy(
             request.recorded_route,
             &request.params.target,
@@ -578,14 +637,14 @@ impl MessageSession<'_> {
         );
         tokio::select! {
             biased;
-            () = self.retired.cancelled() => Err(self.effects.failure("unavailable", "resume")),
+            () = self.retired.cancelled() => Err(self.effects.failure(NativeFailureKind::Unavailable, "resume")),
             result = tokio::time::timeout_at(self.deadline, preparation) => {
                 match result {
                     Ok(Ok(prepared)) => Ok(prepared),
                     Ok(Err(codex_acp_adapter::SessionSetupError::Unavailable)) | Err(_) => {
-                        Err(self.effects.failure("unavailable", "resume"))
+                        Err(self.effects.failure(NativeFailureKind::Unavailable, "resume"))
                     }
-                    Ok(Err(_)) => Err(self.effects.local_rejection("thread/resume", "resume", NativeDeliveryFailureCause::RecordedResumePreparationFailed)),
+                    Ok(Err(error)) => Err(self.effects.recorded_policy_failure(&error, "resume", NativeDeliveryFailureCause::RecordedResumePreparationFailed)),
                 }
             }
         }
@@ -595,11 +654,14 @@ impl MessageSession<'_> {
         result: &Value,
         pointer: &str,
         stage: &str,
-    ) -> Result<NonEmptyText, Value> {
+    ) -> Result<NonEmptyText, NativeMessageFailure> {
         result
             .pointer(pointer)
             .and_then(Value::as_str)
             .and_then(|id| NonEmptyText::try_from(id.to_owned()).ok())
-            .ok_or_else(|| self.effects.failure("outcomeUnknown", stage))
+            .ok_or_else(|| {
+                self.effects
+                    .failure(NativeFailureKind::OutcomeUnknown, stage)
+            })
     }
 }

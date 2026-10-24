@@ -41,15 +41,18 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let message: SavedMessage = serde_json::from_value(
         json!({"target":target(),"content":{"kind":"agent","sender":target(),"text":"Policy queue witness"},"delivery":"queue"}),
     )?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 1000;
     let wake = store
         .lock()
         .await
         .create_wakeup(&WakeCreate {
             operation_id: OperationId::generate(),
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             message,
             timing: TimingRule::After { seconds: 1 },
             expiry: ExpiryRule::None,
-            now_ms: 0,
+            now_ms: anchor_ms,
         })
         .await?;
     let WakeEvaluation::Fired {
@@ -59,16 +62,18 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         .await
         .evaluate_wakeup::<SavedMessage>(
             &wake.definition.wakeup_id,
-            1000,
+            anchor_ms + 1000,
             crate::wakeup_delivery_sender::build_wake_push_draft,
         )
         .await?
     else {
         return Err("wake not fired".into());
     };
-    let push = store
-        .lock()
-        .await
+    let interactions = fixture.broker.interaction_store();
+    crate::PushHandoffWorker::new(Arc::clone(&store), Arc::clone(&interactions))
+        .apply_pending()
+        .await?;
+    let push = interactions
         .get_push_record_by_origin_reference(&RouterOriginRef::Wake {
             wakeup_id: fire.wakeup_id,
             occurrence_id: fire.occurrence_id,
@@ -89,6 +94,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
     let sender = crate::wakeup_delivery_sender::WakeDeliverySender {
+        interactions,
         delivery: delivery.clone(),
         configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity: crate::MachineIdentity::new(
@@ -238,7 +244,13 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                 "public uncertain effect evidence must retain the report"
             );
         }
-        crate::delivery_reconciliation::reconcile(&store, delivery.as_ref(), record).await?;
+        crate::delivery_reconciliation::reconcile(
+            &store,
+            &sender.interactions,
+            delivery.as_ref(),
+            record,
+        )
+        .await?;
         let settled=store.lock().await.read_delivery::<SessionRef,CodexGeneration,crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
         let inspection = crate::delivery_projection::snapshot(settled)
             .map_err(|_| "settled public inspection failed")?;

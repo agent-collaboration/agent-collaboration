@@ -1,3 +1,5 @@
+#[path = "support/native_delivery.rs"]
+mod native_delivery;
 use agent_automation::RouteEffectEvidence;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MessageDelivery, MessageText, PushId,
@@ -26,8 +28,8 @@ impl SessionDeliveryRoute for FakeRoute {
     fn reachability(&self) -> SessionReachability {
         self.reachability
     }
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
-        Box::pin(async { Ok(self.claim.clone()) })
+    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
+        Box::pin(async { Ok(scripted_claim(self.claim.clone())) })
     }
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
         let presence = self.presence.clone();
@@ -37,14 +39,14 @@ impl SessionDeliveryRoute for FakeRoute {
         &self,
         _: layer_zero::DeliveryRequest,
         _: &dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'_, DeliveryReceipt> {
+    ) -> DeliveryFuture<'_, collaboration_service::NativeDeliveryResult> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async {
-            Ok(DeliveryReceipt {
+            Ok(native_delivery::scripted(DeliveryReceipt {
                 outcome: self.outcome.clone(),
                 reachability: Some(self.reachability),
                 client: None,
-            })
+            }))
         })
     }
     fn reconcile_attempt(
@@ -52,6 +54,39 @@ impl SessionDeliveryRoute for FakeRoute {
         _: AttemptReconciliationContext,
     ) -> DeliveryFuture<'_, AttemptReconciliation> {
         Box::pin(async { Ok(AttemptReconciliation::KnownNotSubmitted) })
+    }
+}
+
+// Scripted route selection is a fixture seam; production emitters classify their own failures.
+fn scripted_claim(claim: RouteClaim) -> collaboration_service::NativeRouteClaim {
+    use collaboration_protocol::DeliveryRejectionReason;
+    use collaboration_service::{NativeRefusalCode, NativeRouteClaim, UnsentCause};
+    match claim {
+        RouteClaim::NotMine => NativeRouteClaim::not_mine(),
+        RouteClaim::Holds => NativeRouteClaim::holds(),
+        RouteClaim::CanLoad => NativeRouteClaim::can_load(),
+        RouteClaim::Rejected { rejection } => {
+            let cause = UnsentCause::for_rejection(rejection.reason);
+            NativeRouteClaim::rejected(rejection, cause)
+        }
+        RouteClaim::LiveElsewhere { writable, detail } => NativeRouteClaim::live_elsewhere(
+            writable,
+            detail,
+            UnsentCause::for_rejection(DeliveryRejectionReason::LiveElsewhere),
+        ),
+        RouteClaim::Unavailable { reason, retryable } => NativeRouteClaim::unavailable(
+            reason,
+            retryable,
+            if retryable {
+                UnsentCause::Holdable {
+                    otherwise: NativeRefusalCode::Rejection(
+                        DeliveryRejectionReason::EndpointUnavailable,
+                    ),
+                }
+            } else {
+                UnsentCause::for_rejection(DeliveryRejectionReason::EndpointUnavailable)
+            },
+        ),
     }
 }
 
@@ -300,7 +335,7 @@ async fn loaded_only_delegates_loadability_inspection_to_the_route()
         .await?;
 
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: false,
             ref reason,
@@ -325,7 +360,7 @@ async fn selected_route_not_submitted_never_falls_through_to_another_route()
     let router = SessionDeliveryRouter::new(vec![selected, fallback]);
     let receipt = router.deliver(request()?, &NoopEvidenceSink).await?;
     if !matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ..
@@ -346,8 +381,8 @@ async fn held_route_wins_before_peer_and_loadable_provider()
     let (loadable, load_calls) = fake(RouteClaim::CanLoad, SessionReachability::ProviderAcp);
     let router = SessionDeliveryRouter::new(vec![provider, peer, loadable]);
     let receipt = router.deliver(request()?, &NoopEvidenceSink).await?;
-    if receipt.reachability != Some(SessionReachability::ProviderAcp)
-        || !matches!(receipt.outcome, DeliveryOutcome::Queued)
+    if receipt.receipt().reachability != Some(SessionReachability::ProviderAcp)
+        || !matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Queued)
         || provider_calls.load(Ordering::SeqCst) != 1
         || peer_calls.load(Ordering::SeqCst) != 0
         || load_calls.load(Ordering::SeqCst) != 0
@@ -370,7 +405,7 @@ async fn live_elsewhere_vetoes_provider_load() -> Result<(), Box<dyn std::error:
     let router = SessionDeliveryRouter::new(vec![provider, peer]);
     let receipt = router.deliver(request()?, &NoopEvidenceSink).await?;
     if !matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::Rejected(rejection)
             if rejection.detail.as_deref() == Some("registry protocol 2 is unsupported")
     ) || provider_calls.load(Ordering::SeqCst) != 0
@@ -387,7 +422,7 @@ async fn loadable_route_delivers_without_a_live_owner() -> Result<(), Box<dyn st
     let (peer, _) = fake(RouteClaim::NotMine, SessionReachability::ClaudeCodePeer);
     let router = SessionDeliveryRouter::new(vec![provider, peer]);
     let receipt = router.deliver(request()?, &NoopEvidenceSink).await?;
-    if receipt.reachability != Some(SessionReachability::ProviderAcp)
+    if receipt.receipt().reachability != Some(SessionReachability::ProviderAcp)
         || provider_calls.load(Ordering::SeqCst) != 1
     {
         return Err("loadable provider was not selected".into());
@@ -412,7 +447,7 @@ async fn retryable_unavailable_and_all_not_mine_keep_distinct_outcomes()
     let router = SessionDeliveryRouter::new(vec![unavailable]);
     let receipt = router.deliver(request()?, &NoopEvidenceSink).await?;
     if !matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ..
@@ -425,7 +460,11 @@ async fn retryable_unavailable_and_all_not_mine_keep_distinct_outcomes()
     let (not_mine, _) = fake(RouteClaim::NotMine, SessionReachability::CodexAppServer);
     let router = SessionDeliveryRouter::new(vec![not_mine]);
     let receipt = router.deliver(request()?, &NoopEvidenceSink).await?;
-    if !matches!(receipt.outcome, DeliveryOutcome::Rejected(_)) || receipt.reachability.is_some() {
+    if !matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Rejected(_)
+    ) || receipt.receipt().reachability.is_some()
+    {
         return Err("unserved endpoint did not reject without a client route".into());
     }
     Ok(())

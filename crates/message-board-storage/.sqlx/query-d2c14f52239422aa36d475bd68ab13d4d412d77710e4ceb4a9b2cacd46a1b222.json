@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT row_id AS \"id!: String\" FROM work_trail_rows WHERE row_id>? ORDER BY row_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d2c14f52239422aa36d475bd68ab13d4d412d77710e4ceb4a9b2cacd46a1b222"
+}

@@ -12,6 +12,10 @@ test = false
 bench = false
 
 [features]
+runtime-test-support = [
+    "collaboration-service/runtime-test-support",
+    "board-central-test-support/conformance",
+]
 keychain-test-support = [
     "codex-router-secret-store/keychain-test-guard",
     "codex-router-secret-store/test-support",
@@ -21,6 +25,18 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
+fleet-sync-receiver.workspace = true
+sqlx = { workspace = true, features = ["sqlite"] }
+board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+durable-steps.workspace = true
+fleet-sync-lease.workspace = true
+fleet-sync-protocol.workspace = true
+fleet-sync-session.workspace = true
+fleet-sync-tokio-runner.workspace = true
+fleet-sync-writer.workspace = true
+runtime-primitives = { workspace = true, features = ["tokio"] }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }
 session-event-model = { path = "../session-event-model", version = "0.1.40" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
@@ -52,6 +68,16 @@ toml = "1.1.2"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+board-legacy-upgrade = { version = "0.1.100", path = "../board-legacy-upgrade" }
+collaboration-central-conformance = { version = "0.1.100", path = "../collaboration-central-conformance" }
+sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false, features = ["runtime-tokio"] }
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
+fleet-sync-delivery = { workspace = true, features = ["test-support"] }
+interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
+fleet-sync-writer = { workspace = true, features = ["test-support"] }
+board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
+axum = { workspace = true, features = ["ws"] }
+fleet-sync-service.workspace = true
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40", features = ["test-observation"] }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }
@@ -59,6 +85,7 @@ agent-client-protocol.workspace = true
 sha2.workspace = true
 tempfile = "3.27.0"
 sqlx = { workspace = true, features = ["sqlite"] }
+toml = "1.1.2"
 uuid.workspace = true
 tokio = { workspace = true, features = ["io-std", "test-util"] }
 futures-util.workspace = true

@@ -1,0 +1,38 @@
+[package]
+name = "board-fleet-sync"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+fleet-sync-protocol.workspace = true
+fleet-sync-lease.workspace = true
+fleet-sync-session.workspace = true
+fleet-sync-writer.workspace = true
+futures-util.workspace = true
+message-board-storage = { path = "../message-board-storage", version = "0.1.96" }
+message-board = { path = "../message-board", version = "0.1.96" }
+reqwest.workspace = true
+reqwest-websocket = "=0.5.1"
+serde_json.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
+axum = { workspace = true, features = ["http1", "tokio", "ws"] }
+durable-steps.workspace = true
+fleet-sync-receiver.workspace = true
+fleet-sync-service.workspace = true
+fleet-sync-tokio-runner.workspace = true
+runtime-primitives = { workspace = true, features = ["tokio"] }
+sqlx.workspace = true
+tempfile = "3.27.0"

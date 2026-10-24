@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT progress_id AS \"progress_id!: String\", payload AS \"payload!: String\" FROM subscription_delivery_progress WHERE project_id = ? AND membership_id = ? AND activated_epoch = ? AND activated_position = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "progress_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "b90d6f26c9fbd445fcab15a3b243ce2cd77a905bacee262f1fa8818b0426c54b"
+}
