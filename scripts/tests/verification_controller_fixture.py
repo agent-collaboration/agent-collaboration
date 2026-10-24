@@ -45,6 +45,58 @@ def lookup_response(
         yield
 
 
+@contextmanager
+def ps_reporting(
+    rows: abc.Mapping[int, abc.Mapping[str, int | str]],
+) -> abc.Generator[None, None, None]:
+    """Stand in only for /bin/ps: render exactly the `-o` keywords requested.
+
+    Keyword meanings follow ps(1): `ruid` is the real user ID and `uid` the
+    effective user ID. An observer asking for the wrong one gets the wrong owner.
+    """
+
+    class FieldCommand:
+        @staticmethod
+        def run(
+            command: list[str], **_options: object
+        ) -> subprocess.CompletedProcess[str]:
+            fields = (
+                command[command.index("-o") + 1] if "-o" in command else command[-1]
+            )
+            keywords = [field.rstrip("=") for field in fields.split(",")]
+            selected = (
+                [int(command[command.index("-p") + 1])]
+                if "-p" in command
+                else list(rows)
+            )
+            lines = [
+                " ".join(str(rows[pid][keyword]) for keyword in keywords)
+                for pid in selected
+                if pid in rows
+            ]
+            return subprocess.CompletedProcess(
+                command, 0 if lines else 1, stdout="\n".join(lines), stderr=""
+            )
+
+    with (
+        patch.object(process_ownership, "subprocess", FieldCommand),
+        patch.object(owned_runtime, "subprocess", FieldCommand),
+    ):
+        yield
+
+
+def ps_row(pid: int, parent: int, *, real: int, effective: int) -> dict[str, int | str]:
+    return {
+        "pid": pid,
+        "ppid": parent,
+        "ruid": real,
+        "uid": effective,
+        "pgid": 10,
+        "lstart": "Sat Oct 24 12:00:00 2026",
+        "comm": f"fixture-{pid}",
+    }
+
+
 class LifecycleFixture:
     """Exercise the controller with harmless children and scoped external-I/O fixtures."""
 

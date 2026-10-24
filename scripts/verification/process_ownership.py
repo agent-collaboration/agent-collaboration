@@ -13,8 +13,10 @@ type IdentityFields = abc.Mapping[str, object]
 
 
 def lookup_process_identity(pid: int) -> IdentityRecord | None:
+    # `uid` in the record is the owner: ps(1) `ruid`, the real user ID. ps `uid` is
+    # the effective ID, which a setuid descendant raises without changing its owner.
     result = subprocess.run(
-        ["/bin/ps", "-p", str(pid), "-o", "pid=,uid=,pgid=,lstart=,comm="],
+        ["/bin/ps", "-p", str(pid), "-o", "pid=,ruid=,pgid=,lstart=,comm="],
         capture_output=True,
         text=True,
         timeout=5,

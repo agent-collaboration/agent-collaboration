@@ -14,6 +14,8 @@ from pathlib import Path
 from scripts.tests.verification_controller_fixture import (
     LifecycleFixture,
     lookup_response,
+    ps_reporting,
+    ps_row,
 )
 from scripts.verification import (
     native_correlation,
@@ -167,6 +169,41 @@ def harmless_child() -> abc.Generator[
                 raise RuntimeError("test child identity changed; no signal")
             child.terminate()
         _ = child.wait(timeout=5)
+
+
+class RealOwnerIdentityTests(unittest.TestCase):
+    """Ownership is the real UID (`ruid`), never a setuid effective UID."""
+
+    def test_setuid_descendant_is_owned_by_its_real_uid(self) -> None:
+        owner = os.getuid()
+        setuid_effective = 0 if owner else 1
+        rows = {
+            10: ps_row(10, 1, real=owner, effective=owner),
+            11: ps_row(11, 10, real=owner, effective=setuid_effective),
+        }
+        with ps_reporting(rows):
+            known = {10: owned_runtime.process_table()[10]}
+            owned_runtime.observe_owned(10, known)
+            self.assertEqual(set(known), {10, 11})
+            self.assertEqual(known[11].uid, owner)
+            fresh = process_ownership.lookup_process_identity(11)
+            self.assertIsNotNone(fresh)
+            self.assertEqual(fresh["uid"] if fresh else None, owner)
+
+    def test_foreign_real_owner_is_rejected_even_when_effective_matches(self) -> None:
+        owner = os.getuid()
+        foreign = 0 if owner else 1
+        rows = {
+            10: ps_row(10, 1, real=owner, effective=owner),
+            12: ps_row(12, 10, real=foreign, effective=owner),
+        }
+        with ps_reporting(rows):
+            known = {10: owned_runtime.process_table()[10]}
+            with self.assertRaisesRegex(RuntimeError, "owned process UID changed"):
+                owned_runtime.observe_owned(10, known)
+            self.assertNotIn(12, known)
+            fresh = process_ownership.lookup_process_identity(12)
+            self.assertEqual(fresh["uid"] if fresh else None, foreign)
 
 
 class OwnershipSnapshotTests(unittest.TestCase):

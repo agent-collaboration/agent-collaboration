@@ -31,7 +31,7 @@ Wait for `router-ready.json` and `host-A-ready.json`, then run the independent r
 uv run --offline --no-project --with pydantic --python 3.13 python -m scripts.verification.owned_runtime "$RUNTIME_PLAN" --check
 ```
 
-It checks recorded PID/UID/birth/group/executable, binary hash, health version and same-root Host publication. Health is readiness, not credential usability; a genuine provider journey proves that separately. `/v1/models` is not a Claude credential oracle. Launch owners: `crates/codex-router-cli/src/host_command/{mod,foreground_launch}.rs`, `crates/codex-native-integration/src/debug_profile_projection.rs`, `crates/codex-router-host/src/lifecycle_owner/startup_convergence.rs` and `claude_provider_launch_environment.rs`.
+It checks recorded PID/real UID (ps `ruid`, not the setuid-raised effective `uid`)/birth/group/executable, binary hash, health version and same-root Host publication. Health is readiness, not credential usability; a genuine provider journey proves that separately. `/v1/models` is not a Claude credential oracle. Launch owners: `crates/codex-router-cli/src/host_command/{mod,foreground_launch}.rs`, `crates/codex-native-integration/src/debug_profile_projection.rs`, `crates/codex-router-host/src/lifecycle_owner/startup_convergence.rs` and `claude_provider_launch_environment.rs`.
 
 ## Journeys
 
