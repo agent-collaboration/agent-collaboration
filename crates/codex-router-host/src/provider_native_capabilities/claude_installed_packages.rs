@@ -101,6 +101,11 @@ fn read_installed_package(
     }
     let (name, marketplace_name) = regular_claude_plugin_key(&package.id)
         .map_err(|_| unlocated_error(CatalogueReadFailure::InvalidNativeData))?;
+    // Native rGt branches on the repository suffix independently of export
+    // scope. User installation alone cannot qualify synced skill semantics.
+    if marketplace_name == "synced" {
+        return Err(unlocated_error(CatalogueReadFailure::InvalidScope));
+    }
     if package.scope != ClaudePluginExportScope::User || package.project_path.is_some() {
         return Err(unlocated_error(CatalogueReadFailure::InvalidScope));
     }

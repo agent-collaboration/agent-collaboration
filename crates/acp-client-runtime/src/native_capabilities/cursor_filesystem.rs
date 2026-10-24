@@ -107,11 +107,28 @@ pub fn read_cursor_filesystem_skills(
     if runtime_version != QUALIFIED_CURSOR_VERSION {
         return Err(CursorFilesystemReadError::UnsupportedVersion);
     }
-    let requested = fs::canonicalize(requested_workspace)
-        .map_err(|_| CursorFilesystemReadError::InvalidScope)?;
-    let launched = fs::canonicalize(&context.workspace)
-        .map_err(|_| CursorFilesystemReadError::InvalidScope)?;
+    let requested = fs::canonicalize(requested_workspace).map_err(|_| {
+        tracing::warn!(
+            phase = "cursor-filesystem-scope",
+            category = "requested-workspace-unresolved",
+            "native catalogue scope qualification failed"
+        );
+        CursorFilesystemReadError::InvalidScope
+    })?;
+    let launched = fs::canonicalize(&context.workspace).map_err(|_| {
+        tracing::warn!(
+            phase = "cursor-filesystem-scope",
+            category = "launch-workspace-unresolved",
+            "native catalogue scope qualification failed"
+        );
+        CursorFilesystemReadError::InvalidScope
+    })?;
     if requested != launched {
+        tracing::warn!(
+            phase = "cursor-filesystem-scope",
+            category = "requested-workspace-mismatch",
+            "native catalogue scope qualification failed"
+        );
         return Err(CursorFilesystemReadError::InvalidScope);
     }
     let discovery_workspace = native_cursor_discovery_root(&launched)?;

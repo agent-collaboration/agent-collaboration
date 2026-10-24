@@ -96,16 +96,43 @@ pub(super) struct CursorExecutableSource {
 impl CursorExecutableSource {
     pub(super) fn capture(configured_path: &Path) -> Option<Self> {
         if !configured_path.is_absolute() {
+            tracing::warn!(
+                phase = "cursor-source-capture",
+                category = "relative-launcher",
+                "native catalogue source qualification failed"
+            );
             return None;
         }
-        let physical_launcher = fs::canonicalize(configured_path).ok()?;
+        let physical_launcher = fs::canonicalize(configured_path).ok().or_else(|| {
+            tracing::warn!(
+                phase = "cursor-source-capture",
+                category = "launcher-unresolved",
+                "native catalogue source qualification failed"
+            );
+            None
+        })?;
         if !qualified_versioned_launcher(&physical_launcher) {
+            tracing::warn!(
+                phase = "cursor-source-capture",
+                category = "launcher-form-unqualified",
+                "native catalogue source qualification failed"
+            );
             return None;
         }
         let directory = physical_launcher.parent()?;
         let node = directory.join("node");
         let mut header = [0; 4];
-        fs::File::open(&node).ok()?.read_exact(&mut header).ok()?;
+        fs::File::open(&node)
+            .and_then(|mut file| file.read_exact(&mut header))
+            .ok()
+            .or_else(|| {
+                tracing::warn!(
+                    phase = "cursor-source-capture",
+                    category = "node-unreadable",
+                    "native catalogue source qualification failed"
+                );
+                None
+            })?;
         // The inspected launcher fixes both node and index to its physical
         // directory. Only that adjacent native node image is qualified here.
         if !matches!(
@@ -115,6 +142,11 @@ impl CursorExecutableSource {
                 | [0xca, 0xfe, 0xba, 0xbe]
                 | [0xbe, 0xba, 0xfe, 0xca]
         ) {
+            tracing::warn!(
+                phase = "cursor-source-capture",
+                category = "node-form-unqualified",
+                "native catalogue source qualification failed"
+            );
             return None;
         }
         let paths = [
@@ -126,7 +158,25 @@ impl CursorExecutableSource {
         ];
         let sources = paths
             .into_iter()
-            .map(|path| Some((path.clone(), source_identity(&path)?)))
+            .enumerate()
+            .map(|(index, path)| {
+                let identity = source_identity(&path).or_else(|| {
+                    let category = match index {
+                        0 => "launcher-identity-unavailable",
+                        1 => "node-identity-unavailable",
+                        2 => "index-identity-unavailable",
+                        3 => "acp-payload-identity-unavailable",
+                        _ => "loader-payload-identity-unavailable",
+                    };
+                    tracing::warn!(
+                        phase = "cursor-source-capture",
+                        category,
+                        "native catalogue source qualification failed"
+                    );
+                    None
+                })?;
+                Some((path, identity))
+            })
             .collect::<Option<Vec<_>>>()?;
         Some(Self {
             configured_path: configured_path.to_owned(),
@@ -137,22 +187,66 @@ impl CursorExecutableSource {
     }
 
     fn unchanged(&self) -> bool {
-        fs::canonicalize(&self.configured_path).ok().as_ref() == Some(&self.physical_launcher)
-            && qualified_versioned_launcher(&self.physical_launcher)
-            && self
-                .sources
-                .iter()
-                .all(|(path, identity)| source_identity(path).as_ref() == Some(identity))
+        if fs::canonicalize(&self.configured_path).ok().as_ref() != Some(&self.physical_launcher) {
+            tracing::warn!(
+                phase = "cursor-source-freshness",
+                category = "launcher-retargeted-or-unavailable",
+                "native catalogue source qualification failed"
+            );
+            return false;
+        }
+        if !qualified_versioned_launcher(&self.physical_launcher) {
+            tracing::warn!(
+                phase = "cursor-source-freshness",
+                category = "launcher-form-changed",
+                "native catalogue source qualification failed"
+            );
+            return false;
+        }
+        self.sources
+            .iter()
+            .enumerate()
+            .all(|(index, (path, identity))| {
+                let unchanged = source_identity(path).as_ref() == Some(identity);
+                if !unchanged {
+                    let category = match index {
+                        0 => "launcher-identity-changed",
+                        1 => "node-identity-changed",
+                        2 => "index-identity-changed",
+                        3 => "acp-payload-identity-changed",
+                        _ => "loader-payload-identity-changed",
+                    };
+                    tracing::warn!(
+                        phase = "cursor-source-freshness",
+                        category,
+                        "native catalogue source qualification failed"
+                    );
+                }
+                unchanged
+            })
     }
 
     pub(super) fn confirm_after_launch(&mut self) {
         self.confirmed_after_launch = self.unchanged();
+        tracing::info!(
+            phase = "cursor-source-confirmation",
+            qualified = self.confirmed_after_launch,
+            "native catalogue launch source checked"
+        );
     }
 
     pub(super) fn executable_for_read(&self) -> Option<&Path> {
         // Preserve the bound launcher's $0/CURSOR_INVOKED_AS while its physical
         // source and every adjacent input still match the admitted identity.
-        (self.confirmed_after_launch && self.unchanged()).then_some(self.configured_path.as_path())
+        if !self.confirmed_after_launch {
+            tracing::warn!(
+                phase = "cursor-source-read",
+                category = "launch-source-not-confirmed",
+                "native catalogue source qualification failed"
+            );
+            return None;
+        }
+        self.unchanged().then_some(self.configured_path.as_path())
     }
 }
 

@@ -95,7 +95,14 @@ impl ProviderNativeReadContext {
     }
 
     pub(crate) fn default_workspace(&self) -> Result<PathBuf, CatalogueReadFailure> {
-        let mut workspace = self.cwd.clone().ok_or(CatalogueReadFailure::InvalidScope)?;
+        let mut workspace = self.cwd.clone().ok_or_else(|| {
+            tracing::warn!(
+                phase = "native-default-workspace",
+                category = "launch-cwd-unavailable",
+                "native catalogue scope qualification failed"
+            );
+            CatalogueReadFailure::InvalidScope
+        })?;
         let mut arguments = self.launch.arguments.iter();
         while let Some(argument) = arguments.next() {
             match argument.as_str() {
@@ -103,19 +110,42 @@ impl ProviderNativeReadContext {
                 // loader. ACP still discovers commands/skills from its root.
                 "acp" | "--disable-auto-update" | "--disable-project-configs" => {}
                 "--workspace" => {
-                    workspace =
-                        PathBuf::from(arguments.next().ok_or(CatalogueReadFailure::InvalidScope)?);
+                    workspace = PathBuf::from(arguments.next().ok_or_else(|| {
+                        tracing::warn!(
+                            phase = "native-default-workspace",
+                            category = "workspace-argument-missing",
+                            "native catalogue scope qualification failed"
+                        );
+                        CatalogueReadFailure::InvalidScope
+                    })?);
                     if !workspace.is_absolute() {
+                        tracing::warn!(
+                            phase = "native-default-workspace",
+                            category = "workspace-argument-relative",
+                            "native catalogue scope qualification failed"
+                        );
                         return Err(CatalogueReadFailure::InvalidScope);
                     }
                 }
                 argument if argument.starts_with("--workspace=") => {
                     workspace = PathBuf::from(argument.trim_start_matches("--workspace="));
                     if !workspace.is_absolute() {
+                        tracing::warn!(
+                            phase = "native-default-workspace",
+                            category = "workspace-argument-relative",
+                            "native catalogue scope qualification failed"
+                        );
                         return Err(CatalogueReadFailure::InvalidScope);
                     }
                 }
-                _ => return Err(CatalogueReadFailure::InvalidScope),
+                _ => {
+                    tracing::warn!(
+                        phase = "native-default-workspace",
+                        category = "launch-argument-unqualified",
+                        "native catalogue scope qualification failed"
+                    );
+                    return Err(CatalogueReadFailure::InvalidScope);
+                }
             }
         }
         Ok(workspace)
@@ -138,10 +168,16 @@ impl ProviderNativeReadContext {
         .map_err(map_cursor_failure)?;
         // Cursor ACP does not advertise agentInfo/version. Query the executable
         // of this actual launch, never a global command found independently.
-        let executable = self
-            .cursor_executable
-            .as_ref()
-            .and_then(|source| source.executable_for_read())
+        let source = self.cursor_executable.as_ref().ok_or_else(|| {
+            tracing::warn!(
+                phase = "cursor-catalogue-read",
+                category = "source-not-captured",
+                "native catalogue source qualification failed"
+            );
+            CatalogueReadFailure::InvalidScope
+        })?;
+        let executable = source
+            .executable_for_read()
             .ok_or(CatalogueReadFailure::InvalidScope)?;
         let mut command = tokio::process::Command::new(executable);
         command

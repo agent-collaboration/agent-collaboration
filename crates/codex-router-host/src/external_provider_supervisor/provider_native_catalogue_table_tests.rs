@@ -3,6 +3,43 @@
 use super::*;
 
 #[tokio::test]
+async fn native_capabilities_socket_user_scope_cannot_qualify_reserved_synced_repository() {
+    let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
+    let manifest = fixture.install_package_fixture(false);
+    let package = manifest
+        .parent()
+        .expect("manifest directory")
+        .parent()
+        .expect("package");
+    write(
+        &package.join("skills/native/SKILL.md"),
+        "Native package skill",
+    );
+    // A real ordinary package/market remains independently qualified.
+    let ordinary = fixture.rpc("skills/list").await;
+    assert_eq!(
+        ordinary["result"]["data"][0]["skills"][0]["name"],
+        "fixture-package:native"
+    );
+    write(
+        &fixture._directory.path().join("marketplace.json"),
+        r#"{"name":"synced","plugins":[{"name":"fixture-package"}]}"#,
+    );
+    write(&fixture.config.join("plugins/known_marketplaces.json"), &json!({"synced":{"installLocation":fixture._directory.path().join("marketplace.json"),"source":{"source":"file"}}}).to_string());
+    write(&fixture.export, &json!([{"id":"fixture-package@synced","version":"1","scope":"user","enabled":true,"installPath":package}]).to_string());
+    for method in ["skills/list", "plugin/list"] {
+        let response = fixture.rpc(method).await;
+        assert_eq!(
+            response["error"]["message"],
+            "native filesystem catalogue cannot be represented completely: incomplete native filesystem view: partial native export (1 limitations)",
+            "{method}: {response}"
+        );
+        assert!(response.get("result").is_none());
+    }
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn native_capabilities_socket_synced_scope_does_not_gain_regular_package_availability() {
     let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
     fixture.install_package_fixture(false);
