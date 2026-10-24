@@ -271,3 +271,56 @@ fn native_capabilities_cursor_malformed_candidate_preserves_other_native_files()
         }]
     );
 }
+
+#[cfg(unix)]
+#[test]
+fn native_capabilities_cursor_dangling_non_skill_links_preserve_healthy_files() {
+    use std::os::unix::fs::symlink;
+    let files = NativeFiles::new();
+    let healthy = files.write(
+        true,
+        ".cursor/skills/healthy/SKILL.md",
+        "Healthy user skill",
+    );
+    for name in ["removed-folder", "removed-note.md"] {
+        symlink(
+            files.context.home.join("missing-target").join(name),
+            files.context.home.join(".cursor/skills").join(name),
+        )
+        .expect("dangling non-skill link");
+    }
+
+    let skills = files.read();
+
+    assert_eq!(skills.len(), 1);
+    assert_eq!(skills[0].canonical_name, "healthy");
+    assert_eq!(skills[0].path, healthy);
+    assert_eq!(skills[0].scope, CursorFileSkillScope::User);
+}
+
+#[cfg(unix)]
+#[test]
+fn native_capabilities_cursor_dangling_skill_file_remains_an_explicit_failure() {
+    use std::os::unix::fs::symlink;
+    let files = NativeFiles::new();
+    files.write(
+        true,
+        ".cursor/skills/healthy/SKILL.md",
+        "Healthy user skill",
+    );
+    let broken = files.context.home.join(".cursor/skills/SKILL.md");
+    symlink(files.context.home.join("missing-skill.md"), &broken)
+        .expect("dangling in-view skill source");
+
+    let result = read_cursor_filesystem_skills(
+        &files.context,
+        QUALIFIED_CURSOR_VERSION,
+        &files.context.workspace,
+        &CancellationToken::new(),
+    );
+
+    assert_eq!(
+        result,
+        Err(CursorFilesystemReadError::Unreadable { path: broken })
+    );
+}

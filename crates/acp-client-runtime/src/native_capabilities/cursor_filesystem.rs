@@ -145,23 +145,50 @@ pub fn read_cursor_filesystem_skills(
     let mut roots = vec![(
         context.home.join(".cursor/skills-cursor"),
         RootScope::Builtin,
+        ".cursor",
     )];
     roots.extend(NATIVE_ROOTS.map(|config| {
         (
             discovery_workspace.join(config).join("skills"),
             RootScope::Workspace,
+            config,
         )
     }));
-    roots.extend(
-        NATIVE_ROOTS.map(|config| (context.home.join(config).join("skills"), RootScope::User)),
-    );
+    roots.extend(NATIVE_ROOTS.map(|config| {
+        (
+            context.home.join(config).join("skills"),
+            RootScope::User,
+            config,
+        )
+    }));
     let mut seen_files = HashSet::new();
     let mut active = BTreeMap::<String, (RootScope, CursorFileSkill)>::new();
     let mut disabled = Vec::new();
     let mut errors = Vec::new();
-    for (root, scope) in roots {
+    for (root, scope, config_name) in roots {
         check_cancelled(cancelled)?;
-        let candidates = collect_skill_files(&root, matches!(scope, RootScope::User), cancelled)?;
+        let candidates = collect_skill_files(&root, matches!(scope, RootScope::User), cancelled)
+            .inspect_err(|error| {
+                tracing::warn!(
+                    phase = "cursor-filesystem-root",
+                    provider = "cursor",
+                    root_class = match scope {
+                        RootScope::Builtin => "builtin",
+                        RootScope::Workspace => "workspace",
+                        RootScope::User => "user",
+                    },
+                    config_name,
+                    category = match error {
+                        CursorFilesystemReadError::UnsupportedVersion => "unsupported-version",
+                        CursorFilesystemReadError::InvalidScope => "invalid-scope",
+                        CursorFilesystemReadError::Unreadable { .. } => "unreadable",
+                        CursorFilesystemReadError::InvalidMetadata { .. } => "invalid-metadata",
+                        CursorFilesystemReadError::AmbiguousOrigin { .. } => "ambiguous-origin",
+                        CursorFilesystemReadError::Cancelled => "cancelled",
+                    },
+                    "native catalogue root collection failed"
+                );
+            })?;
         let mut distinct = Vec::new();
         for candidate in candidates {
             if excluded_native_skill(&candidate.path) {
@@ -318,7 +345,19 @@ fn collect_skill_files(
                 .map_err(|_| CursorFilesystemReadError::InvalidMetadata { path: path.clone() })?;
             let file_type = entry.file_type().map_err(|_| unreadable(&path))?;
             let is_symlink = file_type.is_symlink();
-            let metadata = fs::metadata(&path).map_err(|_| unreadable(&path))?;
+            let metadata = match fs::metadata(&path) {
+                Ok(metadata) => metadata,
+                // Native readDirectory leaves a dangling link non-directory;
+                // findSkillMarkdownFiles then ignores names other than SKILL.md.
+                Err(error)
+                    if is_symlink
+                        && name != "SKILL.md"
+                        && error.kind() == std::io::ErrorKind::NotFound =>
+                {
+                    continue;
+                }
+                Err(_) => return Err(unreadable(&path)),
+            };
             if metadata.is_dir() {
                 if !escaped && !ignored_directory(&name) {
                     stack.push((path, depth + 1, allow_user_symlink && is_symlink));

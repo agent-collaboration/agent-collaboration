@@ -118,6 +118,57 @@ fn native_capabilities_cursor_lowering_requires_a_whole_native_reference_identif
     }
 }
 
+#[cfg(unix)]
+#[test]
+fn native_capabilities_cursor_dangling_non_skill_links_preserve_host_rows_and_source_errors() {
+    use std::os::unix::fs::symlink;
+    let directory = tempfile::tempdir_in("/tmp").expect("fixture");
+    let home = directory.path().join("home");
+    let workspace = directory.path().join("workspace");
+    std::fs::create_dir_all(&workspace).expect("workspace");
+    let healthy = home.join(".cursor/skills/healthy/SKILL.md");
+    let malformed = home.join(".cursor/skills/malformed/SKILL.md");
+    for path in [&healthy, &malformed] {
+        std::fs::create_dir_all(path.parent().expect("parent")).expect("skill directory");
+    }
+    std::fs::write(&healthy, "Healthy user skill").expect("healthy source");
+    std::fs::write(&malformed, "---\nname: [broken\n---\n").expect("malformed source");
+    symlink(
+        home.join("missing-package"),
+        home.join(".cursor/skills/removed-package"),
+    )
+    .expect("dangling non-skill link");
+    let context = CursorFilesystemContext::new(home, workspace.clone()).expect("context");
+
+    let source = read_cursor_filesystem_skills(
+        &context,
+        "2026.10.22-27dcf5f",
+        &workspace,
+        &CancellationToken::new(),
+    )
+    .expect("accounted roots despite an ineligible dangling link");
+    let section = project_cursor_catalogue(source).expect("Host projection");
+
+    let CatalogueSection::Supported {
+        items,
+        enumeration,
+        errors,
+    } = section
+    else {
+        panic!("supported file catalogue")
+    };
+    assert_eq!(enumeration, SourceEnumeration::Accounted);
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].name.as_str(), "healthy");
+    assert_eq!(items[0].native_scope, NativeScope::User);
+    assert!(matches!(&items[0].origin,
+        NativeOrigin::Filesystem { actual_path } if actual_path.as_path() == healthy));
+    assert_eq!(errors.len(), 1);
+    assert!(matches!(&errors[0].source,
+        NativeErrorSource::SkillSource { actual_path } if actual_path.as_path() == malformed));
+    assert_eq!(errors[0].reason, CatalogueReadFailure::InvalidNativeData);
+}
+
 #[test]
 fn native_capabilities_cursor_real_files_keep_located_failures_in_host_section() {
     // Literal source-role oracle: a malformed SKILL.md is a SkillSource;

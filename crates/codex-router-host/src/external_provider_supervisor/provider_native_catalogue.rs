@@ -113,19 +113,39 @@ impl NativeCataloguePort for ExternalProviderSupervisor {
                         reason: CatalogueReadFailure::Cancelled,
                     };
                 }
-                Err(reason) => CatalogueSection::Supported {
-                    items: Vec::new(),
-                    errors: vec![CatalogueSourceError {
-                        source: NativeErrorSource::Unobserved,
-                        reason,
-                    }],
-                    enumeration: SourceEnumeration::Incomplete {
-                        limitations: CatalogueLimitations::new(
-                            CatalogueLimitation::MissingScope,
-                            Vec::new(),
-                        ),
-                    },
-                },
+                Err(reason) => {
+                    tracing::warn!(
+                        phase = "cursor-catalogue-result",
+                        provider = "cursor",
+                        category = match reason {
+                            CatalogueReadFailure::Unavailable => "unavailable",
+                            CatalogueReadFailure::AuthenticationRequired =>
+                                "authentication-required",
+                            CatalogueReadFailure::InvalidNativeData => "invalid-native-data",
+                            CatalogueReadFailure::InvalidScope => "invalid-scope",
+                            CatalogueReadFailure::UnsupportedConsumerFilter =>
+                                "unsupported-consumer-filter",
+                            CatalogueReadFailure::NotFound => "not-found",
+                            CatalogueReadFailure::AmbiguousSelector => "ambiguous-selector",
+                            CatalogueReadFailure::Cancelled => "cancelled",
+                            CatalogueReadFailure::TimedOut => "timed-out",
+                        },
+                        "native catalogue read failed"
+                    );
+                    CatalogueSection::Supported {
+                        items: Vec::new(),
+                        errors: vec![CatalogueSourceError {
+                            source: NativeErrorSource::Unobserved,
+                            reason,
+                        }],
+                        enumeration: SourceEnumeration::Incomplete {
+                            limitations: CatalogueLimitations::new(
+                                CatalogueLimitation::MissingScope,
+                                Vec::new(),
+                            ),
+                        },
+                    }
+                }
             };
             CatalogueResult::Ready {
                 report: Box::new(CatalogueObservation {
