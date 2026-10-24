@@ -34,6 +34,19 @@ mod notice_dispatch;
 const SESSION_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const SESSION_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAIL_RECEIVE_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const MAIL_STATUS_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+fn mail_status_interval() -> Duration {
+    #[cfg(feature = "runtime-test-support")]
+    if let Some(milliseconds) = std::env::var("CODEX_ROUTER_TEST_MAIL_STATUS_INTERVAL_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+    {
+        return Duration::from_millis(milliseconds);
+    }
+    MAIL_STATUS_INTERVAL
+}
 
 #[cfg(test)]
 #[path = "tests/mail_notice_events.rs"]
@@ -271,6 +284,10 @@ async fn run_events(
         MAIL_RECEIVE_INTERVAL,
     );
     mail_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let status_period = mail_status_interval();
+    let mut status_interval =
+        tokio::time::interval_at(tokio::time::Instant::now() + status_period, status_period);
+    status_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     loop {
         if *stopped.borrow() {
             break;
@@ -282,40 +299,15 @@ async fn run_events(
                 let mail = owners.mail.clone();
                 spawn_operation(&mut handlers, async move { prompt_mail_receive(&mail).await });
             },
+            _ = status_interval.tick(), if *welcomed.borrow() => {
+                spawn_status_catch_up(&mut handlers, &owners.mail);
+            },
             _ = refresh.tick(), if *welcomed.borrow() => {
                 spawn_fleet_refresh(&mut handlers, &owners);
+                spawn_installation_directory_refresh(&mut handlers, &owners.mail);
             },
             Some(signal) = owners.projects.next_lifecycle_signal() => {
-                match signal {
-                    ProjectLifecycleSignal::Superseded { project, source } => {
-                        let owner = owners.projects.clone();
-                        spawn_operation(&mut handlers, async move { owner.supersede_project(&project, source).await });
-                    }
-                    ProjectLifecycleSignal::Acknowledged(project) | ProjectLifecycleSignal::WritingConfirmed(project) => {
-                        let publisher = owners.publisher.clone();
-                        let publishing_project = project.clone();
-                        spawn_operation(&mut handlers, async move {
-                            if let Some(publisher) = publisher.upgrade() {
-                                publisher.queue_project(publishing_project).await.map_err(io::Error::other)?;
-                            }
-                            Ok(())
-                        });
-                        let projects = owners.projects.clone();
-                        let admission = owners.admission.clone();
-                        let fleet = owners.fleet.clone();
-                        spawn_operation(&mut handlers, async move {
-                            super::archive_observation::observe_acknowledged_project(&projects, &admission, &fleet, &project).await
-                        });
-                    }
-                    ProjectLifecycleSignal::RegistrationReady(project) => {
-                        let admission = owners.admission.clone();
-                        spawn_operation(&mut handlers, async move {
-                            let admission = admission.upgrade()
-                                .ok_or_else(|| io::Error::other("project admission has closed"))?;
-                            admission.resume_creating_project(&project).await.map_err(io::Error::other)
-                        });
-                    }
-                }
+                spawn_project_lifecycle(&mut handlers, &owners, signal);
             },
             result = handlers.join_next(), if !handlers.is_empty() => match result {
                 Some(Ok(SessionCompletion::Reaction(completed))) => {
@@ -331,48 +323,10 @@ async fn run_events(
                     receipts = NoticeReceipts::default();
                     welcomed.send_replace(true);
                     mail_interval.reset();
-                    let mail = owners.mail.clone();
-                    spawn_operation(&mut handlers, async move { prompt_mail_receive(&mail).await });
-                    let mail = owners.mail.clone();
-                    spawn_operation(&mut handlers, async move {
-                        if let Some(mail) = mail.upgrade() {
-                            mail.catch_up_status().await.map_err(io::Error::other)?;
-                        }
-                        Ok(())
-                    });
-                    let publisher = owners.publisher.clone();
-                    spawn_operation(&mut handlers, async move {
-                        if let Some(publisher) = publisher.upgrade() {
-                            publisher.recover().await.map_err(io::Error::other)?;
-                        }
-                        Ok(())
-                    });
-                    let recovery = owners.projects.clone();
-                    let recovering_fleet = owners.fleet.clone();
-                    let admission = owners.admission.clone();
-                    spawn_operation(&mut handlers, async move {
-                        recovery.activate_existing().await?;
-                        super::archive_observation::synchronize_and_observe(&recovery, &admission, &recovering_fleet).await?;
-                        if let Some(admission) = admission.upgrade() {
-                            admission.recover_creating_projects().await.map_err(io::Error::other)?;
-                        }
-                        Ok(())
-                    });
+                    spawn_installation_directory_refresh(&mut handlers, &owners.mail);
+                    status_interval.reset();
+                    spawn_welcome_recovery(&mut handlers, &owners, databases);
                     reactions.catch_up(generation);
-                    for status in databases {
-                        let (database, lease) = match status {
-                            DatabaseStatus::Ready { database, lease, .. }
-                            | DatabaseStatus::Unavailable { database, lease: Some(lease), .. } => (database, lease),
-                            _ => continue,
-                        };
-                        if lease.holder == owners.projects.peer {
-                            let owner = owners.projects.clone();
-                            spawn_operation(&mut handlers, async move {
-                                let project = message_board::ProjectId::try_from(database.to_string()).map_err(io::Error::other)?;
-                                owner.receive_grant(&project, lease.epoch).await
-                            });
-                        }
-                    }
                     for (position, notice) in deferred_notices.drain(..) {
                         queue_notice(&mut reactions, &mut receipts, generation, position, notice);
                     }
@@ -412,6 +366,126 @@ fn spawn_operation(
     handlers.spawn(async move { SessionCompletion::Operation(operation.await) });
 }
 
+fn spawn_status_catch_up(
+    handlers: &mut JoinSet<SessionCompletion>,
+    mail: &Weak<MailDeliveryRuntime>,
+) {
+    let mail = mail.clone();
+    spawn_operation(handlers, async move {
+        if let Some(mail) = mail.upgrade() {
+            mail.catch_up_status().await.map_err(io::Error::other)?;
+        }
+        Ok(())
+    });
+}
+
+fn spawn_welcome_recovery(
+    handlers: &mut JoinSet<SessionCompletion>,
+    owners: &MachineSessionEventOwners,
+    databases: Vec<DatabaseStatus>,
+) {
+    let mail = owners.mail.clone();
+    spawn_operation(handlers, async move { prompt_mail_receive(&mail).await });
+    spawn_status_catch_up(handlers, &owners.mail);
+    let publisher = owners.publisher.clone();
+    spawn_operation(handlers, async move {
+        if let Some(publisher) = publisher.upgrade() {
+            publisher.recover().await.map_err(io::Error::other)?;
+        }
+        Ok(())
+    });
+    let recovery = owners.projects.clone();
+    let recovering_fleet = owners.fleet.clone();
+    let admission = owners.admission.clone();
+    spawn_operation(handlers, async move {
+        recovery.activate_existing().await?;
+        super::archive_observation::synchronize_and_observe(
+            &recovery,
+            &admission,
+            &recovering_fleet,
+        )
+        .await?;
+        if let Some(admission) = admission.upgrade() {
+            admission
+                .recover_creating_projects()
+                .await
+                .map_err(io::Error::other)?;
+        }
+        Ok(())
+    });
+    for status in databases {
+        let (database, lease) = match status {
+            DatabaseStatus::Ready {
+                database, lease, ..
+            }
+            | DatabaseStatus::Unavailable {
+                database,
+                lease: Some(lease),
+                ..
+            } => (database, lease),
+            _ => continue,
+        };
+        if lease.holder == owners.projects.peer {
+            let owner = owners.projects.clone();
+            spawn_operation(handlers, async move {
+                let project = message_board::ProjectId::try_from(database.to_string())
+                    .map_err(io::Error::other)?;
+                owner.receive_grant(&project, lease.epoch).await
+            });
+        }
+    }
+}
+
+fn spawn_project_lifecycle(
+    handlers: &mut JoinSet<SessionCompletion>,
+    owners: &MachineSessionEventOwners,
+    signal: ProjectLifecycleSignal,
+) {
+    match signal {
+        ProjectLifecycleSignal::Superseded { project, source } => {
+            let owner = owners.projects.clone();
+            spawn_operation(handlers, async move {
+                owner.supersede_project(&project, source).await
+            });
+        }
+        ProjectLifecycleSignal::Acknowledged(project)
+        | ProjectLifecycleSignal::WritingConfirmed(project) => {
+            let publisher = owners.publisher.clone();
+            let publishing_project = project.clone();
+            spawn_operation(handlers, async move {
+                if let Some(publisher) = publisher.upgrade() {
+                    publisher
+                        .queue_project(publishing_project)
+                        .await
+                        .map_err(io::Error::other)?;
+                }
+                Ok(())
+            });
+            let projects = owners.projects.clone();
+            let admission = owners.admission.clone();
+            let fleet = owners.fleet.clone();
+            spawn_operation(handlers, async move {
+                super::archive_observation::observe_acknowledged_project(
+                    &projects, &admission, &fleet, &project,
+                )
+                .await
+            });
+        }
+        ProjectLifecycleSignal::RegistrationReady(project) => {
+            let admission = owners.admission.clone();
+            spawn_operation(handlers, async move {
+                let admission = admission
+                    .upgrade()
+                    .ok_or_else(|| io::Error::other("project admission has closed"))?;
+                admission
+                    .resume_creating_project(&project)
+                    .await
+                    .map_err(io::Error::other)
+            });
+        }
+    }
+}
+
 fn spawn_fleet_refresh(
     handlers: &mut JoinSet<SessionCompletion>,
     owners: &MachineSessionEventOwners,
@@ -421,6 +495,21 @@ fn spawn_fleet_refresh(
     let fleet = owners.fleet.clone();
     spawn_operation(handlers, async move {
         super::archive_observation::synchronize_and_observe(&projects, &admission, &fleet).await
+    });
+}
+
+fn spawn_installation_directory_refresh(
+    handlers: &mut JoinSet<SessionCompletion>,
+    mail: &Weak<MailDeliveryRuntime>,
+) {
+    let mail = mail.clone();
+    spawn_operation(handlers, async move {
+        if let Some(mail) = mail.upgrade() {
+            mail.refresh_installation_peers()
+                .await
+                .map_err(io::Error::other)?;
+        }
+        Ok(())
     });
 }
 

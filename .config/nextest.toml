@@ -22,6 +22,14 @@ filter = "binary(update_reexec) | binary(runtime_restart) | binary(compiled_cli_
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# These real central/child cases also need an exclusive scheduling window. A
+# delayed NotWriter check can cross the SDK retry deadline; starving the archive
+# or Serve child crosses their unchanged request and shutdown deadlines.
+[[profile.ci.overrides]]
+filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(=tailscale_exposure::tests::shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_retired)))"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # U66 / MS-10 requires a five-minute minimum repeat gap. This retained real-timer
 # protocol proof observes both firings; its own receive deadlines remain bounded.
 [[profile.ci.overrides]]

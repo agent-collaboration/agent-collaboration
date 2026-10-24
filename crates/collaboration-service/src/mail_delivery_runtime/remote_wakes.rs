@@ -122,6 +122,12 @@ impl MailDeliveryRuntime {
         let relay = session.relay;
         let limits = self.config.limits;
         let clock = self.clock.clone();
+        let retirement = fleet_sync_delivery::SubmitInput {
+            item: id,
+            digest: item.digest().clone(),
+            relay,
+            mailbox: peer,
+        };
         let expired = self
             .store
             .transaction(move |scope| {
@@ -139,6 +145,10 @@ impl MailDeliveryRuntime {
                         .enqueue_and_admit::<SubmitMailTask>(item, relay)
                         .await
                         .map_err(delivery_rollback)?;
+                    super::terminal_retirement::admit_terminal_retirement(
+                        scope, &answer, retirement,
+                    )
+                    .await?;
                     match answer {
                         OutboxAdmission::Queued { .. } | OutboxAdmission::Replayed { .. } => {
                             Ok(None)

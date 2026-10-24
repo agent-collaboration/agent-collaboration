@@ -63,6 +63,9 @@ impl MailCallRouter {
         &self,
         envelope: CallEnvelope,
     ) -> Result<Value, CallFailure> {
+        if envelope.kind == super::terminal_retirement::RetireMailCall::KIND {
+            return self.dispatch_retirement(envelope).await;
+        }
         let session = self.session.as_ref().ok_or_else(unavailable)?;
         let CallEnvelope {
             kind,

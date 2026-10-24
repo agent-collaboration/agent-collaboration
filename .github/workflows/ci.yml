@@ -14,6 +14,11 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.98.1
+  # CI never needs Rust debug info; it makes the test binaries outgrow the
+  # runner disk.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
 
 # DAG: four independent jobs, each on its own Linux runner, each running its
 # steps in the background where they don't compete for the same compile. The
@@ -160,12 +165,6 @@ jobs:
   test:
     name: Test Rust workspace
     runs-on: ubuntu-latest
-    # The workspace's debug test binaries outgrow the runner disk with line
-    # tables; the end-to-end job already builds without debug info.
-    env:
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-      CARGO_INCREMENTAL: "0"
     steps:
       # The steps below build the workspace under several package selections and
       # feature sets, which together outgrow the runner's free disk. Remove
@@ -225,9 +224,6 @@ jobs:
     timeout-minutes: 30
     env:
       CARGO_BUILD_JOBS: "4"
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-      CARGO_INCREMENTAL: "0"
       TMPDIR: /tmp
       CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/examples/board-debug-runtime
       CODEX_ROUTER_E2E_PARENT: /tmp/router-board-e2e-${{ github.run_id }}-${{ github.run_attempt }}

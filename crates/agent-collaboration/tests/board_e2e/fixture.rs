@@ -95,6 +95,13 @@ impl BoardFixture {
     }
 
     async fn start(&mut self) -> FixtureResult {
+        self.start_with_mailbox_items(None).await
+    }
+
+    async fn start_with_mailbox_items(
+        &mut self,
+        items: Option<std::num::NonZeroU64>,
+    ) -> FixtureResult {
         self.host = Some(BoardHost::start(&self.directory, None).await?);
         let client = collaboration_client::CollaborationClient::connect(
             &self.directory,
@@ -109,11 +116,21 @@ impl BoardFixture {
             installation: String::from(installation.service_id.clone()).try_into()?,
             machine: installation.machine_label.as_str().to_owned().try_into()?,
         };
+        let controls = items
+            .map(|items| board_central_test_support::RuntimeControlRequest {
+                address: board_central_test_support::ObjectAddress::Mailbox(
+                    origin.installation.clone(),
+                ),
+                command: board_central_test_support::RuntimeControl::MailboxItemLimit { items },
+            })
+            .into_iter()
+            .collect();
         self.central = Some(
-            board_central_test_support::TestCentral::start_with_peer(
+            board_central_test_support::TestCentral::start_with_peer_and_controls(
                 &self.root.path().join("central"),
                 &origin,
                 installation.peer_id.as_str().to_owned().try_into()?,
+                controls,
             )
             .await?,
         );
@@ -292,6 +309,26 @@ where
         BoardFixture::new()?,
         async move |fixture: &mut BoardFixture| {
             fixture.start().await?;
+            case(fixture).await?;
+            fixture.finished = true;
+            Ok(())
+        },
+        BoardFixture::shutdown,
+        || Ok(()),
+    )
+    .await
+}
+
+/// A real small mailbox makes missing retirement observable as admission refusal.
+#[allow(dead_code)] // Only the mail retirement root reaches it, through central_pair.
+pub async fn scenario_with_mailbox_items<F>(items: std::num::NonZeroU64, case: F) -> FixtureResult
+where
+    F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
+{
+    run_scenario(
+        BoardFixture::new()?,
+        async move |fixture: &mut BoardFixture| {
+            fixture.start_with_mailbox_items(Some(items)).await?;
             case(fixture).await?;
             fixture.finished = true;
             Ok(())

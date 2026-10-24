@@ -99,7 +99,7 @@ async function enroll(input: {
     else await installation.remote.writePrivate(relative, accessSecret);
     enrollment = {
       endpoint: `${edge.origin}/v1/session`,
-      label: installation.machine.name,
+      label: installation.enrollmentLabel,
       accessClientId,
       accessSecretFile: `${installation.machine.root}/${relative}`,
       expiresAt,

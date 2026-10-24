@@ -22,7 +22,7 @@ const ROUTER_ENV: &str = "CODEX_FLEET_PRODUCER_ROUTER_ADDRESS";
 pub fn fixture_root() -> TestResult<tempfile::TempDir> {
     let root = tempfile::Builder::new()
         .prefix("fleet-producer-debug-")
-        .tempdir_in("/private/tmp")?;
+        .tempdir_in("/tmp")?;
     for name in ["router", "collaboration"] {
         let path = root.path().join(name);
         std::fs::create_dir(&path)?;

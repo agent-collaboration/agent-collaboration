@@ -83,6 +83,13 @@ impl BoardHost {
             .open(directory.join(format!("host-{}.stderr", uuid::Uuid::now_v7())))?;
         let mut command = artifact_command(&binary)?;
         command.arg(directory).arg("0");
+        let status_interval = directory.join("fixture-mail-status-interval-ms");
+        if status_interval.is_file() {
+            command.env(
+                "CODEX_ROUTER_TEST_MAIL_STATUS_INTERVAL_MS",
+                std::fs::read_to_string(status_interval)?.trim(),
+            );
+        }
         if let Some(session) = session {
             command.arg(session);
         }

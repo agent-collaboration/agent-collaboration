@@ -4,6 +4,7 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardReadPage, BoardReadScope,
     InstallationPeerLookup,
 };
+use durable_steps::StoreError;
 use fleet_sync_protocol::{OperationAnswer, OperationRequest, PeerId};
 use interaction_storage::{InstallationPeerBinding, StorageError};
 use message_board::ServiceId;
@@ -19,6 +20,61 @@ pub(crate) enum InstallationPeerResolutionError {
 }
 
 impl MailDeliveryRuntime {
+    /// Read every enrolled-installation page into the persistent local cache.
+    pub async fn refresh_installation_peers(&self) -> Result<(), StoreError> {
+        let session = self
+            .session
+            .as_ref()
+            .ok_or_else(|| StoreError::backend("installation directory session is not attached"))?;
+        let mut after = None;
+        loop {
+            if !*session.welcomed.borrow() {
+                return Err(StoreError::backend(
+                    "installation directory session is not welcomed",
+                ));
+            }
+            let answer = session
+                .requests
+                .request(OperationRequest::Consumer(BoardConsumerRequest::Read {
+                    scope: BoardReadScope::InstallationPeers { after },
+                    cursor: None,
+                }))
+                .await
+                .map_err(StoreError::backend)?;
+            let OperationAnswer::Consumer(BoardConsumerAnswer::Read(
+                BoardReadPage::InstallationPeers(page),
+            )) = answer
+            else {
+                return Err(StoreError::backend(
+                    "installation directory returned another read family",
+                ));
+            };
+            page.validate_after(after).map_err(StoreError::backend)?;
+            let bindings = page
+                .peers()
+                .iter()
+                .map(|(service, peer)| {
+                    Ok(InstallationPeerBinding {
+                        service_id: service.clone(),
+                        peer_id: peer
+                            .as_uuid()
+                            .to_string()
+                            .try_into()
+                            .map_err(StoreError::backend)?,
+                    })
+                })
+                .collect::<Result<Vec<_>, StoreError>>()?;
+            self.owner
+                .remember_installation_peers(&bindings)
+                .await
+                .map_err(StoreError::backend)?;
+            after = page.next();
+            if after.is_none() {
+                return Ok(());
+            }
+        }
+    }
+
     pub(crate) async fn cached_installation_peer(
         &self,
         service: &ServiceId,

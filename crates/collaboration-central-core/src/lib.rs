@@ -83,6 +83,8 @@ pub use machine_enrollment::{
     AdmittedMachine, EnrollMachine, EnrollmentDecision, EnrollmentRefusal, RevocationDecision,
 };
 pub use mailbox_limits::central_mailbox_limits;
+#[cfg(feature = "conformance")]
+pub use mailbox_limits::conformance_mailbox_item_limit;
 mod object_bootstrap;
 mod object_runtime;
 mod object_transport;

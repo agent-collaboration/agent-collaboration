@@ -18,6 +18,8 @@ mod piece_integrity_refusal;
 #[cfg(feature = "conformance")]
 pub use piece_integrity_refusal::PieceIntegrityObservation;
 mod claim_grant_drop;
+mod mail_wire_observer;
+pub use mail_wire_observer::{MailWireEvent, MailWireObservation};
 mod lease_notice_gate;
 pub use claim_grant_drop::{ClaimGrantDropObservation, DroppedClaimGrant};
 pub use lease_notice_gate::LeaseNoticeObservation;
@@ -28,7 +30,9 @@ mod owner_transfers;
 pub use machine_enrollment::EnrolledTestMachine;
 #[cfg(feature = "conformance")]
 mod payload_input_observer;
-pub use collaboration_central_conformance::{DispatchFaultObservation, RuntimeControl};
+pub use collaboration_central_conformance::{
+    DispatchFaultObservation, RuntimeControl, RuntimeControlRequest,
+};
 pub use collaboration_central_core::{ConformanceBoardState, ObjectAddress};
 pub use machine_session::FleetTestRuntime;
 #[cfg(feature = "conformance")]
@@ -44,6 +48,12 @@ pub struct TestCentral {
 }
 
 impl TestCentral {
+    pub fn observe_mail_wire(
+        &self,
+        drop_terminal: Option<fleet_sync_protocol::ItemId>,
+    ) -> FixtureResult<MailWireObservation> {
+        self.machine.observe_mail_wire(drop_terminal)
+    }
     /// The first fixture installation's actual established session count.
     pub fn session_connections(&self) -> usize {
         self.machine.session_connections()
@@ -180,30 +190,43 @@ impl TestCentral {
         origin: &ActorOrigin,
         peer: PeerId,
     ) -> FixtureResult<Self> {
+        Self::start_with_peer_and_controls(root, origin, peer, Vec::new()).await
+    }
+
+    /// Configure existing conformance seams before enrollment initializes its mailbox.
+    pub async fn start_with_peer_and_controls(
+        root: &Path,
+        origin: &ActorOrigin,
+        peer: PeerId,
+        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+    ) -> FixtureResult<Self> {
         let jwks = JwksFixtureServer::start().await?;
         // Stable fixture deployment configuration across an owning-store reopen.
         let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
-        let server = TokioServer::start(TokioSettings {
-            delivery: collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
-                    "019f0000-0000-7000-8000-000000005240".to_owned(),
-                )?,
-            },
-            root: root.into(),
-            access_policy: fixture_policy(),
-            jwks_url: jwks.url.clone(),
-            registry: RegistryConfig {
-                lease: LeasePolicy {
-                    lease_duration: Duration::from_secs(14_400),
-                    renew_interval: Duration::from_secs(900),
+        let server = TokioServer::start_with_controls(
+            TokioSettings {
+                delivery: collaboration_central_tokio::DeliveryConfig {
+                    relay_peer: fleet_sync_protocol::PeerId::try_from(
+                        "019f0000-0000-7000-8000-000000005240".to_owned(),
+                    )?,
                 },
-                authoritative_receiver: receiver,
-                release_unsent_for: Duration::ZERO,
-                move_needs_renewal_within: Some(Duration::from_secs(1800)),
+                root: root.into(),
+                access_policy: fixture_policy(),
+                jwks_url: jwks.url.clone(),
+                registry: RegistryConfig {
+                    lease: LeasePolicy {
+                        lease_duration: Duration::from_secs(14_400),
+                        renew_interval: Duration::from_secs(900),
+                    },
+                    authoritative_receiver: receiver,
+                    release_unsent_for: Duration::ZERO,
+                    move_needs_renewal_within: Some(Duration::from_secs(1800)),
+                },
+                holder_answer_timeout: Duration::from_secs(2),
+                copy_ack_wait: Duration::from_secs(2),
             },
-            holder_answer_timeout: Duration::from_secs(2),
-            copy_ack_wait: Duration::from_secs(2),
-        })
+            controls,
+        )
         .await?;
         let machine = EnrolledTestMachine::enroll(
             server.base_url(),

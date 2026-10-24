@@ -354,13 +354,27 @@ impl NativeObjects {
                         self.copy_ack_wait,
                     )),
                     ObjectAddress::Mailbox(installation) => {
+                        let limits = collaboration_central_core::central_mailbox_limits()
+                            .map_err(StoreError::backend)?;
+                        #[cfg(feature = "conformance")]
+                        let limits = match slot
+                            .io
+                            .faults
+                            .mailbox_item_limit()
+                            .map_err(StoreError::backend)?
+                        {
+                            Some(items) => {
+                                collaboration_central_core::conformance_mailbox_item_limit(items)
+                                    .map_err(StoreError::backend)?
+                            }
+                            None => limits,
+                        };
                         RuntimeFace::Mailbox(ObjectRuntime::mailbox(
                             host,
                             slot.io.clone(),
                             self.config.authoritative_receiver,
                             installation.clone(),
-                            collaboration_central_core::central_mailbox_limits()
-                                .map_err(StoreError::backend)?,
+                            limits,
                         )?)
                     }
                     ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(

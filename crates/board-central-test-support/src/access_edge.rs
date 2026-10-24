@@ -28,6 +28,7 @@ struct EdgeState {
     stop: CancellationToken,
     tasks: TaskTracker,
     claim_grants: crate::claim_grant_drop::ClaimGrantDrop,
+    mail_wire: crate::mail_wire_observer::MailWireObserver,
     #[cfg(feature = "conformance")]
     piece_integrity: crate::piece_integrity_refusal::PieceIntegrityRefusal,
     lease_notices: crate::lease_notice_gate::LeaseNoticeGate,
@@ -43,6 +44,7 @@ pub(crate) struct SignedAccessEdge {
     listener: JoinSet<Result<(), std::io::Error>>,
     connections: TaskTracker,
     claim_grants: crate::claim_grant_drop::ClaimGrantDrop,
+    mail_wire: crate::mail_wire_observer::MailWireObserver,
     #[cfg(feature = "conformance")]
     piece_integrity: crate::piece_integrity_refusal::PieceIntegrityRefusal,
     lease_notices: crate::lease_notice_gate::LeaseNoticeGate,
@@ -57,6 +59,7 @@ impl SignedAccessEdge {
         let duplicated_mail = Arc::new(AtomicUsize::new(0));
         let connections = TaskTracker::new();
         let claim_grants = crate::claim_grant_drop::ClaimGrantDrop::default();
+        let mail_wire = crate::mail_wire_observer::MailWireObserver::default();
         let lease_notices = crate::lease_notice_gate::LeaseNoticeGate::default();
         #[cfg(feature = "conformance")]
         let piece_integrity = crate::piece_integrity_refusal::PieceIntegrityRefusal::default();
@@ -72,6 +75,7 @@ impl SignedAccessEdge {
             stop: stop.clone(),
             tasks: connections.clone(),
             claim_grants: claim_grants.clone(),
+            mail_wire: mail_wire.clone(),
             #[cfg(feature = "conformance")]
             piece_integrity: piece_integrity.clone(),
             lease_notices: lease_notices.clone(),
@@ -99,6 +103,7 @@ impl SignedAccessEdge {
             listener,
             connections,
             claim_grants,
+            mail_wire,
             #[cfg(feature = "conformance")]
             piece_integrity,
             lease_notices,
@@ -120,6 +125,12 @@ impl SignedAccessEdge {
         attempt: fleet_sync_protocol::RequestId,
     ) -> FixtureResult<crate::ClaimGrantDropObservation> {
         self.claim_grants.begin(attempt)
+    }
+    pub(crate) fn observe_mail_wire(
+        &self,
+        drop_terminal: Option<fleet_sync_protocol::ItemId>,
+    ) -> FixtureResult<crate::MailWireObservation> {
+        self.mail_wire.begin(drop_terminal)
     }
     pub(crate) fn hold_granted_notice(
         &self,
@@ -223,6 +234,7 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
             },
             frame = downstream.recv() => match frame {
                 Some(Ok(Message::Binary(bytes))) => {
+                    state.mail_wire.client_frame(&bytes)?;
                     #[cfg(feature = "conformance")]
                     if let Some(answer) = state.piece_integrity.refuse_request(&bytes)? {
                         downstream.send(Message::Binary(answer.into())).await?;
@@ -232,6 +244,7 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     upstream.send(UpstreamMessage::Binary(bytes)).await?;
                 },
                 Some(Ok(Message::Text(text))) => {
+                    state.mail_wire.client_frame(text.as_bytes())?;
                     #[cfg(feature = "conformance")]
                     if let Some(answer) = state.piece_integrity.refuse_request(text.as_bytes())? {
                         downstream.send(Message::Binary(answer.into())).await?;
@@ -245,6 +258,7 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
             },
             frame = upstream.next() => match frame {
                 Some(Ok(UpstreamMessage::Binary(bytes))) => {
+                    if state.mail_wire.server_frame(&bytes)? { continue; }
                     if state.claim_grants.drop_answer(&bytes)? { break; }
                     flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
                     if let Some(generation) = state.lease_notices.defer(&bytes)? {
@@ -257,6 +271,7 @@ async fn bridge(mut downstream: WebSocket, state: EdgeState) -> FixtureResult {
                     downstream.send(Message::Binary(bytes)).await?;
                 },
                 Some(Ok(UpstreamMessage::Text(text))) => {
+                    if state.mail_wire.server_frame(text.as_bytes())? { continue; }
                     if state.claim_grants.drop_answer(text.as_bytes())? { break; }
                     flush_released_notices(&mut downstream, &state.lease_notices, &mut held_notices).await?;
                     if let Some(generation) = state.lease_notices.defer(text.as_bytes())? {

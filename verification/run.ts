@@ -72,7 +72,7 @@ async function declarationFromArguments(): Promise<Declaration> {
     throw new ObservationOpen("run-owned state and evidence require canonical cache task roots");
   return declaration;
 }
-async function checkSource(declaration: Declaration): Promise<void> {
+async function checkSource(declaration: Declaration, receipt: Receipt): Promise<void> {
   if ((await realpath(fileURLToPath(new URL("..", import.meta.url)))) !== declaration.repository)
     throw new ObservationOpen("declaration repository differs from the running harness");
   const git = (arguments_: readonly string[]): string =>
@@ -94,8 +94,18 @@ async function checkSource(declaration: Declaration): Promise<void> {
           ":(exclude)Cargo.lock",
         ]
       : [];
+  const sourcePaths = [
+    ".",
+    ":(exclude)docs",
+    ":(exclude)tmp",
+    ":(exclude).agents",
+    ":(exclude).github",
+    ...discoveryExclusions,
+  ];
+  const checkoutHead = git(["rev-parse", "HEAD"]);
+  if (checkoutHead !== declaration.harnessPin)
+    git(["diff", "--quiet", declaration.harnessPin, checkoutHead, "--", ...sourcePaths]);
   if (
-    git(["rev-parse", "HEAD"]) !== declaration.harnessPin ||
     git([
       "status",
       "--porcelain",
@@ -104,6 +114,7 @@ async function checkSource(declaration: Declaration): Promise<void> {
       ":(exclude)docs",
       ":(exclude)tmp",
       ":(exclude).agents",
+      ":(exclude).github",
       ...discoveryExclusions,
     ]) !== ""
   )
@@ -119,6 +130,7 @@ async function checkSource(declaration: Declaration): Promise<void> {
     ":(exclude)docs",
     ":(exclude)tmp",
     ":(exclude).agents",
+    ":(exclude).github",
     ...discoveryExclusions,
   ]);
   if (
@@ -131,6 +143,11 @@ async function checkSource(declaration: Declaration): Promise<void> {
     throw new ObservationOpen("discovery dependency graph differs from the frozen product");
   if (Date.parse(declaration.deadline) <= Date.now())
     throw new ObservationOpen("declared run deadline has passed");
+  await receipt.record("sourceInputsChecked", {
+    declaredHarnessPin: declaration.harnessPin,
+    checkoutHead,
+    unchangedExecutedInputs: true,
+  });
 }
 async function checkRun(context: PreparedRun): Promise<void> {
   for (const link of context.links) await link.assertAlive();
@@ -203,10 +220,10 @@ async function main(): Promise<void> {
   let setupUnconfirmed = false;
   if (missing.length === 0) {
     try {
-      await checkSource(declaration);
+      await checkSource(declaration, receipt);
       const context = await prepareRun({ declaration, receipt, lifetime });
       await executeCases({ declaration, cases, context, receipt, results });
-      await checkSource(declaration);
+      await checkSource(declaration, receipt);
     } catch (error: unknown) {
       setupUnconfirmed = true;
       await receipt.save("composition-failure.json", failureDetails(error));

@@ -66,9 +66,7 @@ fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendR
 #[tokio::test]
 #[allow(clippy::panic_in_result_fn)] // Behavior assertions stay distinct from propagated fixture failures.
 async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestResult {
-    let root = tempfile::Builder::new()
-        .prefix("rw-")
-        .tempdir_in("/private/tmp")?;
+    let root = tempfile::Builder::new().prefix("rw-").tempdir_in("/tmp")?;
     let a = root.path().join("a");
     let b = root.path().join("b");
     for directory in [&a, &b] {

@@ -115,6 +115,16 @@ export class Installation {
     if (this.state.kind !== "ready") throw new Error("installation Host is not ready");
     return this.state.mcp;
   }
+  get enrollmentLabel(): string {
+    switch (this.machine.enrollment.kind) {
+      case "fixture":
+        return this.machine.name;
+      case "access":
+        return this.machine.enrollment.label;
+      case "unattached":
+        throw new Error("unattached installation has no enrolled label");
+    }
+  }
   private async read(path: string): Promise<string> {
     if (!path.startsWith(`${this.machine.root}/`))
       throw new Error("installation read outside owned root");

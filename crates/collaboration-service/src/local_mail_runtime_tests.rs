@@ -15,6 +15,9 @@ mod frozen_settlement;
 #[path = "local_mail_readiness_tests.rs"]
 mod readiness;
 
+#[path = "local_cancel_report_tests.rs"]
+mod report_admission;
+
 fn mail_id(item: ItemId) -> MailItemId {
     item.as_uuid().to_string().try_into().unwrap()
 }

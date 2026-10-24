@@ -17,6 +17,12 @@ pub struct EnrolledTestMachine {
 }
 
 impl EnrolledTestMachine {
+    pub fn observe_mail_wire(
+        &self,
+        drop_terminal: Option<fleet_sync_protocol::ItemId>,
+    ) -> FixtureResult<crate::MailWireObservation> {
+        self.edge.observe_mail_wire(drop_terminal)
+    }
     /// Count actual established upstream sessions; no inferred reconnect evidence.
     /// Repeat one real incoming hint on the wire, preserving its actual position.
     pub fn duplicate_next_mail_notice(&self) {

@@ -17,9 +17,10 @@ async function settleCancellation(input: {
   source: JourneyMachine;
   item: string;
   receipt: Receipt;
+  cancelId?: string;
 }): Promise<{ cancel: string; outcome: unknown }> {
   const request = {
-    cancelId: boardIdentity(),
+    cancelId: input.cancelId ?? boardIdentity(),
     target: input.item,
     sender: { kind: "agent", sender: input.source.recipient.target },
   };
@@ -44,10 +45,27 @@ async function settleCancellation(input: {
   } while (Date.now() < deadline);
   throw new ObservationOpen("cancel remains pending; the contract promises no 30-second deadline");
 }
+async function observeCentralCustody(source: JourneyMachine, item: string): Promise<void> {
+  const deadline = Date.now() + 30_000;
+  do {
+    const shown = await source.installation.mcp.call("router_show", {
+      caller: source.recipient.target,
+      reference: item,
+    });
+    const kind = field(shown, "mail", "status", "kind");
+    if (kind === "sent") return;
+    if (kind !== "queued")
+      throw new Error(
+        "offline recipient original reached an unexpected outcome before cancellation",
+      );
+    await setTimeout(200);
+  } while (Date.now() < deadline);
+  throw new ObservationOpen("original has no observed central custody before cancellation");
+}
 export async function messageCancellation(context: PreparedRun, receipt: Receipt): Promise<void> {
   const [source, target] = context.machines;
-  const gate = context.gates.get(source.installation.machine.name);
-  if (gate === undefined) throw new ObservationOpen("sender Session gate is unavailable");
+  const gate = context.gates.get(target.installation.machine.name);
+  if (gate === undefined) throw new ObservationOpen("recipient Session gate is unavailable");
   const input = {
     sender: source.installation,
     senderSession: source.recipient.target,
@@ -56,36 +74,50 @@ export async function messageCancellation(context: PreparedRun, receipt: Receipt
   };
   const connected = await gate.ready();
   const before = target.recipient.position();
+  const cancelId = boardIdentity();
   let prevented;
   gate.pause();
   try {
     prevented = await submitRemoteMessage(input);
-    const result = await settleCancellation({ source, item: prevented.admission.item, receipt });
-    await receipt.equal("cancel wins while sender has sole custody", result.outcome, {
-      kind: "prevented",
-    });
-    await receipt.equal(
-      "withdrawn original is cancelled at the sender",
-      field(
-        await source.installation.mcp.call("router_show", {
-          caller: source.recipient.target,
-          reference: prevented.admission.item,
+    await observeCentralCustody(source, prevented.admission.item);
+    const pending = z
+      .object({
+        cancel: z.literal(cancelId),
+        target: z.literal(prevented.admission.item),
+        outcome: z.object({ kind: z.literal("pending") }),
+      })
+      .parse(
+        await source.installation.mcp.call("message_cancel", {
+          cancelId,
+          target: prevented.admission.item,
+          sender: { kind: "agent", sender: source.recipient.target },
         }),
-        "mail",
-        "status",
-      ),
-      { kind: "cancelled" },
+      );
+    await receipt.equal(
+      "cancel waits for the disconnected recipient's injection decision",
+      pending.outcome,
+      { kind: "pending" },
     );
+    await target.recipient.absent(null, 1000, before);
   } finally {
     gate.resume();
   }
   await gate.ready(connected.welcomes);
   if (prevented === undefined) throw new ObservationOpen("no cancellable original was admitted");
+  const prevention = await settleCancellation({
+    source,
+    item: prevented.admission.item,
+    receipt,
+    cancelId,
+  });
+  await receipt.equal("recipient prevents the original before model input", prevention.outcome, {
+    kind: "prevented",
+  });
   await source.installation.mcp.call("message_send", {
     ...prevented.request,
     itemId: prevented.admission.item,
   });
-  await target.recipient.absent(prevented.admission.item, 3000, before);
+  await target.recipient.absent(null, 3000, before);
   await receipt.equal(
     "original replay cannot undo the winning cancel",
     field(
@@ -100,6 +132,7 @@ export async function messageCancellation(context: PreparedRun, receipt: Receipt
   );
   const delivered = await submitRemoteMessage(input);
   await finishAndRepeatRemoteMessage(input, delivered);
+  const beforeLateCancel = target.recipient.position();
   const result = await settleCancellation({ source, item: delivered.admission.item, receipt });
   await receipt.equal("cancel after actual model input is too late", result.outcome, {
     kind: "tooLate",
@@ -118,7 +151,7 @@ export async function messageCancellation(context: PreparedRun, receipt: Receipt
   });
   await Promise.all([
     target.recipient.unique(delivered.admission.item, 3000),
-    target.recipient.absent(result.cancel, 3000, before),
+    target.recipient.absent(null, 3000, beforeLateCancel),
   ]);
   await target.recipient.unique(delivered.admission.item);
 }

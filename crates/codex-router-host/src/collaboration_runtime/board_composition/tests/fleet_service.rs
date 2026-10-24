@@ -118,6 +118,15 @@ impl ConsumerHandler<BoardConsumerProtocol> for Consumer {
             }));
         }
         if let BoardConsumerRequest::Read {
+            scope: BoardReadScope::InstallationPeers { after },
+            cursor: None,
+        } = request
+        {
+            return Ok(BoardConsumerAnswer::Read(BoardReadPage::InstallationPeers(
+                self.directory.page(after).await?,
+            )));
+        }
+        if let BoardConsumerRequest::Read {
             scope: BoardReadScope::InstallationPeer { ref service },
             cursor: None,
         } = request

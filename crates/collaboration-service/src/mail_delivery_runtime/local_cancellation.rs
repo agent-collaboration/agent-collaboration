@@ -13,6 +13,19 @@ use interaction_storage::{
 };
 use runtime_primitives::WakeScheduler;
 
+const RELAY_REQUIRED: &str = "router.local_cancel_requires_relay";
+
+#[derive(Clone, Copy)]
+enum LocalCancelMode {
+    Apply,
+    RouteRelayedOriginal,
+}
+
+pub(super) enum RequestedLocalCancel {
+    Applied(LocalCancelReference),
+    RelayRequired,
+}
+
 #[derive(Clone, Debug)]
 pub enum LocalCancelReference {
     Local {
@@ -31,31 +44,65 @@ impl MailDeliveryRuntime {
         cancel: DeliveryCancel<RouterDeliveryTypes>,
         attribution: CancelCause,
     ) -> Result<LocalCancelReference, DeliveryTransactionFailure> {
-        let proposed: MailItemId =
-            cancel
-                .id()
-                .as_uuid()
-                .to_string()
-                .try_into()
-                .map_err(|error| {
-                    DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
-                })?;
-        let target: MailItemId =
-            cancel
-                .target()
-                .as_uuid()
-                .to_string()
-                .try_into()
-                .map_err(|error| {
-                    DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
-                })?;
+        let (reference, has_effects) = self
+            .admit_local_cancel(cancel, attribution, LocalCancelMode::Apply)
+            .await
+            .map_err(classify_delivery_store_error)?;
+        self.wake_local_cancel(reference, has_effects).await
+    }
+
+    pub(super) async fn try_requested_local_cancel(
+        &self,
+        cancel: &DeliveryCancel<RouterDeliveryTypes>,
+        attribution: &CancelCause,
+    ) -> Result<RequestedLocalCancel, DeliveryTransactionFailure> {
+        let local = DeliveryCancel::new(
+            cancel.id(),
+            cancel.sender().clone(),
+            cancel.recipient().clone(),
+            cancel.valid_until(),
+            fleet_sync_protocol::CancelBody {
+                target: cancel.target(),
+            },
+        )
+        .map_err(|error| classify_delivery_store_error(StoreError::backend(error)))?;
+        match self
+            .admit_local_cancel(
+                local,
+                attribution.clone(),
+                LocalCancelMode::RouteRelayedOriginal,
+            )
+            .await
+        {
+            Ok((reference, has_effects)) => self
+                .wake_local_cancel(reference, has_effects)
+                .await
+                .map(RequestedLocalCancel::Applied),
+            Err(StoreError::StepRollback { failure }) if matches!(failure.as_ref(), durable_steps::OperationFailure::Refused { code, .. } if code == RELAY_REQUIRED) =>
+            {
+                // Only the adapter's final error proves the whole attempted local
+                // cancellation rolled back, including attribution and outcome writes.
+                Ok(RequestedLocalCancel::RelayRequired)
+            }
+            Err(error) => Err(classify_delivery_store_error(error)),
+        }
+    }
+
+    async fn admit_local_cancel(
+        &self,
+        cancel: DeliveryCancel<RouterDeliveryTypes>,
+        attribution: CancelCause,
+        mode: LocalCancelMode,
+    ) -> Result<(LocalCancelReference, bool), StoreError> {
+        let original = cancel.target();
+        let proposed = local_cancel_mail_id(cancel.id())?;
+        let target = local_cancel_mail_id(original)?;
         let config = self.config;
         let consumer = self.consumer.clone();
         let now = self.clock.now();
         #[cfg(test)]
         let admission_probe = self.cancel_admission_probe.clone();
-        let (reference, has_effects) = self
-            .store
+        self.store
             .transaction(move |scope| {
                 Box::pin(async move {
                     // No outbox precedes this entry: its own attribution must exist before the hook.
@@ -85,6 +132,7 @@ impl MailDeliveryRuntime {
                             )
                             .await
                             .map_err(delivery_rollback)?;
+                    ensure_local_cancel_route(mode, &admitted.effects, original)?;
                     let canonical: MailItemId = admitted
                         .reference
                         .item
@@ -97,17 +145,7 @@ impl MailDeliveryRuntime {
                             .await
                             .map_err(StoreError::backend)?;
                     }
-                    for attempt in &admitted.effects.attempts {
-                        scope
-                            .admit::<LocalMailTask>(
-                                &delivery_request_key(&(attempt.item, attempt.attempt))
-                                    .map_err(StoreError::backend)?,
-                                attempt,
-                            )
-                            .await
-                            .map_err(StoreError::backend)?;
-                    }
-                    // Reports remain in SDK custody for the durable report drive.
+                    admit_cancel_effects(scope, &admitted.effects).await?;
                     let has_effects = !admitted.effects.attempts.is_empty()
                         || !admitted.effects.reports.is_empty();
                     let reference = if read_local_cancel_in_scope(scope, &canonical)
@@ -127,7 +165,13 @@ impl MailDeliveryRuntime {
                 })
             })
             .await
-            .map_err(classify_delivery_store_error)?;
+    }
+
+    async fn wake_local_cancel(
+        &self,
+        reference: LocalCancelReference,
+        has_effects: bool,
+    ) -> Result<LocalCancelReference, DeliveryTransactionFailure> {
         if has_effects {
             self.host.wake_at(self.host.now()).await.map_err(|error| {
                 DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
@@ -135,6 +179,60 @@ impl MailDeliveryRuntime {
         }
         Ok(reference)
     }
+}
+
+fn local_cancel_mail_id(item: ItemId) -> Result<MailItemId, StoreError> {
+    item.as_uuid()
+        .to_string()
+        .try_into()
+        .map_err(StoreError::backend)
+}
+
+fn ensure_local_cancel_route(
+    mode: LocalCancelMode,
+    effects: &fleet_sync_delivery::InboxEffects,
+    original: ItemId,
+) -> Result<(), StoreError> {
+    if matches!(mode, LocalCancelMode::RouteRelayedOriginal)
+        && effects.reports.iter().any(|report| report.item == original)
+    {
+        // The SDK owns the route. An original's report proves relayed custody;
+        // the normal central control admission must precede its prevention.
+        return Err(StoreError::StepRollback {
+            failure: Box::new(durable_steps::OperationFailure::Refused {
+                code: RELAY_REQUIRED.into(),
+                detail: String::new(),
+            }),
+        });
+    }
+    Ok(())
+}
+
+async fn admit_cancel_effects(
+    scope: &mut TursoScope<'_, MailHost>,
+    effects: &fleet_sync_delivery::InboxEffects,
+) -> Result<(), StoreError> {
+    for attempt in &effects.attempts {
+        scope
+            .admit::<LocalMailTask>(
+                &delivery_request_key(&(attempt.item, attempt.attempt))
+                    .map_err(StoreError::backend)?,
+                attempt,
+            )
+            .await
+            .map_err(StoreError::backend)?;
+    }
+    for report in &effects.reports {
+        scope
+            .admit::<ReportMailTask>(
+                &delivery_request_key(&(report.item, report.report_seq))
+                    .map_err(StoreError::backend)?,
+                report,
+            )
+            .await
+            .map_err(StoreError::backend)?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]

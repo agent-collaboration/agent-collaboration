@@ -17,6 +17,13 @@
 # linker-signed, and Keychain access prompts again after the next rebuild.
 set -euo pipefail
 
+if [[ "$(uname -s)" != Darwin ]]; then
+  if [[ "${1:-}" == --sign-only ]]; then
+    exit 0
+  fi
+  exec "$@"
+fi
+
 readonly DEVELOPER_ID_TEAM="974QD84WVC"
 
 debug_identifier_for() {

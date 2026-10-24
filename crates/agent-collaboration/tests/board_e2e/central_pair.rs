@@ -142,18 +142,32 @@ pub async fn scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
 {
-    fixture::scenario(async move |fixture| {
-        run_scenario(
-            SecondHost::new(fixture)?,
-            async move |second: &mut SecondHost| {
-                second.start(fixture).await?;
-                case(fixture, second).await
-            },
-            SecondHost::shutdown,
-            || Ok(()),
-        )
-        .await
+    fixture::scenario(async move |fixture| with_second(fixture, case).await).await
+}
+
+pub async fn scenario_with_mailbox_items<F>(items: std::num::NonZeroU64, case: F) -> FixtureResult
+where
+    F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
+{
+    fixture::scenario_with_mailbox_items(items, async move |fixture| {
+        with_second(fixture, case).await
     })
+    .await
+}
+
+async fn with_second<F>(fixture: &mut BoardFixture, case: F) -> FixtureResult
+where
+    F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
+{
+    run_scenario(
+        SecondHost::new(fixture)?,
+        async move |second: &mut SecondHost| {
+            second.start(fixture).await?;
+            case(fixture, second).await
+        },
+        SecondHost::shutdown,
+        || Ok(()),
+    )
     .await
 }
 

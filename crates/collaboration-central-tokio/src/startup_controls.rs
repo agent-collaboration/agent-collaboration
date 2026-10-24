@@ -14,6 +14,7 @@ impl PreparedRuntimeControls {
             request.validate().map_err(StoreError::backend)?;
             match request.command {
                 RuntimeControl::SetTime { .. }
+                | RuntimeControl::MailboxItemLimit { .. }
                 | RuntimeControl::CopyFull { .. }
                 | RuntimeControl::DropNextAnswer { .. }
                 | RuntimeControl::HoldNextDispatch { .. }

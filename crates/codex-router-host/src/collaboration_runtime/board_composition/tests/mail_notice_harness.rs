@@ -1,6 +1,8 @@
 //! Start and drain the real Host event loop around one actual library pump.
 use super::*;
 use std::path::PathBuf;
+#[path = "installation_directory_refresh.rs"]
+mod installation_directory_refresh;
 #[path = "notification_directory.rs"]
 mod notification_directory;
 #[path = "notification_frontier.rs"]

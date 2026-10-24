@@ -98,6 +98,7 @@ enum ObjectReplyFault {
 }
 struct FaultState {
     clock: Option<RegistryTime>,
+    mailbox_item_limit: Option<std::num::NonZeroU64>,
     storage: StorageFaultObservation,
     answer: AnswerFault,
     dispatch: DispatchFault,
@@ -108,6 +109,7 @@ impl Default for FaultState {
     fn default() -> Self {
         Self {
             clock: None,
+            mailbox_item_limit: None,
             storage: StorageFaultObservation::Idle,
             answer: AnswerFault::Idle,
             dispatch: DispatchFault::Idle,
@@ -120,6 +122,11 @@ impl Default for FaultState {
 #[derive(Default)]
 pub struct RuntimeFaults(Mutex<FaultState>);
 impl RuntimeFaults {
+    pub fn mailbox_item_limit(
+        &self,
+    ) -> Result<Option<std::num::NonZeroU64>, RuntimeControlFailure> {
+        Ok(self.state()?.mailbox_item_limit)
+    }
     fn state(&self) -> Result<MutexGuard<'_, FaultState>, RuntimeControlFailure> {
         self.0.lock().map_err(|_| RuntimeControlFailure::Poisoned)
     }
@@ -299,6 +306,9 @@ impl RuntimeFaults {
     ) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         match command {
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),
+            RuntimeControl::MailboxItemLimit { items } => {
+                self.state()?.mailbox_item_limit = Some(items)
+            }
             RuntimeControl::CopyFull { after_writes } => {
                 self.state()?.storage = StorageFaultObservation::Armed { after_writes };
             }

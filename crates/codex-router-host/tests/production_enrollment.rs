@@ -225,9 +225,7 @@ async fn require_startup_refusal(root: &Path, expected: &str) -> TestResult {
 }
 
 fn fixture_root() -> TestResult<tempfile::TempDir> {
-    let root = tempfile::Builder::new()
-        .prefix("pe-")
-        .tempdir_in("/private/tmp")?;
+    let root = tempfile::Builder::new().prefix("pe-").tempdir_in("/tmp")?;
     for name in ["router", "collaboration"] {
         let path = root.path().join(name);
         std::fs::create_dir(&path)?;

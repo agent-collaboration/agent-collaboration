@@ -41,7 +41,7 @@ export function casesFor(): readonly RunnableCase[] {
     { ...remoteWakeLimitsCase, run: remoteWakeLimits },
     { ...remoteWakeExpiryCase, run: remoteWakeExpiry },
     { ...messageCancellationCase, run: messageCancellation },
-    // F retains its explicit owning-state gap and therefore runs last.
+    // F observes delivery; its native and Worker non-retention proof is separate.
     { ...forwardedPostsCase, run: forwardedPosts },
   );
   return cases;

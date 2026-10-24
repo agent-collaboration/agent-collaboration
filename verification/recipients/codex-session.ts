@@ -195,7 +195,8 @@ export class CodexSession {
       await setTimeout(Math.min(50, Math.max(1, deadline - Date.now())));
     }
   }
-  async absent(clientId: string, milliseconds: number, afterIndex: number): Promise<void> {
+  // A null identity requires a quiet window for every input, including unexpected IDs.
+  async absent(clientId: string | null, milliseconds: number, afterIndex: number): Promise<void> {
     z.number().int().nonnegative().max(this.connection.events.length).parse(afterIndex);
     z.number().int().positive().parse(milliseconds);
     const deadline = Date.now() + milliseconds;
@@ -207,7 +208,7 @@ export class CodexSession {
           item.success &&
           item.data.threadId === this.target.sessionId &&
           item.data.item.type === "userMessage" &&
-          item.data.item.clientId === clientId
+          (clientId === null || item.data.item.clientId === clientId)
         )
           throw new Error("input arrived during required quiet window");
       }

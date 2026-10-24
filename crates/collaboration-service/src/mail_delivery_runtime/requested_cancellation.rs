@@ -30,7 +30,16 @@ impl MailDeliveryRuntime {
         let proposed = cancel.id();
         let target = cancel.target();
         let admitted = if cancel.recipient().address.endpoint.service_id == self.service {
-            self.cancel_local(cancel, attribution).await
+            match self.try_requested_local_cancel(&cancel, &attribution).await {
+                Ok(super::local_cancellation::RequestedLocalCancel::Applied(reference)) => {
+                    Ok(reference)
+                }
+                Ok(super::local_cancellation::RequestedLocalCancel::RelayRequired) => {
+                    self.admit_remote_requested_cancel(cancel, attribution, epoch)
+                        .await
+                }
+                Err(error) => Err(error),
+            }
         } else {
             self.admit_remote_requested_cancel(cancel, attribution, epoch)
                 .await
@@ -83,6 +92,12 @@ impl MailDeliveryRuntime {
             MailSender::Project { project } => Some(project.clone()),
             _ => None,
         };
+        let retirement = fleet_sync_delivery::SubmitInput {
+            item: cancel.id(),
+            digest: cancel.digest().clone(),
+            relay,
+            mailbox: cancel.recipient().peer,
+        };
         if project.is_some() != epoch.is_some() {
             return Err(DeliveryTransactionFailure::Corrupt {
                 field: "requested cancel epoch".into(),
@@ -122,6 +137,12 @@ impl MailDeliveryRuntime {
                             _ => reference,
                         }
                     };
+                    if project.is_none() {
+                        super::terminal_retirement::admit_terminal_retirement(
+                            scope, &admission, retirement,
+                        )
+                        .await?;
+                    }
                     if canonical.item.as_uuid().to_string() != proposed.as_str() {
                         delete_tentative_local_cancel_in_scope(scope, &proposed, preparation)
                             .await

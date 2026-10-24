@@ -107,13 +107,17 @@ export function collectOutcomes(input: {
         if (result === undefined || result.kind === "open")
           return [row, { kind: "open", reason: result?.reason ?? `case not executed: ${id}` }];
       }
-      if (jointRows.has(row)) {
+      if (jointRows.has(row) || row === "OB4:F") {
         const kinds = new Set(
           input.cases
             .filter((entry): boolean => ids.includes(entry.id))
             .map((entry) => entry.evidence),
         );
-        const missing = jointEvidence.filter((kind): boolean => !kinds.has(kind));
+        const required =
+          row === "OB4:F"
+            ? jointEvidence.filter((kind): boolean => kind !== "rustEndToEnd")
+            : jointEvidence;
+        const missing = required.filter((kind): boolean => !kinds.has(kind));
         if (missing.length > 0)
           return [row, { kind: "open", reason: `adopted row also requires ${missing.join(", ")}` }];
       }

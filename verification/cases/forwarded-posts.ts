@@ -68,7 +68,10 @@ async function observeOrigins(input: {
       })),
       [
         {
-          origin: { installation: origin.serviceId, machine: origin.machineLabel },
+          origin: {
+            installation: origin.serviceId,
+            machine: requester.installation.enrollmentLabel,
+          },
           actor: requester.actor,
           request: post.requestId,
         },
@@ -232,12 +235,10 @@ async function publicRefusals(input: {
 export async function forwardedPosts(context: PreparedRun, receipt: Receipt): Promise<void> {
   const completed = await onlineForwarding(context, receipt);
   await publicRefusals({ context, receipt, completed });
-  await receipt.record("forwardingNonRetentionGap", {
-    onlineAndOfflinePublicOutcomesObserved: true,
-    owningCentralStateReadback: "unavailable",
+  await receipt.record("forwardingProofAllocation", {
+    deliveryHalfObserved: true,
+    nonRetentionEvidenceOwner:
+      "B F2 (T8): native and Worker owning-state tests with retainer control",
     nonRetentionObserved: false,
   });
-  throw new ObservationOpen(
-    "F non-retention needs an owning central state readback for the exact forwarded request",
-  );
 }

@@ -15,6 +15,7 @@ impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
         match (&self.command, &self.address) {
             (RuntimeControl::CopyFull { .. }, ObjectAddress::Copy(_))
+            | (RuntimeControl::MailboxItemLimit { .. }, ObjectAddress::Mailbox(_))
             | (
                 RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
                 ObjectAddress::Connection(_),
@@ -44,15 +45,33 @@ impl RuntimeControlRequest {
     deny_unknown_fields
 )]
 pub enum RuntimeControl {
-    SetTime { now: RegistryTime },
-    CopyFull { after_writes: NonZeroU64 },
-    DropNextAnswer { frame: FrameId },
-    AwaitDroppedAnswer { frame: FrameId },
-    HoldNextDispatch { destination: ObjectAddress },
+    SetTime {
+        now: RegistryTime,
+    },
+    /// Startup-only quota seam; production builds have no conformance control route.
+    MailboxItemLimit {
+        items: NonZeroU64,
+    },
+    CopyFull {
+        after_writes: NonZeroU64,
+    },
+    DropNextAnswer {
+        frame: FrameId,
+    },
+    AwaitDroppedAnswer {
+        frame: FrameId,
+    },
+    HoldNextDispatch {
+        destination: ObjectAddress,
+    },
     AwaitHeldDispatch,
     ResumeDispatch,
-    ResumeDispatchAndHoldNext { destination: ObjectAddress },
-    DropNextObjectReply { destination: ObjectAddress },
+    ResumeDispatchAndHoldNext {
+        destination: ObjectAddress,
+    },
+    DropNextObjectReply {
+        destination: ObjectAddress,
+    },
     AwaitDroppedObjectReply,
     Observe,
 }
