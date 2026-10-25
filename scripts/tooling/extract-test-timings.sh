@@ -20,6 +20,10 @@ awk -v job="$job_name" '
     status = result
     sub(/ .*/, "", status)
     print duration "\t" status "\t" job "\t" name
+  } else if (match($0, /TRANSPORT_TEST\t[0-9]+\t[0-9]+\t/)) {
+    split(substr($0, RSTART), fields, "\t")
+    status = fields[3] == 0 ? "PASS" : "FAIL"
+    print fields[2] "\t" status "\t" job "\t" fields[4]
   } else if (match($0, /[0-9]+\.[0-9]+s test_[^ ]+/)) {
     result = substr($0, RSTART)
     duration = result
