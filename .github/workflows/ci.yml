@@ -11,6 +11,14 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+  actions: read
+
+defaults:
+  run:
+    shell: bash --noprofile --norc -e -o pipefail scripts/tooling/time-step.sh {0}
+
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.98.1
@@ -54,10 +62,12 @@ jobs:
         run: |
           scripts/tooling/bootstrap-tools.sh ci
           echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
+      - name: Test workflow timing and failure propagation
+        run: bash scripts/tests/test_workflow_timing.sh
       - name: Test tool bootstrap
         id: tool_bootstrap
         background: true
-        run: python3 -m unittest scripts.tests.test_bootstrap_tools -v
+        run: python3 -m unittest scripts.tests.test_bootstrap_tools -v --durations 0
       - name: Check Rust formatting
         id: format
         background: true
@@ -65,7 +75,7 @@ jobs:
       - name: Test Homebrew release automation
         id: homebrew_release_automation
         background: true
-        run: python3 -m unittest scripts.tests.test_update_homebrew_formula scripts.tests.test_publish_homebrew_tap_local -v
+        run: python3 -m unittest scripts.tests.test_update_homebrew_formula scripts.tests.test_publish_homebrew_tap_local -v --durations 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
@@ -89,7 +99,7 @@ jobs:
             scripts/tests/test_acp_metadata_observation.py
             scripts/tests/verification_controller_fixture.py
           )
-          "$verification_python" -W error::ResourceWarning -m unittest scripts.tests.test_verification_observations scripts.tests.test_verification_lifecycle scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport scripts.tests.test_acp_metadata_observation -v
+          "$verification_python" -W error::ResourceWarning -m unittest scripts.tests.test_verification_observations scripts.tests.test_verification_lifecycle scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport scripts.tests.test_acp_metadata_observation -v --durations 0
           "$verification_python" -m ruff check "${verification_paths[@]}"
           "$verification_python" -m ruff format --check "${verification_paths[@]}"
           "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" "${verification_paths[@]}"
@@ -136,7 +146,7 @@ jobs:
       - name: Enforce Rust file size limit
         run: python3 scripts/tooling/check-rust-file-size.py
       - name: Test Rust file size checker
-        run: python3 -m unittest scripts.tests.test_rust_file_size -v
+        run: python3 -m unittest scripts.tests.test_rust_file_size -v --durations 0
       - name: Lint Rust workspace
         run: cargo clippy --workspace --all-targets -- -D warnings
       # Runs after clippy so it reuses the checked dependencies instead of
@@ -147,7 +157,7 @@ jobs:
           python3 scripts/tooling/prepare-sqlx.py --check
       - name: Check Turso SQLx metadata against native migrations
         run: |
-          python3 -m unittest scripts.tests.test_prepare_sqlx_turso -v
+          python3 -m unittest scripts.tests.test_prepare_sqlx_turso -v --durations 0
           python3 scripts/tooling/prepare-sqlx-turso.py --check
 
   build:
@@ -181,6 +191,7 @@ jobs:
       # feature sets, which together outgrow the runner's free disk. Remove
       # preinstalled SDKs this job never uses.
       - name: Free runner disk space
+        shell: bash
         run: |
           df -h /
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google
@@ -216,16 +227,16 @@ jobs:
       # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
           df -h /
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
         background: true
-        run: cargo nextest run --profile ci -p codex-router-quota-reset-test-harness
+        run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
       - name: Test Rust workspace
         id: workspace_tests
         background: true
-        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
+        run: cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
@@ -370,6 +381,21 @@ jobs:
     needs: [checks, lint, build, test, board-e2e, central-core, central-cloudflare]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v5
+      - name: Report workflow step and test timings
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/tooling/report-workflow-timings.sh "$GITHUB_RUN_ID" "$RUNNER_TEMP/workflow-report"
+      - name: Retain workflow timing inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-timing-inventory
+          path: |
+            ${{ runner.temp }}/workflow-report/*.tsv
+            ${{ runner.temp }}/workflow-report/jobs.json
+            ${{ runner.temp }}/workflow-report/summary.md
       - name: Require every validation job
         run: |
           for result in "${{ needs.checks.result }}" "${{ needs.lint.result }}" "${{ needs.build.result }}" "${{ needs.test.result }}" "${{ needs.board-e2e.result }}" "${{ needs.central-core.result }}" "${{ needs.central-cloudflare.result }}"; do

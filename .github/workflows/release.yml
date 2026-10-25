@@ -8,8 +8,13 @@ on:
     inputs:
       tag:
         description: Existing semantic-version tag to publish
-        required: true
+        required: false
         type: string
+      dry_run:
+        description: Build, sign and verify this ref without publishing or updating the tap
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -19,6 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  RELEASE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   # Keychain approvals belong to a code identity; a fixed identifier and team keep
   # one identity across releases. Debug builds use "<identifier>.debug".
@@ -30,8 +36,12 @@ jobs:
     name: Apple Silicon release
     permissions:
       contents: write
+      actions: read
     runs-on: macos-15
     timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash --noprofile --norc -e -o pipefail ${{ github.workspace }}/release-source/scripts/tooling/time-step.sh {0}
     outputs:
       asset_sha256: ${{ steps.artifact.outputs.sha256 }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
@@ -43,7 +53,7 @@ jobs:
           fetch-depth: 0
           path: release-source
           persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && github.sha || env.RELEASE_TAG }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -56,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${RELEASE_DRY_RUN}" != "true" && ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "release tag must use v<major>.<minor>.<patch> syntax" >&2
             exit 1
           fi
@@ -69,20 +79,25 @@ jobs:
           fi
 
           source_commit="$(git rev-parse HEAD)"
-          tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
-          if [[ "${source_commit}" != "${tag_commit}" ]]; then
-            echo "checked-out source does not match the release tag" >&2
-            exit 1
-          fi
-          if [[ "$(git tag --points-at HEAD --list "${RELEASE_TAG}")" != "${RELEASE_TAG}" ]]; then
-            echo "release tag is not exact for the checked-out source" >&2
-            exit 1
+          if [[ "${RELEASE_DRY_RUN}" != "true" ]]; then
+            tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
+            if [[ "${source_commit}" != "${tag_commit}" ]]; then
+              echo "checked-out source does not match the release tag" >&2
+              exit 1
+            fi
+            if [[ "$(git tag --points-at HEAD --list "${RELEASE_TAG}")" != "${RELEASE_TAG}" ]]; then
+              echo "release tag is not exact for the checked-out source" >&2
+              exit 1
+            fi
           fi
 
           cargo_version="$(
             cargo metadata --locked --no-deps --format-version 1 |
               jq -r '.packages[] | select(.name == "codex-router-cli") | .version'
           )"
+          if [[ "${RELEASE_DRY_RUN}" == "true" ]]; then
+            release_version="${cargo_version}"
+          fi
           if [[ "${cargo_version}" != "${release_version}" ]]; then
             echo "release tag version does not match codex-router-cli" >&2
             exit 1
@@ -93,36 +108,43 @@ jobs:
             echo "source_commit=${source_commit}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Build release binary
-        working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins
+      - name: Cache release dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: release-source -> target
+          shared-key: release-arm64
 
-      - name: Reject test Keychain support in the release dependency graph
-        working-directory: release-source
+      - name: Require green main CI for the tagged commit
+        if: env.RELEASE_DRY_RUN != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: ${{ steps.metadata.outputs.source_commit }}
         run: |
           set -euo pipefail
-          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features -i codex-router-secret-store)"
-          if grep -q 'keychain-test-guard' <<<"${dependency_features}"; then
-            echo "release dependency graph includes keychain-test-guard" >&2
+          validation_url="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
+            -f head_sha="${SOURCE_COMMIT}" -f branch=main -f event=push -f status=success \
+            --jq '.workflow_runs[] | select(.conclusion == "success") | .html_url' | head -1)"
+          if [[ -z "${validation_url}" ]]; then
+            echo "tagged commit must pass the complete main CI workflow before release" >&2
             exit 1
           fi
+          echo "Validated tagged commit: ${validation_url}"
 
-      # Optimized macOS build only: debug code generation does not reproduce the
-      # FuturesUnordered waker-identity bug behind the 0.1.38 idle CPU loop.
-      - name: Test optimized idle provider transport
+      # Compile shared targets once, then overlap the production build with the
+      # optimized regression and schema export on this same macOS runner.
+      - name: Build release and run independent checks in the background
         working-directory: release-source
-        run: cargo test --locked --release -p codex-router-host --test provider_transport_idle
+        run: scripts/tooling/build-release.sh
 
-      - name: Export collaboration schemas
-        working-directory: release-source
-        run: |
-          set -euo pipefail
-          mkdir -p target/protocol-schemas/communication-control target/protocol-schemas/acp-protocol
-          cargo run --locked --release -p collaboration-protocol --example export_protocol_types \
-            > target/protocol-schemas/communication-control/protocol-types.json
-          cp protocol-schemas/acp-protocol/stable-schema.json protocol-schemas/acp-protocol/upstream-license.txt \
-            target/protocol-schemas/acp-protocol/
-          cp protocol-schemas/schema-packaging.md target/protocol-schemas/
+      - name: Retain release build and test timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-timing-inventory
+          path: |
+            ${{ runner.temp }}/workflow-timings/
+            ${{ runner.temp }}/workflow-parallel/
+            release-source/target/cargo-timings/
 
       - name: Require the Developer ID certificate
         env:
@@ -249,6 +271,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Publish GitHub release asset
+        if: env.RELEASE_DRY_RUN != 'true'
         env:
           ASSET_NAME: ${{ steps.artifact.outputs.name }}
           ASSET_PATH: ${{ steps.artifact.outputs.path }}
@@ -330,6 +353,7 @@ jobs:
 
   publish-tap:
     name: Homebrew tap
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: release
     permissions:
       contents: read
