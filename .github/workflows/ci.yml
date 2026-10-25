@@ -261,6 +261,13 @@ jobs:
         with:
           shared-key: board-e2e
           cache-on-failure: true
+      # The baseline spent over nine minutes rebuilding these pinned tools.
+      # Reuse the same verified cache as checks/test before bootstrapping.
+      - name: Cache pinned Rust tools
+        uses: actions/cache@v4
+        with:
+          path: tmp/rust-tools
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
       - name: Prepare owned runtime roots and pinned test runner
         run: |
           mkdir -m 700 "$CODEX_ROUTER_E2E_PARENT"
