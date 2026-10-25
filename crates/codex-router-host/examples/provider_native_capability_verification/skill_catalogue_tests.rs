@@ -270,6 +270,7 @@ fn plugin_skill_needs_its_own_plugins_namespace() {
             (plugins.join("alpha/1.0.0"), "alpha".to_owned()),
             (plugins.join("beta/1.0.0"), "beta".to_owned()),
         ],
+        plugin_skill_sources: vec![beta_review.clone()],
     };
     // Another plugin's same-named skill must not vouch for this one.
     expect_error(
@@ -298,6 +299,7 @@ fn workspace_roots_follow_the_providers_project_root() {
         workspace_command_dirs: Vec::new(),
         project_root_marker: Some(".git".to_owned()),
         plugin_namespaces: Vec::new(),
+        plugin_skill_sources: Vec::new(),
     };
     // No marker anywhere: the native finder falls back to the cwd itself.
     assert_eq!(

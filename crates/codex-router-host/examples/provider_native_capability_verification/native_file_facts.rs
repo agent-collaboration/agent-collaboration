@@ -4,7 +4,7 @@
 use crate::verification_models::{NativePluginFacts, NativePluginRow, ProviderEndpoint};
 use serde_json::Value;
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -129,6 +129,112 @@ pub(crate) fn is_skill_source(
 
 pub(crate) fn canonical(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_owned())
+}
+
+/// The sync-owned child of the user skill root; never an ordinary skill entry.
+const RESERVED_SYNCED_ENTRY: &str = "synced";
+
+/// The exact sources Claude 2.1.310 itself enumerates for one request, each in its
+/// logical spelling and its canonical (physical) identity. Lying inside a root is not
+/// membership: only an enumerated entry is.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct NativeSourceCandidates {
+    /// `SKILL.md` files and their folders (ordinary roots and declared plugin skills).
+    skills: BTreeSet<PathBuf>,
+    /// Legacy command `.md` files.
+    commands: BTreeSet<PathBuf>,
+}
+
+impl NativeSourceCandidates {
+    fn insert_both(set: &mut BTreeSet<PathBuf>, path: &Path) {
+        set.insert(path.to_owned());
+        set.insert(canonical(path));
+    }
+
+    fn holds(set: &BTreeSet<PathBuf>, path: &Path) -> bool {
+        set.contains(path) || set.contains(&canonical(path))
+    }
+
+    pub(crate) fn is_skill(&self, path: &Path) -> bool {
+        Self::holds(&self.skills, path)
+    }
+
+    pub(crate) fn is_command(&self, path: &Path) -> bool {
+        Self::holds(&self.commands, path)
+    }
+
+    pub(crate) fn is_source(&self, path: &Path) -> bool {
+        self.is_skill(path) || self.is_command(path)
+    }
+}
+
+/// Claude ordinary skill roots (`AL`, offset ≈228.46M in the installed 2.1.310
+/// bytes): each immediate entry that is a directory or a symlink, holding a regular
+/// `SKILL.md`. A symlinked entry may point outside the root; the native loader follows
+/// it. Legacy command roots (`jEo`/`b0`): every `.md` file found recursively, following
+/// symlinks; physical directories already visited are not walked again, so a symlink
+/// cycle terminates. Installed plugin skills are the exact declared files.
+pub(crate) fn claude_source_candidates(
+    skill_roots: &[PathBuf],
+    command_roots: &[PathBuf],
+    plugin_skill_files: &[PathBuf],
+) -> NativeSourceCandidates {
+    let mut candidates = NativeSourceCandidates::default();
+    for root in skill_roots {
+        let Ok(entries) = fs::read_dir(root) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(kind) = entry.file_type() else {
+                continue;
+            };
+            if !(kind.is_dir() || kind.is_symlink()) {
+                continue;
+            }
+            // `AL` skips the sync-owned root's reserved name (`Q3`) in ordinary scans.
+            if entry
+                .file_name()
+                .to_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case(RESERVED_SYNCED_ENTRY))
+            {
+                continue;
+            }
+            let folder = root.join(entry.file_name());
+            let file = folder.join("SKILL.md");
+            if fs::metadata(&file).is_ok_and(|metadata| metadata.is_file()) {
+                NativeSourceCandidates::insert_both(&mut candidates.skills, &file);
+                NativeSourceCandidates::insert_both(&mut candidates.skills, &folder);
+            }
+        }
+    }
+    for file in plugin_skill_files {
+        NativeSourceCandidates::insert_both(&mut candidates.skills, file);
+        if let Some(folder) = file.parent() {
+            NativeSourceCandidates::insert_both(&mut candidates.skills, folder);
+        }
+    }
+    let mut visited = BTreeSet::new();
+    let mut pending: Vec<PathBuf> = command_roots.to_vec();
+    while let Some(directory) = pending.pop() {
+        if !visited.insert(canonical(&directory)) {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&directory) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = directory.join(entry.file_name());
+            let Ok(metadata) = fs::metadata(&path) else {
+                continue;
+            };
+            if metadata.is_dir() {
+                pending.push(path);
+            } else if metadata.is_file() && path.extension().is_some_and(|ext| ext == "md") {
+                NativeSourceCandidates::insert_both(&mut candidates.commands, &path);
+            }
+        }
+    }
+    candidates
 }
 
 pub(crate) fn same_path(left: &Path, right: &Path) -> bool {

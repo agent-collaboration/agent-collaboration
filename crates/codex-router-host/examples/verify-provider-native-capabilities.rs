@@ -216,6 +216,9 @@ mod metadata_oracle_tests;
 #[path = "provider_native_capability_verification/oracle_test_support.rs"]
 mod oracle_test_support;
 #[cfg(test)]
+#[path = "provider_native_capability_verification/ordinary_completion_tests.rs"]
+mod ordinary_completion_tests;
+#[cfg(test)]
 #[path = "provider_native_capability_verification/plugin_catalogue_tests.rs"]
 mod plugin_catalogue_tests;
 #[cfg(test)]
@@ -224,3 +227,6 @@ mod qualification_tests;
 #[cfg(test)]
 #[path = "provider_native_capability_verification/skill_catalogue_tests.rs"]
 mod skill_catalogue_tests;
+#[cfg(test)]
+#[path = "provider_native_capability_verification/skill_source_membership_tests.rs"]
+mod skill_source_membership_tests;

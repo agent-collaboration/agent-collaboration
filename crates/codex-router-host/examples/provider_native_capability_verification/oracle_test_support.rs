@@ -114,6 +114,7 @@ impl NativeSetup {
             workspace_command_dirs: Vec::new(),
             project_root_marker: None,
             plugin_namespaces: Vec::new(),
+            plugin_skill_sources: Vec::new(),
         }
     }
 }

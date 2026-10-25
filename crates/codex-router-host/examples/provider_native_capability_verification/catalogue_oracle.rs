@@ -4,7 +4,9 @@
 //! command roots, its plugin and marketplace exports and its plugin files. Expected
 //! values never come from the candidate's response. An explicit JSON-RPC error is
 //! `ExplicitUnsupported`, never a pass; a wrong build returns `Err`.
-use crate::native_file_facts::{canonical, is_skill_source, natively_disabled, same_path};
+use crate::native_file_facts::{
+    canonical, claude_source_candidates, is_skill_source, natively_disabled, same_path,
+};
 use crate::verification_models::{
     CapabilityStatus, FixtureRecord, NativeMarketplace, NativePluginFacts, NativePluginRow,
     PluginListView, PluginReadView, ProviderEndpoint, RpcReply, SkillsEntryView, SkillsListView,
@@ -27,6 +29,9 @@ pub(crate) struct NativeSkillAuthority {
     pub(crate) project_root_marker: Option<String>,
     /// Active plugin folders and the namespace the provider advertises their skills under.
     pub(crate) plugin_namespaces: Vec<(PathBuf, String)>,
+    /// The installed plugins' exact declared skill files (`plugin_skill_files`): for
+    /// Claude these, not every file inside a plugin folder, are plugin skill sources.
+    pub(crate) plugin_skill_sources: Vec<PathBuf>,
 }
 
 impl NativeSkillAuthority {
@@ -42,10 +47,16 @@ impl NativeSkillAuthority {
             .to_owned()
     }
 
-    pub(crate) fn skill_roots(&self, cwd: &Path) -> Vec<PathBuf> {
+    /// Home and workspace skill roots, without plugin folders.
+    pub(crate) fn ordinary_skill_roots(&self, cwd: &Path) -> Vec<PathBuf> {
         let root = self.project_root(cwd);
         let mut roots = self.home_skill_roots.clone();
         roots.extend(self.workspace_skill_dirs.iter().map(|dir| root.join(dir)));
+        roots
+    }
+
+    pub(crate) fn skill_roots(&self, cwd: &Path) -> Vec<PathBuf> {
+        let mut roots = self.ordinary_skill_roots(cwd);
         roots.extend(
             self.plugin_namespaces
                 .iter()
@@ -133,6 +144,24 @@ pub(crate) fn require_truthful_skill_entry(
     let command_roots = authority.command_roots(cwd);
     let mut roots = skill_roots.clone();
     roots.extend(command_roots.iter().cloned());
+    // Claude: membership is the exact native source enumeration, judged on logical and
+    // canonical identity. Cursor keeps its existing recursive containment.
+    let claude_sources = (authority.provider == ProviderEndpoint::ClaudeLocal).then(|| {
+        claude_source_candidates(
+            &authority.ordinary_skill_roots(cwd),
+            &command_roots,
+            &authority.plugin_skill_sources,
+        )
+    });
+    let is_member = |path: &Path| match &claude_sources {
+        Some(sources) => sources.is_source(path),
+        None => {
+            let resolved = canonical(path);
+            roots
+                .iter()
+                .any(|root| resolved.starts_with(canonical(root)))
+        }
+    };
     for skill in &entry.skills {
         let path = Path::new(&skill.path);
         if !path.is_absolute() || !path.exists() {
@@ -141,11 +170,7 @@ pub(crate) fn require_truthful_skill_entry(
                 skill.name
             ));
         }
-        let resolved = canonical(path);
-        if !roots
-            .iter()
-            .any(|root| resolved.starts_with(canonical(root)))
-        {
+        if !is_member(path) {
             return Err(format!(
                 "skill {:?} lies outside the provider's own roots",
                 skill.name
@@ -187,10 +212,14 @@ pub(crate) fn require_truthful_skill_entry(
             shadow.name
         ));
     }
+    let error_is_source = |path: &Path| match &claude_sources {
+        Some(sources) => path.is_absolute() && sources.is_source(path),
+        None => is_skill_source(path, &skill_roots, &command_roots),
+    };
     if entry
         .errors
         .iter()
-        .any(|error| !is_skill_source(Path::new(&error.path), &skill_roots, &command_roots))
+        .any(|error| !error_is_source(Path::new(&error.path)))
     {
         return Err("skill error names no actual native skill source".to_owned());
     }

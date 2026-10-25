@@ -394,6 +394,14 @@ pub(crate) struct ProviderItem {
     pub(crate) text: Option<String>,
 }
 
+/// How a turn ended (`turnEnded.outcome`), e.g. `{kind: ended, stop_reason: endTurn}`.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
+pub(crate) struct TurnOutcomeView {
+    pub(crate) kind: String,
+    #[serde(default)]
+    pub(crate) stop_reason: Option<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ObservedEvent {
@@ -402,6 +410,8 @@ pub(crate) struct ObservedEvent {
     pub(crate) item: Option<ProviderItem>,
     #[serde(default)]
     pub(crate) turn_id: Option<String>,
+    #[serde(default)]
+    pub(crate) outcome: Option<TurnOutcomeView>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

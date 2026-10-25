@@ -7,10 +7,10 @@ use crate::catalogue_oracle::{
 };
 use crate::command_reload_probe::reload_after_fixture_removal;
 use crate::conversation_oracle::{
-    QueueObservation, advertised_command_names, check_command_catalogues, check_display_operations,
-    check_native_invocation, check_picker_refusal, check_recorded_selection, check_rejected_input,
-    check_selected_history, expected_native_reply, new_operations, require_fresh_session,
-    selected_steer_raced,
+    QueueObservation, advertised_command_names, any_turn_ended, check_command_catalogues,
+    check_display_operations, check_native_invocation, check_ordinary_completion,
+    check_picker_refusal, check_recorded_selection, check_rejected_input, check_selected_history,
+    expected_native_reply, new_operations, require_fresh_session, selected_steer_raced,
 };
 use crate::installed_client_terminal::{CAPTURE_MAX_BYTES, CLEAR_LINE, ESCAPE, terminal_text};
 use crate::journey_run::{Journey, JourneyResult, PICKER_SECONDS, json_value, name_fragment};
@@ -19,10 +19,14 @@ use crate::native_exports::{read_bounded_bytes, read_session_recorder};
 use crate::native_file_facts::{native_plugin_facts, plugin_namespace, plugin_skill_files};
 use crate::native_fixture::write_private;
 use crate::verification_models::{
-    CapabilityStatus, HistoryThread, NativePluginRow, PluginListView, RpcReply,
+    CapabilityStatus, HistoryThread, NativePluginRow, ObservationCursor, PluginListView,
+    ProviderObservation, RpcReply,
 };
 use serde_json::{Map, Value, json};
-use std::{path::Path, time::Duration};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
 const COMPOSER_READY: &str = "›";
 const PICKER_ROW: &str = "echoes its arguments";
@@ -217,6 +221,12 @@ pub(crate) async fn catalogue_journey(journey: &Journey) -> Result<JourneyResult
             .flatten()
             .filter_map(|row| Some((row.active_root().to_owned(), plugin_namespace(row)?)))
             .collect(),
+        // The exact declared skill files of each installed plugin, not its whole folder.
+        plugin_skill_sources: native_before
+            .iter()
+            .flatten()
+            .flat_map(plugin_skill_files)
+            .collect(),
     };
     let skill_check = check_skill_catalogue(&skills, fixture, &authority)?;
     let mut checks = Map::new();
@@ -310,11 +320,30 @@ fn drive_selection(
         client.wait_for(&fixture.canary, mark, REPLY)?;
         return Ok((Some("effect"), text));
     }
+    // A rejected steer is judged by its error here; whether the ordinary turn completed
+    // is judged from public provider events, because Codex 0.163 stops drawing the
+    // ordinary turn after a failed steer.
     let outcome = client.wait_for_effect_or_error(&fixture.canary, mark, REJECTION);
-    if case == SelectionCase::SelectedSteer {
-        client.wait_for(STEER_BASE_REPLY, 0, REPLY)?;
-    }
     Ok((outcome, text))
+}
+
+/// The selected-steer case's ordinary turn, observed from the pre-drive cursor until a
+/// turn ends or the reply bound passes. Every page is kept under its own label.
+async fn observe_until_turn_ends(
+    journey: &Journey,
+    cursor: ObservationCursor,
+) -> Result<ProviderObservation, String> {
+    let deadline = Instant::now() + REPLY;
+    let mut attempt = 0_u32;
+    loop {
+        let observed = journey
+            .observe(&format!("after-{attempt}"), Some(cursor))
+            .await?;
+        if any_turn_ended(&observed) || Instant::now() >= deadline {
+            return Ok(observed);
+        }
+        attempt += 1;
+    }
 }
 
 /// J2: installed-Codex `$` selection; `leading` is the positive case, the others are
@@ -361,11 +390,21 @@ pub(crate) async fn selection_journey(
             1
         },
     )?;
-    let after = journey.observe("after", Some(cursor)).await?;
+    let after = if case == SelectionCase::SelectedSteer {
+        observe_until_turn_ends(journey, cursor).await?
+    } else {
+        journey.observe("after", Some(cursor)).await?
+    };
     let operations = journey.operations("after").await?;
     let mut checks = Map::new();
     checks.insert("case".to_owned(), json!(case.as_str()));
     checks.insert("clientInput".to_owned(), json_value(&recorded)?);
+    if case == SelectionCase::SelectedSteer {
+        // Observation only: the client may stop drawing the ordinary turn.
+        let shown = read_bounded_bytes(&journey.capture(&label), CAPTURE_MAX_BYTES as u64)
+            .map(|raw| terminal_text(&raw).contains(STEER_BASE_REPLY))?;
+        checks.insert("clientShowedOrdinaryReply".to_owned(), Value::Bool(shown));
+    }
     if case == SelectionCase::Leading {
         let selected =
             check_native_invocation(&after, fixture, arguments, &[text], &before, &operations)?;
@@ -389,11 +428,18 @@ pub(crate) async fn selection_journey(
         )?;
         checks.insert("rejected".to_owned(), json_value(&rejected)?);
         checks.insert("deliveryQueue".to_owned(), json_value(&queue)?);
+        if case == SelectionCase::SelectedSteer {
+            let ordinary = check_ordinary_completion(&after, STEER_BASE_REPLY)?;
+            checks.insert("ordinaryCompletion".to_owned(), json_value(&ordinary)?);
+        }
     }
     Ok(JourneyResult {
         journey: "J2",
         checks,
-        limits: vec!["Client-visible rejection wording is recorded, not asserted."],
+        limits: vec![
+            "Client-visible rejection wording is recorded, not asserted.",
+            "After a failed steer the Codex 0.163 client may stop drawing the ordinary turn; its completion is judged from public provider events.",
+        ],
     })
 }
 

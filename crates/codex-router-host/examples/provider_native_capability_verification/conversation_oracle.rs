@@ -277,6 +277,65 @@ pub(crate) fn check_rejected_input(
     Ok(created.iter().map(|row| row.operation_id.clone()).collect())
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct OrdinaryCompletion {
+    pub(crate) turn_id: String,
+    pub(crate) reply_item_id: String,
+}
+
+/// Whether any turn has ended in the observation; the bounded wait stops there.
+pub(crate) fn any_turn_ended(observation: &ProviderObservation) -> bool {
+    observation
+        .events
+        .iter()
+        .any(|entry| entry.event.kind == "turnEnded")
+}
+
+/// J2 selected steer: the ordinary turn the steer targeted still completed natively,
+/// judged from public provider events rather than the client's screen (Codex 0.163
+/// stops drawing that turn after a failed steer). Exactly one turn started, exactly one
+/// assistant message is the expected reply, and that turn ended normally.
+pub(crate) fn check_ordinary_completion(
+    after: &ProviderObservation,
+    reply: &str,
+) -> Result<OrdinaryCompletion, String> {
+    require_complete(after)?;
+    let [turn_id] = turn_started_ids(after)
+        .try_into()
+        .map_err(|_: Vec<String>| "expected exactly one ordinary turn".to_owned())?;
+    let replies: Vec<ProviderItem> = retained_items(after)
+        .into_iter()
+        .filter(|item| {
+            item.kind.kind == "agentMessage" && item.text.as_deref().map(str::trim) == Some(reply)
+        })
+        .collect();
+    let [reply_item] = replies.as_slice() else {
+        return Err("ordinary reply missing, different or repeated".to_owned());
+    };
+    let endings: Vec<_> = after
+        .events
+        .iter()
+        .filter(|entry| {
+            entry.event.kind == "turnEnded"
+                && entry.event.turn_id.as_deref() == Some(turn_id.as_str())
+        })
+        .collect();
+    let [ending] = endings.as_slice() else {
+        return Err("ordinary turn has no single end".to_owned());
+    };
+    let normal = ending.event.outcome.as_ref().is_some_and(|outcome| {
+        outcome.kind == "ended" && outcome.stop_reason.as_deref() == Some("endTurn")
+    });
+    if !normal {
+        return Err("ordinary turn did not end normally".to_owned());
+    }
+    Ok(OrdinaryCompletion {
+        turn_id,
+        reply_item_id: reply_item.item_id.clone(),
+    })
+}
+
 /// True when the selected input was admitted after the ordinary turn had ended: the
 /// client sent a fresh turn instead of a steer, so the case did not run.
 pub(crate) fn selected_steer_raced(before: &[OperationRow], after: &[OperationRow]) -> bool {

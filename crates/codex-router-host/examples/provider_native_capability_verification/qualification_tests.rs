@@ -2,8 +2,10 @@
 //! normal-build record, the Host's global Claude binding, the global Codex config
 //! observation, and real-UID ownership against live setuid and foreign-owner processes.
 //!
-//! The live cases start only `/usr/bin/top` (setuid root on macOS) as this test's own
-//! child and stop it; the foreign-owner case only reads PID 1's actual row.
+//! The live setuid case starts only `/usr/bin/top` (setuid root on macOS, run with the
+//! macOS-only `-l` flag) as this test's own child and stops it, so it and its helper are
+//! compiled on macOS only. Every other control, including the foreign-owner case that
+//! reads PID 1's actual row, is portable and runs on Linux CI too.
 use crate::global_claude_binding::resolve_global_claude;
 use crate::journey_run::CodexConfigObservation;
 use crate::native_exports::codex_config_digest;
@@ -27,6 +29,9 @@ use std::{
         net::UnixListener,
     },
     path::{Path, PathBuf},
+};
+#[cfg(target_os = "macos")]
+use std::{
     process::{Command, Stdio},
     thread,
     time::{Duration, Instant},
@@ -236,6 +241,7 @@ fn codex_config_is_absent_digested_or_unobservable_never_confused() {
 }
 
 /// Wait until ps lists `pid`, so the observation is of the live child.
+#[cfg(target_os = "macos")]
 fn table_with(pid: u32) -> BTreeMap<u32, crate::process_identity::ProcessIdentity> {
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
@@ -247,6 +253,10 @@ fn table_with(pid: u32) -> BTreeMap<u32, crate::process_identity::ProcessIdentit
     }
 }
 
+/// macOS only: `/usr/bin/top` is setuid root there and `-l` is its macOS sample flag.
+/// Linux runners have no such setuid helper; the parsed setuid and foreign-owner cases
+/// and the live PID 1 foreign-owner case still run there.
+#[cfg(target_os = "macos")]
 #[test]
 fn live_setuid_child_is_owned_by_its_real_uid() {
     let owner = own_real_uid().unwrap();
