@@ -22,8 +22,10 @@ Usage: scripts/verification/native-capabilities.sh <command> [options]
       sends /reload-skills through Router, observes the lists and restores the file.
   history PLAN --arguments TEXT --output DIR --ordinary-live-capture PTY [--unloaded-resume]
       J4 read/resume canonical history, display operations, client reopen and the
-      ACP metadata oracle. PTY is the select --case selected-steer run's
-      select-selected-steer.pty.
+      ACP metadata oracle. PTY is an original live client capture on the same
+      Session that actually drew the ordinary STEER_BASE_OK reply. The selected-steer
+      run's select-selected-steer.pty qualifies only if it drew that reply; otherwise
+      use a separate genuine live ordinary control. Reopened history is never live.
   processes capture --root-pid PID --output FILE
       Record the owned process closure of a Lead-started Router or Host (observe only).
   processes check --inventory FILE
