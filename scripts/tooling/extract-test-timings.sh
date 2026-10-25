@@ -24,11 +24,11 @@ awk -v job="$job_name" '
     split(substr($0, RSTART), fields, "\t")
     status = fields[3] == 0 ? "PASS" : "FAIL"
     print fields[2] "\t" status "\t" job "\t" fields[4]
-  } else if (match($0, /[0-9]+\.[0-9]+s test_[^ ]+/)) {
+  } else if (match($0, /[0-9]+\.[0-9]+s[[:space:]]+test_[^ ]+/)) {
     result = substr($0, RSTART)
     duration = result
-    sub(/s .*/, "", duration)
-    sub(/^[0-9.]+s /, "", result)
+    sub(/s[[:space:]].*/, "", duration)
+    sub(/^[0-9.]+s[[:space:]]+/, "", result)
     print duration "\tMEASURED\t" job "\t" result
   }
 }
