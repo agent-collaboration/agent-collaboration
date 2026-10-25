@@ -15,7 +15,7 @@ use crate::conversation_oracle::{
 use crate::history_oracle::check_selected_history;
 use crate::installed_client_terminal::{CAPTURE_MAX_BYTES, CLEAR_LINE, ESCAPE, terminal_text};
 use crate::journey_run::{Journey, JourneyResult, PICKER_SECONDS, json_value, name_fragment};
-use crate::metadata_oracle::{LiveCapture, check_metadata_observation};
+use crate::metadata_oracle::{LiveCapture, LiveOffset, check_metadata_observation};
 use crate::native_exports::{read_bounded_bytes, read_session_recorder};
 use crate::native_file_facts::{native_plugin_facts, plugin_namespace, plugin_skill_files};
 use crate::native_fixture::write_private;
@@ -289,17 +289,29 @@ pub(crate) async fn catalogue_journey(journey: &Journey) -> Result<JourneyResult
     })
 }
 
-/// Type the case's input in the real client; return the outcome label and its Text.
+/// What one J2 drive observed in the installed client.
+struct SelectionDrive {
+    outcome: Option<&'static str>,
+    text: String,
+    /// Selected steer only: raw capture bytes just before the ordinary turn's Enter,
+    /// taken by this driver's own terminal.
+    ordinary_turn_mark: Option<usize>,
+}
+
+/// Type the case's input in the real client; return the outcome label, its Text and,
+/// for selected steer, the ordinary turn's recorded pre-submit mark.
 fn drive_selection(
     journey: &Journey,
     client: &mut crate::installed_client_terminal::InstalledClientTerminal,
     case: SelectionCase,
     arguments: &str,
-) -> Result<(Option<&'static str>, String), String> {
+) -> Result<SelectionDrive, String> {
     let fixture = &journey.target.fixture;
-    if case == SelectionCase::SelectedSteer {
-        client.type_and_submit(STEER_BASE_PROMPT, PICKER_SECONDS)?;
-    }
+    let ordinary_turn_mark = if case == SelectionCase::SelectedSteer {
+        Some(client.type_and_submit(STEER_BASE_PROMPT, PICKER_SECONDS)?)
+    } else {
+        None
+    };
     let prefix = if case == SelectionCase::Nonleading {
         "Please apply "
     } else {
@@ -319,13 +331,21 @@ fn drive_selection(
     let mark = client.type_and_submit(arguments, PICKER_SECONDS)?;
     if case == SelectionCase::Leading {
         client.wait_for(&fixture.canary, mark, REPLY)?;
-        return Ok((Some("effect"), text));
+        return Ok(SelectionDrive {
+            outcome: Some("effect"),
+            text,
+            ordinary_turn_mark,
+        });
     }
     // A rejected steer is judged by its error here; whether the ordinary turn completed
     // is judged from public provider events, because Codex 0.163 stops drawing the
     // ordinary turn after a failed steer.
     let outcome = client.wait_for_effect_or_error(&fixture.canary, mark, REJECTION);
-    Ok((outcome, text))
+    Ok(SelectionDrive {
+        outcome,
+        text,
+        ordinary_turn_mark,
+    })
 }
 
 /// The selected-steer case's ordinary turn, observed from the pre-drive cursor until a
@@ -368,7 +388,11 @@ pub(crate) async fn selection_journey(
         SelectionCase::Leading => None,
         _ => Some(journey.queue("queue-before").await?),
     };
-    let (outcome, text) = journey.drive_client(&label, |client| {
+    let SelectionDrive {
+        outcome,
+        text,
+        ordinary_turn_mark,
+    } = journey.drive_client(&label, |client| {
         client.wait_for_ready_composer(COMPOSER_READY, STARTUP, COMPOSER_SETTLE)?;
         drive_selection(journey, client, case, arguments)
     })?;
@@ -405,6 +429,14 @@ pub(crate) async fn selection_journey(
         let shown = read_bounded_bytes(&journey.capture(&label), CAPTURE_MAX_BYTES as u64)
             .map(|raw| terminal_text(&raw).contains(STEER_BASE_REPLY))?;
         checks.insert("clientShowedOrdinaryReply".to_owned(), Value::Bool(shown));
+    }
+    if let Some(bytes) = ordinary_turn_mark {
+        // This capture's own pre-submit offset for the ordinary turn, observed by the
+        // driver; usable as J4's live offset only if this capture drew the reply.
+        checks.insert(
+            "ordinaryTurnCaptureOffset".to_owned(),
+            json_value(&LiveOffset::recorded_by_driver(bytes))?,
+        );
     }
     if case == SelectionCase::Leading {
         let selected =
@@ -530,6 +562,8 @@ pub(crate) async fn history_journey(
             live_capture.len()
         ));
     }
+    // The CLI offset is trusted as given; this run never observed where the input began.
+    let live_offset = LiveOffset::operator_supplied(ordinary_live_offset);
     let retained = journey.observe("before", None).await?;
     let before = journey.operations("before").await?;
     let replies = journey
@@ -570,13 +604,13 @@ pub(crate) async fn history_journey(
         &threads,
         &LiveCapture {
             raw: &live_capture,
-            pre_input_offset: ordinary_live_offset,
+            offset: live_offset,
         },
         &terminal_text(&reopened),
         STEER_BASE_REPLY,
     )?;
     let mut checks = Map::new();
-    checks.insert("ordinaryLiveOffset".to_owned(), json!(ordinary_live_offset));
+    checks.insert("ordinaryLiveOffset".to_owned(), json_value(&live_offset)?);
     checks.insert("history".to_owned(), json_value(&history)?);
     checks.insert("display".to_owned(), json_value(&display)?);
     checks.insert("metadata".to_owned(), json_value(&metadata)?);
@@ -590,6 +624,7 @@ pub(crate) async fn history_journey(
         limits: vec![
             "Router operation rows and public events, not native-provider counters.",
             "Usage stays unobserved when the provider emits none (metadata usage_limit).",
+            "The live-capture offset is operator-supplied (--ordinary-live-offset); this run did not independently verify where the ordinary input began in that capture.",
         ],
     })
 }

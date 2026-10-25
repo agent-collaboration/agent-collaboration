@@ -116,11 +116,15 @@ async fn shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_r
             url: "https://node.example.ts.net:8443/mcp".to_owned(),
         };
         let result = exposure.shutdown().await;
-        assert_eq!(
-            result.is_err(),
-            keep_lease,
-            "cleanup must refuse a retained own lease"
-        );
+        if keep_lease {
+            let error = result.expect_err("cleanup must refuse a retained own lease");
+            assert_eq!(
+                error.to_string(),
+                "Tailscale foreground Serve session remains after its child was reaped"
+            );
+        } else {
+            result.expect("normal foreground lease shutdown must succeed");
+        }
         let remaining: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&state_path).expect("state readback"))
                 .expect("state");

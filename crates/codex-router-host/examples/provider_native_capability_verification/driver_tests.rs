@@ -9,6 +9,7 @@ use crate::installed_client_terminal::{
     InstalledClientTerminal, contains_word, shows_trust_dialog, terminal_text,
 };
 use crate::journey_run::name_fragment;
+use crate::metadata_oracle::{LiveOffset, OffsetProvenance};
 use crate::native_journeys::SelectionCase;
 use crate::process_identity::{
     TABLE_FIELDS, own_real_uid, owned_closure, parse_process_table, remaining_owned,
@@ -351,6 +352,30 @@ fn submission_waits_for_the_drawn_text_and_the_enter_window() {
         .wait_for("refusal-probe", mark, Duration::from_secs(10))
         .unwrap();
     terminal.shutdown(Duration::from_secs(10)).unwrap();
+}
+
+#[test]
+fn the_recorded_submit_mark_splits_the_saved_capture_at_the_input() {
+    // J2 keeps this mark as the ordinary turn's driver-recorded offset: in the saved raw
+    // capture, the typed text is drawn before it and the submitted line's output after it.
+    let directory = TempDir::new().unwrap();
+    let mut terminal = cat_terminal(directory.path());
+    let mark = terminal
+        .type_and_submit("ordinary-turn-probe", Duration::from_secs(10))
+        .unwrap();
+    terminal
+        .wait_for("ordinary-turn-probe", mark, Duration::from_secs(10))
+        .unwrap();
+    terminal.shutdown(Duration::from_secs(10)).unwrap();
+    let recorded = LiveOffset::recorded_by_driver(mark);
+    assert_eq!(recorded.provenance, OffsetProvenance::RecordedByDriver);
+    let raw = fs::read(directory.path().join("cat.pty")).unwrap();
+    let (before, after) = raw.split_at(recorded.bytes);
+    assert_eq!(
+        terminal_text(before).matches("ordinary-turn-probe").count(),
+        1
+    );
+    assert!(terminal_text(after).contains("ordinary-turn-probe"));
 }
 
 #[test]

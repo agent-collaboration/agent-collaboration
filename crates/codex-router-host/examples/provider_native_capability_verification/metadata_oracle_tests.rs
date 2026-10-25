@@ -1,12 +1,13 @@
 //! The Rust metadata oracle against known-good and wrong evidence: metadata shown as
 //! prose, prose missing from history or the terminal, raw keys split across a wrap, and
-//! live-versus-reopened provenance of the original live capture.
-use crate::metadata_oracle::{LiveCapture, check_metadata_observation};
+//! live-versus-reopened provenance of the original live capture, and where its offset
+//! came from.
+use crate::metadata_oracle::{LiveCapture, LiveOffset, check_metadata_observation};
 use crate::oracle_test_support::{
     SKILL, agent, catalogue, expect_error, item, observation, thread, user,
 };
 use crate::verification_models::HistoryThread;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 const ORDINARY: &str = "STEER_BASE_OK";
 
@@ -36,7 +37,7 @@ const CAPTURE: &str = "› ordinary prompt\n\n• STEER_BASE_OK\n\n› Ask Codex
 fn live(capture: &str) -> LiveCapture<'_> {
     LiveCapture {
         raw: capture.as_bytes(),
-        pre_input_offset: 0,
+        offset: LiveOffset::operator_supplied(0),
     }
 }
 
@@ -182,7 +183,7 @@ fn a_replayed_reply_before_the_input_is_never_the_live_reply() {
             &metadata_views(),
             &LiveCapture {
                 raw: replay_only.as_bytes(),
-                pre_input_offset: offset,
+                offset: LiveOffset::operator_supplied(offset),
             },
             CAPTURE,
             ORDINARY,
@@ -195,7 +196,7 @@ fn a_replayed_reply_before_the_input_is_never_the_live_reply() {
         &metadata_views(),
         &LiveCapture {
             raw: replay_only.as_bytes(),
-            pre_input_offset: 0,
+            offset: LiveOffset::operator_supplied(0),
         },
         CAPTURE,
         ORDINARY,
@@ -208,7 +209,7 @@ fn a_replayed_reply_before_the_input_is_never_the_live_reply() {
         &metadata_views(),
         &LiveCapture {
             raw: live_reply.as_bytes(),
-            pre_input_offset: offset,
+            offset: LiveOffset::operator_supplied(offset),
         },
         CAPTURE,
         ORDINARY,
@@ -221,7 +222,7 @@ fn a_replayed_reply_before_the_input_is_never_the_live_reply() {
             &metadata_views(),
             &LiveCapture {
                 raw: live_reply.as_bytes(),
-                pre_input_offset: live_reply.len() + 1,
+                offset: LiveOffset::operator_supplied(live_reply.len() + 1),
             },
             CAPTURE,
             ORDINARY,
@@ -242,11 +243,63 @@ fn metadata_leaks_before_the_input_are_still_found() {
             &metadata_views(),
             &LiveCapture {
                 raw: capture.as_bytes(),
-                pre_input_offset: prefix.len(),
+                offset: LiveOffset::operator_supplied(prefix.len()),
             },
             CAPTURE,
             ORDINARY,
         ),
         "raw provider metadata",
+    );
+}
+
+#[test]
+fn the_offset_is_reported_with_its_provenance_and_judged_alike() {
+    let observed = observation(metadata_events(), "deadlineReached");
+    let replay_only = format!("{REPLAYED_PREFIX}› ordinary prompt\n");
+    let live_reply = format!("{REPLAYED_PREFIX}› ordinary prompt\n\n• STEER_BASE_OK\n");
+    let after_prefix = REPLAYED_PREFIX.len();
+    for offset in [
+        LiveOffset::operator_supplied(after_prefix),
+        LiveOffset::recorded_by_driver(after_prefix),
+    ] {
+        // Provenance labels the evidence; it never relaxes the post-offset replay check.
+        expect_error(
+            check_metadata_observation(
+                &observed,
+                &metadata_views(),
+                &LiveCapture {
+                    raw: replay_only.as_bytes(),
+                    offset,
+                },
+                CAPTURE,
+                ORDINARY,
+            ),
+            "absent from original live PTY after the input",
+        );
+        let result = check_metadata_observation(
+            &observed,
+            &metadata_views(),
+            &LiveCapture {
+                raw: live_reply.as_bytes(),
+                offset,
+            },
+            CAPTURE,
+            ORDINARY,
+        )
+        .unwrap();
+        assert_eq!(result.live_offset, offset);
+    }
+    // The same byte count from the operator and from the driver is different evidence.
+    assert_ne!(
+        LiveOffset::operator_supplied(after_prefix),
+        LiveOffset::recorded_by_driver(after_prefix)
+    );
+    assert_eq!(
+        serde_json::to_value(LiveOffset::operator_supplied(7)).unwrap(),
+        json!({"bytes": 7, "provenance": "operatorSupplied"})
+    );
+    assert_eq!(
+        serde_json::to_value(LiveOffset::recorded_by_driver(7)).unwrap(),
+        json!({"bytes": 7, "provenance": "recordedByDriver"})
     );
 }

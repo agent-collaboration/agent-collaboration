@@ -11,9 +11,10 @@ flowchart TD
   Host -->|native export or qualified files| Setup[Provider own setup]
   Codex -->|existing selected items and task| Facade
   Facade -->|private actor-bearing request| Host
-  Host -->|existing content| Delivery[Existing command and delivery path]
+  Host -->|existing content| Delivery[Existing delivery and prompt actor]
   Delivery -->|standard ACP prompt| Provider[Installed native provider]
-  Provider -->|existing events| History[Existing hub and history]
+  Delivery -->|submitted single-Text task| History[Existing hub and history]
+  Provider -->|unchanged native events| History
 ```
 
 The consumer codec owns Codex shapes. The Host owns target/binding/context checks and provider-specific resolution. A native adapter owns source parsing and native input conventions. The facade never scans installations. Catalogue state is a bounded observation, never a second installation registry.
@@ -73,7 +74,7 @@ The consumer codec owns Codex shapes. The Host owns target/binding/context check
 | Detail | Meaning |
 | --- | --- |
 | Owner and home | Existing Host runtime/delivery and event hub |
-| Shape | Existing SessionRef/InputId/actor-bearing commands, PromptContent and TurnOutcome |
+| Shape | Existing SessionRef/InputId/actor-bearing commands, PromptContent and TurnOutcome; the prompt actor retains its submitted single-Text task as an existing UserMessage item, separately from native output |
 | Lifetime | Existing active/unloaded/closed lifecycle; no new rejected outcome or history store |
 
 ### E8 Metadata record
@@ -263,8 +264,9 @@ sequenceDiagram
   else qualified
     H->>D: existing target/input/actor/content
     D->>N: existing ACP prompt with native input
+    D-->>F: hub retains submitted task after local send and TurnStarted
     N-->>D: actual native events/stop or error
-    D-->>F: existing hub/history events
+    D-->>F: existing hub retains unchanged native events
     F-->>C: existing live/history presentation
   end
 ```
@@ -293,7 +295,9 @@ stateDiagram-v2
 
 Keep observations request-scoped and use only already-existing native caches where their semantics qualify. Cancellable reads do not hold a hub/store lock across native I/O; discard retired-binding results. No new Host catalogue cache or background refresh mechanism. Preparation checks target scope and availability without inventing native atomic snapshots or version locks. No registry, durable state, scheduler, daemon, retry system, global configuration write or installation management is introduced.
 
-Pure loaded-history display uses the existing hub and retained native command/user items. Provider replay reconstructs `/name args` for display and may trim whitespace; it does not run it. Explicit unloaded resume keeps its existing load behavior. Metadata and genuine output remain on the merged repair's owners.
+The existing prompt actor owns the exact content it submits. After successful local send and the existing TurnStarted event, it retains an exactly single-Text prompt as an existing UserMessage start/completion pair with a fresh identity. This includes the canonical `/name args` produced by qualified lowering. Settings, encoding or send rejection adds no submitted-task item. The native projection independently retains every native user group and message ID; it does not match, suppress or rewrite native echoes. Neither input nor native-output ownership moves, and no public/stored shape or loaded-session lifetime changes.
+
+Pure loaded-history display reads those retained items from the existing hub and submits nothing. If a provider echoes, the submitted task and native echo remain distinct items even when their text matches. The existing history grouper opens a synthetic replay turn at each user item, so one real turn can display as a submitted-task-only group followed by the native echo and reply. There is no single-row-per-input guarantee or coalescing mechanism. Codex0.163 treats live user items as bookkeeping; this grouping consequence concerns read/resume. Explicit unloaded resume keeps its existing load behavior. Metadata and genuine output remain on the merged repair's owners.
 
 ## Native routes and delivery candidates
 
@@ -379,9 +383,9 @@ Existing authorized events observe exposes retained command-catalogue Notice.tex
 | --- | --- |
 | U / E | U5 / E2,E7,E8 |
 | Owner / interface | Existing metadata observation, discovery responses and pure history |
-| Shape / state | Existing SessionItem/PromptContent/TurnOutcome; native canonical command display |
+| Shape / state | Existing SessionItem/PromptContent/TurnOutcome; actor-retained submitted task plus unchanged native groups/IDs, displayed without coalescing through the existing history grouper |
 | Failure | Retention bounds explicit; no historical discovery/prompt/tool execution |
-| Proof seam | Payload identity plus unchanged real-delegate operation counts on pure loaded-history display |
+| Proof seam | Exact original submitted/native item identity and content sets, including no-echo and equal-text/distinct-ID controls; unchanged real-delegate operation counts on pure loaded-history display |
 
 ### metadata — R8
 

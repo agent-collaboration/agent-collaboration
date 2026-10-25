@@ -9,22 +9,59 @@ use serde_json::Value;
 
 const METADATA_KINDS: [&str; 4] = ["usage", "modeChange", "configChange", "sessionInfo"];
 
+/// Where a live-capture offset came from. Only a driver-recorded offset was observed by
+/// this verifier; an operator-supplied one is trusted as given, not verified.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum OffsetProvenance {
+    /// Given on the command line; the verifier did not observe where the input began.
+    OperatorSupplied,
+    /// Taken by this driver's own terminal just before it submitted the ordinary turn.
+    RecordedByDriver,
+}
+
+/// A raw capture byte offset with its provenance, reported as evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct LiveOffset {
+    pub(crate) bytes: usize,
+    pub(crate) provenance: OffsetProvenance,
+}
+
+impl LiveOffset {
+    /// An offset given on the command line, trusted as given.
+    pub(crate) fn operator_supplied(bytes: usize) -> Self {
+        Self {
+            bytes,
+            provenance: OffsetProvenance::OperatorSupplied,
+        }
+    }
+
+    /// A mark this driver's own terminal returned just before submitting the input.
+    pub(crate) fn recorded_by_driver(bytes: usize) -> Self {
+        Self {
+            bytes,
+            provenance: OffsetProvenance::RecordedByDriver,
+        }
+    }
+}
+
 /// The original live client capture of the ordinary turn: its raw bytes and the byte
-/// offset recorded just before the ordinary input was typed. A resumed client redraws
-/// earlier history before any input, so only bytes after this offset can show the new
-/// live reply; the whole capture is still scanned for metadata leaks.
+/// offset before the ordinary input. A resumed client redraws earlier history before
+/// any input, so only bytes after this offset can show the new live reply; the whole
+/// capture is still scanned for metadata leaks.
 pub(crate) struct LiveCapture<'a> {
     pub(crate) raw: &'a [u8],
-    pub(crate) pre_input_offset: usize,
+    pub(crate) offset: LiveOffset,
 }
 
 impl LiveCapture<'_> {
-    /// Terminal text after the pre-input offset, sliced from raw bytes before decoding.
+    /// Terminal text after the offset, sliced from raw bytes before decoding.
     fn after_input(&self) -> Result<String, String> {
-        let after = self.raw.get(self.pre_input_offset..).ok_or_else(|| {
+        let after = self.raw.get(self.offset.bytes..).ok_or_else(|| {
             format!(
                 "ordinary live offset {} is outside the {}-byte capture",
-                self.pre_input_offset,
+                self.offset.bytes,
                 self.raw.len()
             )
         })?;
@@ -39,6 +76,8 @@ pub(crate) struct MetadataCheck {
     pub(crate) command_catalogues: usize,
     pub(crate) usage_items: usize,
     pub(crate) assistant_item_ids: Vec<String>,
+    /// The live-capture offset the reply was judged after, with its provenance.
+    pub(crate) live_offset: LiveOffset,
 }
 
 /// An actual Codex assistant row `• REPLY`, ending the line or followed by the composer.
@@ -168,5 +207,6 @@ pub(crate) fn check_metadata_observation(
             .filter(|item| item.kind.kind == "usage")
             .count(),
         assistant_item_ids: assistant_ids,
+        live_offset: live.offset,
     })
 }
