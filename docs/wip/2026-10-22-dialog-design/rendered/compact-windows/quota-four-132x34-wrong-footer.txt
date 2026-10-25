@@ -1,0 +1,34 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Quota                                                                                                                   [?] Help │
+│                                                                                                                                  │
+│ [/] Filters  All providers · Disabled shown                                                                                      │
+│   ACCOUNT                        STATUS                  QUOTA LEFT · RESET IN                     WEEKLY PACE                   │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────── │
+│                                                                                                                                  │
+│   personal                       ✓ Available             ██████ 92% · week · 6d 16h                Healthy pace                  │
+│   ◎ OpenAI                       2 clients               █████░ 83% · 5h · 2h 10m                  0.89× reset pace              │
+│                                                                                                                                  │
+│                                                                                                    62.5k credits                 │
+│                                                                                                    2 resets                      │
+│                                                                                                                                  │
+│                                                                                                                                  │
+│ ❯ ssdev                          ★ Preferred             ██████ 92% · week · 6d 16h                Healthy pace                  │
+│   ◎ OpenAI                       2 clients               █████░ 83% · 5h · 2h 10m                  0.89× reset pace              │
+│                                                                                                                                  │
+│                                                                                                    62.5k credits                 │
+│                                                                                                    2 resets                      │
+│                                                                                                                                  │
+│                                                                                                                                  │
+│   ss-retail-relay-claude         ✓ Available             ██████ 92% · week · 6d 16h                Healthy pace                  │
+│   ◎ OpenAI                       2 clients               █████░ 83% · 5h · 2h 10m                  0.89× reset pace              │
+│                                                                                                                                  │
+│                                                                                                    62.5k credits                 │
+│                                                                                                    2 resets                      │
+│                                                                                                                                  │
+│                                                                                                                                  │
+│   ss-retail-relay-claude         ✓ Available             ██████ 92% · week · 6d 16h                Healthy pace                  │
+│   ◎ OpenAI                       2 clients               █████░ 83% · 5h · 2h 10m                  0.89× reset pace              │
+│                                                                                                                                  │
+│                                                                                                    62.5k credits                 │
+│                                                                                                    2 resets                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -268,6 +268,9 @@ mod picker_interaction_tests;
 #[path = "provider_filter_component_tests.rs"]
 mod provider_filter_component_tests;
 
+#[path = "provider_filter_focus_reveal_tests.rs"]
+mod provider_filter_focus_reveal_tests;
+
 #[path = "picker_layout_tests.rs"]
 mod picker_layout_tests;
 

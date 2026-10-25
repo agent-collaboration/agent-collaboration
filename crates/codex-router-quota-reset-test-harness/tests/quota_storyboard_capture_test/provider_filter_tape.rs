@@ -4,6 +4,15 @@ use super::{CapturedTuiSurface, FONT_FAMILY, TestResult, ensure};
 mod provider_filter_details;
 use provider_filter_details::{compact_session_details_poses, expected_session_checkpoints};
 
+// Collapsed FormField values can occupy the next terminal row. Only padding
+// and the painted frame may separate a label from its exact value; the bound
+// also accommodates VHS's retained 2400-cell right-padded screen text.
+const COLLAPSED_FILTER_VALUE_GAP: &str = r"[ \t\r\n│┃]{1,4096}";
+
+fn quota_openai_filter_ready() -> String {
+    format!(r"Account filters.*Account provider{COLLAPSED_FILTER_VALUE_GAP}OpenAI\b")
+}
+
 pub(super) fn validate_compact_checkpoints(
     surface: CapturedTuiSurface,
     columns: u16,
@@ -14,25 +23,36 @@ pub(super) fn validate_compact_checkpoints(
         CapturedTuiSurface::Sessions => {
             checkpoints == expected_session_checkpoints(columns, rows).as_slice()
         }
-        CapturedTuiSurface::Quota => {
-            checkpoints
-                == [
-                    "compact-quota-all",
-                    "compact-quota-provider-no-match",
-                    "compact-quota-chooser",
-                    "compact-quota-help",
-                    "compact-quota-disabled-choice",
-                    "compact-quota-hidden-choice",
-                    "compact-quota-claude",
-                    "compact-quota-cancelled",
-                    "compact-quota-details",
-                ]
-        }
+        CapturedTuiSurface::Quota => checkpoints == compact_quota_checkpoints(rows).as_slice(),
     };
     ensure(
         complete,
         "compact capture must contain every declared menu checkpoint",
     )
+}
+
+// 2026-10-23 C6: F5 Pool details holds the census. Top, middle and bottom
+// poses cover all ten rows at every grid; the whole body fits only at 36 rows.
+pub(super) fn compact_quota_checkpoints(rows: u16) -> Vec<&'static str> {
+    let mut checkpoints = vec!["compact-quota-all", "compact-quota-pool-details"];
+    if rows >= 36 {
+        checkpoints.push("compact-quota-pool-details-complete");
+    }
+    checkpoints.extend([
+        "compact-quota-pool-details-middle",
+        "compact-quota-pool-details-bottom",
+        "compact-quota-pool-closed",
+        "compact-quota-filters-block-pool",
+        "compact-quota-provider-no-match",
+        "compact-quota-chooser",
+        "compact-quota-help",
+        "compact-quota-disabled-choice",
+        "compact-quota-hidden-choice",
+        "compact-quota-claude",
+        "compact-quota-cancelled",
+        "compact-quota-details",
+    ]);
+    checkpoints
 }
 
 pub(super) fn build_filter_tape(
@@ -310,7 +330,7 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-new-no-match",
-                r"New session.*Machine[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
+                r"New session.*Machine[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz▏.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
             );
             tape.push_str("Escape\n");
             checkpoint(
@@ -331,7 +351,7 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-client-no-match",
-                r"Session filters.*Client[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
+                r"Session filters.*Client[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz▏.*No matching[ \t\r\n│┃┌┐]{1,128}choices.*Cancel.*Select",
             );
             tape.push_str("Escape\nEnter\nDown\nEnter\n");
             checkpoint(
@@ -422,19 +442,73 @@ pub(super) fn build_compact_filter_tape(
                 "compact-quota-all",
                 "All.*Disabled: Shown.*4/4( accounts| ▾).*Claude Delta",
             );
+            // Exact rendered census rows (quota_pool_details.rs "Label: N").
+            tape.push_str("F5\nUp@1ms 256\n");
+            checkpoint(
+                &mut tape,
+                &mut checkpoints,
+                "compact-quota-pool-details",
+                "Pool details.*Accounts: 4.*Usable: 0.*Reserve: 0.*Close",
+            );
+            if rows >= 36 {
+                checkpoint(
+                    &mut tape,
+                    &mut checkpoints,
+                    "compact-quota-pool-details-complete",
+                    "Pool details.*Accounts: 4.*Usable: 0.*Reserve: 0.*Blocked: 0.*Pool unknown: 1.*Excluded: 3.*Fresh: 0.*Stale: 0.*Data unknown: 4.*Clients: 0.*Close",
+                );
+            }
+            // The middle rows are visible at offset 0 except in the 48x12 body's
+            // four rows, where three Downs show rows 3-6 (mounted frames).
+            tape.push_str(&"Down\n".repeat(if rows == 12 { 3 } else { 0 }));
+            checkpoint(
+                &mut tape,
+                &mut checkpoints,
+                "compact-quota-pool-details-middle",
+                "Pool details.*Blocked: 0.*Pool unknown: 1.*Excluded: 3.*Close",
+            );
+            tape.push_str("Down@1ms 256\n");
+            checkpoint(
+                &mut tape,
+                &mut checkpoints,
+                "compact-quota-pool-details-bottom",
+                "Pool details.*Fresh: 0.*Stale: 0.*Data unknown: 4.*Clients: 0.*Close",
+            );
+            tape.push_str("Escape\n");
+            checkpoint(
+                &mut tape,
+                &mut checkpoints,
+                "compact-quota-pool-closed",
+                "All.*Disabled: Shown.*4/4( accounts| ▾).*Claude Delta",
+            );
+            // An obscuring modal owns input: F5 must not open Pool details.
+            tape.push_str("Ctrl+F\nWait+Screen /(?s)Account filters.*Account provider/\nF5\n");
+            checkpoint(
+                &mut tape,
+                &mut checkpoints,
+                "compact-quota-filters-block-pool",
+                "Account filters.*Account provider",
+            );
+            tape.push_str(
+                "Escape\nWait+Screen /(?s)All.*Disabled: Shown.*4\\/4( accounts| ▾).*Claude Delta/\n",
+            );
             tape.push_str("Ctrl+F\nEnter\nType \"zznomatchzz\"\n");
+            // C7: the terminal text carries the exact end caret after the query.
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-quota-provider-no-match",
-                r"Account filters.*Account provider[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz.*No matching[ \t\r\n│┃┌┐]{1,128}choices",
+                r"Account filters.*Account provider[:]?.*Search:[ \t\r\n│┃┌┐]{1,128}zznomatchzz▏.*No matching[ \t\r\n│┃┌┐]{1,128}choices",
             );
             tape.push_str("Escape\nEnter\nDown\nEnter\nDown\n");
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
                 "compact-quota-chooser",
-                r"Account filters.*Account provider[ \t]+OpenAI.*Disabled accounts[ \t]+Shown",
+                &format!(
+                    r"{}.*Disabled accounts{COLLAPSED_FILTER_VALUE_GAP}Shown\b",
+                    quota_openai_filter_ready()
+                ),
             );
             tape.push_str("Up\nF1\n");
             checkpoint(
@@ -443,7 +517,10 @@ pub(super) fn build_compact_filter_tape(
                 "compact-quota-help",
                 "Quota Help.*Move field",
             );
-            tape.push_str("Escape\nWait+Screen /(?s)Account filters.*Account provider[ \\t]+OpenAI/\nEnter\nDown\nEnter\nTab\nEnter\n");
+            tape.push_str(&format!(
+                "Escape\nWait+Screen /(?s){}/\nEnter\nDown\nEnter\nTab\nEnter\n",
+                quota_openai_filter_ready()
+            ));
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
@@ -464,7 +541,10 @@ pub(super) fn build_compact_filter_tape(
                 "compact-quota-claude",
                 "Claude.*Disabled: Hidden.*1/4( accounts| ▾).*Claude Gamma",
             );
-            tape.push_str("Ctrl+F\nEnter\nUp\nEnter\nWait+Screen /(?s)Account filters.*Account provider[ \\t]+OpenAI/\nEscape\n");
+            tape.push_str(&format!(
+                "Ctrl+F\nEnter\nUp\nEnter\nWait+Screen /(?s){}/\nEscape\n",
+                quota_openai_filter_ready()
+            ));
             checkpoint(
                 &mut tape,
                 &mut checkpoints,
@@ -486,238 +566,5 @@ pub(super) fn build_compact_filter_tape(
 }
 
 #[cfg(test)]
-mod compact_capture_contract_tests {
-    use super::*;
-
-    #[test]
-    #[ignore = "requires the exact nominated pinned VHS and fresh parser output; launches no UI"]
-    fn all_compact_tapes_parse_with_the_nominated_vhs_before_ui() -> TestResult<()> {
-        let vhs = super::super::required_executable("QUOTA_STORYBOARD_VHS")?;
-        let root = std::fs::canonicalize(
-            std::env::var_os("QUOTA_STORYBOARD_OUTPUT").ok_or("fresh parser output required")?,
-        )?;
-        let output = root.join("compact-tape-parser-validation");
-        std::fs::create_dir(&output)?;
-        for surface in [CapturedTuiSurface::Sessions, CapturedTuiSurface::Quota] {
-            for (columns, rows) in crate::CURRENT_STATIC_VIEWPORTS {
-                let label = format!("{}-{columns}x{rows}", surface.label());
-                let (tape, checkpoints) = build_compact_filter_tape(surface, columns, rows);
-                validate_compact_checkpoints(surface, columns, rows, &checkpoints)?;
-                let path = output.join(format!("{label}.tape"));
-                std::fs::write(&path, tape)?;
-                let result = std::process::Command::new(&vhs)
-                    .arg("validate")
-                    .arg(&path)
-                    .output()?;
-                std::fs::write(output.join(format!("{label}.stdout")), &result.stdout)?;
-                std::fs::write(output.join(format!("{label}.stderr")), &result.stderr)?;
-                std::fs::write(
-                    output.join(format!("{label}.exit")),
-                    result
-                        .status
-                        .code()
-                        .ok_or("parser exited without a code")?
-                        .to_string(),
-                )?;
-                ensure(
-                    result.status.success(),
-                    "actual VHS rejected a complete compact tape",
-                )?;
-            }
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn compact_quota_consumer_accepts_every_required_named_scene() -> TestResult<()> {
-        for (columns, rows) in [(120, 36), (76, 30), (48, 24), (48, 12)] {
-            let (_, checkpoints) =
-                build_compact_filter_tape(CapturedTuiSurface::Quota, columns, rows);
-            validate_compact_checkpoints(CapturedTuiSurface::Quota, columns, rows, &checkpoints)?;
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn compact_quota_consumer_rejects_missing_or_replaced_named_scenes() {
-        let (_, checkpoints) = build_compact_filter_tape(CapturedTuiSurface::Quota, 120, 36);
-        for omitted_index in 0..checkpoints.len() {
-            let mut missing = checkpoints.clone();
-            missing.remove(omitted_index);
-            assert!(
-                validate_compact_checkpoints(CapturedTuiSurface::Quota, 120, 36, &missing).is_err(),
-                "missing scene {} must reject before capture",
-                checkpoints[omitted_index]
-            );
-        }
-        let mut replaced = checkpoints.clone();
-        replaced[7] = replaced[0];
-        assert!(
-            validate_compact_checkpoints(CapturedTuiSurface::Quota, 120, 36, &replaced).is_err()
-        );
-        let mut extra = checkpoints;
-        extra.push("unexpected-scene");
-        assert!(validate_compact_checkpoints(CapturedTuiSurface::Quota, 120, 36, &extra).is_err());
-    }
-
-    #[test]
-    fn compact_capture_preserves_each_declared_menu_checkpoint() {
-        for (surface, expected) in [
-            (
-                CapturedTuiSurface::Sessions,
-                [
-                    "compact-sessions-all",
-                    "compact-sessions-codex-details",
-                    "compact-sessions-fork",
-                    "compact-sessions-fork-choice",
-                    "compact-sessions-new",
-                    "compact-sessions-new-machine",
-                    "compact-sessions-new-no-match",
-                    "compact-sessions-new-returned",
-                    "compact-sessions-machine-sources",
-                    "compact-sessions-client-no-match",
-                    "compact-sessions-chooser",
-                    "compact-sessions-help",
-                    "compact-sessions-claude",
-                    "compact-sessions-cancelled",
-                    "compact-sessions-details",
-                    "compact-sessions-folder-choice",
-                    "compact-sessions-model-provider-choice",
-                    "compact-sessions-source-choice",
-                    "compact-sessions-runtime-choice",
-                    "compact-sessions-sort-choice",
-                ]
-                .as_slice(),
-            ),
-            (
-                CapturedTuiSurface::Quota,
-                [
-                    "compact-quota-all",
-                    "compact-quota-provider-no-match",
-                    "compact-quota-chooser",
-                    "compact-quota-help",
-                    "compact-quota-disabled-choice",
-                    "compact-quota-hidden-choice",
-                    "compact-quota-claude",
-                    "compact-quota-cancelled",
-                    "compact-quota-details",
-                ]
-                .as_slice(),
-            ),
-        ] {
-            for (columns, rows) in crate::CURRENT_STATIC_VIEWPORTS.into_iter().rev() {
-                let (tape, checkpoints) = build_compact_filter_tape(surface, columns, rows);
-                let measured: &[&str] = match (columns, rows) {
-                    (32, 24) | (40, 24) => &[
-                        "compact-sessions-details-title",
-                        "compact-sessions-details",
-                        "compact-sessions-details-path",
-                    ],
-                    (48, 12) => &[
-                        "compact-sessions-details-title",
-                        "compact-sessions-details-identity",
-                        "compact-sessions-details-state",
-                        "compact-sessions-details-path",
-                    ],
-                    (48, 24) => &["compact-sessions-details-title", "compact-sessions-details"],
-                    _ => &["compact-sessions-details"],
-                };
-                let expected: Vec<&str> = expected
-                    .iter()
-                    .flat_map(|name| {
-                        if *name == "compact-sessions-details" {
-                            measured.to_vec()
-                        } else {
-                            vec![*name]
-                        }
-                    })
-                    .collect();
-                assert_eq!(
-                    checkpoints, expected,
-                    "each declared menu/Details pose needs its own original"
-                );
-                validate_compact_checkpoints(surface, columns, rows, &checkpoints)
-                    .expect("the real capture consumer must accept every declared checkpoint");
-                assert_eq!(tape.matches("Screenshot ").count(), expected.len());
-                assert!(tape.contains("Wait+Screen /QUOTA_STORYBOARD_CHILD_EXIT=0/"));
-                // Exact ordered equality above rejects unknown scenes while the
-                // adopted journey may legitimately grow to cover more menus.
-            }
-        }
-    }
-
-    #[test]
-    fn quota_no_match_wait_accepts_wrapped_words_but_rejects_wrong_content() -> TestResult<()> {
-        let (tape, _) = build_compact_filter_tape(CapturedTuiSurface::Quota, 48, 24);
-        let wait = tape
-            .lines()
-            .find(|line| line.starts_with("Wait+Screen /(?s)Account filters.*Account provider[:]?"))
-            .ok_or("no-match wait missing")?;
-        let pattern = wait
-            .strip_prefix("Wait+Screen /")
-            .and_then(|line| line.strip_suffix('/'))
-            .ok_or("no-match pattern missing")?;
-        // This common regex subset preserves the exact ordered words, allowing
-        // only whitespace/frame separators actually seen in the failed PTY.
-        let result = std::process::Command::new("/usr/bin/python3").args(["-c", r#"
-import re, sys
-pattern = re.compile(sys.argv[1])
-prefix = "Account filters Account provider Search: zznomatchzz "
-valid = [prefix + "No matching choices",
-         prefix + "\n│ ││                    No matching       ┃ ││ │\n│ ││                    choices           │ ││ │",
-         prefix + "\n│ A│                    No matching       ┃ │  │\n│ ┌│                    choices           │ │┐ │",
-         "Account filters Account provider\n│ Search: zznomatchzz No matching choices"]
-invalid = [prefix + "No matching results", prefix + "choices No matching",
-           prefix + "No matching", prefix + "No matching other choices",
-           prefix + "No matching Ctrl+F choices",
-           prefix + "No matching" + " " * 129 + "choices",
-           "Account filters Search: zznomatchzz No matching choices",
-           "Account filters Account provider Search: another No matching choices"]
-assert all(pattern.search(text) for text in valid), "wrapped exact label must match"
-assert not any(pattern.search(text) for text in invalid), "wrong content must reject"
-"#, pattern]).output()?;
-        if !result.status.success() {
-            return Err(std::io::Error::other(
-                String::from_utf8_lossy(&result.stderr).into_owned(),
-            )
-            .into());
-        }
-        Ok(())
-    }
-
-    #[test]
-    fn quota_draft_capture_requires_labeled_values_without_offscreen_summary() {
-        for (columns, rows) in [(120, 36), (76, 30), (48, 24), (48, 12)] {
-            let (tape, _) = build_compact_filter_tape(CapturedTuiSurface::Quota, columns, rows);
-            assert!(
-                !tape.contains("Draft: OpenAI"),
-                "offscreen decorative heading cannot own readiness"
-            );
-            assert!(tape.contains(r"Account provider[ \t]+OpenAI.*Disabled accounts[ \t]+Shown"));
-            assert!(tape.contains("Down\nWait+Screen /(?s)Account filters.*Account provider"));
-            assert!(
-                tape.contains("Up\nF1\n"),
-                "restore provider focus before existing Help/edit journey"
-            );
-            assert!(tape.contains("Escape\nWait+Screen /(?s)Account filters.*Account provider"));
-        }
-    }
-
-    #[test]
-    fn quota_capture_requires_exact_provider_disabled_and_count_variants() {
-        for (columns, rows) in [(120, 36), (76, 30), (48, 24)] {
-            let (tape, checkpoints) =
-                build_compact_filter_tape(CapturedTuiSurface::Quota, columns, rows);
-            assert_eq!(checkpoints.len(), 9);
-            // The adopted row contract keeps full names at narrow widths too.
-            assert!(tape.contains("All.*Disabled: Shown.*4\\/4( accounts| ▾).*Claude Delta"));
-            assert!(tape.contains("Claude.*Disabled: Hidden.*1\\/4( accounts| ▾).*Claude Gamma"));
-            assert!(tape.contains("Ctrl+F\nEnter\nType \"zznomatchzz\""));
-            assert!(tape.contains(r"No matching[ \t\r\n│┃┌┐]{1,128}choices"));
-            assert!(tape.contains("Quota Help.*Move field"));
-            assert!(tape.contains("Account details.*Claude Gamma"));
-            assert!(tape.contains("QUOTA_STORYBOARD_CHILD_EXIT=0"));
-            assert!(!tape.contains("Wait+Screen /4\\/4 accounts/"));
-        }
-    }
-}
+#[path = "provider_filter_tape_test.rs"]
+mod compact_capture_contract_tests;

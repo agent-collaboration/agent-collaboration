@@ -285,7 +285,11 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                     Some(if enabled {
                                         Color::White
                                     } else {
-                                        Color::DarkGrey
+                                        Color::Rgb {
+                                            r: 166,
+                                            g: 175,
+                                            b: 189,
+                                        }
                                     })
                                 );
                                 sender

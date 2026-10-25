@@ -80,7 +80,8 @@ async fn quota_details_dialog_resizes_scrolls_and_blocks_background_navigation()
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,height:0usize));
+    let terminal_width_reader: fn() -> Option<usize> = || None;
+    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,terminal_width_reader:Some(terminal_width_reader),height:0usize));
     let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let mut phase = 0;
@@ -89,7 +90,7 @@ async fn quota_details_dialog_resizes_scrolls_and_blocks_background_navigation()
         while let Some(canvas) = frames.next().await {
             let frame = canvas.to_string();
             match phase {
-                0 if frame.contains("Details") => {
+                0 if frame.contains("Pool details") => {
                     sender.send(TerminalEvent::Resize(48, 24)).unwrap();
                     phase = 1;
                 }
@@ -137,7 +138,7 @@ async fn quota_details_dialog_resizes_scrolls_and_blocks_background_navigation()
                     sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
                     phase = 6;
                 }
-                6 if !frame.contains("Account details") && frame.contains("Details") => {
+                6 if !frame.contains("Account details") && frame.contains("Pool details") => {
                     assert!(
                         frame.contains("❯ alpha"),
                         "background click changed focus: {frame}"
@@ -272,7 +273,7 @@ async fn quota_provider_filters_real_component_partitions_provider_and_disabled_
             "{text}"
         );
         assert!(
-            text.contains("Pool-wide: responses") && text.contains("Accounts 4"),
+            text.contains("Pool details") && !text.contains("Pool-wide:"),
             "{text}"
         );
     }
@@ -683,7 +684,7 @@ async fn owner_feedback_quota_chrome_retains_wrapped_counters_and_controls() {
             "typed counters may wrap; title, controls, list border and group heading stay compact at {width}: {frame}"
         );
         assert!(
-            frame.contains("Details") && frame.contains("Disabled") && frame.contains("Shown"),
+            frame.contains("Pool details") && frame.contains("Disabled") && frame.contains("Shown"),
             "keep active controls and state visible: {frame}"
         );
     }
@@ -746,28 +747,34 @@ fn account_rows_wrap_full_name_with_provider_below_and_fixed_selector_columns() 
 
 #[tokio::test]
 async fn quota_header_exposes_distinct_availability_and_operational_censuses() {
-    let frame = render_quota_capture_model_at(
+    // C6 moves the full census, including zeros, into the F5 view.
+    let frames = render_quota_filter_phases(
         quota_two_account_view_model(),
-        160,
+        120,
         36,
-        vec![provider_filter_key(KeyCode::Esc)],
+        vec![
+            ("Quota status", vec![provider_filter_key(KeyCode::F(5))]),
+            ("Accounts: 2", vec![provider_filter_key(KeyCode::Esc)]),
+            ("Filters", vec![provider_filter_key(KeyCode::Esc)]),
+        ],
+        None,
     )
     .await;
-    let header = frame.lines().take(6).collect::<Vec<_>>().join("\n");
-    for counter in [
-        "Accounts 2",
-        "Usable 2",
-        "Reserve 0",
-        "Blocked 0",
-        "Pool unknown 0",
-        "Excluded 0",
-        "Fresh 2",
-        "Stale 0",
+    let pool = frames
+        .iter()
+        .find(|frame| frame.contains("Accounts: 2"))
+        .unwrap();
+    for fact in [
+        "Usable: 2",
+        "Reserve: 0",
+        "Blocked: 0",
+        "Pool unknown: 0",
+        "Excluded: 0",
+        "Fresh: 2",
+        "Stale: 0",
+        "Data unknown: 0",
     ] {
-        assert!(
-            header.contains(counter),
-            "missing {counter} in typed pool/operational header: {frame}"
-        );
+        assert!(pool.contains(fact), "{pool}");
     }
 }
 
@@ -793,20 +800,20 @@ async fn routing_preference_and_stale_status_do_not_move_with_keyboard_focus() {
     )
     .await;
     let frame = frames.last().unwrap();
+    let alpha = frame.find("alpha").unwrap();
+    let beta = frame.find("❯ beta").unwrap();
+    let alpha_region = frame.get(alpha..beta).unwrap();
+    let beta_region = frame.get(beta..).unwrap();
     assert!(
-        frame
-            .lines()
-            .any(|line| line.contains("alpha") && line.contains("★ preferred")),
-        "routing preference remains on alpha: {frame}"
+        alpha_region.contains("★ preferred"),
+        "routing preference stays on alpha: {frame}"
     );
     assert!(
-        frame
-            .lines()
-            .any(|line| line.contains("❯ beta") && line.contains("◷ stale")),
-        "focus remains independent of freshness-derived status: {frame}"
+        beta_region.contains("◷ stale"),
+        "focus independent of freshness: {frame}"
     );
     assert!(
-        frame.contains("Usable 2") && frame.contains("Stale 1"),
-        "whole-pool availability and freshness remain independent: {frame}"
+        !frame.contains("Stale 1"),
+        "C6 census stays in Pool details: {frame}"
     );
 }

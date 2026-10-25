@@ -121,7 +121,11 @@ async fn all_grid_credit_choices_keep_selection_empty_query_and_cancelled_policy
                                 .text_style()
                                 .unwrap()
                                 .color,
-                            Some(Color::DarkGrey),
+                            Some(Color::Rgb {
+                                r: 166,
+                                g: 175,
+                                b: 189
+                            }),
                             "{frame}"
                         );
                         evidence.push(("empty", frame));
@@ -243,7 +247,11 @@ async fn no_match_select_is_disabled_and_pointer_and_enter_preserve_query_throug
                                 .text_style()
                                 .unwrap()
                                 .color,
-                            Some(Color::DarkGrey),
+                            Some(Color::Rgb {
+                                r: 166,
+                                g: 175,
+                                b: 189
+                            }),
                             "no available choice means visibly disabled Select: {dialog}"
                         );
                         let words = dialog.split_whitespace().collect::<Vec<_>>().join(" ");

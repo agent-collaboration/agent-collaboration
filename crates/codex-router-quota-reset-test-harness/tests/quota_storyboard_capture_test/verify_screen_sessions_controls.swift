@@ -56,17 +56,25 @@ extension VerifyScreenImage {
         failures.append(name)
       }
     }
+    // 2026-10-23 structured Details: fields, then the Original title and
+    // Conversation sections; the action row sits above the "… Esc Close" hint.
+    let bodyTitleY = 0.44
     let details = [
       region("Session details Help", 0.1, 0.94),
       region("Claude Gamma session · project-a [000.0011]", 0.1, 0.89),
-      region("Title: Claude Gamma session · project-a", 0.1, 0.81),
-      region("Client: Claude Code", 0.1, 0.76),
-      region("Machine: This machine", 0.1, 0.71),
-      region("Session ID: 00000000-0000-4000-8000-000000000011", 0.1, 0.66),
-      region("Endpoint: Claude Gamma", 0.1, 0.61),
-      region("State: Idle", 0.1, 0.56),
-      region("Working directory: /repo/project-a", 0.1, 0.51),
-      region("Close Copy session ID Copy path", 0.1, 0.2),
+      region("Client actions have not been checked", 0.1, 0.84),
+      region("Session ID: 00000000-0000-4000-8000-000000000011", 0.1, 0.79),
+      region("Endpoint: Claude Gamma", 0.1, 0.74),
+      region("State: Idle", 0.1, 0.69),
+      region("Client: Claude Code", 0.1, 0.64),
+      region("Machine: This machine", 0.1, 0.59),
+      region("Working directory: /repo/project-a", 0.1, 0.54),
+      region("Original title", 0.1, 0.49),
+      region("Claude Gamma session · project-a", 0.1, bodyTitleY),
+      region("Conversation", 0.1, 0.39),
+      region("history unavailable", 0.1, 0.34),
+      region("Close Copy session ID Copy path", 0.1, 0.25),
+      region("←/→ Tab focus · Enter/Space activate · Esc Close", 0.1, 0.2),
     ]
     let valid = observe(
       checkpoint: .compactSessionsDetails, recognizedLines: details.map(\.text), regions: details)
@@ -82,7 +90,7 @@ extension VerifyScreenImage {
     }
     func titlePose(_ context: String, bodyTitle: Bool) -> [ScreenTextRegion] {
       details.filter {
-        !$0.text.contains("[000.0011]") && (bodyTitle || !$0.text.hasPrefix("Title:"))
+        !$0.text.contains("[000.0011]") && (bodyTitle || $0.bounds.minY != bodyTitleY)
       } + [region(context, 0.1, 0.89)]
     }
     let titleCases: [(String, [ScreenTextRegion], Bool)] = [
@@ -140,7 +148,169 @@ extension VerifyScreenImage {
         failures.append("c8-folder-query-" + query)
       }
     }
-    return (noMatchCases.count + titleCases.count + 6, failures)
+    let layoutControls = checkSessionsDetailsLayoutControls()
+    failures += layoutControls.failures
+    return (noMatchCases.count + titleCases.count + 6 + layoutControls.count, failures)
+  }
+
+  // Box geometry of the retained cua-sessions-calibration-003 provider-details
+  // wide original (label and value columns, a separate right-aligned tag, the
+  // action row above the "Esc Close" hint, background columns either side),
+  // with the fixture's actual text; plus the stacked layout below 52 columns.
+  static func checkSessionsDetailsLayoutControls() -> (count: Int, failures: [String]) {
+    func box(_ text: String, _ x: Double, _ y: Double, _ width: Double, _ height: Double)
+      -> ScreenTextRegion
+    {
+      ScreenTextRegion(text: text, bounds: CGRect(x: x, y: y, width: width, height: height))
+    }
+    let wide = [
+      box("Session details", 0.0751, 0.8429, 0.0662, 0.0143),
+      box("Help", 0.3989, 0.8429, 0.0215, 0.0143),
+      box("Claude Gamma session • project-a", 0.0769, 0.8286, 0.1324, 0.0143),
+      box("[000.0011]", 0.3792, 0.8286, 0.0411, 0.0143),
+      box("Client actions have not been checked", 0.0751, 0.8057, 0.1485, 0.0143),
+      box("Session ID:", 0.0769, 0.7857, 0.0465, 0.0171),
+      box("00000000-0000-4000-8000-000000000011", 0.1574, 0.7857, 0.17, 0.0171),
+      box("Endpoint:", 0.0751, 0.7714, 0.04, 0.0143),
+      box("Claude Gamma", 0.1574, 0.7714, 0.05, 0.0143),
+      box("State:", 0.0751, 0.7600, 0.0286, 0.0143),
+      box("Idle", 0.1574, 0.7600, 0.0197, 0.0143),
+      box("Client:", 0.0769, 0.7457, 0.0304, 0.0171),
+      box("Claude Code", 0.1574, 0.7457, 0.0483, 0.0171),
+      box("Machine:", 0.0751, 0.7314, 0.035, 0.0143),
+      box("This machine", 0.1574, 0.7314, 0.05, 0.0143),
+      box("Working directory:", 0.0751, 0.7171, 0.0769, 0.0143),
+      box("/repo/project-a", 0.1574, 0.7171, 0.0644, 0.0171),
+      box("Original title", 0.0769, 0.7057, 0.0608, 0.0143),
+      box("Claude Gamma session - project-a", 0.0733, 0.6914, 0.1360, 0.0143),
+      box("Conversation", 0.0769, 0.6771, 0.0519, 0.0171),
+      box("Close Copy session ID", 0.0751, 0.6629, 0.0930, 0.0171),
+      box("Copy path", 0.1717, 0.6629, 0.0429, 0.0171),
+      box("←/→ Tab focus • Enter/Space activate • Esc Close", 0.0769, 0.6486, 0.1986, 0.0171),
+      box("Claude-Lo", 0.0322, 0.6943, 0.0394, 0.0114),
+      box("ow", 0.4700, 0.7600, 0.0100, 0.0143),
+    ]
+    let allPairs = [
+      "details context claude gamma [000.0011]", "details endpoint claude gamma",
+      "details path /repo/project-a",
+      "details session id 00000000-0000-4000-8000-000000000011", "details state idle",
+      "details title claude gamma session · project-a",
+    ]
+    func replacing(_ text: String, with replacement: ScreenTextRegion?) -> [ScreenTextRegion] {
+      wide.compactMap { $0.text == text ? replacement : $0 }
+    }
+    let shortContext = replacing(
+      "Claude Gamma session • project-a",
+      with: box("Claude Gamma session • proj", 0.0769, 0.8286, 0.11, 0.0143))
+    // Below 52 columns each value stacks under its label and long values wrap.
+    let stacked = [
+      box("Session details", 0.05, 0.90, 0.3, 0.03), box("Help", 0.80, 0.90, 0.08, 0.03),
+      box("Claude Gamma sess [000.0011]", 0.05, 0.86, 0.8, 0.03),
+      box("Session ID:", 0.05, 0.80, 0.2, 0.03),
+      box("00000000-0000-4000-8000-", 0.05, 0.76, 0.6, 0.03),
+      box("000000000011", 0.05, 0.72, 0.3, 0.03),
+      box("Endpoint:", 0.05, 0.68, 0.2, 0.03), box("Claude Gamma", 0.05, 0.64, 0.3, 0.03),
+      box("State:", 0.05, 0.60, 0.15, 0.03), box("Idle", 0.05, 0.56, 0.1, 0.03),
+      box("Close Copy session ID", 0.05, 0.20, 0.5, 0.03),
+      box("Tab/←→ focus • Enter/Space activate", 0.05, 0.16, 0.8, 0.03),
+    ]
+    let stackedPairs = [
+      "details context claude gamma [000.0011]", "details endpoint claude gamma",
+      "details session id 00000000-0000-4000-8000-000000000011", "details state idle",
+    ]
+    // 76x30 native overlap: the Close box's top edge reaches 0.0034
+    // into the Working directory row directly above it
+    // (root-007-details-path-native.txt), applied to the wide geometry.
+    let pathAboveClose = wide.filter {
+      !["Original title", "Claude Gamma session - project-a", "Conversation", "Close Copy session ID",
+        "Copy path", "←/→ Tab focus • Enter/Space activate • Esc Close"].contains($0.text)
+    } + [
+      box("Close Copy session ID", 0.0751, 0.6930, 0.0930, 0.0275),
+      box("Copy path", 0.1717, 0.6930, 0.0429, 0.0275),
+      box("←/→ Tab focus • Enter/Space activate • Esc Close", 0.0769, 0.6750, 0.1986, 0.0171),
+    ]
+    let cases: [(String, [ScreenTextRegion], [String])] = [
+      ("details-wide-native-geometry", wide, allPairs),
+      (
+        "details-native-tag-above-row-edge",
+        replacing("[000.0011]", with: box("[000.0011]", 0.3792, 0.8233, 0.0411, 0.0198)),
+        allPairs
+      ),
+      (
+        "details-tag-on-heading-row-not-context",
+        replacing("[000.0011]", with: box("[000.0011]", 0.3792, 0.8429, 0.0411, 0.0143)),
+        []
+      ),
+      (
+        "details-title-only-from-original-title-section", shortContext, allPairs
+      ),
+      (
+        "details-title-text-under-conversation-is-not-title",
+        shortContext.filter { !["Claude Gamma session - project-a", "Conversation"].contains($0.text) }
+          + [
+            box("Conversation", 0.0769, 0.6914, 0.0519, 0.0143),
+            box("Claude Gamma session - project-a", 0.0733, 0.6771, 0.1360, 0.0143),
+          ],
+        allPairs.filter { !$0.hasPrefix("details title") }
+      ),
+      (
+        "details-short-context-without-section-title",
+        shortContext.filter { $0.text != "Claude Gamma session - project-a" },
+        allPairs.filter { !$0.hasPrefix("details title") }
+      ),
+      (
+        "details-background-right-value-not-field",
+        replacing("Idle", with: box("Idle", 0.4700, 0.7600, 0.0197, 0.0143)).filter { $0.text != "ow" },
+        allPairs.filter { $0 != "details state idle" }
+      ),
+      (
+        "details-left-background-title-not-section",
+        shortContext.filter { !["Claude Gamma session - project-a", "Claude-Lo"].contains($0.text) }
+          + [box("Claude Gamma session - project-a", 0.0322, 0.6914, 0.1360, 0.0143)],
+        allPairs.filter { !$0.hasPrefix("details title") }
+      ),
+      (
+        "details-wrong-state-value",
+        replacing("Idle", with: box("Running", 0.1574, 0.7600, 0.04, 0.0143)),
+        allPairs.filter { $0 != "details state idle" }
+      ),
+      // The "… Esc Close" hint never stands in for the Close action row.
+      (
+        "details-missing-close-action-row",
+        replacing("Close Copy session ID", with: box("Copy session ID", 0.1126, 0.6629, 0.06, 0.0171)),
+        []
+      ),
+      (
+        "details-wrong-action-row",
+        replacing("Close Copy session ID", with: box("Cancel Select", 0.0751, 0.6629, 0.06, 0.0171)),
+        []
+      ),
+      (
+        "details-two-action-rows-ambiguous",
+        wide + [box("Close", 0.0751, 0.6300, 0.03, 0.0143)], []
+      ),
+      ("details-stacked-wrapped-values", stacked, stackedPairs),
+      (
+        "details-stacked-value-past-next-label",
+        stacked.filter { $0.text != "Idle" }
+          + [box("Client:", 0.05, 0.555, 0.15, 0.03), box("Idle", 0.05, 0.52, 0.1, 0.03)],
+        stackedPairs.filter { $0 != "details state idle" }
+      ),
+      ("details-path-row-above-close-edge", pathAboveClose, allPairs),
+      (
+        "details-path-value-on-close-row",
+        pathAboveClose.map {
+          $0.text == "/repo/project-a" ? box("/repo/project-a", 0.2300, 0.6930, 0.0644, 0.0275) : $0
+        },
+        allPairs.filter { $0 != "details path /repo/project-a" }
+      ),
+      ("details-invalid-geometry", wide + [box("Idle", -0.1, 0.5, 0.1, 0.01)], []),
+    ]
+    var failures: [String] = []
+    for (name, regions, expected) in cases {
+      if sessionsDetailsPairs(regions) != expected.sorted() { failures.append(name) }
+    }
+    return (cases.count, failures)
   }
 }
 

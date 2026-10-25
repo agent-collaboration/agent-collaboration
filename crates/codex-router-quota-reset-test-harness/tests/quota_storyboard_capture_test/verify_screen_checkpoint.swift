@@ -72,6 +72,12 @@ enum ScreenCheckpoint: String {
   case compactQuotaClaude = "compact-quota-claude"
   case compactQuotaCancelled = "compact-quota-cancelled"
   case compactQuotaDetails = "compact-quota-details"
+  case compactQuotaPoolDetails = "compact-quota-pool-details"
+  case compactQuotaPoolDetailsMiddle = "compact-quota-pool-details-middle"
+  case compactQuotaPoolDetailsComplete = "compact-quota-pool-details-complete"
+  case compactQuotaPoolDetailsBottom = "compact-quota-pool-details-bottom"
+  case compactQuotaPoolClosed = "compact-quota-pool-closed"
+  case compactQuotaFiltersBlockPool = "compact-quota-filters-block-pool"
 
   case componentQuotaBrowse = "component-quota-browse"
   case componentQuotaBrowseCreditWindow = "component-quota-browse-credit-window"
@@ -116,35 +122,121 @@ enum ScreenCheckpoint: String {
   case componentQuotaResetResultBottom = "component-quota-reset-result-bottom"
   case componentQuotaReturned = "component-quota-returned"
 
+  case componentQuotaHardBrowse = "component-quota-hard-browse"
+  case componentQuotaHardBrowseTop = "component-quota-hard-browse-top"
+  case componentQuotaHardAlphaNameContinued = "component-quota-hard-alpha-name-continued"
+  case componentQuotaHardBetaNameContinued = "component-quota-hard-beta-name-continued"
+  case componentQuotaHardAlphaWeek = "component-quota-hard-alpha-week"
+  case componentQuotaHardAlphaShort = "component-quota-hard-alpha-short"
+  case componentQuotaHardBetaSelected = "component-quota-hard-beta-selected"
+  case componentQuotaHardBetaWeek = "component-quota-hard-beta-week"
+  case componentQuotaHardBetaShort = "component-quota-hard-beta-short"
+  case componentQuotaHardBetaWindows = "component-quota-hard-beta-windows"
+  case componentQuotaHardBetaExtra = "component-quota-hard-beta-extra"
+  case componentQuotaHardPoolDetails = "component-quota-hard-pool-details"
+  case componentQuotaHardPoolDetailsMiddle = "component-quota-hard-pool-details-middle"
+  case componentQuotaHardPoolDetailsComplete = "component-quota-hard-pool-details-complete"
+  case componentQuotaHardPoolDetailsBottom = "component-quota-hard-pool-details-bottom"
+  case componentQuotaHardPoolClosed = "component-quota-hard-pool-closed"
+  case componentQuotaHardPoolClosedTop = "component-quota-hard-pool-closed-top"
+  case componentQuotaHardDetails = "component-quota-hard-details"
+
   // These are the current bound fixtures' pool projection, not account-row words.
-  // Zero detail counters on constrained screens remain a contextual Help duty.
-  var requiredQuotaHeaderCounts: [String] {
+  // 2026-10-23 C6: routine pool census moved from the browse header into the
+  // read-only Pool details dialog (F5). Every compact fixture pair, including
+  // zeros, must be bound inside that dialog. The values are the compact
+  // fixture's census previously adopted for the browse header.
+  static let compactPoolCensus = [
+    "accounts 4", "usable 0", "reserve 0", "blocked 0", "pool unknown 1", "excluded 3",
+    "fresh 0", "stale 0", "data unknown 4", "clients 0",
+  ]
+
+  // visual-hard-cases fixture census (quota_storyboard_fixture_test.rs).
+  static let hardCasePoolCensus = [
+    "accounts 2", "usable 1", "reserve 0", "blocked 1", "pool unknown 0", "excluded 0",
+    "fresh 0", "stale 1", "data unknown 1", "clients 1",
+  ]
+
+  var requiredPoolCensus: [String] {
     switch self {
-    case .componentQuotaBrowse, .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-      .componentQuotaBrowsePaceValue, .componentQuotaBrowsePageReturned,
-      .componentQuotaNextAccount, .componentQuotaRestoredAccount, .componentQuotaReturned:
-      ["accounts 2", "usable 2"]
-    case .compactQuotaAll, .compactQuotaClaude, .compactQuotaCancelled:
-      ["accounts 4", "usable 0", "pool unknown 1", "excluded 3", "data unknown 4"]
-    default:
-      []
+    // Top, middle and bottom subsets each fit the smallest body (48x12 shows
+    // four rows; pool-six-grid-body-proof.log mounted frames, same
+    // DialogBodyViewport), so together they cover all ten rows at every grid.
+    // The complete pose is captured only at 120x36, where the whole body fits.
+    case .compactQuotaPoolDetails: ["accounts 4", "usable 0", "reserve 0"]
+    case .compactQuotaPoolDetailsMiddle: ["blocked 0", "pool unknown 1", "excluded 3"]
+    case .compactQuotaPoolDetailsBottom: ["fresh 0", "stale 0", "data unknown 4", "clients 0"]
+    case .compactQuotaPoolDetailsComplete: Self.compactPoolCensus
+    case .componentQuotaHardPoolDetails: ["accounts 2", "usable 1", "reserve 0"]
+    case .componentQuotaHardPoolDetailsMiddle: ["blocked 1", "pool unknown 0", "excluded 0", "fresh 0"]
+    case .componentQuotaHardPoolDetailsBottom: ["stale 1", "data unknown 1", "clients 1"]
+    case .componentQuotaHardPoolDetailsComplete: Self.hardCasePoolCensus
+    default: []
     }
   }
+
+  // The hard fixture's credential notice is the Pool body's last row.
+  var requiresPoolNotice: Bool {
+    self == .componentQuotaHardPoolDetailsBottom || self == .componentQuotaHardPoolDetailsComplete
+  }
+
+  // C2: each window line must be one rendered row "pct · window · reset" in its
+  // account's block. Markers are "window <account> <pct> <window> <reset>";
+  // "—" is the unknown reset.
+  var requiredWindowLines: [String] {
+    switch self {
+    case .componentQuotaHardBrowse: ["window alpha 92% week 6d 16h", "window alpha 83% 5h 2h 10m"]
+    case .componentQuotaHardBetaWindows: ["window beta 75% week —", "window beta no data 5h —"]
+    case .componentQuotaHardAlphaWeek: ["window alpha 92% week 6d 16h"]
+    case .componentQuotaHardAlphaShort: ["window alpha 83% 5h 2h 10m"]
+    case .componentQuotaHardBetaWeek: ["window beta 75% week —"]
+    case .componentQuotaHardBetaShort: ["window beta no data 5h —"]
+    default: []
+    }
+  }
+
+  // Census labels that must never return to a browse header (C6).
+  var forbidsBrowseCensus: Bool {
+    switch self {
+    case .compactQuotaAll, .compactQuotaClaude, .compactQuotaCancelled, .compactQuotaPoolClosed,
+      .compactQuotaFiltersBlockPool, .componentQuotaBrowse, .componentQuotaBrowseCreditWindow,
+      .componentQuotaBrowsePaceHeading, .componentQuotaBrowsePaceValue,
+      .componentQuotaBrowsePageReturned, .componentQuotaNextAccount,
+      .componentQuotaRestoredAccount, .componentQuotaReturned, .componentQuotaHardBrowse,
+      .componentQuotaHardBetaWindows, .componentQuotaHardBetaExtra, .componentQuotaHardPoolClosed,
+      .componentQuotaHardBrowseTop, .componentQuotaHardAlphaWeek, .componentQuotaHardAlphaShort,
+      .componentQuotaHardBetaSelected, .componentQuotaHardBetaWeek, .componentQuotaHardBetaShort,
+      .componentQuotaHardAlphaNameContinued, .componentQuotaHardBetaNameContinued,
+      .componentQuotaHardPoolClosedTop:
+      true
+    default:
+      false
+    }
+  }
+
+  // C9: Quota browse labels only its actual bindings (Spec input table).
+  static let quotaBrowseFooterHints = [
+    "F4 Details", "F3 Filters", "F5 Pool", "F1 Help", "Ctrl+R Options",
+  ]
+
+  // Session Details labels focused navigation/activation and modified shortcuts.
+  static let sessionDetailsFooterHints = ["focus", "activate"]
 
   var requiredMarkers: [String] {
     switch self {
     case .componentQuotaBrowse, .componentQuotaBrowsePageReturned:
-      ["Quota status", "OpenAI"]
+      ["Quota status", "OpenAI"] + Self.quotaBrowseFooterHints
     case .componentQuotaBrowseCreditWindow:
-      ["Quota status", "62.5k"]
+      ["Quota status", "62.5k credits"] + Self.quotaBrowseFooterHints
     case .componentQuotaBrowsePaceHeading:
-      ["Quota status", "5h", "99%", "Weekly pace"]
+      ["Quota status", "5h", "99%", "Weekly pace"] + Self.quotaBrowseFooterHints
     case .componentQuotaBrowsePaceValue:
-      ["Quota status", "burn unavailable"]
+      ["Quota status", "burn unavailable"] + Self.quotaBrowseFooterHints
     case .componentQuotaNextAccount:
       ["Quota status", "Claude Research Account Beta Full Name", "Claude"]
+        + Self.quotaBrowseFooterHints
     case .componentQuotaRestoredAccount:
-      ["Quota status", "OpenAI"]
+      ["Quota status", "OpenAI"] + Self.quotaBrowseFooterHints
     case .componentQuotaDetailsTop:
       ["Account details", "Status", "Reason", "Close"]
     case .componentQuotaDetailsBottom:
@@ -184,7 +276,7 @@ enum ScreenCheckpoint: String {
     case .componentQuotaPolicyChoice:
       ["Credit usage", "alpha-tag", "Allow", "Cancel", "Select"]
     case .componentQuotaPolicyNoMatch:
-      ["Credit usage", "Use credits: zznomatchzz", "No matching choices", "Cancel", "Select"]
+      ["Credit usage", "field use credits query zznomatchzz", "No matching choices", "Cancel", "Select"]
     case .componentQuotaPolicyChoiceReturned:
       ["Credit usage", "Use credits Disallow", "Cancel", "Save"]
     case .componentQuotaPolicyDraft:
@@ -220,7 +312,40 @@ enum ScreenCheckpoint: String {
     case .componentQuotaResetResultBottom:
       ["Reset result", "alpha-tag", "Return to quota status.", "Close"]
     case .componentQuotaReturned:
-      ["Quota status", "OpenAI"]
+      ["Quota status", "OpenAI"] + Self.quotaBrowseFooterHints
+    // C2/C3/C6 hard cases: credential error stays visible; stale and unknown
+    // stay explicit; credit text is quantity-first with a separate stale cue.
+    case .componentQuotaHardBrowse:
+      ["Quota status", "Credentials locked"] + Self.quotaBrowseFooterHints
+    case .componentQuotaHardBetaWindows:
+      [
+        "Quota status", "Credentials locked", "Claude Research Account Beta Full Name",
+        "week stale",
+      ] + Self.quotaBrowseFooterHints
+    // 48x12 one-fact poses (measured pages); Beta's facts are Beta-unique.
+    case .componentQuotaHardBrowseTop, .componentQuotaHardAlphaWeek, .componentQuotaHardAlphaShort,
+      .componentQuotaHardBetaWeek:
+      ["Quota status", "Credentials locked"] + Self.quotaBrowseFooterHints
+    case .componentQuotaHardBetaShort:
+      ["Quota status", "Credentials locked", "week stale"] + Self.quotaBrowseFooterHints
+    // 48x12 top pose fits only the name's first row; its continuation and the
+    // captured Details tag complete the identity.
+    case .componentQuotaHardBetaSelected, .componentQuotaHardPoolClosedTop:
+      ["Quota status", "Claude Research Account Beta Full"] + Self.quotaBrowseFooterHints
+    case .componentQuotaHardAlphaNameContinued, .componentQuotaHardBetaNameContinued:
+      ["Quota status", "Credentials locked"] + Self.quotaBrowseFooterHints
+    // Same child after body paging; only Beta has these credit facts.
+    case .componentQuotaHardBetaExtra:
+      ["Quota status", "Credentials locked", "125.5 credits", "Credits stale"]
+        + Self.quotaBrowseFooterHints
+    case .componentQuotaHardPoolDetails, .componentQuotaHardPoolDetailsMiddle:
+      ["Pool details", "Close"]
+    case .componentQuotaHardPoolDetailsComplete, .componentQuotaHardPoolDetailsBottom:
+      ["Pool details", "Credentials locked", "Close"]
+    case .componentQuotaHardPoolClosed:
+      ["Quota status", "Claude Research Account Beta Full Name"] + Self.quotaBrowseFooterHints
+    case .componentQuotaHardDetails:
+      ["Account details", "[beta-tag]", "Credentials locked", "Close"]
     case .compactSessionsAll:
       ["Sessions", "Help", "This machine", "All providers", "6/6", "Codex Alpha"]
     case .compactSessionsChooser:
@@ -291,8 +416,15 @@ enum ScreenCheckpoint: String {
         "details context claude gamma [000.0011]",
         "details path /repo/project-a",
       ]
-    case .compactQuotaAll:
+    case .compactQuotaAll, .compactQuotaPoolClosed:
       ["Quota status", "Help", "All", "Disabled: Shown", "4/4", "Claude Delta"]
+        + Self.quotaBrowseFooterHints
+    // F5 pressed while Account filters owns input: filters stay, no census.
+    case .compactQuotaFiltersBlockPool:
+      ["Account filters", "Account provider", "Cancel"]
+    case .compactQuotaPoolDetails, .compactQuotaPoolDetailsComplete,
+      .compactQuotaPoolDetailsBottom, .compactQuotaPoolDetailsMiddle:
+      ["Pool details", "Close"]
     case .compactQuotaProviderNoMatch:
       [
         "Account filters", "Help", "field account provider query zznomatchzz",
@@ -312,6 +444,7 @@ enum ScreenCheckpoint: String {
       ["Quota Help", "Account filters", "Move field", "Close"]
     case .compactQuotaClaude, .compactQuotaCancelled:
       ["Quota status", "Help", "Claude", "Disabled: Hidden", "1/4", "Claude Gamma", "Details"]
+        + Self.quotaBrowseFooterHints
     case .compactQuotaDetails:
       ["Account details", "Help", "Status", "Reason", "Claude Gamma", "Close"]
     case .sessionsDetails:
@@ -422,7 +555,7 @@ enum ScreenCheckpoint: String {
     switch self {
     case .compactSessionsAll: "6/6"
     case .compactSessionsClaude, .compactSessionsCancelled: "2/6"
-    case .compactQuotaAll: "4/4"
+    case .compactQuotaAll, .compactQuotaPoolClosed: "4/4"
     case .compactQuotaClaude, .compactQuotaCancelled: "1/4"
     default: nil
     }
@@ -434,8 +567,11 @@ enum ScreenCheckpoint: String {
       .componentQuotaConfirmHelpTop, .componentQuotaConfirmHelpIdentity:
       []
     case .componentQuotaReturned:
-      hiddenShortcutMarkers + [
-        "Options", "Account details", "Credit usage", "Weekly floor", "Quota Help",
+      // The browse footer now names "Ctrl+R Options" (C9), so an open Options
+      // dialog is identified by its own page titles and body content instead.
+      sampleShortcutMarkers + [
+        "Options · Resets", "Options · Credits", "Review", "Credit balance", "Use credits",
+        "Account details", "Credit usage", "Weekly floor", "Quota Help",
         "Confirm reset", "Checking reset", "Reset in progress", "Reset result", "Success", "[No]",
         "[Yes]",
       ]
@@ -448,10 +584,12 @@ enum ScreenCheckpoint: String {
       hiddenShortcutMarkers
     case .componentQuotaDetailsTop, .componentQuotaDetailsBottom:
       hiddenShortcutMarkers + ["Selected account"]
-    case .componentQuotaPolicyNoMatch, .componentQuotaPolicyChoiceReturned, .componentQuotaBrowse,
-      .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-      .componentQuotaBrowsePaceValue, .componentQuotaBrowsePageReturned, .componentQuotaNextAccount,
-      .componentQuotaRestoredAccount,
+    case .componentQuotaBrowse, .componentQuotaBrowseCreditWindow,
+      .componentQuotaBrowsePaceHeading, .componentQuotaBrowsePaceValue,
+      .componentQuotaBrowsePageReturned, .componentQuotaNextAccount,
+      .componentQuotaRestoredAccount:
+      sampleShortcutMarkers
+    case .componentQuotaPolicyNoMatch, .componentQuotaPolicyChoiceReturned,
       .componentQuotaFloorOriginal, .componentQuotaFloorDraft,
       .componentQuotaFloorCancelled, .componentQuotaFloorSaved, .componentQuotaOptionsIdentity,
       .componentQuotaResetInventory, .componentQuotaResetLastPage, .componentQuotaCreditsIdentity,
@@ -492,9 +630,16 @@ enum ScreenCheckpoint: String {
       ]
     case .compactSessionsDetails, .compactSessionsDetailsTitle, .compactSessionsDetailsIdentity,
       .compactSessionsDetailsState, .compactSessionsDetailsPath:
-      hiddenShortcutMarkers + ["Draft:", "Session client provider", "Sessions Help"]
-    case .compactQuotaAll:
-      hiddenShortcutMarkers + ["Account provider", "Quota Help"]
+      // C9: Details shows its actual focus/activation and modified shortcuts;
+      // a fixed Enter-is-Resume label is rejected separately by the checker.
+      sampleShortcutMarkers + ["Draft:", "Session client provider", "Sessions Help"]
+    case .compactQuotaAll, .compactQuotaPoolClosed:
+      sampleShortcutMarkers + ["Account provider", "Quota Help", "Account filters"]
+    case .compactQuotaFiltersBlockPool:
+      ["Quota Help", "Account details"]
+    case .compactQuotaPoolDetails, .compactQuotaPoolDetailsComplete,
+      .compactQuotaPoolDetailsBottom, .compactQuotaPoolDetailsMiddle:
+      ["Account details", "Account filters", "Quota Help"]
     case .compactQuotaProviderNoMatch:
       hiddenShortcutMarkers + ["Quota Help", "Sessions Help"]
     case .compactQuotaDisabledChoice:
@@ -506,7 +651,18 @@ enum ScreenCheckpoint: String {
     case .compactQuotaHelp:
       ["Sessions Help", "Draft:"]
     case .compactQuotaClaude, .compactQuotaCancelled:
-      hiddenShortcutMarkers + ["Claude De", "OpenAI Al", "OpenAI Be", "Account provider", "Draft:"]
+      sampleShortcutMarkers + ["Claude De", "OpenAI Al", "OpenAI Be", "Account provider", "Draft:"]
+    case .componentQuotaHardBrowse, .componentQuotaHardBetaWindows, .componentQuotaHardBetaExtra,
+      .componentQuotaHardPoolClosed, .componentQuotaHardBrowseTop, .componentQuotaHardAlphaWeek,
+      .componentQuotaHardAlphaShort, .componentQuotaHardBetaSelected, .componentQuotaHardBetaWeek,
+      .componentQuotaHardBetaShort, .componentQuotaHardAlphaNameContinued,
+      .componentQuotaHardBetaNameContinued, .componentQuotaHardPoolClosedTop:
+      sampleShortcutMarkers + ["Account details", "Account filters", "Quota Help"]
+    case .componentQuotaHardPoolDetails, .componentQuotaHardPoolDetailsComplete,
+      .componentQuotaHardPoolDetailsBottom, .componentQuotaHardPoolDetailsMiddle:
+      ["Account details", "Account filters", "Quota Help"]
+    case .componentQuotaHardDetails:
+      ["Account filters", "Quota Help"]
     case .compactQuotaDetails:
       hiddenShortcutMarkers + ["Draft:", "Account provider", "Quota Help", "Selected account"]
     case .sessionsDetails, .quotaDetails:
@@ -594,5 +750,11 @@ enum ScreenCheckpoint: String {
 
   private var hiddenShortcutMarkers: [String] {
     ["Ctrl+", "ctrl-", "F1", "F2", "F3", "F4", "enter apply", "esc cancel"]
+  }
+
+  // Surfaces whose footer names actual bindings (C9) still reject the accepted
+  // HTML study's sample letter shortcuts and its unshipped Account actions.
+  private var sampleShortcutMarkers: [String] {
+    ["[/]", "[?]", "[a]", "[c]", "[p]", "[m]", "[f]", "[enter]", "Account actions"]
   }
 }

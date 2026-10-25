@@ -8,6 +8,20 @@ use codex_router_core::ids::AccountId;
 use codex_router_tui::{DialogAction, DialogFrame, DialogMargins, DialogPresentation};
 use iocraft::prelude::*;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum QuotaDetailsDialog {
+    Account(AccountId),
+    Pool,
+}
+impl QuotaDetailsDialog {
+    pub(super) fn account_id(&self) -> Option<&AccountId> {
+        match self {
+            Self::Account(id) => Some(id),
+            Self::Pool => None,
+        }
+    }
+}
+
 pub(super) struct QuotaDialogViewProps<'a> {
     pub width: u16,
     pub height: u16,
@@ -15,7 +29,7 @@ pub(super) struct QuotaDialogViewProps<'a> {
     pub confirmation_choices: Option<AnyElement<'static>>,
     pub filter_state: QuotaFilterState,
     pub filter_controller: QuotaFilterController,
-    pub details_dialog: State<Option<AccountId>>,
+    pub details_dialog: State<Option<QuotaDetailsDialog>>,
     pub view_model: &'a QuotaStatusViewModel,
     pub filter_modal_owns_input: bool,
     pub help_action: Option<AnyElement<'static>>,
@@ -48,6 +62,19 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
         account_options_state,
         mut panel,
     } = props;
+    if matches!(
+        details_dialog.read().as_ref(),
+        Some(QuotaDetailsDialog::Pool)
+    ) && !filter_modal_owns_input
+    {
+        return Some(super::quota_pool_details::render_pool_details(
+            width,
+            height,
+            &view_model.header,
+            view_model.selection_projection_degraded,
+            details_dialog,
+        ));
+    }
     let presentation = DialogPresentation::default();
     let margins = DialogMargins {
         top: 1,
@@ -72,7 +99,11 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
     if details_dialog.read().is_none() && !filter_modal_owns_input {
         return None;
     }
-    if let Some(identity) = details_dialog.read().as_ref() {
+    if let Some(identity) = details_dialog
+        .read()
+        .as_ref()
+        .and_then(QuotaDetailsDialog::account_id)
+    {
         panel.focused_details = view_model
             .rows
             .iter()

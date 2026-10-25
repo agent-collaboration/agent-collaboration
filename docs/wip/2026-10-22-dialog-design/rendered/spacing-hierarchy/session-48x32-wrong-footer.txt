@@ -1,0 +1,32 @@
+╭──────────────────────────────────────────────╮
+│ Session details                     [?] Help │
+│                                              │
+│ Lead · ACP metadata presentation             │
+│ Session ID                                   │
+│ 01a10e91-24b8-7db4-9a42-8ee73f12c6b7         │
+│ Directory                                    │
+│ ~/code/projects/codex-router.acp-metadata    │
+│ Original title                               │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+│ Preserve useful metadata without dumping raw │
+│ JSON into assistant prose.                   │
+╰──────────────────────────────────────────────╯

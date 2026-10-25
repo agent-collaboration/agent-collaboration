@@ -2,6 +2,7 @@ mod quota_reset_pty_test {
     mod credit_refresh_feedback_test;
     mod isolated_fixture_test;
     mod loopback_provider_test;
+    mod no_color_pty_test;
     mod provider_filter_pty_test;
     mod stored_model_diagnostic_test;
     mod terminal_interaction_test;
@@ -668,7 +669,11 @@ mod quota_reset_pty_test {
         let details_start = terminal.transcript_len();
         terminal.send(b"\r")?;
         terminal.wait_for_text_after("Session details", details_start, SEMANTIC_WAIT)?;
-        terminal.wait_for_text_after("Session ID: thread-b", details_start, SEMANTIC_WAIT)?;
+        terminal.wait_for_styled_text_after(
+            "Session ID: thread-b",
+            details_start,
+            SEMANTIC_WAIT,
+        )?;
         ensure(
             terminal.child_is_running()?,
             "ordinary Enter must inspect the focused session without launching",

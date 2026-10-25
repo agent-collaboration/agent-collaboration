@@ -20,8 +20,13 @@ use super::isolated_fixture_test::ensure;
 use super::loopback_provider_test::HeldLoopbackProvider;
 
 mod capture_receipt;
+mod capture_tools;
+use capture_tools::{
+    CaptureTools, permanent_adapter_source, required_executable, verified_node_executable,
+};
 mod cleanup_test;
 mod failure_evidence;
+mod native_adapter_pty_test;
 mod owned_capture;
 use capture_receipt::write_receipt;
 use owned_capture::{
@@ -32,11 +37,12 @@ mod provider_filter_capture;
 mod provider_filter_tape;
 mod quota_component_capture;
 mod quota_component_tape;
+mod vhs_wait_pattern_oracle;
 pub(super) use provider_filter_capture::ProviderFilterJourney;
 pub(super) use provider_filter_capture::run_provider_filter_storyboard;
 pub(super) use quota_component_capture::{
     run_component_failure_retention_control, run_first_frame_component_diagnostic,
-    run_normal_component_capture,
+    run_hard_case_component_capture, run_normal_component_capture,
 };
 
 #[derive(Clone, Copy)]
@@ -253,227 +259,6 @@ fn build_tape(columns: u16, rows: u16, expected_timeout: bool) -> String {
     tape
 }
 
-struct CaptureTools {
-    vhs: PathBuf,
-    ttyd: PathBuf,
-    image_verifier: PathBuf,
-    dynamic_library_path: String,
-    image_timeout: Duration,
-    stop_file: Option<PathBuf>,
-}
-
-impl CaptureTools {
-    fn from_environment() -> TestResult<Self> {
-        Ok(Self {
-            vhs: required_executable("QUOTA_STORYBOARD_VHS")?,
-            ttyd: required_executable("QUOTA_STORYBOARD_TTYD")?,
-            image_verifier: required_executable("QUOTA_STORYBOARD_IMAGE_VERIFIER")?,
-            dynamic_library_path: std::env::var("QUOTA_STORYBOARD_DYLD_LIBRARY_PATH")?,
-            image_timeout: Duration::from_secs(30),
-            stop_file: std::env::var_os("QUOTA_STORYBOARD_OUTPUT")
-                .filter(|_| std::env::var_os("QUOTA_STORYBOARD_CUA_SURFACE").is_none())
-                .map(|root| PathBuf::from(root).join("capture-stop")),
-        })
-    }
-
-    fn write_fixed_child_adapter(
-        &self,
-        output: &Path,
-        binary: &Path,
-        fixture: &QuotaResetFixture,
-        provider_address: std::net::SocketAddr,
-        surface: CapturedTuiSurface,
-    ) -> TestResult<()> {
-        let configuration = format!(
-            "{{\"binary\":{},\"root\":{},\"capability\":{},\"provider\":{},\"output\":{},\"ttyd\":{},\"temporary_directory\":{},\"dynamic_library_path\":{},\"surface\":{}}}\n",
-            encode_json_string(&binary.to_string_lossy()),
-            encode_json_string(&fixture.root().to_string_lossy()),
-            encode_json_string(fixture.capability()),
-            encode_json_string(&provider_address.to_string()),
-            encode_json_string(&output.to_string_lossy()),
-            encode_json_string(&self.ttyd.to_string_lossy()),
-            encode_json_string(&std::env::temp_dir().to_string_lossy()),
-            encode_json_string(&self.dynamic_library_path),
-            encode_json_string(surface.label()),
-        );
-        fs::write(output.join("fixture-command.json"), configuration)?;
-        self.write_child_adapter_files(output)
-    }
-
-    fn write_child_adapter_files(&self, output: &Path) -> TestResult<()> {
-        // The extracted Homebrew library retains an installed plugin directory.
-        // libwebsockets also searches cwd; supply the exact same verified plugin
-        // there without installing or rewriting any system library.
-        let library_directory = std::env::split_paths(&self.dynamic_library_path)
-            .next()
-            .ok_or("isolated library directory is missing")?;
-        fs::copy(
-            library_directory.join("libwebsockets-evlib_uv.dylib"),
-            output.join("libwebsockets-evlib_uv.dylib"),
-        )?;
-        let shim = output.join("shim");
-        fs::create_dir(&shim)?;
-        fs::write(shim.join("ttyd"), include_str!("fixed_ttyd_adapter.py"))?;
-        fs::set_permissions(shim.join("ttyd"), fs::Permissions::from_mode(0o700))?;
-        fs::write(
-            output.join("fixed_quota_child.py"),
-            include_str!("fixed_quota_child.py"),
-        )?;
-        Ok(())
-    }
-
-    fn start_capture(&self, output: &Path, capability: &str) -> TestResult<OwnedCapture> {
-        self.start_capture_with_owner(
-            output,
-            CapturedChildOwnership::FixtureCapability(capability.to_owned()),
-        )
-    }
-
-    fn start_capture_with_owner(
-        &self,
-        output: &Path,
-        child_ownership: CapturedChildOwnership,
-    ) -> TestResult<OwnedCapture> {
-        ensure_capture_running(self.stop_file.as_deref())?;
-        let stdout = fs::File::create(output.join("vhs.stdout"))?;
-        let stderr = fs::File::create(output.join("vhs.stderr"))?;
-        let browser_temporary_directory = create_browser_temporary_directory(output)?;
-        let child = Command::new(&self.vhs)
-            .arg("quota.tape")
-            .current_dir(output)
-            .env_clear()
-            .env(
-                "PATH",
-                format!(
-                    "{}:/opt/homebrew/bin:/usr/bin:/bin",
-                    output.join("shim").display()
-                ),
-            )
-            .env("HOME", output)
-            .env("TMPDIR", &browser_temporary_directory)
-            .env("LANG", "C.UTF-8")
-            .env("TERM", "xterm-256color")
-            .env("DYLD_LIBRARY_PATH", &self.dynamic_library_path)
-            .env(
-                "QUOTA_STORYBOARD_FIXTURE_COMMAND",
-                output.join("fixture-command.json"),
-            )
-            .stdout(stdout)
-            .stderr(stderr)
-            .process_group(0)
-            .spawn();
-        let child = match child {
-            Ok(child) => child,
-            Err(error) => {
-                // No child exists yet to own this directory's cleanup.
-                fs::remove_dir_all(&browser_temporary_directory)?;
-                return Err(error.into());
-            }
-        };
-        Ok(OwnedCapture {
-            child,
-            group_released: false,
-            output: output.to_path_buf(),
-            child_ownership,
-            browser_temporary_directory,
-            stop_file: self.stop_file.clone(),
-        })
-    }
-
-    fn verify_image(
-        &self,
-        output: &Path,
-        checkpoint: &str,
-        image_path: &Path,
-        expect_rejection: bool,
-    ) -> TestResult<()> {
-        ensure_capture_running(self.stop_file.as_deref())?;
-        let label = if expect_rejection {
-            format!(
-                "reject-{checkpoint}-{}",
-                image_path
-                    .file_stem()
-                    .ok_or("image name missing")?
-                    .to_string_lossy()
-            )
-        } else {
-            checkpoint.to_owned()
-        };
-        let stdout_path = output.join(format!("{label}.image-observation.json"));
-        let mut child = Command::new(&self.image_verifier)
-            .arg(checkpoint)
-            .arg(image_path)
-            .stdin(std::process::Stdio::null())
-            .stdout(fs::File::create(&stdout_path)?)
-            .stderr(fs::File::create(
-                output.join(format!("{label}.image-observation.stderr")),
-            )?)
-            .spawn()?;
-        let record = fs::write(
-            output.join(format!("{label}.image-verifier.pid")),
-            child.id().to_string(),
-        );
-        if record.is_err() {
-            let termination = child.kill();
-            let settlement = child.wait();
-            termination?;
-            settlement?;
-        }
-        record?;
-        let deadline = std::time::Instant::now() + self.image_timeout;
-        let status = loop {
-            if let Err(stopped) = ensure_capture_running(self.stop_file.as_deref()) {
-                let termination = child.kill();
-                let settlement = child.wait();
-                termination?;
-                settlement?;
-                return Err(stopped);
-            }
-            match child.try_wait() {
-                Ok(Some(status)) => break status,
-                Ok(None) if std::time::Instant::now() < deadline => {
-                    std::thread::sleep(Duration::from_millis(10));
-                }
-                result => {
-                    let termination = child.kill();
-                    let settlement = child.wait();
-                    termination?;
-                    settlement?;
-                    return match result {
-                        Err(error) => Err(error.into()),
-                        _ => Err(std::io::Error::new(
-                            std::io::ErrorKind::TimedOut,
-                            "owned image checker exceeded its deadline; stdout/stderr retained",
-                        )
-                        .into()),
-                    };
-                }
-            }
-        };
-        let stdout = fs::read(&stdout_path)?;
-        if expect_rejection {
-            ensure(
-                status.code() == Some(1)
-                    && String::from_utf8_lossy(&stdout).contains("missingMarkers"),
-                "blank or wrong-scene image must fail its scene oracle, not crash or fail to launch",
-            )
-        } else {
-            ensure(
-                status.success(),
-                "saved PNG failed its independent visible-scene oracle",
-            )
-        }
-    }
-}
-
-fn required_executable(name: &str) -> TestResult<PathBuf> {
-    let path = fs::canonicalize(std::env::var_os(name).ok_or_else(|| {
-        std::io::Error::other(format!("{name} must nominate the exact isolated tool"))
-    })?)?;
-    ensure(path.is_file(), "capture tool must be an existing file")?;
-    Ok(path)
-}
-
 fn validate_png(path: &Path) -> TestResult<()> {
     let bytes = fs::read(path)?;
     ensure(
@@ -515,17 +300,41 @@ fn encode_json_string(value: &str) -> String {
     encoded
 }
 
+fn run_actual_fixture_reader(
+    record: &str,
+    check: &str,
+    arguments: &[&str],
+) -> TestResult<std::process::Output> {
+    use std::io::Write as _;
+    let (node, _) = verified_node_executable()?;
+    let reader = permanent_adapter_source("fixture-child.ts")?;
+    let mut child = Command::new(node)
+        .args(["--input-type=module", "-e"])
+        .arg(format!(
+            "import {{ pathToFileURL }} from 'node:url';\nconst [reader, ...args] = process.argv.slice(1);\nconst {{ readFixtureCommand }} = await import(pathToFileURL(reader).href);\nconst record = readFixtureCommand('/dev/stdin');\n{check}\n"
+        ))
+        .arg(reader)
+        .args(arguments)
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    child
+        .stdin
+        .take()
+        .ok_or("reader stdin missing")?
+        .write_all(record.as_bytes())?;
+    Ok(child.wait_with_output()?)
+}
+
 #[test]
-fn fixture_command_strings_round_trip_through_the_actual_python_json_reader() -> TestResult<()> {
+fn fixture_command_strings_round_trip_through_the_actual_typescript_reader() -> TestResult<()> {
     let all_controls: String = (0_u8..=31).map(char::from).collect();
-    let old_debug_encoded = format!("{all_controls:?}");
-    let old_reader = Command::new("/usr/bin/python3")
-        .args(["-c", "import json,sys; json.loads(sys.argv[1])"])
-        .arg(old_debug_encoded)
-        .output()?;
+    let old_reader =
+        run_actual_fixture_reader(&format!("{{\"value\":{all_controls:?}}}"), "", &[])?;
     ensure(
         !old_reader.status.success()
-            && String::from_utf8_lossy(&old_reader.stderr).contains("JSONDecodeError"),
+            && String::from_utf8_lossy(&old_reader.stderr).contains("SyntaxError"),
         "old Debug string formatting must fail for JSON control-character escaping",
     )?;
     for expected in [
@@ -539,11 +348,108 @@ fn fixture_command_strings_round_trip_through_the_actual_python_json_reader() ->
             .map(|byte| format!("{byte:02x}"))
             .collect::<String>();
         ensure(
-            Command::new("/usr/bin/python3")
-                .args(["-c", "import json,sys; assert json.loads(sys.argv[1]).encode('utf-8').hex() == sys.argv[2]"])
-                .arg(encode_json_string(expected)).arg(expected_hex).status()?.success(),
-            "fixture JSON must round trip through Python's actual reader",
+            run_actual_fixture_reader(
+                &format!("{{\"value\":{}}}\n", encode_json_string(expected)),
+                "if (Buffer.from(record['value'] ?? '', 'utf8').toString('hex') !== args[0]) process.exit(1);",
+                &[&expected_hex],
+            )?
+            .status
+            .success(),
+            "fixture JSON must round trip through the actual TypeScript reader",
         )?;
     }
     Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
+async fn fixed_ttyd_shim_executes_bound_node_and_permanent_adapter() -> TestResult<()> {
+    let fixture = QuotaResetFixture::create().await?;
+    let output = fixture.root().join("node-shim-output");
+    let library = fixture.root().join("node-shim-library");
+    fs::create_dir(&output)?;
+    fs::create_dir(&library)?;
+    fs::write(
+        library.join("libwebsockets-evlib_uv.dylib"),
+        b"controlled library",
+    )?;
+    let ttyd = fixture.root().join("controlled-ttyd");
+    fs::write(
+        &ttyd,
+        "#!/bin/sh\n[ \"$#\" = 1 ] && [ \"$1\" = --version ] || exit 9\nprintf 'controlled-ttyd-version\\n'\n",
+    )?;
+    fs::set_permissions(&ttyd, fs::Permissions::from_mode(0o700))?;
+    let tools = CaptureTools {
+        vhs: PathBuf::new(),
+        ttyd: ttyd.clone(),
+        image_verifier: PathBuf::new(),
+        dynamic_library_path: library.to_string_lossy().into_owned(),
+        image_timeout: Duration::from_secs(1),
+        stop_file: None,
+    };
+    tools.write_child_adapter_files(&output)?;
+    let shim = fs::read_to_string(output.join("shim/ttyd"))?;
+    ensure(
+        shim.starts_with("#!/bin/sh\n")
+            && shim.contains("ttyd-adapter.ts")
+            && shim.contains(verified_node_executable()?.0.to_string_lossy().as_ref()),
+        "fixed ttyd shim must exec the bound Node and permanent TypeScript adapter",
+    )?;
+    fs::write(
+        output.join("fixture-command.json"),
+        format!(
+            "{{\"output\":{},\"ttyd\":{},\"dynamic_library_path\":{}}}",
+            encode_json_string(&output.to_string_lossy()),
+            encode_json_string(&ttyd.to_string_lossy()),
+            encode_json_string(&library.to_string_lossy()),
+        ),
+    )?;
+    let result = Command::new(output.join("shim/ttyd"))
+        .arg("--version")
+        .env(
+            "QUOTA_STORYBOARD_FIXTURE_COMMAND",
+            output.join("fixture-command.json"),
+        )
+        .output()?;
+    ensure(
+        result.status.success(),
+        "native Node ttyd shim version execution failed",
+    )?;
+    ensure(
+        result.stdout == b"controlled-ttyd-version\n",
+        "shim changed real ttyd argv/stdout",
+    )?;
+    ensure(
+        fs::read(output.join("ttyd.stderr"))?.is_empty(),
+        "shim diagnostics were not privately redirected",
+    )?;
+    ensure(
+        fs::metadata(output.join("ttyd.stderr"))?
+            .permissions()
+            .mode()
+            & 0o777
+            == 0o600,
+        "shim diagnostic file must remain private mode0600",
+    )?;
+    fixture.assert_read_only()?;
+    Ok(())
+}
+
+#[test]
+fn node_binding_refuses_changed_digest_before_adapter_launch() -> TestResult<()> {
+    let (node, _) = verified_node_executable()?;
+    let result = Command::new(std::env::current_exe()?)
+        .args([
+            "--exact",
+            "capture_support::fixed_ttyd_shim_executes_bound_node_and_permanent_adapter",
+            "--nocapture",
+        ])
+        .env("QUOTA_STORYBOARD_NODE", node)
+        .env("QUOTA_STORYBOARD_NODE_SHA256", "0".repeat(64))
+        .output()?;
+    ensure(
+        !result.status.success()
+            && String::from_utf8_lossy(&result.stderr)
+                .contains("declared Node executable SHA256 changed"),
+        "changed runtime binding must fail at the exact native Node guard before adapter launch",
+    )
 }

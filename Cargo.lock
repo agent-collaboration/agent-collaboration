@@ -1383,6 +1383,7 @@ dependencies = [
  "codex-router-secret-store",
  "codex-router-state",
  "portable-pty",
+ "regex",
  "sha2 0.10.9",
  "tokio",
 ]
@@ -3558,8 +3559,7 @@ dependencies = [
 [[package]]
 name = "iocraft"
 version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "39264184585824b7c1ea33a63699a37c964ba590036981a5c04ceeb96afd259d"
+source = "git+https://github.com/ShravanSunder/iocraft.git?rev=829ebd86bd07fe2100c096ec6d785875ec2e0c79#829ebd86bd07fe2100c096ec6d785875ec2e0c79"
 dependencies = [
  "bitflags 2.13.0",
  "crossterm",
@@ -3574,8 +3574,7 @@ dependencies = [
 [[package]]
 name = "iocraft-macros"
 version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e938637cb8e9a299dded6c51cc22003483ef8ec0928ba37d2bc5a3260afc764"
+source = "git+https://github.com/ShravanSunder/iocraft.git?rev=829ebd86bd07fe2100c096ec6d785875ec2e0c79#829ebd86bd07fe2100c096ec6d785875ec2e0c79"
 dependencies = [
  "proc-macro2",
  "quote",

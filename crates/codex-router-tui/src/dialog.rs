@@ -59,6 +59,7 @@ pub struct DialogFrameProps<'a> {
     /// Caller-owned identity stays attributable while the task body scrolls.
     pub context: Vec<AnyElement<'a>>,
     pub children: Vec<AnyElement<'a>>,
+    pub action_hints: Vec<AnyElement<'a>>,
     pub actions: Vec<AnyElement<'a>>,
 }
 
@@ -98,10 +99,11 @@ pub fn DialogFrame<'a>(
         .resolve(available_width, available_height);
     let children = std::mem::take(&mut props.children);
     let actions = std::mem::take(&mut props.actions);
+    let action_hints = std::mem::take(&mut props.action_hints);
     let help_action = props.help_action.take();
     let context = std::mem::take(&mut props.context);
     let context_gap = u16::from(!context.is_empty() && height_limit >= 16);
-    let action_gap = u16::from(!actions.is_empty());
+    let has_actions = !actions.is_empty() || !action_hints.is_empty();
     let padding = props.padding.unwrap_or(u16::from(height_limit >= 16));
     let content_height = matches!(
         props.presentation,
@@ -124,15 +126,16 @@ pub fn DialogFrame<'a>(
                 flex_direction: FlexDirection::Column, overflow: Overflow::Hidden,
                 border_style: props.border_style.unwrap_or(BorderStyle::Round),
                 border_color: props.border_color.unwrap_or(Color::Cyan),
-                background_color: Color::Reset, padding,
+                background_color: crate::UiSurface::Base.color(), padding,
                 flex_shrink: 0.0_f32,
             ) {
                 crate::SurfaceHeader(title: props.title.clone(), help_action)
                 View(flex_direction: FlexDirection::Column, flex_shrink: 0.0_f32, margin_bottom: context_gap) { #(context) }
                 DialogBodyViewport(scroll_keys: props.scroll_keys, children)
-                View(height: action_gap, flex_shrink: 0.0_f32) {}
-                View(flex_shrink: 0.0_f32, column_gap: 2, flex_wrap: FlexWrap::Wrap) { #(actions) }
                 #((!content_height).then(|| element!(View(flex_grow: 1.0_f32))))
+                #(has_actions.then(|| element! {
+                    crate::DialogFooter(children:actions,hints:action_hints)
+                }))
             }
         }
     }

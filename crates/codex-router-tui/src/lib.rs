@@ -18,8 +18,8 @@ pub use dialog_action::{
 };
 mod typography;
 pub use typography::{
-    SurfaceHeader, SurfaceHeaderProps, UiHeading, UiHeadingLevel, UiHeadingProps, UiText,
-    UiTextProps, UiTextRole,
+    SurfaceHeader, SurfaceHeaderProps, UiColumnHeading, UiColumnHeadingProps, UiHeading,
+    UiHeadingLevel, UiHeadingProps, UiSurface, UiText, UiTextProps, UiTextRole,
 };
 mod shortcut_help;
 pub use shortcut_help::{ShortcutEntry, ShortcutHelp, ShortcutHelpProps, ShortcutSection};
@@ -45,3 +45,6 @@ mod search_select_tests;
 mod dialog_focus_reveal;
 
 pub use dialog_focus_reveal::{FocusReveal, FocusRevealProps};
+
+mod dialog_footer;
+pub use dialog_footer::{DialogFooter, DialogFooterProps};

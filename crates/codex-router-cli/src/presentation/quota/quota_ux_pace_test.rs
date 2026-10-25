@@ -18,7 +18,11 @@ async fn phone_pace_uses_whole_compact_words_and_preserves_full_details() {
             render_quota_capture_model_at(model, 32, 80, vec![provider_filter_key(KeyCode::Esc)])
                 .await;
         let account = phone_account_region(&frame, "東京", Some("Claude"));
-        let quota = quota_column_words(&account, 22, 8);
+        let quota = account
+            .replace(['│', '┃'], " ")
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         println!("PHONE PACE {semantic_label} ACTUAL32:\n{frame}");
         assert!(
             frame
@@ -29,8 +33,8 @@ async fn phone_pace_uses_whole_compact_words_and_preserves_full_details() {
     }
     for (semantic_label, quota) in &observations {
         assert!(
-            quota.split_whitespace().any(|word| word == "Unknown"),
-            "narrow pace must be a whole readable word, keeping the full reason in Details; source={semantic_label}, observations={observations:?}, quota={quota}"
+            quota.contains(semantic_label),
+            "C1 folded pace retains full semantic meaning and Details; source={semantic_label}, observations={observations:?}, quota={quota}"
         );
     }
 }

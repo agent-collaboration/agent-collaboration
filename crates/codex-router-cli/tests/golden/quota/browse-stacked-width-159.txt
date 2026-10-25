@@ -1,14 +1,12 @@
 ╭─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Quota status                                                                            Clients unknown · Fresh 1 · Stale 0 · Data unknown 0  Details  Help │
-│ Pool-wide: responses  Accounts 1 · Usable 1 · Reserve 0 · Blocked 0 · Pool unknown 0 · Excluded 0                                                           │
+│ Quota status                                                                                                                             Pool details  Help │
 │ Filters ▾  Provider: All · Disabled: Shown · 1/1 accounts                                                                                                   │
 │ ┌─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
-│ │    Account                                                   Status                                   Quota                                             │ │
-│ │  ❯ ssdev                                                     ✓ available                              safest quota                                      │ │
-│ │    ◎ OpenAI                                                  1 client                                 Weekly       █████ 83% left reset 7d              │ │
-│ │                                                              2 resets                                 5h           █████ 99% left reset 5h              │ │
-│ │                                                              Credits unknown                          Weekly pace  □□□□□□□│□□□□□□□  1.00x reset pace    │ │
-│ │                                                                                                                    healthy                              │ │
+│ │   Account                           Quota left · reset in                              Weekly pace                       Extra                          │ │
+│ │   ───────────────────────────────── ────────────────────────────────────────────────── ───────────────────────────────── ─────────────────────────────  │ │
+│ │ ❯ ssdev                             █████░░ 83% · week · 7d 0h                         healthy                           Credits unknown                │ │
+│ │   ◎ OpenAI · 1 client               ██████░ 99% · 5h · 5h 0m                           1.00x reset pace                  2 resets                       │ │
+│ │   ✓ available                                                                                                                                           │ │
 │ └─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘ │
 │                                                                                                                                                             │
 │                                                                                                                                                             │
@@ -21,4 +19,6 @@
 │                                                                                                                                                             │
 │                                                                                                                                                             │
 │                                                                                                                                                             │
+│                                                                                                                                                             │
+│ F4 Details  F3 Filters · F5 Pool  F1 Help · Ctrl+R Options                                                                                                  │
 ╰─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

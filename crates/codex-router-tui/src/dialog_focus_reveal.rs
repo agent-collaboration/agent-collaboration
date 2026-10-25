@@ -7,6 +7,7 @@ pub(crate) struct DialogBodyScroll {
     pub viewport_height: State<u16>,
     pub natural_height: State<u16>,
     pub offset: State<u16>,
+    pub layout_offset: u16,
 }
 
 struct FocusRevealHook {
@@ -26,7 +27,7 @@ impl Hook for FocusRevealHook {
         }
         let top = i32::from(drawer.canvas_position().y) - i32::from(scroll.top.get());
         let target = (
-            top + i32::from(scroll.offset.get()),
+            top + i32::from(scroll.layout_offset),
             drawer.size().height,
             scroll.viewport_height.get(),
         );
@@ -48,12 +49,17 @@ impl Hook for FocusRevealHook {
         } else {
             0
         };
+        // All reveal hooks in this paint observe the same layout. A nested
+        // target must not undo an ancestor's correction when it needs none.
+        if displacement == 0 {
+            return;
+        }
         let maximum = scroll
             .natural_height
             .get()
             .saturating_sub(scroll.viewport_height.get());
         let next =
-            (i32::from(scroll.offset.get()) + displacement).clamp(0, i32::from(maximum)) as u16;
+            (i32::from(scroll.layout_offset) + displacement).clamp(0, i32::from(maximum)) as u16;
         if next != scroll.offset.get() {
             scroll.offset.set(next);
         }

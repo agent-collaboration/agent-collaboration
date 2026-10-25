@@ -39,9 +39,26 @@ pub(super) fn render_details_dialog(
                 }
             })).into_any()
     }).collect::<Vec<_>>();
-    let ((_, frame_width), _) =
-        DialogPresentation::default().resolve(width.saturating_sub(4), height.saturating_sub(2));
-    let content_width = usize::from(frame_width.saturating_sub(4));
+    let presentation = match DialogPresentation::default() {
+        DialogPresentation::Sized {
+            width: width_policy,
+            height: height_policy,
+        } => DialogPresentation::Sized {
+            width: width_policy,
+            height: if width <= 48 || height < 16 {
+                codex_router_tui::DialogAxisSize::cells(height.saturating_sub(2))
+            } else {
+                height_policy
+            },
+        },
+        DialogPresentation::FullScreen => DialogPresentation::FullScreen,
+    };
+    let ((_, frame_width), (_, frame_height)) =
+        presentation.resolve(width.saturating_sub(4), height.saturating_sub(2));
+    // Frame borders/padding plus the body viewport's scrollbar cell all
+    // constrain wrapping. A wider fixed child measures fewer rows than it draws.
+    let padding = u16::from(frame_height >= 16);
+    let content_width = usize::from(frame_width.saturating_sub(3 + 2 * padding));
     let content = match &dialog.target {
         SessionDetailsTarget::Session(record) => {
             render_details(record, content_width, selected_conversation, Size::Auto)
@@ -52,10 +69,30 @@ pub(super) fn render_details_dialog(
         ClipboardRequestStatus::Sent => Some(("Copy requested", UiTextRole::Secondary)),
         ClipboardRequestStatus::Failed => Some(("Could not copy", UiTextRole::Error)),
     };
+    let mut hints=vec![element!(UiText(content:if width<=48 {"Tab/←→ focus · Enter/Space activate"}else {"←/→ Tab focus · Enter/Space activate · Esc Close"},role:UiTextRole::Label,wrap:TextWrap::Wrap)).into_any()];
+    let available = dialog.actions();
+    let mut modified = Vec::new();
+    if available.contains(&super::super::details_dialog_state::DetailsAction::Resume) {
+        modified.push(if width <= 48 {
+            "Ctrl+↵ Resume"
+        } else {
+            "Ctrl+Enter Resume"
+        });
+    }
+    if available.contains(&super::super::details_dialog_state::DetailsAction::Fork) {
+        modified.push(if width <= 48 {
+            "Ctrl+Shift+↵ Fork"
+        } else {
+            "Ctrl+Shift+Enter Fork"
+        });
+    }
+    if !modified.is_empty() {
+        hints.push(element!(UiText(content:modified.join(" · "),role:UiTextRole::Label,wrap:TextWrap::Wrap)).into_any());
+    }
     element! {
         DialogFrame(width, height, title, context, help_action: Some(super::super::picker_help_view::help_action(model_state)),
-            presentation: DialogPresentation::default(),
-            margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, scroll_keys: codex_router_tui::DialogScrollKeys::Navigation, actions) {
+            presentation,
+            margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, scroll_keys: codex_router_tui::DialogScrollKeys::Navigation, actions,action_hints:hints) {
             #(notice.map(|(content, role)| element!(UiText(content, role))))
             #(dialog.inspection_notice().map(|notice|element!(UiText(content:notice.to_owned(),role:UiTextRole::Secondary))))
             #(content)

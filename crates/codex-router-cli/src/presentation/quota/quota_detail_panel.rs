@@ -7,6 +7,7 @@ use super::quota_status_view_model::*;
 use crate::quota_reset::reset_session_supervisor::ResetWorkflowSnapshot;
 use iocraft::prelude::*;
 
+#[derive(Clone, Copy)]
 pub(super) struct QuotaDetailPanelProps<'a> {
     pub(super) interactive: bool,
     pub(super) focused_details: Option<&'a QuotaSelectedAccountViewModel>,

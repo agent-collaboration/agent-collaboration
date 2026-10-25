@@ -93,6 +93,23 @@ jobs:
           "$verification_python" -m ruff check "${verification_paths[@]}"
           "$verification_python" -m ruff format --check "${verification_paths[@]}"
           "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" "${verification_paths[@]}"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.14.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26.12.1'
+          cache: pnpm
+          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+      - name: Check Quota and Sessions verification TypeScript
+        id: tui_verification
+        background: true
+        run: |
+          pnpm --dir scripts/verification/tui install --frozen-lockfile
+          pnpm --dir scripts/verification/tui typecheck
+          pnpm --dir scripts/verification/tui lint
+          pnpm --dir scripts/verification/tui format:check
+          pnpm --dir scripts/verification/tui test
       - name: Enforce dependency policy
         id: dependency_policy
         background: true
@@ -187,6 +204,18 @@ jobs:
           sudo docker image prune --all --force > /dev/null
           df -h /
       - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.14.0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26.12.1'
+          cache: pnpm
+          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+      - name: Install native adapter test dependencies
+        run: |
+          pnpm --dir scripts/verification/tui install --frozen-lockfile
+          node -e 'const fs=require("node:fs");const crypto=require("node:crypto");const runtime=fs.realpathSync(process.execPath);fs.appendFileSync(process.env.GITHUB_ENV,"QUOTA_STORYBOARD_NODE="+runtime+"\nQUOTA_STORYBOARD_NODE_SHA256="+crypto.createHash("sha256").update(fs.readFileSync(runtime)).digest("hex")+"\n");'
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}

@@ -14,6 +14,7 @@ pub(super) enum QuotaHelpMode {
     Browse,
     Filters,
     Details,
+    PoolDetails,
     Floor,
     Options,
     Reset,
@@ -53,25 +54,16 @@ pub(super) fn render_quota_header(props: QuotaHeaderProps<'_>) -> AnyElement<'st
         return quota_title_row(model, width, tick);
     }
     let column_gap: u16 = if width < 64 { 1 } else { 2 };
-    let status_width = width.saturating_sub(23 + 3 * usize::from(column_gap));
-    let status = model
-        .header
-        .freshness
-        .summary(model.header.observed_clients);
-    let show_status = width >= 64;
-    let separate =
-        show_status && unicode_width::UnicodeWidthStr::width(status.as_str()) > status_width;
-    let children = if separate || !show_status {
-        vec![details_action]
-    } else {
-        vec![
-            element!(UiText(content:status,role:UiTextRole::Secondary)).into_any(),
-            details_action,
-        ]
-    };
+    let clients = model.header.observed_clients.map(|count| {
+        element!(UiText(content:format!("Clients {count}"),role:UiTextRole::Secondary)).into_any()
+    });
+    let mut children = Vec::new();
+    if width >= 64 {
+        children.extend(clients);
+    }
+    children.push(details_action);
     element! {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
         SurfaceHeader(title:"Quota status".to_owned(),inactive,column_gap,help_action:Some(quota_help_action(help)),children)
-        #(separate.then(||element!(Text(content:model.header.freshness.summary(model.header.observed_clients),color:Color::Grey,wrap:TextWrap::Wrap))))
     }}.into_any()
 }
 
@@ -79,24 +71,10 @@ pub(super) fn render_quota_route(
     model: &QuotaStatusViewModel,
     width: usize,
 ) -> AnyElement<'static> {
-    let route = format!("Pool-wide: {}", model.header.route_band);
-    let counts = model.header.pool.summary(width);
-    let data_problems = [
-        ("Stale", model.header.freshness.stale),
-        ("Data unknown", model.header.freshness.unknown),
-    ]
-    .into_iter()
-    .filter(|(_, count)| *count > 0)
-    .map(|(label, count)| format!("{label} {count}"))
-    .collect::<Vec<_>>()
-    .join(" · ");
-    element! {View(width:100pct,column_gap:2,flex_wrap:FlexWrap::Wrap,flex_shrink:0.0_f32) {
-        Text(content:route,color:Color::White,wrap:TextWrap::Wrap)
-        View(max_width:100pct,flex_shrink:0.0_f32) {Text(content:counts,color:Color::Grey,wrap:TextWrap::Wrap)}
-        #((width<64 && !data_problems.is_empty()).then(||element!(Text(content:data_problems,color:Color::Grey,wrap:TextWrap::Wrap))))
-        #(model.selection_projection_degraded.then(||element!(Text(content:"degraded",color:Color::White))))
-        #(model.header.credential_notice.as_ref().map(|notice|element!(Text(content:notice.clone(),color:Color::White,wrap:TextWrap::Wrap))))
-        #((model.header.pool.total()==0).then(||element!(Text(content:"no accounts",color:Color::White))))
+    let _ = width;
+    element! {View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        #(model.selection_projection_degraded.then(||element!(UiText(content:"Selection projection degraded",role:UiTextRole::Error,wrap:TextWrap::Wrap))))
+        #(model.header.credential_notice.as_ref().map(|notice|element!(UiText(content:notice.clone(),role:UiTextRole::Error,wrap:TextWrap::Wrap))))
     }}.into_any()
 }
 
@@ -116,6 +94,7 @@ pub(super) fn render_quota_help(
                 ("PgUp / PgDn", "Scroll account content"),
                 ("Ctrl+F / F3", "Open filters"),
                 ("Enter / F4", "Account details"),
+                ("F5", "Pool details"),
                 ("Ctrl+E", "Edit weekly floor"),
                 ("Ctrl+R", "Account options"),
                 ("Esc / Q", "Exit"),
@@ -132,8 +111,12 @@ pub(super) fn render_quota_help(
                 ("Esc", "Close choice; otherwise discard draft"),
             ],
         ),
-        QuotaHelpMode::Details => (
-            "Account details",
+        QuotaHelpMode::Details | QuotaHelpMode::PoolDetails => (
+            if matches!(mode, QuotaHelpMode::PoolDetails) {
+                "Pool details"
+            } else {
+                "Account details"
+            },
             vec![
                 ("↑ / ↓ / PgUp / PgDn", "Scroll details"),
                 ("Esc", "Close details"),
@@ -278,7 +261,7 @@ pub(super) fn render_quota_screen(props: QuotaScreenChromeProps) -> AnyElement<'
             #(props.controls)
             #(props.body)
             View(width: 100pct, flex_grow: 1.0_f32) {}
-            View(flex_shrink: 0.0_f32) { #(props.actions) }
+            #((!props.actions.is_empty()).then(||element!(codex_router_tui::DialogFooter(children:props.actions))))
             #(props.static_footer.map(|line| element!(Text(content: line, color: Color::Grey, wrap: TextWrap::NoWrap)).into_any()))
         }
     }.into_any()
@@ -351,4 +334,17 @@ pub(super) fn quota_legacy_footer(props: QuotaFooterPresentation<'_>) -> String 
         footer_line = "↑/↓ provider  tab focus  space toggle  enter apply  esc cancel".to_owned();
     }
     footer_line
+}
+
+/// Browse uses the same footer surface as dialogs; the controller owns activation.
+pub(super) fn render_quota_browse_footer(
+    enabled: bool,
+    weekly_floor_enabled: bool,
+    on_details: impl FnMut(()) + Send + Sync + 'static,
+) -> Vec<AnyElement<'static>> {
+    vec![
+        element!(DialogAction(label:"F4 Details",enabled,handler:on_details)).into_any(),
+        element!(UiText(content:"F3 Filters · F5 Pool",role:UiTextRole::Label,wrap:TextWrap::Wrap)).into_any(),
+        element!(UiText(content:if weekly_floor_enabled {"F1 Help · Ctrl+R Options · Ctrl+E Floor"}else {"F1 Help · Ctrl+R Options"},role:UiTextRole::Label,wrap:TextWrap::Wrap)).into_any(),
+    ]
 }
