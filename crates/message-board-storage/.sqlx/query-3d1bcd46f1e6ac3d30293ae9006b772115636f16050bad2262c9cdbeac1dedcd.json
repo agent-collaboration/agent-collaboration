@@ -1,6 +1,6 @@
 {
   "db_name": "Turso",
-  "query": "SELECT c.canonical_hash AS \"creation_hash!: String\", c.input AS \"input!: String\", r.request_id AS \"request_id!: String\", r.canonical_hash AS \"canonical_hash!: String\", r.request AS \"request!: String\", r.ids AS \"ids!: String\", r.state AS \"state!: String\" FROM project_creation_inputs c JOIN fleet_outbox_requests r ON r.request_id = c.request_id WHERE c.request_id > ? AND json_extract(r.state, '$.kind') = 'decided' AND json_extract(r.state, '$.decision.kind') = 'accepted' ORDER BY c.request_id LIMIT ?",
+  "query": "SELECT c.canonical_hash AS \"creation_hash!: String\", c.input AS \"input!: String\", r.request_id AS \"request_id!: String\", r.canonical_hash AS \"canonical_hash!: String\", r.request AS \"request!: String\", r.state AS \"state!: String\" FROM project_creation_inputs c JOIN fleet_outbox_requests r ON r.request_id = c.request_id WHERE c.request_id > ? AND json_extract(r.state, '$.kind') = 'decided' AND json_extract(r.state, '$.decision.kind') = 'accepted' ORDER BY c.request_id LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -40,13 +40,6 @@
       },
       {
         "ordinal": 5,
-        "name": "ids!: String",
-        "type_info": {
-          "name": "TEXT"
-        }
-      },
-      {
-        "ordinal": 6,
         "name": "state!: String",
         "type_info": {
           "name": "TEXT"
@@ -60,9 +53,8 @@
       null,
       null,
       null,
-      null,
       null
     ]
   },
-  "hash": "74ed7c3e281fa45b33eccc606a5fe00f03fb941a7e871fe4b088d0345fb7a074"
+  "hash": "3d1bcd46f1e6ac3d30293ae9006b772115636f16050bad2262c9cdbeac1dedcd"
 }

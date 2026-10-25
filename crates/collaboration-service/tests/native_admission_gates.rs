@@ -160,14 +160,6 @@ async fn an_actual_superseding_renewal_keeps_the_write_refusal_and_stops_public_
     read.finish().await?;
     let database = fixture._registry.database(&project).await?;
     let now = SystemClock.now();
-    let move_check = json!({"projectId":project,"actor":fixture.actor,
-        "moveName":"missing","expectedRevision":0});
-    let before = fixture.api.call("move_check", move_check.clone()).await?;
-    assert_eq!(
-        before.pointer("/result/kind"),
-        Some(&json!("rejected")),
-        "{before}"
-    );
     database
         .observe_renewal(
             RenewAnswer::Refused(LeaseRefusal::NotWriter {
@@ -199,16 +191,6 @@ async fn an_actual_superseding_renewal_keeps_the_write_refusal_and_stops_public_
     assert!(
         read.get("result").is_none(),
         "superseded records were served: {read}"
-    );
-    let checked = fixture.api.call("move_check", move_check).await?;
-    assert_eq!(
-        checked.pointer("/error/data/kind"),
-        Some(&json!("boardUnavailable")),
-        "{checked}"
-    );
-    assert!(
-        checked.get("result").is_none(),
-        "superseded move check was served: {checked}"
     );
     assert_unrecorded(&fixture, &project, &request_id, &task, high).await?;
     drop(database);
@@ -276,8 +258,6 @@ async fn an_unregistered_native_owner_refuses_the_first_write_and_registration_e
             },
             project_id: project.clone(),
             description: Description::try_from("first registered write".to_owned())?,
-            status: None,
-            pinned_definition: None,
             revision: SubjectRevision::INITIAL,
             closed_at: None,
         }))

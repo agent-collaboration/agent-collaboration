@@ -141,7 +141,6 @@ pub(super) async fn maximum_directory_summary(
     let summary = collaboration_central_core::CopyDirectorySummary {
         database: fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned())?,
         summary: board_sync_protocol::BoardAnnotation::ProjectSummary {
-            status: Some(StatusName::try_from("\"".repeat(MAX_NAME_BYTES))?),
             latest_record_at: time,
         },
         position: fleet_sync_protocol::ReplicationPosition::new(
@@ -268,7 +267,6 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
         RecordKind::Workspace => "SELECT * FROM workspaces WHERE workspace_id=?",
         RecordKind::Board => "SELECT * FROM boards WHERE board_id=?",
         RecordKind::Adr => "SELECT * FROM workspace_adrs WHERE adr_id=?",
-        RecordKind::ProcessDefinition => "SELECT * FROM process_definitions WHERE definition_id=?",
         RecordKind::Project => "SELECT * FROM project_directory WHERE project_id=?",
         _ => return Err("maximum-row measurement names a non-Fleet family".into()),
     };

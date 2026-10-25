@@ -46,20 +46,6 @@ CREATE TABLE workspace_adrs (
     origin_machine TEXT NOT NULL,
     import_digest TEXT
 );
-CREATE TABLE process_definitions (
-    definition_id TEXT NOT NULL PRIMARY KEY,
-    workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),
-    name TEXT NOT NULL,
-    version TEXT NOT NULL,
-    source_hash TEXT NOT NULL,
-    payload TEXT NOT NULL,
-    router_time TEXT,
-    time_basis TEXT NOT NULL,
-    origin_installation TEXT NOT NULL,
-    origin_machine TEXT NOT NULL,
-    import_digest TEXT,
-    UNIQUE(name, version)
-);
 CREATE TABLE repository_attachments (
     attachment_id TEXT NOT NULL PRIMARY KEY,
     workspace_id TEXT NOT NULL REFERENCES workspaces(workspace_id),

@@ -70,7 +70,6 @@ pub(super) struct OperationContext<'request> {
     pub links: Vec<TaskLink>,
     pub live_subtasks: Vec<SubtaskId>,
     pub archived: bool,
-    pub definitions: Vec<ProcessDefinition>,
     pub workspace_adrs: Vec<Adr>,
 }
 
@@ -185,8 +184,7 @@ impl<'request> OperationContext<'request> {
         if self.archived
             && !matches!(
                 self.request.operation,
-                BoardOperation::MoveRequest { .. }
-                    | BoardOperation::ThreadUnwatch { .. }
+                BoardOperation::ThreadUnwatch { .. }
                     | BoardOperation::ProjectUnwatch { .. }
                     | BoardOperation::ThreadUnsubscribe { .. }
                     | BoardOperation::ReadMarkInitialize { .. }
@@ -223,7 +221,6 @@ impl<'request> OperationContext<'request> {
                 | BoardOperation::RoleGrant { .. }
                 | BoardOperation::RoleRelease { .. }
                 | BoardOperation::RoleReplaceLead { .. }
-                | BoardOperation::ProjectPinDefinition { .. }
                 | BoardOperation::ProjectPublishPlan { .. }
                 | BoardOperation::ProjectClose { .. }
         );
@@ -257,11 +254,9 @@ impl<'request> OperationContext<'request> {
             | BoardOperation::RoleReplaceLead { .. }
             | BoardOperation::OwnerGrantRecord { .. }
             | BoardOperation::RoleAcknowledgeCurrent { .. } => self.role_plan(write).await?,
-            BoardOperation::ProjectPinDefinition { .. }
-            | BoardOperation::ProjectPublishPlan { .. }
+            BoardOperation::ProjectPublishPlan { .. }
             | BoardOperation::ProjectClose { .. }
-            | BoardOperation::ProjectDescribe { .. }
-            | BoardOperation::MoveRequest { .. } => self.process_plan(),
+            | BoardOperation::ProjectDescribe { .. } => self.project_lifecycle_plan(),
             BoardOperation::FactRecord { fact } => {
                 if let Some(anchor) = fact.anchor
                     && write.cursor_validity(anchor).await?
@@ -271,7 +266,7 @@ impl<'request> OperationContext<'request> {
                         field: "anchor".into(),
                     }));
                 }
-                self.process_plan()
+                self.project_lifecycle_plan()
             }
             BoardOperation::ThreadCreate { .. }
             | BoardOperation::ThreadRefile { .. }

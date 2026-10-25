@@ -262,7 +262,7 @@ fn advertised_tool_schemas_validate_available_success_and_every_error_sample() {
         .into_iter()
         .filter_map(|tool| tool.output_schema.map(|schema| (tool.name, schema)))
         .collect::<std::collections::BTreeMap<_, _>>();
-    assert_eq!(advertised.len(), 176);
+    assert_eq!(advertised.len(), 167);
 
     let position = serde_json::json!({"kind":"project","position":{
         "cursor":{"epoch":1,"position":1},

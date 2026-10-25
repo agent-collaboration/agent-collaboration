@@ -1,6 +1,6 @@
 //! Durable semantic requests survive the stand-in's eventual replacement by central.
 use crate::{RouterLocalStorageError, router_local_database::RouterLocalDatabase};
-use fleet_admission::{FleetIds, FleetRequest, canonical_hash};
+use fleet_admission::{FleetRequest, canonical_hash};
 use message_board::{RequestDecision, RequestId};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
@@ -21,7 +21,6 @@ pub enum FleetOutboxState {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FleetOutboxEntry {
     pub request: FleetRequest,
-    pub ids: FleetIds,
     pub state: FleetOutboxState,
 }
 
@@ -34,9 +33,9 @@ impl FleetOutbox {
         request: &RequestId,
     ) -> Result<Option<FleetOutboxEntry>, RouterLocalStorageError> {
         let id = request.as_str();
-        sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", ids AS "ids!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE request_id = ?"#, id)
+        sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE request_id = ?"#, id)
             .fetch_optional(&self.database.pool).await?
-            .map(|row| decode_entry(&row.request_id, &row.canonical_hash, &row.request, &row.ids, &row.state))
+            .map(|row| decode_entry(&row.request_id, &row.canonical_hash, &row.request, &row.state))
             .transpose()
     }
 
@@ -46,7 +45,7 @@ impl FleetOutbox {
         limit: u64,
     ) -> Result<Vec<FleetOutboxEntry>, RouterLocalStorageError> {
         let limit = i64::try_from(limit).map_err(|_| RouterLocalStorageError::InvalidRecord)?;
-        let rows = sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", ids AS "ids!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE request_id > ? AND json_extract(state, '$.kind') = 'decided' AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id LIMIT ?"#, after, limit)
+        let rows = sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE request_id > ? AND json_extract(state, '$.kind') = 'decided' AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id LIMIT ?"#, after, limit)
             .fetch_all(&self.database.pool).await?;
         rows.into_iter()
             .map(|row| {
@@ -54,7 +53,6 @@ impl FleetOutbox {
                     &row.request_id,
                     &row.canonical_hash,
                     &row.request,
-                    &row.ids,
                     &row.state,
                 )
             })
@@ -66,9 +64,9 @@ impl FleetOutbox {
     ) -> Result<Option<FleetOutboxEntry>, RouterLocalStorageError> {
         let id = request.as_str();
         let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
-        sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", ids AS "ids!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE request_id = ? AND state = ?"#, id, state)
+        sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE request_id = ? AND state = ?"#, id, state)
             .fetch_optional(&self.database.pool).await?
-            .map(|row| decode_entry(&row.request_id, &row.canonical_hash, &row.request, &row.ids, &row.state))
+            .map(|row| decode_entry(&row.request_id, &row.canonical_hash, &row.request, &row.state))
             .transpose()
     }
     pub async fn pending_project_ids(
@@ -112,11 +110,10 @@ impl FleetOutbox {
     pub async fn enqueue(
         &self,
         request: &FleetRequest,
-        ids: &FleetIds,
     ) -> Result<FleetOutboxEntry, RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
         let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let result = enqueue_request(&mut transaction, request, ids).await;
+        let result = enqueue_request(&mut transaction, request).await;
         match result {
             Ok(entry) => {
                 transaction.commit().await?;
@@ -130,14 +127,13 @@ impl FleetOutbox {
     }
     pub async fn pending(&self) -> Result<Vec<FleetOutboxEntry>, RouterLocalStorageError> {
         let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
-        let rows = sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", ids AS "ids!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE state = ? ORDER BY request_id"#, state).fetch_all(&self.database.pool).await?;
+        let rows = sqlx_turso::query!(r#"SELECT request_id AS "request_id!: String", canonical_hash AS "canonical_hash!: String", request AS "request!: String", state AS "state!: String" FROM fleet_outbox_requests WHERE state = ? ORDER BY request_id"#, state).fetch_all(&self.database.pool).await?;
         rows.into_iter()
             .map(|row| {
                 decode_entry(
                     &row.request_id,
                     &row.canonical_hash,
                     &row.request,
-                    &row.ids,
                     &row.state,
                 )
             })
@@ -193,7 +189,6 @@ fn decode_entry(
     id: &str,
     hash: &str,
     request: &str,
-    ids: &str,
     state: &str,
 ) -> Result<FleetOutboxEntry, RouterLocalStorageError> {
     let request: FleetRequest =
@@ -204,7 +199,6 @@ fn decode_entry(
     }
     Ok(FleetOutboxEntry {
         request,
-        ids: serde_json::from_str(ids).map_err(|_| RouterLocalStorageError::InvalidRecord)?,
         state: serde_json::from_str(state).map_err(|_| RouterLocalStorageError::InvalidRecord)?,
     })
 }
@@ -212,22 +206,19 @@ fn decode_entry(
 async fn enqueue_request(
     transaction: &mut sqlx::Transaction<'_, sqlx_turso::Turso>,
     request: &FleetRequest,
-    ids: &FleetIds,
 ) -> Result<FleetOutboxEntry, RouterLocalStorageError> {
     let id = request.request_id.as_str();
     let hash = canonical_hash(request).map_err(|_| RouterLocalStorageError::InvalidRecord)?;
-    if let Some(row) = sqlx_turso::query!(r#"SELECT request AS "request!: String", ids AS "ids!: String", state AS "state!: String", canonical_hash AS "canonical_hash!: String" FROM fleet_outbox_requests WHERE request_id = ?"#, id).fetch_optional(&mut **transaction).await? {
+    if let Some(row) = sqlx_turso::query!(r#"SELECT request AS "request!: String", state AS "state!: String", canonical_hash AS "canonical_hash!: String" FROM fleet_outbox_requests WHERE request_id = ?"#, id).fetch_optional(&mut **transaction).await? {
                 if row.canonical_hash != hash.as_str() { return Err(RouterLocalStorageError::ConflictingRequest); }
-                return decode_entry(id, &row.canonical_hash, &row.request, &row.ids, &row.state);
+                return decode_entry(id, &row.canonical_hash, &row.request, &row.state);
             }
     let hash = hash.as_str();
     let encoded = serde_json::to_string(request)?;
-    let encoded_ids = serde_json::to_string(ids)?;
     let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
-    sqlx_turso::query!("INSERT INTO fleet_outbox_requests(request_id, canonical_hash, request, ids, state) VALUES (?, ?, ?, ?, ?)", id, hash, encoded, encoded_ids, state).execute(&mut **transaction).await?;
+    sqlx_turso::query!("INSERT INTO fleet_outbox_requests(request_id, canonical_hash, request, state) VALUES (?, ?, ?, ?)", id, hash, encoded, state).execute(&mut **transaction).await?;
     Ok(FleetOutboxEntry {
         request: request.clone(),
-        ids: ids.clone(),
         state: FleetOutboxState::Pending {},
     })
 }

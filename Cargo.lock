@@ -1436,13 +1436,13 @@ dependencies = [
 name = "codex-router-test-support"
 version = "0.1.102"
 dependencies = [
- "collaboration-client",
  "codex-native-integration",
  "codex-router-cli",
  "codex-router-core",
  "codex-router-proxy",
  "codex-router-secret-store",
  "codex-router-state",
+ "collaboration-client",
  "futures-util",
  "serde",
  "serde_json",

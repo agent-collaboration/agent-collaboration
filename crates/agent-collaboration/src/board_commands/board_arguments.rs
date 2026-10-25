@@ -29,11 +29,6 @@ pub(super) enum BoardCommand {
         #[command(subcommand)]
         command: super::board_view_commands::ViewCommand,
     },
-    /// Return one typed context, check or card result for a hook.
-    Hook {
-        #[command(subcommand)]
-        command: super::board_view_commands::HookCommand,
-    },
     /// Search workspace, board, and project names/descriptions with strict location filters.
     Search(DiscoverySearchArguments),
     /// Create, inspect, update, or list workspaces.
@@ -91,10 +86,6 @@ pub(super) enum BoardCommand {
         #[command(subcommand)]
         command: RoleCommand,
     },
-    Move {
-        #[command(subcommand)]
-        command: MoveCommand,
-    },
     Fact {
         #[command(subcommand)]
         command: FactCommand,
@@ -106,10 +97,6 @@ pub(super) enum BoardCommand {
     Adr {
         #[command(subcommand)]
         command: AdrCommand,
-    },
-    Process {
-        #[command(subcommand)]
-        command: ProcessCommand,
     },
 }
 
@@ -169,7 +156,6 @@ pub(super) enum ProjectCommand {
     Show(ProjectShowArguments),
     /// Replace the project description under its expected revision.
     Describe(OperationFileArguments),
-    PinDefinition(OperationFileArguments),
     PublishPlan(OperationFileArguments),
     Close(OperationFileArguments),
 }

@@ -60,7 +60,7 @@ All refs are event `seq` numbers.
   - `workstreams`, `readyQueue` and `blocked`: `view_work`. Tasks are listed per lane; the view orders them by `blockedBy`, then creation;
   - `pending`, `pendingHandbacks`, `settledHandbacks` and `settledOwnerQuestions`: PD1 §3b's pending rules. A handback is settled by a later decision row from the lead at that row's position that links to it. An owner question is settled by any later decision row linking to it. `pending` also lists open tasks;
   - `ownerWaiting`: `view_owner`;
-  - `owed`: `view_lead_load` (`assess`, `closeOut`, `answerRejection`). In the replacement case it's keyed by lead;
+  - `owed`: `view_lead_load` (`assess`, `closeOut`). In the replacement case it's keyed by lead;
   - `card`: `view_card` for that actor with subject `project`;
   - `lateFacts`: the facts whose `late` flag is set (`fact_list`).
 - **`what proves it`** lists evidence by ref. `kind` is `test`, `ci`, `review` or `commit`, extended with `release` and `production` for release checks and production observations.

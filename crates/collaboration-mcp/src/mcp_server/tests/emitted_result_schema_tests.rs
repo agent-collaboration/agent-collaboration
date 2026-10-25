@@ -314,7 +314,6 @@ fn work_view_schema_accepts_typed_writer_observations_and_refuses_removed_shapes
             ready_queue: Vec::new(),
             blocked: Vec::new(),
             open_in_closed_workstreams: Vec::new(),
-            rejected_since_last_move: Vec::new(),
             current_writer: writer,
             writer_observation: None,
             source,
@@ -378,11 +377,11 @@ fn work_view_schema_accepts_typed_writer_observations_and_refuses_removed_shapes
 }
 
 #[test]
-fn card_hooks_and_cross_project_rows_require_their_own_copy_context() {
+fn cards_and_cross_project_rows_require_their_own_copy_context() {
     use message_board::{
-        ContinuationCard, CopySource, EpochNumber, FeedCursor, FeedPosition, HookPayload,
-        HookResult, HumanId, Identity, LeadLoad, LeadObligation, LeadOwed, OwnerView, OwnerWait,
-        ProjectId, RecordedActor, SessionRunningState,
+        ContinuationCard, CopySource, EpochNumber, FeedCursor, FeedPosition, HumanId, Identity,
+        LeadLoad, LeadObligation, LeadOwed, OwnerView, OwnerWait, ProjectId, RecordedActor,
+        SessionRunningState,
     };
 
     let project = ProjectId::generate();
@@ -429,7 +428,6 @@ fn card_hooks_and_cross_project_rows_require_their_own_copy_context() {
         let card = ContinuationCard {
             subject: project.clone().into(),
             plan_revision: None,
-            process_definition: None,
             assignment: None,
             pending_handbacks: Vec::new(),
             pending_decisions: Vec::new(),
@@ -444,7 +442,6 @@ fn card_hooks_and_cross_project_rows_require_their_own_copy_context() {
             blockers: Vec::new(),
             session_state: SessionRunningState::NotSession {},
         };
-        let hook = HookResult::Ok(HookPayload::Card(Box::new(card.clone())));
         let cases = [
             (
                 "view_owner",
@@ -460,11 +457,6 @@ fn card_hooks_and_cross_project_rows_require_their_own_copy_context() {
                 "view_card",
                 super::super::success_result(&card),
                 "/nextObligation",
-            ),
-            (
-                "hook_card",
-                super::super::success_result(&hook),
-                "/payload/payload/nextObligation",
             ),
         ];
         for (tool, result, row_path) in cases {

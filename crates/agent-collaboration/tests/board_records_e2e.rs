@@ -70,8 +70,8 @@ async fn all_thread_subjects_refile_replay_and_current_titles_survive_reopen() -
 }
 
 #[tokio::test]
-async fn keyed_work_move_verdicts_and_causal_late_facts_survive_reopen() -> FixtureResult {
-    scenario(records_work::replay_moves_and_late_facts).await
+async fn keyed_work_and_causal_late_facts_survive_reopen() -> FixtureResult {
+    scenario(records_work::replay_keyed_work_and_late_facts).await
 }
 
 #[tokio::test]

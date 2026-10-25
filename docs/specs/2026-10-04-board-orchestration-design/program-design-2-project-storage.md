@@ -1,5 +1,7 @@
 # Program design 2: project storage on agent-fleet-sync
 
+> **0.1.102 cut (owner decision 1217, 2026-10-24).** Project moves (E12, `moves`), process definitions and their registration, pinning and the stored project status were removed before release. Rows, columns and summary fields here that name them no longer exist: `project_feed.project_status` and `project_state`'s status and pinned definition are gone. Everything else stands.
+
 **What this is:** how Router realizes [spec 2](spec-2-project-storage.md) on the holder side now that agent-fleet-sync (`agent-collaboration/agent-fleet-sync`, U78) supplies replication, leases, sessions and delivery custody. The board keeps its own records, rules and views ([PD1](program-design-1-board.md)) and gets a **new schema** built for agent-fleet-sync (U79, §3a).
 
 This is a hard-cutover rewrite of the 2026-10-09 PD2. The earlier version, with its own CDC capture, piece builder, session client and lease holder, is in git history.

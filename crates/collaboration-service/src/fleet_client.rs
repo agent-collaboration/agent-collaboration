@@ -3,7 +3,7 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardPayload, BoardReadPage,
     BoardReadScope, FleetRequestEnvelope,
 };
-use fleet_admission::{FleetIds, FleetRequest, FleetRequestResult};
+use fleet_admission::{FleetRequest, FleetRequestResult};
 use fleet_sync_protocol::{OperationAnswer, OperationRequest};
 use fleet_sync_tokio_runner::SessionRequests;
 use message_board::{Record, RecordRef, RequestDecision, RequestId, RequestResult};
@@ -172,11 +172,10 @@ impl FleetClient {
     pub async fn submit(
         &self,
         request: &FleetRequest,
-        ids: &FleetIds,
         _origin: &message_board::ActorOrigin,
     ) -> Result<FleetReply, FleetClientError> {
         let _guard = self.admission_mutex.lock().await;
-        let queued = match self.outbox.enqueue(request, ids).await {
+        let queued = match self.outbox.enqueue(request).await {
             Ok(queued) => queued,
             Err(RouterLocalStorageError::ConflictingRequest) => {
                 return Ok(FleetReply {
@@ -203,11 +202,10 @@ impl FleetClient {
         &self,
         input: &message_board::ProjectCreateRequest,
         directory: &FleetRequest,
-        ids: &FleetIds,
         _origin: &message_board::ActorOrigin,
     ) -> Result<FleetReply, FleetClientError> {
         let _guard = self.admission_mutex.lock().await;
-        let queued = match self.outbox.enqueue_creation(directory, ids, input).await {
+        let queued = match self.outbox.enqueue_creation(directory, input).await {
             Ok(queued) => queued,
             Err(RouterLocalStorageError::ConflictingRequest) => {
                 return Ok(FleetReply {
@@ -344,13 +342,6 @@ impl FleetClient {
 
     pub async fn record(&self, reference: &RecordRef) -> Result<Option<Record>, FleetClientError> {
         Ok(self.cache.record(reference).await?)
-    }
-
-    pub async fn process_definition(
-        &self,
-        reference: &message_board::ProcessDefinitionRef,
-    ) -> Result<Option<message_board::ProcessDefinition>, FleetClientError> {
-        Ok(self.cache.process_definition(reference).await?)
     }
 
     pub async fn records(&self) -> Result<Vec<Record>, FleetClientError> {

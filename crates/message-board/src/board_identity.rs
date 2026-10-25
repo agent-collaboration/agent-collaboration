@@ -101,7 +101,7 @@ macro_rules! record_identity {
 }
 record_identity!(WorkspaceId => Workspace, BoardId => Board, ProjectId => Project,
     WorkstreamId => Workstream, TaskId => Task, TaskLinkEventId => TaskLinkEvent, SubtaskId => Subtask, AdrId => Adr,
-    ThreadId => Thread, PostId => Post, RoleAssignmentId => RoleAssignment, MoveId => Move,
+    ThreadId => Thread, PostId => Post, RoleAssignmentId => RoleAssignment,
     FactId => Fact, NotifyIntentId => NotifyIntent, RequestId => Request,
     WorkTrailRowId => WorkTrailRow, TrailRedactionId => TrailRedaction,
     OwnerGrantId => OwnerGrant);

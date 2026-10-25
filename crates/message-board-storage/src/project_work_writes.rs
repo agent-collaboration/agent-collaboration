@@ -23,13 +23,7 @@ impl ProjectWriteTransaction {
             .as_str();
         let actor = envelope.actor_id.as_str();
         let request = envelope.request_id.as_deref();
-        let status = row.status.as_ref().map(StatusName::as_str);
         let description = row.description.as_str();
-        let pinned = row
-            .pinned_definition
-            .as_ref()
-            .map(serde_json::to_string)
-            .transpose()?;
         let revision =
             i64::try_from(row.revision.get()).map_err(|_| ProjectStorageError::InvalidFeed)?;
         let closed_epoch = row
@@ -44,14 +38,14 @@ impl ProjectWriteTransaction {
             .map_err(|_| ProjectStorageError::InvalidFeed)?;
         let changed = match mode {
             ProjectRowWrite::Insert => sqlx_turso::query!(
-                "INSERT INTO project_state(project_id, workspace_id, board_id, actor_id, request_id, epoch, position, router_time, time_basis, status, description, pinned_definition, revision, closed_epoch, closed_position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO project_state(project_id, workspace_id, board_id, actor_id, request_id, epoch, position, router_time, time_basis, description, revision, closed_epoch, closed_position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 id, workspace, board, actor, request, envelope.epoch, envelope.position,
-                envelope.router_time, envelope.time_basis, status, description, pinned, revision, closed_epoch, closed_position
+                envelope.router_time, envelope.time_basis, description, revision, closed_epoch, closed_position
             ).execute(&mut self.transaction).await?,
             ProjectRowWrite::Update => sqlx_turso::query!(
-                "UPDATE project_state SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, status=?, description=?, pinned_definition=?, revision=?, closed_epoch=?, closed_position=? WHERE project_id=?",
+                "UPDATE project_state SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, description=?, revision=?, closed_epoch=?, closed_position=? WHERE project_id=?",
                 actor, request, envelope.epoch, envelope.position, envelope.router_time,
-                envelope.time_basis, status, description, pinned, revision, closed_epoch, closed_position, id
+                envelope.time_basis, description, revision, closed_epoch, closed_position, id
             ).execute(&mut self.transaction).await?,
         };
         require_one_row(changed.rows_affected(), row.project_id.clone().into())

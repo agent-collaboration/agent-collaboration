@@ -1,4 +1,4 @@
-//! Read-mark and move gates read their rule operands beside unrelated retained history.
+//! Read-mark and session-context gates read their rule operands beside unrelated retained history.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
@@ -7,26 +7,8 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use sqlx::{ConnectOptions, Connection};
 use std::collections::BTreeMap;
-
-async fn prepare_move(fixture: &BoardFixture, project: &ProjectId) -> Result<(), TestError> {
-    let source = json!({"initialStatus":"draft","edges":[{"name":"finish","from":"draft","to":"done","requiredRole":"lead","guards":[{"name":"proof","evaluator":fixture.actor}]}]}).to_string();
-    let mut register = fixture.header();
-    register.as_object_mut().ok_or("header")?.extend(
-        json!({"workspaceId":fixture.workspace,"name":"gate flow","version":"v1","source":source})
-            .as_object()
-            .ok_or("fields")?
-            .clone(),
-    );
-    accepted(&fixture.api.call("process_register", register).await?);
-    let definition = json!({"name":"gate flow","version":"v1","sourceHash":format!("{:x}",Sha256::digest(source.as_bytes()))});
-    accepted(&fixture.api.call("project_pin_definition",fixture.request(project,json!({"kind":"projectPinDefinition","definition":definition,"expectedRevision":0}))).await?);
-    let evaluator = RecordedActor::declared(serde_json::from_value(fixture.actor.clone())?);
-    accepted(&fixture.api.call("fact_record",fixture.request(project,json!({"kind":"factRecord","fact":{"factId":FactId::generate(),"kind":{"kind":"evaluatorResult","fact":{"guard":"proof","subject":{"kind":"project","id":project},"outcome":"met","evidence":[],"evaluator":{"actor":evaluator,"engine":null,"calibration":null},"executor":null}},"links":[{"kind":"project","id":project}],"producerTime":"2026-10-12T00:00:00Z","anchor":null}}))).await?);
-    Ok(())
-}
 
 async fn unrelated_operands(
     store: &collaboration_service::NativeProjectStore,
@@ -115,7 +97,6 @@ async fn unrelated_operands(
 async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
-    prepare_move(&fixture, &project).await?;
     let store = fixture
         ._registry
         .existing_project(&project)
@@ -140,17 +121,6 @@ async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Tes
         .await?;
     let mark_cost = current_cost().since(before);
     assert_eq!(mark, ReadMarkOutcome::Advanced { through: covered });
-    let check =
-        json!({"projectId":project,"actor":reader,"moveName":"finish","expectedRevision":1});
-    let before = current_cost();
-    let verdict = fixture.api.call("move_check", check.clone()).await?;
-    let move_cost = current_cost().since(before);
-    assert_eq!(
-        verdict.pointer("/result/kind"),
-        Some(&json!("allowed")),
-        "{verdict}"
-    );
-
     let mut connection = sqlx_turso::TursoConnectOptions::new()
         .filename(store.path())
         .connect()
@@ -177,12 +147,6 @@ async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Tes
         )
         .await?;
     assert_eq!(mark, ReadMarkOutcome::Unchanged {});
-    let verdict = fixture.api.call("move_check", check).await?;
-    assert_eq!(
-        verdict.pointer("/result/kind"),
-        Some(&json!("allowed")),
-        "{verdict}"
-    );
     let mut read = store.snapshot().await?;
     assert!(
         read.record(&unrelated.0).await.is_err(),
@@ -194,10 +158,7 @@ async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Tes
     );
     read.finish().await?;
     fixture.stop().await?;
-    Ok(BTreeMap::from([
-        ("covered read", mark_cost),
-        ("move check", move_cost),
-    ]))
+    Ok(BTreeMap::from([("covered read", mark_cost)]))
 }
 
 #[allow(clippy::panic_in_result_fn)]
@@ -285,7 +246,7 @@ async fn context_cost(
     let before = current_cost();
     let result = fixture
         .api
-        .call("hook_context", json!({"session":session}))
+        .call("view_session_context", json!({"session":session}))
         .await?;
     let mut cost = current_cost().since(before);
     let alarms = alarms.finish().await?;
@@ -337,19 +298,19 @@ async fn context_cost(
     eprintln!("context fixture {size}: {cost:?}");
     assert_eq!(
         result.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{result}"
     );
     assert_eq!(
         result
-            .pointer("/result/payload/payload/assignments")
+            .pointer("/result/payload/assignments")
             .and_then(serde_json::Value::as_array)
             .map(Vec::len),
         Some(1)
     );
     own_facts.sort();
     assert_eq!(
-        result.pointer("/result/payload/payload/acknowledgedScopes"),
+        result.pointer("/result/payload/acknowledgedScopes"),
         Some(&json!(own_facts)),
         "scope facts must cross the 100-key page without omissions or foreign sessions"
     );
@@ -364,11 +325,11 @@ async fn context_cost(
     connection.close().await?;
     let result = fixture
         .api
-        .call("hook_context", json!({"session":session}))
+        .call("view_session_context", json!({"session":session}))
         .await?;
     assert_eq!(
         result.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "unrelated workspace poisoned context: {result}"
     );
     let direct = fixture
@@ -386,7 +347,7 @@ async fn context_cost(
 
 #[tokio::test]
 #[allow(clippy::panic_in_result_fn)]
-async fn covered_read_and_move_checks_have_operand_bounded_cost() -> Result<(), TestError> {
+async fn covered_reads_and_session_context_have_operand_bounded_cost() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = gate_costs(8).await?;
     let large = gate_costs(80).await?;

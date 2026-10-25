@@ -4,115 +4,8 @@ use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-fn rejected_move(base: &Record, reasons: Vec<RejectReason>) -> Result<Record, TextValidationError> {
-    let move_id = MoveId::generate();
-    let actor = base.envelope().actor.clone();
-    MoveRecord::new(MoveRecordProps {
-        envelope: RecordEnvelope {
-            id: move_id.clone().into(),
-            ..base.envelope().clone()
-        },
-        move_id,
-        project: base
-            .envelope()
-            .scope
-            .project
-            .clone()
-            .ok_or(TextValidationError {
-                field: "project",
-                requirement: "fixture must own a project",
-            })?,
-        move_name: MoveName::try_from("attempt".to_owned())?,
-        endpoints: None,
-        evidence: Vec::new(),
-        reason: String::new(),
-        requester: actor,
-        outcome: MoveOutcome::Rejected { reasons },
-    })
-    .map(Record::Move)
-}
-
 #[tokio::test]
-async fn move_rejection_shape_is_checked_at_native_admission_and_decode() -> TestResult {
-    let directory = tempfile::tempdir()?;
-    let project = ProjectId::generate();
-    let store =
-        ProjectStore::open(&directory.path().join("project.sqlite"), project.clone()).await?;
-    let base = crate::project_store_tests::project_record(project);
-    let mut reasons = vec![
-        RejectReason::Archived {},
-        RejectReason::Closed {},
-        RejectReason::StaleRevision {
-            current: SubjectRevision::INITIAL,
-        },
-        RejectReason::MoveNotAllowed {
-            edge: "attempt".to_owned().try_into()?,
-            required_role: Some(AuthorityRole::Lead),
-        },
-    ];
-    let evaluator = Identity::Human {
-        human_id: "verifier".to_owned().try_into()?,
-    };
-    reasons.extend(
-        (0..MAX_EDGE_GUARDS).map(|_| RejectReason::GuardUnavailable {
-            guard: "guard".to_owned(),
-            evaluator: evaluator.clone(),
-        }),
-    );
-    assert_eq!(reasons.len(), 12);
-    let valid = rejected_move(&base, reasons.clone())?;
-    let mut write = store
-        .begin_admission(crate::project_test_support::origin())
-        .await?;
-    write.append_record(base.clone()).await?;
-    write.append_record(valid.clone()).await?;
-    write.commit().await?;
-    reasons.push(RejectReason::Closed {});
-    let mut write = store
-        .begin_admission(crate::project_test_support::origin())
-        .await?;
-    assert!(
-        matches!(
-            write
-                .append_record(rejected_move(&base, reasons.clone())?)
-                .await,
-            Err(ProjectStorageError::InvalidRecord {
-                field: "reasons",
-                ..
-            })
-        ),
-        "native admission accepted a 13-reason movement"
-    );
-    write.rollback().await?;
-    let mut corrupt = store.database.begin_write().await?;
-    assert_eq!(
-        sqlx::query("UPDATE moves SET outcome=? WHERE move_id=?")
-            .bind(serde_json::to_string(&MoveOutcome::Rejected { reasons })?)
-            .bind(valid.reference().id.as_str())
-            .execute(&mut corrupt)
-            .await?
-            .rows_affected(),
-        1
-    );
-    corrupt.commit().await?;
-    let mut read = store.snapshot().await?;
-    assert!(
-        matches!(
-            read.record(&valid.reference()).await,
-            Err(ProjectStorageError::InvalidRecord {
-                field: "reasons",
-                ..
-            })
-        ),
-        "native decoding accepted a 13-reason movement"
-    );
-    read.finish().await?;
-    store.close().await;
-    Ok(())
-}
-
-#[tokio::test]
-async fn non_move_rejection_shape_is_checked_at_native_admission_and_decode() -> TestResult {
+async fn rejection_shape_is_checked_at_native_admission_and_decode() -> TestResult {
     let directory = tempfile::tempdir()?;
     let project = ProjectId::generate();
     let store =
@@ -143,7 +36,12 @@ async fn non_move_rejection_shape_is_checked_at_native_admission_and_decode() ->
     invalid.envelope.id = invalid.request_id.clone().into();
     invalid.envelope.request = Some(invalid.request_id.clone());
     invalid.decision = StoredDecision::Rejected {
-        reasons: vec![Refusal::Archived, Refusal::DefinitionConflict],
+        reasons: vec![
+            Refusal::Archived,
+            Refusal::InvalidShape {
+                field: "fixture".into(),
+            },
+        ],
     };
     let mut write = store
         .begin_admission(crate::project_test_support::origin())
@@ -255,6 +153,65 @@ async fn request_rows_are_insert_once_and_a_persisted_voided_decision_is_refused
         })
     ));
     read.finish().await?;
+    store.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_rejected_decision_cannot_commit_record_effects() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let project = ProjectId::generate();
+    let store =
+        ProjectStore::open(&directory.path().join("project.sqlite"), project.clone()).await?;
+    let base = crate::project_store_tests::project_record(project);
+    let request = RequestId::generate();
+    let fact = FactId::generate();
+    let mut write = store
+        .begin_admission(crate::project_test_support::origin())
+        .await?;
+    write.append_record(base.clone()).await?;
+    write
+        .append_record(Record::Fact(Fact {
+            envelope: RecordEnvelope {
+                id: fact.clone().into(),
+                request: Some(request.clone()),
+                ..base.envelope().clone()
+            },
+            fact_id: fact,
+            kind: FactKind::Lifecycle(LifecycleFact::PhaseCompleted {
+                phase: "fixture".into(),
+            }),
+            links: vec![],
+            producer_time: chrono::Utc::now(),
+            anchor: None,
+            late: false,
+        }))
+        .await?;
+    let rejected = Record::Request(RequestLedgerEntry {
+        envelope: RecordEnvelope {
+            id: request.clone().into(),
+            request: Some(request.clone()),
+            ..base.envelope().clone()
+        },
+        request_id: request,
+        canonical_hash: CanonicalHash::try_from("b".repeat(64))?,
+        accepted_in: None,
+        decision: StoredDecision::Rejected {
+            reasons: vec![Refusal::Archived],
+        },
+    });
+    let result = write.append_record(rejected).await;
+    assert!(
+        matches!(
+            result,
+            Err(ProjectStorageError::InvalidRecord {
+                field: "effects",
+                ..
+            })
+        ),
+        "rejected decision accepted effects: {result:?}"
+    );
+    write.rollback().await?;
     store.close().await;
     Ok(())
 }

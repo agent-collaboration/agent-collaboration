@@ -39,11 +39,6 @@ pub enum FleetReadKey {
         scope: FleetNameScope,
         name: ResourceName,
     },
-    Definition {
-        workspace: WorkspaceId,
-        name: ResourceName,
-        version: ResourceName,
-    },
     WorkspaceBoards {
         workspace: WorkspaceId,
     },
@@ -92,7 +87,6 @@ pub struct FleetSnapshot {
     pub decision_receipts: Vec<DecisionEffect>,
     pub records: Vec<Record>,
     pub names: Vec<FleetNameOwner>,
-    pub definitions: Vec<ProcessDefinition>,
     pub workspace_boards: Vec<Board>,
     pub board_projects: Vec<ProjectDirectoryEntry>,
     pub archive_reports: Vec<ProjectId>,
@@ -112,7 +106,6 @@ impl FleetSnapshot {
             decision_receipts: Vec::new(),
             records: Vec::new(),
             names: Vec::new(),
-            definitions: Vec::new(),
             workspace_boards: Vec::new(),
             board_projects: Vec::new(),
             archive_reports: Vec::new(),
@@ -225,11 +218,6 @@ pub fn reads_for(request: &FleetRequest) -> FleetReads {
                 });
             }
         }
-        FleetOperation::DefinitionRegister { definition } => keys.push(FleetReadKey::Definition {
-            workspace: request.workspace.clone(),
-            name: definition.reference.name.clone(),
-            version: definition.reference.version.clone(),
-        }),
         FleetOperation::RepositoryAttach { .. } | FleetOperation::RepositoryDetach { .. } => keys
             .push(FleetReadKey::Repositories {
                 workspace: request.workspace.clone(),

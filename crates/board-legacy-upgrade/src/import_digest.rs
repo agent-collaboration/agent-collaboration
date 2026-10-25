@@ -34,8 +34,6 @@ enum SemanticBody<'a> {
     Project {
         project: &'a ProjectId,
         description: &'a Description,
-        status: &'a Option<StatusName>,
-        pinned: &'a Option<ProcessDefinitionRef>,
         revision: SubjectRevision,
         closed: &'a Option<FeedCursor>,
     },
@@ -100,8 +98,6 @@ pub(crate) fn semantic_import_digest(
                 SemanticBody::Project {
                     project: &row.project_id,
                     description: &row.description,
-                    status: &row.status,
-                    pinned: &row.pinned_definition,
                     revision: row.revision,
                     closed: &row.closed_at,
                 },

@@ -62,8 +62,8 @@ pub async fn prepare_registered_creation_for_peer(
     origin: &message_board::ActorOrigin,
     peer: fleet_sync_protocol::PeerId,
 ) -> Result<(), FixtureError> {
-    use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
-    use message_board::{Record, RecordId, RecordedActor, RequestDecision, RequestResult};
+    use fleet_admission::{FleetOperation, FleetRequest};
+    use message_board::{Record, RecordedActor, RequestDecision, RequestResult};
     use runtime_primitives::{Clock, SystemClock};
     let Some(Record::Board(board)) = fleet.record(&input.board_id.clone().into()).await? else {
         return Err("fixture board missing".into());
@@ -80,15 +80,7 @@ pub async fn prepare_registered_creation_for_peer(
             title: input.title.clone(),
         },
     };
-    let ids = match fleet.pending_request(&input.request_id).await? {
-        Some(queued) => queued.ids,
-        None => FleetIds {
-            generated_record: RecordId::generate(),
-        },
-    };
-    let reply = fleet
-        .submit_creation(input, &directory, &ids, origin)
-        .await?;
+    let reply = fleet.submit_creation(input, &directory, origin).await?;
     match reply.result {
         RequestResult::Decided(RequestDecision::Accepted { .. }) => {}
         RequestResult::PendingUnreachable => {
@@ -96,7 +88,7 @@ pub async fn prepare_registered_creation_for_peer(
                 .pending_request(&input.request_id)
                 .await?
                 .ok_or("creating input was not queued")?;
-            let reply = fleet.submit(&queued.request, &queued.ids, origin).await?;
+            let reply = fleet.submit(&queued.request, origin).await?;
             let RequestResult::Decided(decision @ RequestDecision::Accepted { .. }) = reply.result
             else {
                 return Err("fixture directory refused".into());

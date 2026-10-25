@@ -10,7 +10,7 @@ use message_board_storage::CapturedProjectChanges;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-fn feed(position: i64, status: Option<&str>, time: Option<&str>) -> RowChange {
+fn feed(position: i64, time: Option<&str>) -> RowChange {
     let key = SqlValue::Text(format!("019eef00-0000-7000-8000-{position:012}"));
     RowChange::Upsert {
         table: "project_feed".to_owned(),
@@ -35,18 +35,17 @@ fn feed(position: i64, status: Option<&str>, time: Option<&str>) -> RowChange {
                 .to_owned(),
             ),
             SqlValue::Text("{}".to_owned()),
-            status.map_or(SqlValue::Null, |value| SqlValue::Text(value.to_owned())),
         ],
     }
 }
 
 #[test]
-fn annotation_uses_the_highest_feed_position_including_unknown_time_and_no_status() -> TestResult {
+fn annotation_uses_the_highest_feed_position_including_unknown_time() -> TestResult {
     let transaction = ReplicatedTransaction::Rows {
         commit_id: CommitSequence::new(900),
         rows: vec![
-            feed(4, None, None),
-            feed(2, Some("working"), Some("2026-10-18T12:00:00.000000000Z")),
+            feed(4, None),
+            feed(2, Some("2026-10-18T12:00:00.000000000Z")),
         ],
     };
     let captured = CapturedTransaction {
@@ -68,7 +67,6 @@ fn annotation_uses_the_highest_feed_position_including_unknown_time_and_no_statu
     assert_eq!(
         BoardPieceAnnotation.annotate(&[captured]),
         Some(BoardAnnotation::ProjectSummary {
-            status: None,
             latest_record_at: RecordTime::LegacyUnknown
         })
     );
@@ -86,12 +84,7 @@ fn no_feed_keeps_the_summary_and_malformed_captured_metadata_refuses() -> TestRe
         transaction: &transaction,
     };
     assert_eq!(BoardPieceAnnotation.annotate(&[captured]), None);
-    for row in [
-        feed(0, None, None),
-        feed(1, Some(""), None),
-        feed(1, Some(" working "), None),
-        feed(1, None, Some("bad stored time")),
-    ] {
+    for row in [feed(0, None), feed(1, Some("bad stored time"))] {
         let transaction = ReplicatedTransaction::Rows {
             commit_id: CommitSequence::new(902),
             rows: vec![row],

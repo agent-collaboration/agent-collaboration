@@ -12,7 +12,6 @@ pub(super) async fn dispatch(
     command: PreparedEntityCommand,
 ) -> Result<Value, BoardClientError> {
     match command {
-        PreparedEntityCommand::MoveCheck(request) => serialized(client.move_check(request).await?),
         PreparedEntityCommand::ProjectWrite(kind, request) => match kind {
             ProjectWriteKind::ProjectNotificationCancel => {
                 serialized(client.project_notification_cancel(*request).await?)
@@ -56,11 +55,7 @@ pub(super) async fn dispatch(
             ProjectWriteKind::OwnerGrantRecord => {
                 serialized(client.owner_grant_record(*request).await?)
             }
-            ProjectWriteKind::MoveRequest => serialized(client.move_request(*request).await?),
             ProjectWriteKind::FactRecord => serialized(client.fact_record(*request).await?),
-            ProjectWriteKind::ProjectPinDefinition => {
-                serialized(client.project_pin_definition(*request).await?)
-            }
             ProjectWriteKind::ProjectPublishPlan => {
                 serialized(client.project_publish_plan(*request).await?)
             }
@@ -74,7 +69,6 @@ pub(super) async fn dispatch(
             ProjectReadKind::Task => client.task_show(request).await?,
             ProjectReadKind::Subtask => client.subtask_show(request).await?,
             ProjectReadKind::RoleAssignment => client.role_show(request).await?,
-            ProjectReadKind::Move => client.move_show(request).await?,
             ProjectReadKind::Fact => client.fact_show(request).await?,
             ProjectReadKind::NotifyIntent => client.intent_show(request).await?,
             ProjectReadKind::WorkTrailRow => {
@@ -88,7 +82,6 @@ pub(super) async fn dispatch(
                 return Err(ClientError::InvalidRequest("use subtask list").into());
             }
             ProjectReadKind::RoleAssignment => client.role_list(request).await?,
-            ProjectReadKind::Move => client.move_list(request).await?,
             ProjectReadKind::Fact => client.fact_list(request).await?,
             ProjectReadKind::NotifyIntent => client.intent_list(request).await?,
             ProjectReadKind::WorkTrailRow => {
@@ -106,8 +99,5 @@ pub(super) async fn dispatch(
         }
         PreparedEntityCommand::AdrShow(request) => serialized(client.adr_show(request).await?),
         PreparedEntityCommand::AdrList(request) => serialized(client.adr_list(request).await?),
-        PreparedEntityCommand::ProcessRegister(request) => {
-            serialized(client.process_register(*request).await?)
-        }
     }
 }

@@ -118,7 +118,6 @@ async fn actual_cli_publishes_a_zero_post_project_with_only_its_project_state() 
     assert_eq!(
         summary.summary,
         board_sync_protocol::BoardAnnotation::ProjectSummary {
-            status: None,
             latest_record_at: message_board::RecordTime::LegacyUnknown,
         }
     );
@@ -467,11 +466,8 @@ async fn uploader_publishes_real_snapshots_and_replays_without_republishing() ->
         assert_eq!(record.header.manifest, manifest);
         assert_eq!(record.header.declared_owner, prepared.report.owner);
         assert!(record.header.pages > 0);
-        let board_sync_protocol::BoardAnnotation::ProjectSummary {
-            status,
-            latest_record_at,
-        } = record.header.summary;
-        assert_eq!(status, None);
+        let board_sync_protocol::BoardAnnotation::ProjectSummary { latest_record_at } =
+            record.header.summary;
         assert_eq!(latest_record_at, message_board::RecordTime::LegacyUnknown);
         Ok(())
     }

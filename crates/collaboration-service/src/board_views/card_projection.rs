@@ -79,10 +79,6 @@ pub(crate) fn continuation_card(
                 .map(|cursor| cursor.position)
         })
         .map(|row| row.hash.clone());
-    let process_definition = snapshot.records.values().find_map(|record| match record {
-        Record::Project(row) => row.pinned_definition.clone(),
-        _ => None,
-    });
     let view = super::work_view(&snapshot, false)?;
     let blockers = view
         .blocked
@@ -107,7 +103,6 @@ pub(crate) fn continuation_card(
     let mut card = ContinuationCard {
         subject,
         plan_revision,
-        process_definition,
         assignment,
         pending_handbacks,
         pending_decisions,

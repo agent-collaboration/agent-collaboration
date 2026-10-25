@@ -175,8 +175,6 @@ pub(crate) fn project_record(project_id: ProjectId) -> message_board::Record {
             time: RecordTime::Router("2026-10-12T00:00:00Z".parse().unwrap()),
         },
         project_id,
-        status: None,
-        pinned_definition: None,
         revision: SubjectRevision::INITIAL,
         closed_at: None,
         description: Description::try_from(String::new()).unwrap(),

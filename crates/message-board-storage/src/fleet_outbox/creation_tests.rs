@@ -4,8 +4,7 @@ use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-fn inputs()
--> Result<(ProjectCreateRequest, FleetRequest, FleetIds), Box<dyn std::error::Error + Send + Sync>>
+fn inputs() -> Result<(ProjectCreateRequest, FleetRequest), Box<dyn std::error::Error + Send + Sync>>
 {
     let input = ProjectCreateRequest {
         request_id: RequestId::generate(),
@@ -31,13 +30,7 @@ fn inputs()
             title: input.title.clone(),
         },
     };
-    Ok((
-        input,
-        directory,
-        FleetIds {
-            generated_record: RecordId::generate(),
-        },
-    ))
+    Ok((input, directory))
 }
 
 #[tokio::test]
@@ -45,14 +38,12 @@ async fn complete_creation_input_and_identity_survive_pending_conflict_and_reope
     let temporary = tempfile::tempdir()?;
     let path = temporary.path().join("outbox.sqlite");
     let outbox = FleetOutbox::open(&path).await?;
-    let (input, directory, ids) = inputs()?;
-    let queued = outbox.enqueue_creation(&directory, &ids, &input).await?;
+    let (input, directory) = inputs()?;
+    let queued = outbox.enqueue_creation(&directory, &input).await?;
     let mut conflicting = input.clone();
     conflicting.description = Some(Description::try_from("changed".to_owned())?);
     assert!(matches!(
-        outbox
-            .enqueue_creation(&directory, &ids, &conflicting)
-            .await,
+        outbox.enqueue_creation(&directory, &conflicting).await,
         Err(RouterLocalStorageError::ConflictingRequest)
     ));
     assert_eq!(
@@ -85,17 +76,12 @@ async fn complete_creation_input_and_identity_survive_pending_conflict_and_reope
 async fn creation_input_failure_rolls_back_its_directory_request() -> TestResult {
     let temporary = tempfile::tempdir()?;
     let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
-    let (input, directory, ids) = inputs()?;
+    let (input, directory) = inputs()?;
     // A fault at the second table must not leave the first half enqueued.
     sqlx::query("DROP TABLE project_creation_inputs")
         .execute(&outbox.database.pool)
         .await?;
-    assert!(
-        outbox
-            .enqueue_creation(&directory, &ids, &input)
-            .await
-            .is_err()
-    );
+    assert!(outbox.enqueue_creation(&directory, &input).await.is_err());
     assert!(outbox.request(&input.request_id).await?.is_none());
     outbox.close().await;
     Ok(())
@@ -105,8 +91,8 @@ async fn creation_input_failure_rolls_back_its_directory_request() -> TestResult
 async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity() -> TestResult {
     let temporary = tempfile::tempdir()?;
     let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
-    let (input, directory, ids) = inputs()?;
-    outbox.enqueue_creation(&directory, &ids, &input).await?;
+    let (input, directory) = inputs()?;
+    outbox.enqueue_creation(&directory, &input).await?;
     let mut changed = input.clone();
     changed.description = Some(Description::try_from("corrupt description".to_owned())?);
     sqlx::query("UPDATE project_creation_inputs SET input = ? WHERE request_id = ?")

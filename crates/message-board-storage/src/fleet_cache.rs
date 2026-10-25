@@ -31,27 +31,6 @@ pub struct FleetCache {
 }
 
 impl FleetCache {
-    pub async fn process_definition(
-        &self,
-        reference: &message_board::ProcessDefinitionRef,
-    ) -> Result<Option<message_board::ProcessDefinition>, RouterLocalStorageError> {
-        let name = reference.name.as_str();
-        let version = reference.version.as_str();
-        let hash = reference.source_hash.as_str();
-        let row = sqlx_turso::query!(r#"SELECT id AS "id!: String", payload AS "payload!: String" FROM cached_fleet_records WHERE kind = 'processDefinition' AND json_extract(payload, '$.record.reference.name') = ? AND json_extract(payload, '$.record.reference.version') = ? AND json_extract(payload, '$.record.reference.sourceHash') = ? ORDER BY id LIMIT 1"#, name, version, hash).fetch_optional(&self.database.pool).await?;
-        row.map(|row| {
-            let key = message_board::RecordRef {
-                kind: message_board::RecordKind::ProcessDefinition,
-                id: message_board::RecordId::try_from(row.id)
-                    .map_err(|_| RouterLocalStorageError::InvalidRecord)?,
-            };
-            match decode_fleet_record(&key, &row.payload).map_err(record_decode_error)? {
-                Record::ProcessDefinition(definition) => Ok(definition),
-                _ => Err(RouterLocalStorageError::InvalidRecord),
-            }
-        })
-        .transpose()
-    }
     /// Scope selection reads keys only; bodies are validated when a consumer needs them.
     pub async fn workspace_project_ids(
         &self,

@@ -59,7 +59,7 @@ async fn directory_keeps_epoch_first_registry_version_across_late_repeated_and_r
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"copy_directory_version"},
             "kind":"central.directory-summary","target":null,"request":{
                 "database":PROJECT,"position":{"epoch":9,"sequence":50},"ackedAt":1_792_411_199_000_i64,
-                "summary":{"kind":"projectSummary","value":{"status":null,"latestRecordAt":{"kind":"legacyUnknown"}}}
+                "summary":{"kind":"projectSummary","value":{"latestRecordAt":{"kind":"legacyUnknown"}}}
             }
         }))?).await.map_err(|error|format!("Copy summary: {error:?}"))?;
         let old=encoded_revision(collaboration_central_core::RegistryIncarnation::new(99)?,2,99,SERVICE,PEER,1_792_411_200_000)?;

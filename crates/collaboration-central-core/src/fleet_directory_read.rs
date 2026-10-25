@@ -99,12 +99,8 @@ where
                     "summary belongs to another project",
                 ));
             }
-            let BoardAnnotation::ProjectSummary {
-                status,
-                latest_record_at,
-            } = summary.summary;
+            let BoardAnnotation::ProjectSummary { latest_record_at } = summary.summary;
             DirectorySide::Known(CopyMetadata {
-                status,
                 latest_record_at,
                 as_of: CopyMetadataAsOf {
                     position: summary.position,

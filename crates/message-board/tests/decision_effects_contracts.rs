@@ -12,7 +12,6 @@ fn fleet_effect_validation_refuses_a_post_even_when_its_placement_and_digest_mat
         RecordKind::Workspace,
         RecordKind::Board,
         RecordKind::Adr,
-        RecordKind::ProcessDefinition,
         RecordKind::Project,
     ] {
         assert!(

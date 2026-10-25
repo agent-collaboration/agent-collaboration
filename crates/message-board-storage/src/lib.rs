@@ -49,8 +49,8 @@ mod project_participant_batch;
 mod project_participant_io;
 mod project_participant_pages;
 mod project_participation_writes;
+mod project_plan_operands;
 mod project_post_actor_reads;
-mod project_process_operands;
 mod project_read_store;
 #[cfg(test)]
 mod project_reader_identity_tests;

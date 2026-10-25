@@ -2,14 +2,11 @@
 use crate::{ProjectStorageError, project_record_codec::decode_record_time};
 use fleet_sync_protocol::{ReplicatedTransaction, RowChange, SqlValue};
 use fleet_sync_writer::CapturedTransaction;
-use message_board::{
-    EpochNumber, FeedCursor, FeedPosition, RecordId, RecordRef, RecordTime, StatusName,
-};
+use message_board::{EpochNumber, FeedCursor, FeedPosition, RecordId, RecordRef, RecordTime};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CapturedFeedSummary {
     pub cursor: FeedCursor,
-    pub status: Option<StatusName>,
     pub time: RecordTime,
 }
 
@@ -34,7 +31,7 @@ impl CapturedProjectChanges {
             };
             match table.as_str() {
                 "project_feed" => {
-                    validate_row(key, values, 13)?;
+                    validate_row(key, values, 12)?;
                     let [
                         _,
                         epoch,
@@ -48,7 +45,6 @@ impl CapturedProjectChanges {
                         router_time,
                         time_basis,
                         _,
-                        project_status,
                     ] = values.as_slice()
                     else {
                         return Err(ProjectStorageError::InvalidFeed);
@@ -73,16 +69,6 @@ impl CapturedProjectChanges {
                         text(time_basis)?,
                         &reference,
                     )?;
-                    let status = optional_text(project_status)?
-                        .map(|value| {
-                            let status = StatusName::try_from(value.to_owned())
-                                .map_err(|_| ProjectStorageError::InvalidFeed)?;
-                            if status.as_str() != value {
-                                return Err(ProjectStorageError::InvalidFeed);
-                            }
-                            Ok(status)
-                        })
-                        .transpose()?;
                     changes.first_feed_position = Some(
                         changes
                             .first_feed_position
@@ -95,7 +81,6 @@ impl CapturedProjectChanges {
                     {
                         changes.latest_feed = Some(CapturedFeedSummary {
                             cursor: FeedCursor { epoch, position },
-                            status,
                             time,
                         });
                     }

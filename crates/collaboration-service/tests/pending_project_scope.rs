@@ -191,16 +191,14 @@ async fn rejected_creation_preserves_nonempty_repository_context() -> Result<(),
     );
     let before = fixture
         .api
-        .call("hook_context", json!({"session":session}))
+        .call("view_session_context", json!({"session":session}))
         .await?;
     assert_eq!(
         before.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{before}"
     );
-    let payload = before
-        .pointer("/result/payload/payload")
-        .ok_or("context payload")?;
+    let payload = before.pointer("/result/payload").ok_or("context payload")?;
     let assignments = payload
         .get("assignments")
         .and_then(Value::as_array)
@@ -211,15 +209,19 @@ async fn rejected_creation_preserves_nonempty_repository_context() -> Result<(),
     reject_registration_fixture(&fixture).await?;
     let after = fixture
         .api
-        .call("hook_context", json!({"session":session}))
+        .call("view_session_context", json!({"session":session}))
         .await?;
-    assert_eq!(after.pointer("/result/kind"), Some(&json!("ok")), "{after}");
     assert_eq!(
-        after.pointer("/result/payload/payload/assignments"),
+        after.pointer("/result/kind"),
+        Some(&json!("context")),
+        "{after}"
+    );
+    assert_eq!(
+        after.pointer("/result/payload/assignments"),
         payload.get("assignments")
     );
     assert_eq!(
-        after.pointer("/result/payload/payload/acknowledgedScopes"),
+        after.pointer("/result/payload/acknowledgedScopes"),
         payload.get("acknowledgedScopes")
     );
     fixture.stop().await
@@ -309,15 +311,15 @@ async fn cold_corrupt_rejected_file_is_excluded_without_reading_it() -> Result<(
     assert!(summary.page.records[0].main_tracking_initialized);
     let context = fixture
         .api
-        .call("hook_context", json!({"session":session}))
+        .call("view_session_context", json!({"session":session}))
         .await?;
     assert_eq!(
         context.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{context}"
     );
     let assignments = context
-        .pointer("/result/payload/payload/assignments")
+        .pointer("/result/payload/assignments")
         .ok_or("assignments")?
         .clone();
     assert_eq!(assignments.as_array().map(Vec::len), Some(1));
@@ -327,7 +329,7 @@ async fn cold_corrupt_rejected_file_is_excluded_without_reading_it() -> Result<(
         json!([Assignment::Implementer(workstream.clone())])
     );
     assert_eq!(
-        context.pointer("/result/payload/payload/acknowledgedScopes"),
+        context.pointer("/result/payload/acknowledgedScopes"),
         Some(&json!([fact.clone()]))
     );
     let scopes = [
@@ -483,19 +485,19 @@ async fn cold_corrupt_rejected_file_is_excluded_without_reading_it() -> Result<(
     assert!(inbox.unavailable.is_empty());
     let context = fixture
         .api
-        .call("hook_context", json!({"session":session}))
+        .call("view_session_context", json!({"session":session}))
         .await?;
     assert_eq!(
         context.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{context}"
     );
     assert_eq!(
-        context.pointer("/result/payload/payload/assignments"),
+        context.pointer("/result/payload/assignments"),
         Some(&assignments)
     );
     assert_eq!(
-        context.pointer("/result/payload/payload/acknowledgedScopes"),
+        context.pointer("/result/payload/acknowledgedScopes"),
         Some(&json!([fact]))
     );
     assert_eq!(

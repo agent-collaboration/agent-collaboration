@@ -374,6 +374,7 @@ impl ProjectStoreRegistry {
             closing: Some(database.clone()),
             superseded_current: Some(current),
         };
+        tracing::trace!(target: "collaboration_service::project_native_close", "native project drain started");
         database.close().await;
         *owner = ProjectRuntime::Superseded {
             current: Some(current),

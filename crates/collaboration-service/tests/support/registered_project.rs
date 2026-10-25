@@ -72,9 +72,6 @@ pub async fn settle_accepted_creation(
                     title: request.title.clone(),
                 },
             },
-            &fleet_admission::FleetIds {
-                generated_record: RecordId::generate(),
-            },
             origin,
         )
         .await?;

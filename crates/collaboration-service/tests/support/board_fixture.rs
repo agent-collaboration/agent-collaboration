@@ -162,12 +162,7 @@ impl BoardFixture {
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
             registry: registry.clone(),
             fleet: fleet.clone(),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
-                )?,
-                Some("V1/V2 proof"),
-            )?,
+            identity: fixture_machine_identity()?,
         })?);
         let mut identity = ServiceIdentity::new(
             "00000000-0000-4000-8000-000000000001",
@@ -193,25 +188,7 @@ impl BoardFixture {
                 .await?,
             ));
             let routes = Arc::new(collaboration_service::SessionDeliveryRouter::new(Vec::new()));
-            let service = collaboration_service::SubscriptionDeliveryService::new(
-                collaboration_service::SubscriptionDeliveryServiceProps {
-                    board_availability: collaboration_service::BoardAvailability::Available(
-                        Arc::new(tokio::sync::Mutex::new(
-                            admission.subscription_window_store(interactions.clone()),
-                        )),
-                    ),
-                    push_store: interactions.clone(),
-                    delivery: routes.clone(),
-                    presence: routes.clone(),
-                    machine_identity: MachineIdentity::new(
-                        collaboration_protocol::UuidIdentity::try_from(
-                            "00000000-0000-4000-8000-000000000001".to_owned(),
-                        )?,
-                        Some("V1/V2 proof"),
-                    )?,
-                    clock: Arc::new(collaboration_service::SystemSubscriptionClock),
-                },
-            );
+            let service = fixture_subscription_service(&admission, &interactions, &routes)?;
             identity = identity
                 .with_automation_store(automation)
                 .with_subscription_delivery_service(service.clone(), routes.clone());
@@ -222,12 +199,7 @@ impl BoardFixture {
                     interactions: interactions.clone(),
                     actors: service.clone(),
                     presence: routes,
-                    machine: MachineIdentity::new(
-                        "00000000-0000-4000-8000-000000000001"
-                            .to_owned()
-                            .try_into()?,
-                        Some("V1/V2 proof"),
-                    )?,
+                    machine: fixture_machine_identity()?,
                     clock: Arc::new(collaboration_service::SystemSubscriptionClock),
                 },
             )?;
@@ -455,12 +427,7 @@ impl BoardFixture {
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
             registry: registry.clone(),
             fleet: fleet.clone(),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(
-                    "00000000-0000-4000-8000-000000000001".to_owned(),
-                )?,
-                Some("V1/V2 proof"),
-            )?,
+            identity: fixture_machine_identity()?,
         })?);
         let identity = ServiceIdentity::new(
             "00000000-0000-4000-8000-000000000001",
@@ -609,7 +576,7 @@ pub fn accepted(value: &Value) {
 pub fn refusal_kind(value: &Value) -> Option<&str> {
     let reason = value.pointer("/result/result/decision/reasons/0")?;
     match reason.get("kind").and_then(Value::as_str)? {
-        "task" | "workstream" | "trail" | "role" | "thread" | "move" => {
+        "task" | "workstream" | "trail" | "role" | "thread" => {
             reason.pointer("/reason/kind").and_then(Value::as_str)
         }
         kind => Some(kind),
@@ -638,4 +605,32 @@ fn fixture_record_origin() -> Result<ActorOrigin, TestError> {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("V1/V2 proof".to_owned())?,
     })
+}
+
+fn fixture_machine_identity() -> Result<MachineIdentity, TestError> {
+    Ok(MachineIdentity::new(
+        "00000000-0000-4000-8000-000000000001"
+            .to_owned()
+            .try_into()?,
+        Some("V1/V2 proof"),
+    )?)
+}
+
+fn fixture_subscription_service(
+    admission: &ProjectAdmission,
+    interactions: &Arc<interaction_storage::InteractionStore>,
+    routes: &Arc<collaboration_service::SessionDeliveryRouter>,
+) -> Result<collaboration_service::SubscriptionDeliveryService, TestError> {
+    Ok(collaboration_service::SubscriptionDeliveryService::new(
+        collaboration_service::SubscriptionDeliveryServiceProps {
+            board_availability: collaboration_service::BoardAvailability::Available(Arc::new(
+                tokio::sync::Mutex::new(admission.subscription_window_store(interactions.clone())),
+            )),
+            push_store: interactions.clone(),
+            delivery: routes.clone(),
+            presence: routes.clone(),
+            machine_identity: fixture_machine_identity()?,
+            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+        },
+    ))
 }

@@ -35,7 +35,6 @@ async fn close_is_terminal_and_late_facts_require_a_current_line_anchor() -> Res
     };
     let closing = state.closed_at.ok_or("close position")?;
     assert!(closing.position > before_close.position);
-    assert_eq!(state.status, None);
     let facts = read.records(RecordKind::Fact).await?;
     assert!(facts.iter().any(|record|matches!(record,Record::Fact(fact) if matches!(&fact.kind,FactKind::Lifecycle(LifecycleFact::Closed {position,reason}) if *position==closing&&reason=="scope completed") && fact.envelope.position.project_cursor()==Some(closing))));
     read.finish().await?;

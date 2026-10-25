@@ -7,8 +7,7 @@ use crate::{
 use chrono::{DateTime, Utc};
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
 use fleet_admission::{
-    FleetAdmissionError, FleetIds, FleetImportBundle, FleetImportResult, FleetRequest,
-    FleetRequestResult,
+    FleetAdmissionError, FleetImportBundle, FleetImportResult, FleetRequest, FleetRequestResult,
 };
 use message_board::ActorOrigin;
 use sqlx_core::{
@@ -25,7 +24,6 @@ pub(crate) struct ImportFleet {
 pub(crate) struct DecideFleet {
     pub request: FleetRequest,
     pub origin: ActorOrigin,
-    pub ids: FleetIds,
     pub now: DateTime<Utc>,
     pub row_ids: crate::fleet_row_ids::FleetRowIds,
 }
@@ -82,19 +80,14 @@ where
             let snapshot =
                 fleet_scope_snapshot::read(scope, fleet_admission::reads_for(&self.request))
                     .await?;
-            let decision = match fleet_admission::decide(
-                &self.request,
-                &snapshot,
-                self.now,
-                &self.ids,
-                &self.origin,
-            ) {
-                Ok(decision) => decision,
-                Err(FleetAdmissionError::ConflictingRequest) => {
-                    return Ok((FleetRequestResult::ConflictingRequest, Vec::new()));
-                }
-                Err(error) => return Err(StoreError::backend(error)),
-            };
+            let decision =
+                match fleet_admission::decide(&self.request, &snapshot, self.now, &self.origin) {
+                    Ok(decision) => decision,
+                    Err(FleetAdmissionError::ConflictingRequest) => {
+                        return Ok((FleetRequestResult::ConflictingRequest, Vec::new()));
+                    }
+                    Err(error) => return Err(StoreError::backend(error)),
+                };
             let result =
                 fleet_scope_apply::decision(scope, decision, self.now, &mut self.row_ids).await?;
             if matches!(

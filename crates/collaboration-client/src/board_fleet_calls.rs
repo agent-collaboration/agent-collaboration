@@ -31,16 +31,6 @@ impl CollaborationClient {
             .await
     }
 
-    pub async fn process_register(
-        &self,
-        request: ProcessRegisterRequest,
-    ) -> Result<WriteReply, BoardClientError> {
-        let resource = ResourceIdentity::Workspace {
-            workspace_id: request.workspace_id.clone(),
-        };
-        self.board_mutation_call("process_register", request, resource)
-            .await
-    }
     pub async fn adr_show(
         &self,
         request: FleetRecordShowRequest,

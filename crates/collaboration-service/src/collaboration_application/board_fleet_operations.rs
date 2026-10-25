@@ -1,6 +1,6 @@
 //! Workspace, board, repository and directory writes use the fleet port.
 use super::{BoardOperations, admission_error};
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::public_replies::WriteReply;
 use message_board::*;
 
@@ -12,13 +12,7 @@ impl BoardOperations<'_> {
         let reply = self
             .admission()?
             .fleet
-            .submit(
-                &request,
-                &FleetIds {
-                    generated_record: RecordId::generate(),
-                },
-                &self.admission()?.record_origin(),
-            )
+            .submit(&request, &self.admission()?.record_origin())
             .await
             .map_err(|error| admission_error(error.into()))?;
         self.public_write_reply(

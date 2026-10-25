@@ -46,7 +46,6 @@ pub enum Record {
     RoleAssignment(crate::RoleAssignment),
     OwnerGrant(crate::OwnerGrant),
     StandDownAcknowledgement(crate::StandDownAcknowledgement),
-    Move(crate::MoveRecord),
     Fact(crate::Fact),
     Project(crate::ProjectState),
     PlanRevision(PlanRevision),
@@ -60,7 +59,6 @@ pub enum Record {
     Workspace(crate::Workspace),
     Board(crate::Board),
     Adr(crate::Adr),
-    ProcessDefinition(crate::ProcessDefinition),
     DirectoryEntry(crate::ProjectDirectoryEntry),
 }
 
@@ -77,7 +75,6 @@ impl Record {
             Self::RoleAssignment(row) => &row.envelope,
             Self::OwnerGrant(row) => &row.envelope,
             Self::StandDownAcknowledgement(row) => &row.envelope,
-            Self::Move(row) => &row.envelope,
             Self::Fact(row) => &row.envelope,
             Self::Project(row) => &row.envelope,
             Self::PlanRevision(row) => &row.envelope,
@@ -91,7 +88,6 @@ impl Record {
             Self::Workspace(row) => &row.envelope,
             Self::Board(row) => &row.envelope,
             Self::Adr(row) => &row.envelope,
-            Self::ProcessDefinition(row) => &row.envelope,
             Self::DirectoryEntry(row) => &row.envelope,
         }
     }
@@ -106,7 +102,6 @@ impl Record {
             Self::RoleAssignment(row) => &mut row.envelope,
             Self::OwnerGrant(row) => &mut row.envelope,
             Self::StandDownAcknowledgement(row) => &mut row.envelope,
-            Self::Move(row) => &mut row.envelope,
             Self::Fact(row) => &mut row.envelope,
             Self::Project(row) => &mut row.envelope,
             Self::PlanRevision(row) => &mut row.envelope,
@@ -120,7 +115,6 @@ impl Record {
             Self::Workspace(row) => &mut row.envelope,
             Self::Board(row) => &mut row.envelope,
             Self::Adr(row) => &mut row.envelope,
-            Self::ProcessDefinition(row) => &mut row.envelope,
             Self::DirectoryEntry(row) => &mut row.envelope,
         }
     }
@@ -138,7 +132,6 @@ impl Record {
                 kind: crate::RecordKind::StandDownAcknowledgement,
                 id: self.envelope().id.clone(),
             },
-            Self::Move(row) => row.move_id.clone().into(),
             Self::Fact(row) => row.fact_id.clone().into(),
             Self::Project(row) => row.project_id.clone().into(),
             Self::NotifyIntent(row) => row.intent_id.clone().into(),
@@ -167,10 +160,6 @@ impl Record {
             },
             Self::ReadMark(_) => RecordRef {
                 kind: crate::RecordKind::ReadMark,
-                id: self.envelope().id.clone(),
-            },
-            Self::ProcessDefinition(_) => RecordRef {
-                kind: crate::RecordKind::ProcessDefinition,
                 id: self.envelope().id.clone(),
             },
         }

@@ -18,8 +18,6 @@ CREATE TABLE project_state (
     position INTEGER NOT NULL,
     router_time TEXT,
     time_basis TEXT NOT NULL,
-    status TEXT,
-    pinned_definition TEXT,
     revision INTEGER NOT NULL,
     closed_epoch INTEGER,
     closed_position INTEGER
@@ -229,23 +227,6 @@ CREATE TABLE work_trail_links (
     target TEXT NOT NULL,
     UNIQUE(row_id, place)
 );
-CREATE TABLE moves (
-    move_id TEXT NOT NULL PRIMARY KEY,
-    actor_id TEXT NOT NULL REFERENCES actors(actor_id),
-    request_id TEXT,
-    epoch INTEGER NOT NULL REFERENCES epoch_lines(epoch),
-    position INTEGER NOT NULL,
-    router_time TEXT,
-    time_basis TEXT NOT NULL,
-    move_name TEXT NOT NULL,
-    from_status TEXT,
-    to_status TEXT,
-    evidence TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    requester TEXT NOT NULL REFERENCES actors(actor_id),
-    outcome TEXT NOT NULL
-);
-CREATE INDEX moves_by_position ON moves(position, move_id);
 CREATE TABLE facts (
     fact_id TEXT NOT NULL PRIMARY KEY,
     actor_id TEXT NOT NULL REFERENCES actors(actor_id),
@@ -380,7 +361,6 @@ CREATE TABLE project_feed (
     router_time TEXT,
     time_basis TEXT NOT NULL,
     content TEXT NOT NULL,
-    project_status TEXT,
     UNIQUE(epoch, position)
 );
 CREATE INDEX feed_by_record ON project_feed(record_kind, record_id, position);

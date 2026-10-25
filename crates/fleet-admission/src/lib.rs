@@ -22,13 +22,13 @@ pub use fleet_import_contract::*;
 pub use fleet_import_rules::{decide_import, reads_for_import};
 
 pub use fleet_decision::{
-    FleetAdmissionError, FleetDecision, FleetFeedEntry, FleetIds, FleetRequestResult, FleetWrite,
+    FleetAdmissionError, FleetDecision, FleetFeedEntry, FleetRequestResult, FleetWrite,
 };
 pub use fleet_reads::{
     FleetNameOwner, FleetNameScope, FleetReadKey, FleetReads, FleetSnapshot,
     ProjectCreationDecision, reads_for,
 };
-pub use fleet_request::{FleetOperation, FleetRequest, ProcessDefinitionInput, canonical_hash};
+pub use fleet_request::{FleetOperation, FleetRequest, canonical_hash};
 pub use fleet_rules::decide;
 
 #[cfg(feature = "test-support")]

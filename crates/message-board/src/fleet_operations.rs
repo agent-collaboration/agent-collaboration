@@ -29,15 +29,3 @@ pub struct AdrTransitionRequest {
     pub transition: AdrTransition,
     pub expected_revision: SubjectRevision,
 }
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProcessRegisterRequest {
-    pub request_id: RequestId,
-    pub protocol_version: ProtocolVersion,
-    pub workspace_id: WorkspaceId,
-    pub actor: Identity,
-    pub acting_for: Option<ActingForIdentity>,
-    pub name: ResourceName,
-    pub version: ResourceName,
-    pub source: String,
-}

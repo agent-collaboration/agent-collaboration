@@ -11,13 +11,51 @@ use runtime_primitives::{Clock, SystemClock};
 use std::{
     future::{Future, poll_fn},
     pin::Pin,
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     task::Poll,
     time::Duration,
 };
 use tokio::time::timeout;
+use tracing::instrument::WithSubscriber;
+use tracing_subscriber::prelude::*;
 
 const BOUND: Duration = Duration::from_secs(30);
+
+struct NativeDrainStarted(Arc<AtomicBool>);
+impl<Subscriber: tracing::Subscriber> tracing_subscriber::Layer<Subscriber> for NativeDrainStarted {
+    fn on_event(
+        &self,
+        event: &tracing::Event<'_>,
+        _: tracing_subscriber::layer::Context<'_, Subscriber>,
+    ) {
+        if event.metadata().target() == "collaboration_service::project_native_close" {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+}
+
+async fn wait_for_native_drain(
+    mut transition: Pin<&mut impl Future<Output = Result<(), ProjectRegistryError>>>,
+    started: &AtomicBool,
+) -> Result<(), TestError> {
+    poll_fn(|context| {
+        if let Poll::Ready(result) = transition.as_mut().poll(context) {
+            return Poll::Ready(Err(format!(
+                "native drain completed while its read is held: {result:?}"
+            )
+            .into()));
+        }
+        if started.load(Ordering::SeqCst) {
+            Poll::Ready(Ok(()))
+        } else {
+            Poll::Pending
+        }
+    })
+    .await
+}
 
 async fn wait_for_transition_gate(
     mut transition: Pin<&mut impl Future<Output = Result<(), ProjectRegistryError>>>,
@@ -33,7 +71,7 @@ async fn wait_for_transition_gate(
         // Unlike a record query, this probe has no native IO: its only pending
         // step in this fixture is the real registry gate. A first transition
         // poll can still be checking paths, so that poll alone is not readiness.
-        let mut probe = std::pin::pin!(reader.schema_state());
+        let mut probe = std::pin::pin!(tokio::task::unconstrained(reader.schema_state()));
         match probe.as_mut().poll(context) {
             Poll::Pending => Poll::Ready(Ok(())),
             Poll::Ready(Ok(_)) => Poll::Pending,
@@ -126,8 +164,17 @@ async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retrie
         // This real checked-out connection pins NativeFileOwner::close after
         // the registry's exclusive gate is taken; it is not a pool stand-in.
         let held = database.reader().begin_read().await?;
-        let mut closing = Box::pin(fixture._registry.supersede_project(&project));
-        wait_for_transition_gate(closing.as_mut(), &reader).await?;
+        // The gate precedes an asynchronous authority read. Observe the actual
+        // native-drain boundary before cancellation, while the real read pins it.
+        let started = Arc::new(AtomicBool::new(false));
+        let subscriber = tracing_subscriber::registry().with(NativeDrainStarted(started.clone()));
+        let mut closing = Box::pin(
+            fixture
+                ._registry
+                .supersede_project(&project)
+                .with_subscriber(subscriber),
+        );
+        wait_for_native_drain(closing.as_mut(), &started).await?;
         let mut reading = Box::pin(reader.snapshot());
         assert!(matches!(futures_util::poll!(&mut reading), Poll::Pending));
         drop(reading);

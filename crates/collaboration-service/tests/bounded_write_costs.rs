@@ -7,7 +7,6 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 
 async fn measured_write(
@@ -38,17 +37,6 @@ async fn write_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Te
         .clone(),
     );
     accepted(&fixture.api.call("thread_create", root).await?);
-    let source = json!({"initialStatus":"draft","edges":[{"name":"finish","from":"draft","to":"done","requiredRole":"lead","guards":[{"name":"proof","evaluator":fixture.actor}]}]}).to_string();
-    let mut register = fixture.header();
-    register.as_object_mut().ok_or("header")?.extend(
-        json!({"workspaceId":fixture.workspace,"name":"cost flow","version":"v1","source":source})
-            .as_object()
-            .ok_or("fields")?
-            .clone(),
-    );
-    accepted(&fixture.api.call("process_register", register).await?);
-    let definition = json!({"name":"cost flow","version":"v1","sourceHash":format!("{:x}",Sha256::digest(source.as_bytes()))});
-    accepted(&fixture.api.call("project_pin_definition",fixture.request(&project,json!({"kind":"projectPinDefinition","definition":definition,"expectedRevision":0}))).await?);
     let store = fixture
         ._registry
         .existing_project(&project)
@@ -268,14 +256,9 @@ async fn write_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Te
             json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":workstream},"role":"implementer","holder":other,"model":null,"lineage":null,"ownerGrant":null,"expectedRevision":0}),
         ),
         (
-            "process",
+            "plan",
             "project_publish_plan",
-            json!({"kind":"projectPublishPlan","hash":"77".repeat(32),"document":{"kind":"url","url":"https://example.com/operand-plan"},"expectedRevision":1}),
-        ),
-        (
-            "move",
-            "move_request",
-            json!({"kind":"moveRequest","moveId":MoveId::generate(),"moveName":"finish","expectedRevision":2,"evidence":[],"reason":"recorded proof","addressees":[]}),
+            json!({"kind":"projectPublishPlan","hash":"77".repeat(32),"document":{"kind":"url","url":"https://example.com/operand-plan"},"expectedRevision":0}),
         ),
     ] {
         costs.insert(

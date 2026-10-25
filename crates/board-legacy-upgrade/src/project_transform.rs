@@ -63,8 +63,6 @@ pub(crate) fn transform(
         )?,
         project_id: project.topic_id.clone(),
         description: project.description.clone(),
-        status: None,
-        pinned_definition: None,
         revision: SubjectRevision::INITIAL,
         closed_at: None,
     };

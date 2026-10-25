@@ -31,15 +31,12 @@ pub(super) enum ProjectWriteKind {
     RoleReplaceLead,
     RoleAcknowledgeCurrent,
     OwnerGrantRecord,
-    MoveRequest,
     FactRecord,
-    ProjectPinDefinition,
     ProjectPublishPlan,
     ProjectClose,
     ProjectDescribe,
 }
 pub(super) enum PreparedEntityCommand {
-    MoveCheck(ProjectMoveCheckRequest),
     ProjectWrite(ProjectWriteKind, Box<ProjectRequest>),
     Show(ProjectReadKind, ProjectRecordShowRequest),
     List(ProjectReadKind, ProjectRecordListRequest),
@@ -50,16 +47,13 @@ pub(super) enum PreparedEntityCommand {
     AdrTransition(Box<AdrTransitionRequest>),
     AdrShow(FleetRecordShowRequest),
     AdrList(FleetRecordListRequest),
-    ProcessRegister(Box<ProcessRegisterRequest>),
 }
 impl PreparedEntityCommand {
     pub(super) fn finalize(&mut self, client: &CollaborationClient) -> Result<(), String> {
         match self {
-            Self::MoveCheck(request) => finalize_identity(&mut request.actor, client),
             Self::ProjectWrite(_, request) => finalize_identity(&mut request.actor, client),
             Self::AdrCreate(request) => finalize_identity(&mut request.actor, client),
             Self::AdrTransition(request) => finalize_identity(&mut request.actor, client),
-            Self::ProcessRegister(request) => finalize_identity(&mut request.actor, client),
             Self::Feed(request) => match &mut request.reader {
                 ReadActor::Identified { reader } => finalize_identity(reader, client),
                 _ => Ok(()),
@@ -474,6 +468,5 @@ pub(super) fn prepare_subtask(
 }
 
 pub(super) use super::board_entity_metadata_preparation::{
-    file_write, prepare_adr, prepare_fact, prepare_feed, prepare_move, prepare_process,
-    prepare_role, prepare_worktrail,
+    file_write, prepare_adr, prepare_fact, prepare_feed, prepare_role, prepare_worktrail,
 };

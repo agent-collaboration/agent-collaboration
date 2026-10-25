@@ -309,25 +309,10 @@ impl ProjectWriteTransaction {
         let installation = origin.installation.as_str();
         let machine = origin.machine.as_str();
         let content = serde_json::to_string(&FeedContent::Shown(Box::new(record.clone())))?;
-        let project = self.project_id.as_str();
-        let status = sqlx_turso::query_scalar!(
-            r#"SELECT status AS "status?: String" FROM project_state WHERE project_id=?"#,
-            project
-        )
-        .fetch_one(&mut self.transaction)
-        .await?;
-        if let Some(status) = &status {
-            stored_text(
-                status.clone(),
-                &reference,
-                "projectStatus",
-                StatusName::as_str,
-            )?;
-        }
         sqlx_turso::query!(
-            "INSERT INTO project_feed(entry_id, epoch, position, record_kind, record_id, request_id, actor_id, origin_installation, origin_machine, router_time, time_basis, content, project_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO project_feed(entry_id, epoch, position, record_kind, record_id, request_id, actor_id, origin_installation, origin_machine, router_time, time_basis, content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             entry_id, envelope.epoch, envelope.position, kind, id, request, actor, installation,
-            machine, envelope.router_time, envelope.time_basis, content, status
+            machine, envelope.router_time, envelope.time_basis, content
         ).execute(&mut self.transaction).await?;
         Ok(())
     }

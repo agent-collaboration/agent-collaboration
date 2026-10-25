@@ -1,7 +1,6 @@
 //! Combined evidence maxima include every repeated repository and identity.
 use super::{
-    RECORD_BYTE_BUDGET, TestResult, envelope, ledger, maximum_actor, measure_native_row,
-    project_state,
+    RECORD_BYTE_BUDGET, TestResult, envelope, maximum_actor, measure_native_row, project_state,
 };
 use message_board::*;
 
@@ -27,7 +26,7 @@ pub(super) fn evidence() -> TestResult<EvidenceRef> {
 }
 
 #[tokio::test]
-async fn maximum_receipt_and_move_rows_fit_the_adopted_record_budget() -> TestResult {
+async fn maximum_receipt_rows_fit_the_adopted_record_budget() -> TestResult {
     let mut state = project_state()?;
     if let RecordPlacement::Project(position) = &mut state.envelope.position {
         position.origin.machine = MachineLabel::try_from("\"".repeat(256))?;
@@ -76,79 +75,18 @@ async fn maximum_receipt_and_move_rows_fit_the_adopted_record_budget() -> TestRe
         }),
         late: false,
     });
-    let move_id = MoveId::generate();
-    let moved = Record::Move(MoveRecord::new(MoveRecordProps {
-        envelope: envelope(&state, move_id.clone().into()),
-        move_id,
-        project: state.project_id.clone(),
-        move_name: MoveName::try_from("\"".repeat(256))?,
-        endpoints: Some(MoveEndpoints {
-            from: StatusName::try_from("\"".repeat(256))?,
-            to: StatusName::try_from("\"".repeat(256))?,
-        }),
-        evidence: (0..16)
-            .map(|_| evidence())
-            .collect::<TestResult<Vec<_>>>()?,
-        reason: "\0".repeat(16 * 1024),
-        requester: actor.clone(),
-        outcome: MoveOutcome::Accepted {},
-    })?);
-    let mut rejected: MoveRecordProps = match moved.clone() {
-        Record::Move(row) => row.into(),
-        _ => return Err("move fixture".into()),
-    };
-    let mut reasons = vec![
-        RejectReason::Archived {},
-        RejectReason::Closed {},
-        RejectReason::StaleRevision {
-            current: SubjectRevision::try_from(i64::MAX as u64)?,
-        },
-        RejectReason::MoveNotAllowed {
-            edge: MoveName::try_from("\"".repeat(256))?,
-            required_role: Some(AuthorityRole::Implementer),
-        },
-    ];
-    let evaluator = actor.declared_identity().ok_or("session fixture")?;
-    reasons.extend(
-        (0..MAX_EDGE_GUARDS).map(|_| RejectReason::GuardUnavailable {
-            guard: "\0".repeat(256),
-            evaluator: evaluator.clone(),
-        }),
-    );
-    rejected.outcome = MoveOutcome::Rejected {
-        reasons: reasons.clone(),
-    };
-    let rejected_ledger = ledger(
-        &state,
-        StoredDecision::Rejected {
-            reasons: reasons.into_iter().map(Refusal::Move).collect(),
-        },
-    )?;
-    let mut sizes = Vec::new();
-    for (kind, record) in [
-        ("maximumReceipt", receipt),
-        ("maximumMoveAccepted", moved),
-        (
-            "maximumMoveRejected",
-            Record::Move(MoveRecord::new(rejected)?),
-        ),
-        ("maximumRejectedDecision", rejected_ledger),
-    ] {
-        record.validate_bounds()?;
-        sizes.push(measure_native_row(kind, &state, record).await?);
-    }
+    receipt.validate_bounds()?;
+    let size = measure_native_row("maximumReceipt", &state, receipt).await?;
     eprintln!(
         "BOARD_MAXIMUM_EVIDENCE_SIZES {}",
-        serde_json::to_string(&sizes)?
+        serde_json::to_string(std::slice::from_ref(&size))?
     );
-    for size in sizes {
-        assert!(
-            size.conservative_numeric_row_bytes <= RECORD_BYTE_BUDGET,
-            "{}: {} bytes exceeds {}",
-            size.kind,
-            size.conservative_numeric_row_bytes,
-            RECORD_BYTE_BUDGET
-        );
-    }
+    assert!(
+        size.conservative_numeric_row_bytes <= RECORD_BYTE_BUDGET,
+        "{}: {} bytes exceeds {}",
+        size.kind,
+        size.conservative_numeric_row_bytes,
+        RECORD_BYTE_BUDGET
+    );
     Ok(())
 }

@@ -14,10 +14,6 @@ mod claim_admission;
 mod claim_settlement;
 #[path = "fleet_storage/creation_decisions.rs"]
 mod creation_decisions;
-#[path = "fleet_storage/definition_identity.rs"]
-mod definition_identity;
-#[path = "fleet_storage/definition_validation.rs"]
-mod definition_validation;
 #[path = "fleet_storage/lease_version_publication.rs"]
 mod lease_version_publication;
 #[path = "fleet_storage/maximum_rows.rs"]

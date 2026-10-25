@@ -92,10 +92,8 @@ project_tools! {
     OwnerGrantRecord => ("owner_grant_record", ProjectToolSelection::Operation { kind: "ownerGrantRecord" }, BoardOperation::OwnerGrantRecord { .. }),
     RoleReplaceLead => ("role_replace_lead", ProjectToolSelection::Operation { kind: "roleReplaceLead" }, BoardOperation::RoleReplaceLead { .. }),
     RoleAcknowledgeCurrent => ("role_acknowledge_current", ProjectToolSelection::Operation { kind: "roleAcknowledgeCurrent" }, BoardOperation::RoleAcknowledgeCurrent { .. }),
-    ProjectPinDefinition => ("project_pin_definition", ProjectToolSelection::Operation { kind: "projectPinDefinition" }, BoardOperation::ProjectPinDefinition { .. }),
     ProjectPublishPlan => ("project_publish_plan", ProjectToolSelection::Operation { kind: "projectPublishPlan" }, BoardOperation::ProjectPublishPlan { .. }),
     ProjectClose => ("project_close", ProjectToolSelection::Operation { kind: "projectClose" }, BoardOperation::ProjectClose { .. }),
     ProjectDescribe => ("project_describe", ProjectToolSelection::Operation { kind: "projectDescribe" }, BoardOperation::ProjectDescribe { .. }),
-    MoveRequest => ("move_request", ProjectToolSelection::Operation { kind: "moveRequest" }, BoardOperation::MoveRequest { .. }),
     FactRecord => ("fact_record", ProjectToolSelection::Operation { kind: "factRecord" }, BoardOperation::FactRecord { .. }),
 }

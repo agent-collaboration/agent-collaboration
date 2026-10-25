@@ -25,7 +25,7 @@ async fn grant(
 async fn assignments(fixture: &BoardFixture) -> Result<Value, TestError> {
     Ok(fixture
         .api
-        .call("hook_context", json!({"session":session()?}))
+        .call("view_session_context", json!({"session":session()?}))
         .await?)
 }
 #[tokio::test]
@@ -42,22 +42,18 @@ async fn context_excludes_projects_outside_the_sessions_repository() -> Result<(
     let result = assignments(&fixture).await?;
     assert_eq!(
         result.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{result}"
     );
     assert_eq!(
         result
-            .pointer("/result/payload/payload/assignments")
+            .pointer("/result/payload/assignments")
             .and_then(Value::as_array)
             .map(Vec::len),
         Some(1),
         "{result}"
     );
-    assert!(
-        result
-            .pointer("/result/payload/payload/readMarks")
-            .is_none()
-    );
+    assert!(result.pointer("/result/payload/readMarks").is_none());
     fixture.stop().await
 }
 #[tokio::test]
@@ -84,12 +80,12 @@ async fn corrupt_unrelated_project_does_not_poison_a_healthy_session_context()
     let result = assignments(&fixture).await?;
     assert_eq!(
         result.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{result}"
     );
     assert_eq!(
         result
-            .pointer("/result/payload/payload/assignments")
+            .pointer("/result/payload/assignments")
             .and_then(Value::as_array)
             .map(Vec::len),
         Some(1)
@@ -153,18 +149,18 @@ async fn context_reads_roles_and_scope_facts_without_decoding_posts_or_feed()
     let result = assignments(&fixture).await?;
     assert_eq!(
         result.pointer("/result/kind"),
-        Some(&json!("ok")),
+        Some(&json!("context")),
         "{result}"
     );
     assert_eq!(
         result
-            .pointer("/result/payload/payload/assignments")
+            .pointer("/result/payload/assignments")
             .and_then(Value::as_array)
             .map(Vec::len),
         Some(1)
     );
     assert_eq!(
-        result.pointer("/result/payload/payload/acknowledgedScopes"),
+        result.pointer("/result/payload/acknowledgedScopes"),
         Some(&json!([fact]))
     );
     let store = fixture
@@ -213,16 +209,16 @@ async fn provider_context_uses_existing_durable_session_worktrees() -> Result<()
         accepted(&fixture.api.call("role_grant",fixture.request(&project,json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":lane},"role":if revision==0 {"implementer"} else {"verifier"},"holder":{"kind":"session","session":target},"model":null,"lineage":null,"expectedRevision":revision,"ownerGrant":null}))).await?);
         let result = fixture
             .api
-            .call("hook_context", json!({"session":target}))
+            .call("view_session_context", json!({"session":target}))
             .await?;
         assert_eq!(
             result.pointer("/result/kind"),
-            Some(&json!("ok")),
+            Some(&json!("context")),
             "{result}"
         );
         assert_eq!(
             result
-                .pointer("/result/payload/payload/assignments")
+                .pointer("/result/payload/assignments")
                 .and_then(Value::as_array)
                 .map(Vec::len),
             Some(1)
@@ -238,13 +234,9 @@ async fn unresolved_session_metadata_never_invents_an_allowed_context() -> Resul
     fixture.project().await?;
     let result = assignments(&fixture).await?;
     assert_eq!(
-        result.pointer("/result/kind"),
-        Some(&json!("unavailable")),
+        result.pointer("/error/data/kind"),
+        Some(&json!("boardUnavailable")),
         "{result}"
-    );
-    assert_eq!(
-        result.pointer("/result/payload/reason/kind"),
-        Some(&json!("sessionMetadataUnavailable"))
     );
     fixture.stop().await
 }

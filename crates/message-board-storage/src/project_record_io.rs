@@ -9,7 +9,6 @@ pub(crate) fn record_kind_tag(kind: RecordKind) -> &'static str {
         RecordKind::Workspace => "workspace",
         RecordKind::Board => "board",
         RecordKind::Adr => "adr",
-        RecordKind::ProcessDefinition => "processDefinition",
         RecordKind::Project => "project",
         RecordKind::Workstream => "workstream",
         RecordKind::Task => "task",
@@ -21,7 +20,6 @@ pub(crate) fn record_kind_tag(kind: RecordKind) -> &'static str {
         RecordKind::RoleAssignment => "roleAssignment",
         RecordKind::OwnerGrant => "ownerGrant",
         RecordKind::StandDownAcknowledgement => "standDownAcknowledgement",
-        RecordKind::Move => "move",
         RecordKind::Fact => "fact",
         RecordKind::PlanRevision => "planRevision",
         RecordKind::ReadMark => "readMark",
@@ -79,10 +77,7 @@ impl ProjectWriteTransaction {
             || record.envelope().id != reference.id
             || matches!(
                 reference.kind,
-                RecordKind::Workspace
-                    | RecordKind::Board
-                    | RecordKind::Adr
-                    | RecordKind::ProcessDefinition
+                RecordKind::Workspace | RecordKind::Board | RecordKind::Adr
             )
         {
             return Err(ProjectStorageError::InvalidRecord {
@@ -125,7 +120,6 @@ impl ProjectWriteTransaction {
                 reference.kind,
                 RecordKind::Post
                     | RecordKind::Fact
-                    | RecordKind::Move
                     | RecordKind::WorkTrailRow
                     | RecordKind::TrailRedaction
                     | RecordKind::OwnerGrant
@@ -222,7 +216,6 @@ pub(crate) fn validate_project_record(
         Record::Workstream(row) => Some(&row.project_id),
         Record::Task(row) => Some(&row.project_id),
         Record::WorkTrailRow(row) => Some(&row.project_id),
-        Record::Move(row) => Some(&row.project),
         Record::OwnerGrant(row) => match &row.grant {
             message_board::GrantKind::ReplaceLead { project, .. } => Some(project),
         },
@@ -285,11 +278,7 @@ pub(crate) fn validate_project_record(
                 None
             }
         }
-        Record::Workspace(_)
-        | Record::Board(_)
-        | Record::Adr(_)
-        | Record::ProcessDefinition(_)
-        | Record::DirectoryEntry(_) => {
+        Record::Workspace(_) | Record::Board(_) | Record::Adr(_) | Record::DirectoryEntry(_) => {
             return Err(ProjectStorageError::InvalidRecord {
                 record: reference,
                 field: "scope",

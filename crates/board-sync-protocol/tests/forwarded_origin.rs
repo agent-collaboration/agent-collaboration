@@ -25,12 +25,12 @@ fn verified_forward_keeps_a_v4_service_id_and_the_enrolled_label_without_a_peer_
 
 #[test]
 fn a_statusless_summary_is_an_annotation_with_explicit_none_not_an_absent_annotation() {
-    let value = json!({"kind":"projectSummary","value":{"status":null,"latestRecordAt":{"kind":"legacyUnknown"}}});
+    let value =
+        json!({"kind":"projectSummary","value":{"latestRecordAt":{"kind":"legacyUnknown"}}});
     let decoded: BoardAnnotation = serde_json::from_value(value.clone()).unwrap();
     assert!(matches!(
         decoded,
         BoardAnnotation::ProjectSummary {
-            status: None,
             latest_record_at: RecordTime::LegacyUnknown
         }
     ));

@@ -203,7 +203,6 @@ pub(crate) const fn board_notification_summary(cause: message_board::RecordKind)
     match cause {
         message_board::RecordKind::Post => "New thread post",
         message_board::RecordKind::RoleAssignment => "Role assignment changed",
-        message_board::RecordKind::Move => "Project move recorded",
         _ => "New board activity",
     }
 }

@@ -2,7 +2,7 @@
 use collaboration_service::{
     ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState,
 };
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use std::sync::{Arc, Mutex};
 
@@ -72,9 +72,6 @@ async fn a_newly_decided_directory_starts_registration_without_another_recovery_
                     protocol_version: ProtocolVersion::CURRENT,
                     operation,
                 },
-                &FleetIds {
-                    generated_record: RecordId::generate(),
-                },
                 &origin,
             )
             .await?;
@@ -112,15 +109,10 @@ async fn a_newly_decided_directory_starts_registration_without_another_recovery_
             title: input.title.clone(),
         },
     };
-    let ids = FleetIds {
-        generated_record: RecordId::generate(),
-    };
 
     // The registration port is observed, while Access, central admission,
     // the machine session and durable Router settlement stay real.
-    let reply = fleet
-        .submit_creation(&input, &request, &ids, &origin)
-        .await?;
+    let reply = fleet.submit_creation(&input, &request, &origin).await?;
 
     assert!(matches!(
         reply.result,
@@ -131,9 +123,7 @@ async fn a_newly_decided_directory_starts_registration_without_another_recovery_
         vec![input.project_id.clone()]
     );
     assert_eq!(
-        fleet
-            .submit_creation(&input, &request, &ids, &origin)
-            .await?,
+        fleet.submit_creation(&input, &request, &origin).await?,
         reply
     );
     assert_eq!(

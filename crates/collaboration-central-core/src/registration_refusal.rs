@@ -19,8 +19,7 @@ pub(crate) fn render(reason: &Refusal) -> Result<GateReason, CallFailure> {
             existing.id.as_str()
         ),
         Refusal::InvalidShape { field } => format!("Invalid field: {field}."),
-        Refusal::Move(_)
-        | Refusal::Workstream(_)
+        Refusal::Workstream(_)
         | Refusal::Task(_)
         | Refusal::Trail(_)
         | Refusal::Role(_)
@@ -28,7 +27,6 @@ pub(crate) fn render(reason: &Refusal) -> Result<GateReason, CallFailure> {
         | Refusal::StaleRevision { .. }
         | Refusal::TopLevelPostCooldown { .. }
         | Refusal::Closed { .. }
-        | Refusal::DefinitionConflict
         | Refusal::ProjectRejected { .. } => {
             serde_json::to_string(reason).map_err(|_| CallFailure::AnswerLost)?
         }
@@ -93,9 +91,14 @@ mod tests {
     #[test]
     fn other_typed_refusals_preserve_explicit_compact_structure()
     -> Result<(), Box<dyn std::error::Error>> {
-        let actual = render(&Refusal::DefinitionConflict)?;
-        assert_eq!(actual.code.as_str(), "definitionConflict");
-        assert_eq!(actual.detail, r#"{"kind":"definitionConflict"}"#);
+        let actual = render(&Refusal::StaleRevision {
+            current: message_board::SubjectRevision::try_from(7)?,
+        })?;
+        assert_eq!(actual.code.as_str(), "staleRevision");
+        assert_eq!(
+            actual.detail,
+            r#"{"kind":"staleRevision","reason":{"current":7}}"#
+        );
         Ok(())
     }
 }

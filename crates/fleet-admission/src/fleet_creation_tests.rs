@@ -18,9 +18,6 @@ fn another_creation_request_cannot_reuse_an_accepted_or_rejected_project_identit
         machine: MachineLabel::try_from("verified creation carrier".to_owned())?,
     };
     let now = "2026-10-19T12:00:00Z".parse()?;
-    let ids = FleetIds {
-        generated_record: RecordId::generate(),
-    };
     for decision in [
         StoredDecision::accepted(Vec::new(), ChangeOutcome::Changed),
         StoredDecision::Rejected {
@@ -36,7 +33,7 @@ fn another_creation_request_cannot_reuse_an_accepted_or_rejected_project_identit
         let mut snapshot = FleetSnapshot::empty();
         snapshot.creation_decisions.push(binding.clone());
 
-        let rejected = decide(&request, &snapshot, now, &ids, &origin)?;
+        let rejected = decide(&request, &snapshot, now, &origin)?;
 
         assert!(
             matches!(rejected.decision, RequestDecision::Rejected {ref reasons}
@@ -70,9 +67,6 @@ fn the_first_rejected_creation_still_binds_its_request_and_verified_carrier() ->
         &request,
         &FleetSnapshot::empty(),
         "2026-10-19T12:00:00Z".parse()?,
-        &FleetIds {
-            generated_record: RecordId::generate(),
-        },
         &carrier,
     )?;
 

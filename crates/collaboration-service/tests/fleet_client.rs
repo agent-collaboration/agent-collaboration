@@ -1,7 +1,7 @@
 use collaboration_service::FleetClient;
 #[path = "support/native_registry.rs"]
 pub mod native_registry;
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use std::sync::{Arc, Mutex};
 
@@ -74,13 +74,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
     ] {
         assert!(matches!(
             connected
-                .submit(
-                    &make_request(operation),
-                    &FleetIds {
-                        generated_record: RecordId::generate()
-                    },
-                    &origin
-                )
+                .submit(&make_request(operation), &origin)
                 .await?
                 .result,
             RequestResult::Decided(RequestDecision::Accepted { .. })
@@ -94,12 +88,9 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
         board,
         title: "queued project".to_owned().try_into()?,
     });
-    let ids = FleetIds {
-        generated_record: RecordId::generate(),
-    };
     let offline = FleetClient::open(directory.path(), registration.clone(), None).await?;
     assert_eq!(
-        offline.submit(&offered, &ids, &origin).await?.result,
+        offline.submit(&offered, &origin).await?.result,
         RequestResult::PendingUnreachable
     );
     assert_eq!(offline.pending_requests().await?.len(), 1);
@@ -133,7 +124,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
     let (reconnected, runtime) =
         board_central_test_support::fleet_client(directory.path(), registration.clone(), &origin)
             .await?;
-    let reply = reconnected.submit(&offered, &ids, &origin).await?;
+    let reply = reconnected.submit(&offered, &origin).await?;
     assert!(matches!(
         reply.result,
         RequestResult::Decided(RequestDecision::Accepted { .. })
@@ -177,9 +168,6 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("fleet fixture".to_owned())?,
     };
-    let original_ids = FleetIds {
-        generated_record: RecordId::generate(),
-    };
     let offline = FleetClient::open(
         directory.path(),
         std::sync::Arc::new(native_registry::PendingRegistration),
@@ -187,10 +175,7 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
     )
     .await?;
     assert_eq!(
-        offline
-            .submit(&request, &original_ids, &origin)
-            .await?
-            .result,
+        offline.submit(&request, &origin).await?.result,
         RequestResult::PendingUnreachable
     );
     offline.close().await;
@@ -200,15 +185,7 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         &origin,
     )
     .await?;
-    let first = client
-        .submit(
-            &request,
-            &FleetIds {
-                generated_record: RecordId::generate(),
-            },
-            &origin,
-        )
-        .await?;
+    let first = client.submit(&request, &origin).await?;
     assert!(matches!(
         first.result,
         RequestResult::Decided(RequestDecision::Accepted { .. })
@@ -235,7 +212,6 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         .await?
         .ok_or("settled request missing")?;
     assert_eq!(queued.request, request);
-    assert_eq!(queued.ids, original_ids);
     assert!(matches!(
         queued.state,
         message_board_storage::FleetOutboxState::Decided { .. }
@@ -250,9 +226,7 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
     )
     .await?;
     assert_eq!(
-        offline_replay
-            .submit(&request, &original_ids, &origin)
-            .await?,
+        offline_replay.submit(&request, &origin).await?,
         first,
         "a durable decision replays without a live machine session"
     );
@@ -269,15 +243,7 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         &origin,
     )
     .await?;
-    let replay = reopened
-        .submit(
-            &request,
-            &FleetIds {
-                generated_record: RecordId::generate(),
-            },
-            &origin,
-        )
-        .await?;
+    let replay = reopened.submit(&request, &origin).await?;
     assert_eq!(replay, first);
     assert_eq!(
         reopened.record(&request.workspace.clone().into()).await?,
@@ -290,10 +256,7 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         description: Description::try_from("fleet proof".to_owned())?,
     };
     assert_eq!(
-        reopened
-            .submit(&conflict, &original_ids, &origin)
-            .await?
-            .result,
+        reopened.submit(&conflict, &origin).await?.result,
         RequestResult::ConflictingRequest
     );
     assert!(!directory.path().join("fleet.sqlite").exists());

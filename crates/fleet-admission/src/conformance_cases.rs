@@ -1,9 +1,6 @@
 //! Engine-independent decision tables consumed by both native and central adapters.
-use crate::{
-    ArchiveReport, ArchiveReportOutcome, FleetOperation, FleetRequest, ProcessDefinitionInput,
-};
+use crate::{ArchiveReport, ArchiveReportOutcome, FleetOperation, FleetRequest};
 use message_board::*;
-use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FleetExpectation {
@@ -385,57 +382,5 @@ pub fn cases() -> Result<Vec<FleetCase>, FixtureError> {
         steps: adr_steps,
     });
 
-    let definition = |source: &str| -> Result<ProcessDefinitionInput, FixtureError> {
-        Ok(ProcessDefinitionInput {
-            reference: ProcessDefinitionRef {
-                name: name("workflow")?,
-                version: name("one")?,
-                source_hash: CanonicalHash::try_from(format!(
-                    "{:x}",
-                    Sha256::digest(source.as_bytes())
-                ))?,
-            },
-            source: source.to_owned(),
-        })
-    };
-    all.push(FleetCase {
-        name: "definition-version-is-immutable",
-        steps: vec![
-            step(
-                request(&workspace, 0, workspace_create()?)?,
-                FleetExpectation::Accepted(ChangeOutcome::Changed),
-            ),
-            step(
-                request(
-                    &workspace,
-                    1,
-                    FleetOperation::DefinitionRegister {
-                        definition: definition(r#"{"initialStatus":"new","edges":[]}"#)?,
-                    },
-                )?,
-                FleetExpectation::Accepted(ChangeOutcome::Changed),
-            ),
-            step(
-                request(
-                    &workspace,
-                    2,
-                    FleetOperation::DefinitionRegister {
-                        definition: definition(r#"{"initialStatus":"new","edges":[]}"#)?,
-                    },
-                )?,
-                FleetExpectation::Accepted(ChangeOutcome::AlreadySo),
-            ),
-            step(
-                request(
-                    &workspace,
-                    3,
-                    FleetOperation::DefinitionRegister {
-                        definition: definition(r#"{"initialStatus":"other","edges":[]}"#)?,
-                    },
-                )?,
-                FleetExpectation::Rejected(Refusal::DefinitionConflict),
-            ),
-        ],
-    });
     Ok(all)
 }

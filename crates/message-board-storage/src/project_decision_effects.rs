@@ -25,7 +25,6 @@ impl StoredDecisionEffect {
                 | RecordKind::Workspace
                 | RecordKind::Board
                 | RecordKind::Adr
-                | RecordKind::ProcessDefinition
         ) {
             return Err(invalid());
         }
@@ -64,14 +63,6 @@ pub(crate) async fn verify_decision<TScope>(
 where
     for<'scope> &'scope mut TScope: Executor<'scope, Database = Turso>,
 {
-    // Rejected moves can still record the attempted movement and notification.
-    // Only accepted decisions commit a retrievable effect sequence.
-    let StoredDecision::Accepted {
-        effects: header, ..
-    } = &ledger.decision
-    else {
-        return Ok(());
-    };
     let request = ledger.request_id.as_str();
     let rows = sqlx_turso::query_as!(StoredDecisionEffect,
         r#"SELECT record_kind AS "record_kind!: String", record_id AS "record_id!: String", epoch AS "epoch!: i64", position AS "position!: i64", origin_installation AS "origin_installation!: String", origin_machine AS "origin_machine!: String" FROM project_feed INDEXED BY feed_by_request_position WHERE request_id=? AND record_kind <> 'request' ORDER BY position"#,
@@ -80,7 +71,13 @@ where
         .into_iter()
         .map(StoredDecisionEffect::decode)
         .collect::<Result<Vec<_>, _>>()?;
-    if !header.matches_full(&effects) {
+    let valid = match &ledger.decision {
+        StoredDecision::Accepted {
+            effects: header, ..
+        } => header.matches_full(&effects),
+        StoredDecision::Rejected { .. } => effects.is_empty(),
+    };
+    if !valid {
         return Err(invalid_receipt(ledger));
     }
     Ok(())

@@ -81,11 +81,9 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
     )?;
     let annotations = [
         BoardAnnotation::ProjectSummary {
-            status: Some("active".to_owned().try_into()?),
             latest_record_at: latest,
         },
         BoardAnnotation::ProjectSummary {
-            status: None,
             latest_record_at: RecordTime::LegacyUnknown,
         },
     ];
@@ -148,9 +146,7 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
                 .find(|entry| entry.project.as_str() == database.to_string())
                 .ok_or("Directory omitted reported project")?;
             assert_eq!((&entry.workspace, &entry.board), (&workspace, &board));
-            let BoardAnnotation::ProjectSummary {
-                status,
-                latest_record_at,
+            let BoardAnnotation::ProjectSummary { latest_record_at,
             } = annotation;
             let summary = observed[index]
                 .0
@@ -159,7 +155,6 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
             assert_eq!(
                 entry.copy_side,
                 DirectorySide::Known(CopyMetadata {
-                    status: status.clone(),
                     latest_record_at: *latest_record_at,
                     as_of: CopyMetadataAsOf {
                         position: ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(1)),
@@ -194,18 +189,6 @@ async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reo
         assert!(matches!(&retired.lease_side,DirectorySide::Known(LeaseMetadata {
             lease:DirectoryLease::Retired {retired_at:shown},as_of,lease_version:_,
         }) if shown.timestamp_millis()==retired_at.unix_millis() && as_of.timestamp_millis()==observed[3].1.changed_at.unix_millis()));
-        assert_eq!(
-            support::directory(
-                &mut machine.socket,
-                DirectoryQuery {
-                    status: Some("active".into()),
-                    ..Default::default()
-                }
-            )
-            .await?
-            .len(),
-            1
-        );
         assert_eq!(
             support::directory(
                 &mut machine.socket,

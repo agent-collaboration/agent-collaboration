@@ -315,23 +315,12 @@ pub(super) fn operation_description(name: &str) -> &'static str {
         "role_acknowledge_current" => {
             "Records the former lead acknowledgement of the current lead after replacement. It does not restore lead authority."
         }
-        "project_pin_definition" => {
-            "Pins a registered immutable process definition to the project under its expected revision."
-        }
         "project_publish_plan" => {
             "Publishes a project plan revision and recorded obligations under the project revision precondition."
         }
         "project_close" => {
             "Closes a project with its reason and expected revision. Further domain writes are refused."
         }
-        "move_request" => {
-            "Requests a named process move. Records accepted or composed rejected guard and authority reasons; replay returns the original decision."
-        }
-        "move_check" => {
-            "Checks a project move against its pinned definition, recorded roles and guard facts. Read-only; records no verdict or intent."
-        }
-        "move_show" => "Reads one recorded move verdict in the named project. Read-only.",
-        "move_list" => "Lists recorded moves in one project. Read-only.",
         "fact_record" => {
             "Records the declared evaluator result or attestation for its subject. Missing or unavailable guard evidence never permits a move."
         }
@@ -351,9 +340,6 @@ pub(super) fn operation_description(name: &str) -> &'static str {
         }
         "adr_show" => "Reads one immutable workspace ADR and its recorded state. Read-only.",
         "adr_list" => "Lists a bounded page of workspace ADRs. Read-only.",
-        "process_register" => {
-            "Registers a strict immutable process definition containing initialStatus and edges. Unsupported required roles and unknown fields are refused."
-        }
         "feed_read" => {
             "Reads a bounded project feed page after an epoch-qualified cursor, with covered-through position. Identified reads mark that coverage and report a separate readMark outcome. A superseded epoch returns its resume cursor."
         }
@@ -367,19 +353,10 @@ pub(super) fn operation_description(name: &str) -> &'static str {
             "Lists pending owner questions across project metadata, including the records each blocks. Missing copies remain explicit unavailable projects. This summary advances no read marks and returns no readMark field."
         }
         "view_lead_load" => {
-            "Lists the named lead's pending handback assessments, completed-lane close-outs and unanswered rejected moves across projects, with unavailable projects explicit. This summary advances no read marks and returns no readMark field."
+            "Lists the named lead's pending handback assessments and completed-lane close-outs across projects, with unavailable projects explicit. This summary advances no read marks and returns no readMark field."
         }
         "view_session_context" => {
             "Returns current session assignments and recorded scope acknowledgement facts across projects and repository worktrees. This summary advances no read marks and returns no readMark field."
-        }
-        "hook_context" => {
-            "Returns exactly one context HookResult with session assignments and scope acknowledgement facts. This summary advances no read marks and returns no readMark field. Unavailable is a distinct result and never permission to proceed."
-        }
-        "hook_check" => {
-            "Returns exactly one check HookResult using the pure move verdict. Leaves no board effects; unavailable never means allowed."
-        }
-        "hook_card" => {
-            "Returns exactly one card HookResult for the identified actor and subject. This summary advances no read marks and returns no readMark field. Unavailable is distinct and never means allowed."
         }
         "thread_renew" => {
             "Renews a membership through a declared request ID and project admission. Delivery settlement does not renew it."

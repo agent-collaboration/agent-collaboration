@@ -86,24 +86,6 @@
       ]
     },
     {
-      "name": "read_global_definition",
-      "sql": "sql/fleet/read_global_definition.sql",
-      "row": "StoredFleetRecord",
-      "result": "optional",
-      "parameters": [
-        {
-          "name": "name",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "version",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
       "name": "read_directory_summary",
       "sql": "sql/fleet/read_directory_summary.sql",
       "row": "StoredDirectorySummary",
@@ -188,29 +170,6 @@
     {
       "name": "read_adr_snapshot_keys",
       "sql": "sql/fleet/read_adr_snapshot_keys.sql",
-      "row": "StoredFleetRecordKey",
-      "result": "many",
-      "parameters": [
-        {
-          "name": "after_id",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "after_kind",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "limit",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
-    },
-    {
-      "name": "read_process_definition_snapshot_keys",
-      "sql": "sql/fleet/read_process_definition_snapshot_keys.sql",
       "row": "StoredFleetRecordKey",
       "result": "many",
       "parameters": [

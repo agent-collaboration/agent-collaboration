@@ -23,7 +23,6 @@ const KEYS: &[(&str, &str)] = &[
     ("work_trail_rows", "row_id"),
     ("work_trail_tags", "tag_id"),
     ("work_trail_links", "link_id"),
-    ("moves", "move_id"),
     ("facts", "fact_id"),
     ("plan_revisions", "revision_id"),
     ("read_marks", "mark_id"),

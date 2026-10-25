@@ -10,7 +10,7 @@ use collaboration_central_tokio::{TokioServer, TokioSettings};
 use collaboration_service::{
     FleetClient, ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState,
 };
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use fleet_sync_protocol::{ClientFrame, OperationRequest, SchemaSupport};
 use fleet_sync_session::{ClientEvent, Endpoint, PeerCredential, SessionClient};
 use fleet_sync_tokio_runner::SessionPump;

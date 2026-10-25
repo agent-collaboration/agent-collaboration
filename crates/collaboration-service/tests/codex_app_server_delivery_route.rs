@@ -253,6 +253,7 @@ async fn exercise_held_empty_thread(
     let run_id = agent_automation::RunId::generate();
     let scheduled_push_id = PushId::try_from(uuid::Uuid::now_v7().to_string())?;
     let expected_scheduled_push_id = scheduled_push_id.clone();
+    let (delivery_prepared, mut delivery_ready) = tokio::sync::oneshot::channel();
     let backend = tokio::spawn(async move {
         let (stream, _) = listener.accept().await?;
         let mut wire = tokio_tungstenite::accept_async(stream).await?;
@@ -274,6 +275,11 @@ async fn exercise_held_empty_thread(
             ],
         };
         for &method in methods {
+            if method == "turn/start" && scenario.is_none() {
+                // Real app-server connections remain idle during local store
+                // setup. Start the RPC deadline when the caller can send it.
+                tokio::time::timeout(Duration::from_secs(30), &mut delivery_ready).await??;
+            }
             let frame = tokio::time::timeout(Duration::from_secs(3), wire.next())
                 .await?
                 .ok_or("native connection closed")??;
@@ -597,6 +603,9 @@ async fn exercise_held_empty_thread(
     )?;
     let served = served_api::ServedApi::start(identity).await?;
     let control = served.client("held-thread-message").await?;
+    delivery_prepared
+        .send(())
+        .map_err(|_| "native fixture stopped before delivery setup")?;
     let started = control
         .send_message(collaboration_client::MessageSendRequest {
             item_id: None,

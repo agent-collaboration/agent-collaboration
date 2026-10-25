@@ -12,8 +12,8 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
-use fleet_admission::{FleetIds, FleetRequest, FleetRequestResult};
-use message_board::{ActorOrigin, RecordId};
+use fleet_admission::{FleetRequest, FleetRequestResult};
+use message_board::ActorOrigin;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -116,15 +116,11 @@ where
         };
         let now = chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
             .ok_or(CallFailure::AnswerLost)?;
-        let ids = FleetIds {
-            generated_record: RecordId::try_from(io.new_id().to_string()).map_err(|_| refused())?,
-        };
         let row_ids = crate::fleet_row_ids::FleetRowIds::new(io.clone());
         let (result, _) = StepDriver::new(host.clone())
             .run(DecideFleet {
                 request,
                 origin,
-                ids,
                 now,
                 row_ids,
             })

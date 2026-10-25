@@ -142,6 +142,8 @@ Each obligation lists the U rows it serves. *MUST* means the board refuses or fa
 
 ### 4.2 Moves and state (MV)
 
+> **Superseded for 0.1.102 (owner decision 1217, 2026-10-24).** Project moves, `move_check`, process definitions, pinning and the project stage were cut before release; they rested on an adherence premise that was never tested. MV-1 to MV-4 and MV-7, and their refusal kinds (`moveNotAllowed`, `guardUnmet`/`guardUnavailable`, `definitionConflict`), no longer apply. A project has no stored stage. MV-8 (validation of every record) still applies. Generic evaluator and guard facts stay as recorded facts.
+
 - **MV-1** A project's status MUST change only through an accepted move. Workstreams, tasks and subtasks change state through their own operations (§4.9), each recorded in the feed with its actor; no process definition governs them for now. (U5, U40, U43)
 - **MV-2** A move MUST be checked against the project's pinned process definition: the edge exists, the requester holds the role the edge requires, and the definition's board-checkable guards pass. A guard needing an evaluator result passes only when that result is recorded; a missing result is `unavailable` and never passes. (U5, U8)
 - **MV-3** A rejected move MUST be visible in the project feed, with its typed reasons and requester, and MUST notify the project's `lead`. A repeat of the same rejection (same requester, subject, edge and reasons) MUST show as a repeat of the earlier one, not as a new item, and MUST NOT notify again. (U2, U14)
@@ -228,6 +230,8 @@ These carry the twelve guarantees in the [index](2026-10-04-board-orchestration-
 - **NI-4** Each intent MUST show its state: emitted, handedOff, superseded or refused. `handedOff` means a recoverable delivery responsibility exists, with a frozen recipient and item identity (spec 3 MS-5). It doesn't mean any hop has received the item. Delivery stages after handoff follow the message path (U63, spec 3 MS) and are linked. (U14, U63)
 
 ### 4.7 Views and the hook interface (VW)
+
+> **Superseded for 0.1.102 (owner decision 1217).** The three hook tools (`hook_context`, `hook_card`, `hook_check`) were cut. The continuation card and session context remain as the ordinary `view_card` and `view_session_context`. The card no longer shows a process definition.
 
 - **VW-1 Continuation card.** For an actor and a subject, the card MUST give:
   - the governing plan revision and process definition;

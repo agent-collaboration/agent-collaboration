@@ -262,8 +262,6 @@ async fn registered_creation_preserves_initial_state_and_replays_after_reopen_wi
         return Err("initial state missing".into());
     };
     assert_eq!(Some(&state.description), request.description.as_ref());
-    assert_eq!(state.status, None);
-    assert_eq!(state.pinned_definition, None);
     assert_eq!(
         state
             .envelope

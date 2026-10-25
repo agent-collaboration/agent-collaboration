@@ -4,14 +4,14 @@ use super::*;
 fn catalog_has_complete_unique_tools_with_resolvable_schemas() {
     let server = CollaborationMcpServer::catalog_only();
     let tools = server.resolved_tools();
-    assert_eq!(tools.len(), 176);
+    assert_eq!(tools.len(), 167);
     let mut names = tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<Vec<_>>();
     names.sort_unstable();
     names.dedup();
-    assert_eq!(names.len(), 176);
+    assert_eq!(names.len(), 167);
     assert!(names.contains(&"conversation_resume"));
     assert!(names.contains(&"installation_show"));
     assert!(names.contains(&"conversation_close"));
@@ -589,8 +589,6 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
         "view_owner",
         "view_lead_load",
         "view_session_context",
-        "hook_context",
-        "hook_card",
     ] {
         let description = descriptions.get(name).expect("summary description");
         assert!(
@@ -638,13 +636,7 @@ fn representative_catalog_descriptions_explain_operation_specific_behavior() {
     for tool in server.resolved_tools().into_iter().filter(|tool| {
         matches!(
             tool.name.as_ref(),
-            "view_work"
-                | "view_card"
-                | "view_owner"
-                | "view_lead_load"
-                | "view_session_context"
-                | "hook_context"
-                | "hook_card"
+            "view_work" | "view_card" | "view_owner" | "view_lead_load" | "view_session_context"
         )
     }) {
         let schema = Value::Object((*tool.output_schema.expect("summary output schema")).clone());

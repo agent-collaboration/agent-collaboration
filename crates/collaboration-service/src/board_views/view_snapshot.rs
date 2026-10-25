@@ -174,9 +174,6 @@ impl ViewSnapshot {
         if global_work {
             kinds.extend([RecordKind::Workstream, RecordKind::Task]);
         }
-        if full_work || matches!(selection, ViewReadSelection::Lead(_)) || card_lead {
-            kinds.push(RecordKind::Move);
-        }
         if full_work {
             kinds.extend([RecordKind::RoleAssignment, RecordKind::Subtask]);
         }

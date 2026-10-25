@@ -37,7 +37,6 @@ async fn every_keyed_record_batch_uses_an_index_search_instead_of_a_record_scan(
         batch!("grant", "grant_id"),
         batch!("stand_down_ack", "acknowledgement_id"),
         batch!("trail", "row_id"),
-        batch!("move", "move_id"),
         batch!("fact", "fact_id"),
         batch!("plan_revision", "revision_id"),
         batch!("decision", "request_id"),

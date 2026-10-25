@@ -125,36 +125,6 @@ where
         Ok(())
     }
 }
-pub(crate) fn put_process_definition<S>(
-    scope: &mut S,
-    payload: String,
-    router_time: Option<String>,
-    time_basis: String,
-    origin_installation: String,
-    origin_machine: String,
-    import_digest: Option<String>,
-) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/put_process_definition.sql"
-        )))
-        .bind(payload)
-        .bind(router_time)
-        .bind(time_basis)
-        .bind(origin_installation)
-        .bind(origin_machine)
-        .bind(import_digest);
-        statement.execute(scope.executor()).await?;
-        Ok(())
-    }
-}
 pub(crate) fn store_directory_summary<S>(
     scope: &mut S,
     record: String,

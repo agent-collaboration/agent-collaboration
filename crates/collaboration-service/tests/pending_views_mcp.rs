@@ -4,7 +4,6 @@ pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 
 #[tokio::test]
 #[allow(clippy::panic_in_result_fn)]
@@ -13,19 +12,10 @@ async fn cards_show_the_current_governing_plan_and_empty_duties_without_inventin
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
     let task = fixture.task(&project, &workstream).await?;
-    let source=json!({"initialStatus":"draft","edges":[{"name":"finish","from":"draft","to":"done","requiredRole":"lead","guards":[]}]}).to_string();
-    let mut register = fixture.header();
-    register["workspaceId"] = json!(fixture.workspace);
-    register["name"] = json!("card-plan");
-    register["version"] = json!("v1");
-    register["source"] = json!(source);
-    accepted(&fixture.api.call("process_register", register).await?);
-    let definition = json!({"name":"card-plan","version":"v1","sourceHash":format!("{:x}",Sha256::digest(source.as_bytes()))});
-    accepted(&fixture.api.call("project_pin_definition",fixture.request(&project,json!({"kind":"projectPinDefinition","definition":definition,"expectedRevision":0}))).await?);
     let document = EvidencePointer::Record {
         record: task.clone().into(),
     };
-    for (revision, hash) in [(1, "11".repeat(32)), (2, "22".repeat(32))] {
+    for (revision, hash) in [(0, "11".repeat(32)), (1, "22".repeat(32))] {
         accepted(&fixture.api.call("project_publish_plan",fixture.request(&project,json!({"kind":"projectPublishPlan","hash":hash,"document":document,"expectedRevision":revision}))).await?);
     }
     let reader = json!({"kind":"human","humanId":"unassigned-reader"});
@@ -44,7 +34,6 @@ async fn cards_show_the_current_governing_plan_and_empty_duties_without_inventin
         card.pointer("/result/planRevision"),
         Some(&json!("22".repeat(32)))
     );
-    assert_eq!(card.pointer("/result/processDefinition"), Some(&definition));
     assert_eq!(card.pointer("/result/counts/task"), Some(&json!(1)));
     assert_eq!(card.pointer("/result/counts/planRevision"), Some(&json!(2)));
     assert_eq!(

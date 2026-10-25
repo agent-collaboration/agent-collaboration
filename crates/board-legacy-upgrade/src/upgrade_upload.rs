@@ -260,7 +260,7 @@ async fn summary(
 ) -> Result<BoardAnnotation, UpgradeUploadError> {
     let mut snapshot = project.store.snapshot().await.map_err(UpgradeError::from)?;
     let outcome = async {
-        let Some(Record::Project(state)) = snapshot.record(&id.clone().into()).await? else {
+        let Some(Record::Project(_)) = snapshot.record(&id.clone().into()).await? else {
             return Err(UpgradeError::Snapshot(
                 "imported ProjectState absent".into(),
             ));
@@ -291,7 +291,6 @@ async fn summary(
             ));
         }
         Ok(BoardAnnotation::ProjectSummary {
-            status: state.status,
             latest_record_at: latest.time,
         })
     }

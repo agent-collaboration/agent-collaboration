@@ -49,8 +49,6 @@ fn project_record(project: &ProjectId) -> Result<Record, Box<dyn std::error::Err
             ),
         },
         project_id: project.clone(),
-        status: None,
-        pinned_definition: None,
         revision: SubjectRevision::INITIAL,
         closed_at: None,
         description: Description::try_from(String::new())?,

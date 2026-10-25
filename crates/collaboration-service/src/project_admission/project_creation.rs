@@ -1,7 +1,7 @@
 //! Central accepts the directory, native registration completes, then the first write initializes it.
 use super::{ProjectAdmission, ProjectAdmissionError, request_gate::*};
 use chrono::Utc;
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::request_canonical::creation_hash;
 use message_board::*;
 
@@ -51,14 +51,7 @@ impl ProjectAdmission {
         };
         let directory_reply = self
             .fleet
-            .submit_creation(
-                request,
-                &directory,
-                &FleetIds {
-                    generated_record: RecordId::generate(),
-                },
-                &self.record_origin(),
-            )
+            .submit_creation(request, &directory, &self.record_origin())
             .await?;
         match directory_reply.result {
             RequestResult::Decided(RequestDecision::Accepted { .. }) => {}
@@ -183,8 +176,6 @@ impl ProjectAdmission {
                             .map_err(|error| {
                                 ProjectAdmissionError::InvalidRecord(error.to_string())
                             })?,
-                        status: None,
-                        pinned_definition: None,
                         revision: SubjectRevision::INITIAL,
                         closed_at: None,
                     });

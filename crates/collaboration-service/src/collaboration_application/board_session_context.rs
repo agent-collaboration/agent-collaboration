@@ -1,4 +1,4 @@
-//! Hook unavailability is a value; a board or Host failure never supplies an allowed verdict.
+//! Session context reads assignments and scope acknowledgements from associated projects.
 use super::{BoardOperations, presence_for_reader};
 use message_board::*;
 use message_board_storage::StoreSchemaState;
@@ -29,52 +29,10 @@ impl BoardOperations<'_> {
             }
         }
     }
-    pub async fn hook_card(
-        &self,
-        request: ContinuationCardRequest,
-    ) -> Result<HookResult, BoardError> {
-        if let Some(reason) = self.hook_project_unavailable(&request.project_id).await {
-            return Ok(HookResult::Unavailable { reason });
-        }
-        let project = request.project_id.clone();
-        match self.view_card(request).await {
-            Ok(card) => Ok(HookResult::Ok(HookPayload::Card(Box::new(card)))),
-            Err(error) if error.kind == BoardFailureKind::BoardUnavailable => {
-                Ok(HookResult::Unavailable {
-                    reason: UnavailableReason::StoreUnavailable { project },
-                })
-            }
-            Err(error) => Err(error),
-        }
-    }
-    pub async fn hook_check(
-        &self,
-        request: ProjectMoveCheckRequest,
-    ) -> Result<HookResult, BoardError> {
-        if let Some(reason) = self.hook_project_unavailable(&request.project_id).await {
-            return Ok(HookResult::Unavailable { reason });
-        }
-        let project = request.project_id.clone();
-        Ok(match self.move_check(request).await {
-            Ok(verdict) => HookResult::Ok(HookPayload::Check(verdict)),
-            Err(_) => HookResult::Unavailable {
-                reason: UnavailableReason::StoreUnavailable { project },
-            },
-        })
-    }
-    pub async fn hook_context(
-        &self,
-        request: SessionContextRequest,
-    ) -> Result<HookResult, BoardError> {
-        Ok(match self.context_payload(&request.session).await {
-            Ok(payload) => HookResult::Ok(payload),
-            Err(reason) => HookResult::Unavailable { reason },
-        })
-    }
     pub async fn view_session_context(
         &self,
         request: SessionContextRequest,
-    ) -> Result<HookPayload, BoardError> {
+    ) -> Result<SessionContext, BoardError> {
         self.context_payload(&request.session)
             .await
             .map_err(|_| BoardError::board_unavailable())
@@ -82,7 +40,7 @@ impl BoardOperations<'_> {
     async fn context_payload(
         &self,
         session: &SessionRef,
-    ) -> Result<HookPayload, UnavailableReason> {
+    ) -> Result<SessionContext, UnavailableReason> {
         let projects = self.context_projects(session).await?;
         let reader = Identity::Session {
             session: session.clone(),
@@ -90,7 +48,7 @@ impl BoardOperations<'_> {
         let mut assignments = Vec::new();
         let mut acknowledged_scopes = Vec::new();
         for project in projects {
-            if let Some(reason) = self.hook_project_unavailable(&project).await {
+            if let Some(reason) = self.context_project_unavailable(&project).await {
                 return Err(reason);
             }
             let unavailable = || UnavailableReason::StoreUnavailable {
@@ -160,7 +118,7 @@ impl BoardOperations<'_> {
             }
             snapshot.finish().await.map_err(|_| unavailable())?;
         }
-        Ok(HookPayload::Context {
+        Ok(SessionContext::Context {
             session: session.clone(),
             assignments,
             acknowledged_scopes,
@@ -326,7 +284,7 @@ impl BoardOperations<'_> {
             common_directory: common.to_str()?.to_owned().try_into().ok()?,
         })
     }
-    async fn hook_project_unavailable(&self, project: &ProjectId) -> Option<UnavailableReason> {
+    async fn context_project_unavailable(&self, project: &ProjectId) -> Option<UnavailableReason> {
         let Some(admission) = &self.identity.project_admission else {
             return Some(UnavailableReason::BoardUnreachable {});
         };

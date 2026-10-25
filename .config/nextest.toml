@@ -36,6 +36,27 @@ threads-required = "num-test-threads"
 filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
 slow-timeout = { period = "60s", terminate-after = 6 }
 
+# These cases deliberately fill the real production queue or construct 260
+# maximum descriptions / 31,000 historical effects. Keep those inputs intact
+# and give their native storage work an exclusive, bounded execution window.
+[[profile.ci.overrides]]
+filter = "binary(=held_queue_depth) | binary(=project_description_encoded_sizes) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+slow-timeout = { period = "60s", terminate-after = 15 }
+
+[[profile.ci.overrides]]
+filter = "binary(=request_effects_public) & test(=a_large_fleet_write_returns_a_signed_public_continuation)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
+# The real SIGKILL/reopen proof shares the same native-process scheduling
+# requirement as the other crash/restart cases; its one-second storage fence stays.
+[[profile.ci.overrides]]
+filter = "package(=collaboration-service) & test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # Real local Host/central journeys run in the required slower CI job.
 [[profile.ci.overrides]]
 filter = "binary(=board_records_e2e)"

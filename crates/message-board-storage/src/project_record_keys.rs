@@ -27,7 +27,6 @@ where
         RecordKind::OwnerGrant => sqlx_turso::query_scalar!(r#"SELECT grant_id AS "id!: String" FROM owner_grants WHERE grant_id>? ORDER BY grant_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::StandDownAcknowledgement => sqlx_turso::query_scalar!(r#"SELECT acknowledgement_id AS "id!: String" FROM stand_down_acknowledgements WHERE acknowledgement_id>? ORDER BY acknowledgement_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::Fact => sqlx_turso::query_scalar!(r#"SELECT fact_id AS "id!: String" FROM facts WHERE fact_id>? ORDER BY fact_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
-        RecordKind::Move => sqlx_turso::query_scalar!(r#"SELECT move_id AS "id!: String" FROM moves WHERE move_id>? ORDER BY move_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::PlanRevision => sqlx_turso::query_scalar!(r#"SELECT revision_id AS "id!: String" FROM plan_revisions WHERE revision_id>? ORDER BY revision_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::WorkTrailRow => sqlx_turso::query_scalar!(r#"SELECT row_id AS "id!: String" FROM work_trail_rows WHERE row_id>? ORDER BY row_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::TrailRedaction => sqlx_turso::query_scalar!(r#"SELECT record_id AS "id!: String" FROM project_feed WHERE record_id>? AND record_kind='trailRedaction' ORDER BY record_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
@@ -35,7 +34,7 @@ where
         RecordKind::NotifyIntent => sqlx_turso::query_scalar!(r#"SELECT intent_id AS "id!: String" FROM notify_intents WHERE intent_id>? ORDER BY intent_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::SubscriptionMembership => sqlx_turso::query_scalar!(r#"SELECT membership_id AS "id!: String" FROM subscription_memberships WHERE membership_id>? ORDER BY membership_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
         RecordKind::ReadMark => sqlx_turso::query_scalar!(r#"SELECT mark_id AS "id!: String" FROM read_marks WHERE mark_id>? ORDER BY mark_id LIMIT ?"#, after, limit).fetch_all(&mut *transaction).await?,
-        RecordKind::Workspace | RecordKind::Board | RecordKind::Adr | RecordKind::ProcessDefinition => return Err(ProjectStorageError::InvalidFeed),
+        RecordKind::Workspace | RecordKind::Board | RecordKind::Adr => return Err(ProjectStorageError::InvalidFeed),
     };
     keys.into_iter()
         .map(|id| {

@@ -30,7 +30,6 @@ async fn lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_
     let fixture = Fixture::open(root.path()).await?;
     let proof = async {
         let annotation = BoardAnnotation::ProjectSummary {
-            status: None,
             latest_record_at: RecordTime::LegacyUnknown,
         };
         let piece = Piece::new(PieceContents {

@@ -105,6 +105,17 @@ fn format_timestamp(created_at: DateTime<Utc>) -> String {
     created_at.to_rfc3339_opts(chrono::SecondsFormat::Nanos, true)
 }
 
+fn startup_unavailable(stage: &'static str, error: sqlx::Error) -> StorageError {
+    // Driver codes are fixed classifications. Never log its message, SQL,
+    // database path or stored values while diagnosing a failed cold reopen.
+    let code = error
+        .as_database_error()
+        .and_then(|database| database.code());
+    tracing::warn!(stage, database_code = code.as_deref(), error_kind = ?std::mem::discriminant(&error),
+        "interaction storage startup unavailable");
+    StorageError::StorageUnavailable
+}
+
 pub(crate) async fn initialize_history(
     database_path: &Path,
 ) -> Result<(TursoConnection, HistoryDatabaseState), StorageError> {
@@ -120,7 +131,7 @@ pub(crate) async fn initialize_history(
             observer
                 .close()
                 .await
-                .map_err(|_| StorageError::StorageUnavailable)?;
+                .map_err(|error| startup_unavailable("observer_close", error))?;
         }
         Ok(_) => return Err(StorageError::InvalidSchema),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
@@ -133,19 +144,19 @@ pub(crate) async fn initialize_history(
         .busy_timeout(Duration::from_secs(1));
     let mut connection = TursoConnection::connect_with(&options)
         .await
-        .map_err(|_| StorageError::StorageUnavailable)?;
+        .map_err(|error| startup_unavailable("writer_connect", error))?;
     sqlx::query("PRAGMA synchronous=FULL")
         .execute(&mut connection)
         .await
-        .map_err(|_| StorageError::StorageUnavailable)?;
+        .map_err(|error| startup_unavailable("synchronous_pragma", error))?;
     sqlx::query("PRAGMA journal_mode=WAL")
         .execute(&mut connection)
         .await
-        .map_err(|_| StorageError::StorageUnavailable)?;
+        .map_err(|error| startup_unavailable("journal_mode_pragma", error))?;
     let mut transaction = connection
         .begin_with("BEGIN IMMEDIATE")
         .await
-        .map_err(|_| StorageError::StorageUnavailable)?;
+        .map_err(|error| startup_unavailable("begin_immediate", error))?;
     let initialized = async {
         let admission = inspect_schema(&mut transaction).await?;
         MIGRATOR
@@ -158,7 +169,7 @@ pub(crate) async fn initialize_history(
             )
             .execute(&mut *transaction)
             .await
-            .map_err(|_| StorageError::StorageUnavailable)?;
+            .map_err(|error| startup_unavailable("initial_revision", error))?;
         }
         durable_steps::turso_store::migrate_journal(&mut transaction)
             .await
@@ -185,14 +196,14 @@ pub(crate) async fn initialize_history(
             transaction
                 .rollback()
                 .await
-                .map_err(|_| StorageError::StorageUnavailable)?;
+                .map_err(|error| startup_unavailable("initialization_rollback", error))?;
             return Err(error);
         }
     };
     transaction
         .commit()
         .await
-        .map_err(|_| StorageError::StorageUnavailable)?;
+        .map_err(|error| startup_unavailable("initialization_commit", error))?;
     Ok((connection, HistoryDatabaseState { cache, revision }))
 }
 

@@ -319,21 +319,21 @@ async fn subscription_restart_contains_project_failure(
         "{reply:?}"
     );
     let shown = client
-        .hook_card(ContinuationCardRequest {
+        .view_card(ContinuationCardRequest {
             project_id: healthy.clone(),
             actor: serde_json::from_value(fixture.actor.clone())?,
             subject: TrailSubject::Project,
         })
         .await?;
-    assert!(matches!(shown, HookResult::Ok(_)), "{shown:?}");
+    assert_eq!(shown.subject, healthy.clone().into());
     let shown = client
-        .hook_card(ContinuationCardRequest {
+        .view_card(ContinuationCardRequest {
             project_id: broken.clone(),
             actor: serde_json::from_value(fixture.actor.clone())?,
             subject: TrailSubject::Project,
         })
-        .await?;
-    assert!(matches!(shown, HookResult::Unavailable { .. }), "{shown:?}");
+        .await;
+    assert!(shown.is_err(), "{shown:?}");
     let mut direct_reader = None;
     if matches!(fault, RestartFault::Membership) {
         let reader: Identity = serde_json::from_value(fixture.actor.clone())?;

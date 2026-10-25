@@ -310,7 +310,6 @@ pub(super) fn prepare(
             ))
         }
         BoardCommand::View { command } => super::board_view_commands::prepare_view(command),
-        BoardCommand::Hook { command } => super::board_view_commands::prepare_hook(command),
         BoardCommand::Workstream { command } => {
             super::board_entity_preparation::prepare_workstream(command)
         }
@@ -322,13 +321,9 @@ pub(super) fn prepare(
             super::board_entity_preparation::prepare_worktrail(command)
         }
         BoardCommand::Role { command } => super::board_entity_preparation::prepare_role(command),
-        BoardCommand::Move { command } => super::board_entity_preparation::prepare_move(command),
         BoardCommand::Fact { command } => super::board_entity_preparation::prepare_fact(command),
         BoardCommand::Feed { command } => super::board_entity_preparation::prepare_feed(command),
         BoardCommand::Adr { command } => super::board_entity_preparation::prepare_adr(command),
-        BoardCommand::Process { command } => {
-            super::board_entity_preparation::prepare_process(command)
-        }
         BoardCommand::Search(arguments) => {
             super::board_search_commands::prepare_discovery_search(arguments)
         }

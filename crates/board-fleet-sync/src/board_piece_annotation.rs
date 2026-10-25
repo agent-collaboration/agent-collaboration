@@ -1,4 +1,4 @@
-//! Summaries describe the piece's highest feed position, including no-status projects.
+//! Summaries describe the piece's highest feed position.
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
 use fleet_sync_writer::{CapturedTransaction, PieceAnnotation};
 use message_board_storage::{CapturedFeedSummary, CapturedProjectChanges};
@@ -27,7 +27,6 @@ impl PieceAnnotation for BoardPieceAnnotation {
                 });
         match latest {
             Ok(Some(latest)) => Some(BoardAnnotation::ProjectSummary {
-                status: latest.status,
                 latest_record_at: latest.time,
             }),
             Ok(None) => None,

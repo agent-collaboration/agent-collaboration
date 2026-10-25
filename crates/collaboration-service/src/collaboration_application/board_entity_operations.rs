@@ -47,21 +47,10 @@ impl BoardOperations<'_> {
     entity_read_operation!(show subtask_show, Subtask);
     entity_read_operation!(show role_show, RoleAssignment);
     entity_read_operation!(list role_list, RoleAssignment);
-    entity_read_operation!(show move_show, Move);
-    entity_read_operation!(list move_list, Move);
     entity_read_operation!(show fact_show, Fact);
     entity_read_operation!(list fact_list, Fact);
     entity_read_operation!(show intent_show, NotifyIntent);
     entity_read_operation!(list intent_list, NotifyIntent);
-    pub async fn move_check(
-        &self,
-        request: ProjectMoveCheckRequest,
-    ) -> Result<MoveVerdict, BoardError> {
-        self.admission()?
-            .check_move(&request)
-            .await
-            .map_err(admission_error)
-    }
     project_operation!(workstream_create, WorkstreamCreate);
     project_operation!(workstream_rename, WorkstreamRename);
     project_operation!(workstream_close, WorkstreamClose);
@@ -85,11 +74,9 @@ impl BoardOperations<'_> {
     project_operation!(owner_grant_record, OwnerGrantRecord);
     project_operation!(role_replace_lead, RoleReplaceLead);
     project_operation!(role_acknowledge_current, RoleAcknowledgeCurrent);
-    project_operation!(project_pin_definition, ProjectPinDefinition);
     project_operation!(project_publish_plan, ProjectPublishPlan);
     project_operation!(project_close, ProjectClose);
     project_operation!(project_describe, ProjectDescribe);
-    project_operation!(move_request, MoveRequest);
     project_operation!(fact_record, FactRecord);
     pub async fn entity_show(
         &self,

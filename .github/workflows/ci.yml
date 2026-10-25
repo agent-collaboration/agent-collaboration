@@ -201,9 +201,11 @@ jobs:
       # the built artifacts so they don't contend for cargo's build lock. Each
       # build uses exactly its run step's package selection and features, so
       # the run reuses these artifacts instead of relinking them.
+      # Prebuilt-Host roots live in board-e2e below; add future board_central_e2e
+      # and local_mail_e2e roots to both selections when they land.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e))' --no-run
+          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e))' --no-run
           df -h /
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
@@ -212,7 +214,7 @@ jobs:
       - name: Test Rust workspace
         id: workspace_tests
         background: true
-        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e))'
+        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
@@ -249,7 +251,7 @@ jobs:
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
-          cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test board_records_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test board_records_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1

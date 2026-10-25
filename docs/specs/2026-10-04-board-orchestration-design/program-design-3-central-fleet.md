@@ -1,5 +1,7 @@
 # Program design 3: the central fleet
 
+> **0.1.102 cut (owner decision 1217, 2026-10-24).** Process-definition registration and its fleet-admission rules were removed with project moves. Everything else stands.
+
 **What this is:** how central realizes [spec 3](spec-3-central-fleet.md). **Its runtime structure is superseded (2026-10-16):** C20, §2a, the `storage_transaction` component, the crate list and the `collaboration-central-local` adapter are replaced by [the central one-core program design](../2026-10-16-central-one-core/program-design.md). That design describes one async core with capabilities injected per runtime; see [what went wrong](../2026-10-16-central-one-core/what-went-wrong.md). The domain design here (copies, fences, leases, transfers, sessions, fleet, forwarding, imports, operations) still governs. Central is a Rust Cloudflare Worker (workers-rs) with four kinds of Durable Object:
 - one connection object per machine;
 - one central copy per project;

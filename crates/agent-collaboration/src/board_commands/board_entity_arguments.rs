@@ -280,13 +280,6 @@ pub(super) enum RoleCommand {
     List(EntityListArguments),
 }
 #[derive(Subcommand)]
-pub(super) enum MoveCommand {
-    Check(OperationFileArguments),
-    Request(OperationFileArguments),
-    Show(EntityShowArguments),
-    List(EntityListArguments),
-}
-#[derive(Subcommand)]
 pub(super) enum FactCommand {
     Record(OperationFileArguments),
     Show(EntityShowArguments),
@@ -327,8 +320,4 @@ pub(super) enum AdrCommand {
         #[command(flatten)]
         common: CommonArguments,
     },
-}
-#[derive(Subcommand)]
-pub(super) enum ProcessCommand {
-    Register(OperationFileArguments),
 }

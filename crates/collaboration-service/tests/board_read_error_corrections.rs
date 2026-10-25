@@ -47,7 +47,6 @@ async fn every_project_entity_read_uses_the_board_error_family() -> Result<(), T
         ("task_show", "task_list", "task"),
         ("subtask_show", "subtask_list", "subtask"),
         ("role_show", "role_list", "roleAssignment"),
-        ("move_show", "move_list", "move"),
         ("fact_show", "fact_list", "fact"),
         ("intent_show", "intent_list", "notifyIntent"),
     ] {

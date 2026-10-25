@@ -1,7 +1,7 @@
 //! Read the shared Fleet rules' declared inputs from canonical storage.
 
 use crate::{
-    fleet_record_codec::{self as codec, corrupt, required},
+    fleet_record_codec::{corrupt, required},
     fleet_record_store, generated_fleet_record_reads as queries, generated_statements,
 };
 use durable_steps::{StoreError, storage::TransactionScope};
@@ -74,29 +74,6 @@ where
                         name,
                         record,
                     });
-                }
-            }
-            FleetReadKey::Definition {
-                workspace: _,
-                name,
-                version,
-            } => {
-                if let Some(row) = queries::read_global_definition(
-                    scope,
-                    name.as_str().into(),
-                    version.as_str().into(),
-                )
-                .await
-                .map_err(StoreError::backend)?
-                {
-                    let Record::ProcessDefinition(definition) = codec::decode(row)?.record else {
-                        return Err(corrupt("definition", "wrong indexed record kind"));
-                    };
-                    if definition.reference.name != name || definition.reference.version != version
-                    {
-                        return Err(corrupt("definition", "business key disagrees with lookup"));
-                    }
-                    snapshot.definitions.push(definition);
                 }
             }
             FleetReadKey::WorkspaceBoards { workspace } => {

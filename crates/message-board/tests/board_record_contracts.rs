@@ -34,9 +34,6 @@ fn active_names_and_thread_subjects_are_closed() {
     assert!(serde_json::from_value::<BoardKind>(json!({"kind":"area","goal":"hidden"})).is_err());
     assert!(serde_json::from_value::<RecordKind>(json!("brief")).is_err());
     assert!(
-        serde_json::from_value::<MoveOutcome>(json!({"kind":"accepted","hidden":true})).is_err()
-    );
-    assert!(
         serde_json::from_value::<UnavailableReason>(
             json!({"kind":"boardUnreachable","hidden":true})
         )
@@ -135,49 +132,10 @@ fn role_subject_constructor_and_deserializer_reject_every_wrong_pair() {
 }
 
 #[test]
-fn rejected_move_can_record_unresolved_endpoints_but_an_accepted_move_cannot() {
-    let project = ProjectId::generate();
-    let envelope = support::record_envelope(RecordId::generate(), project.clone());
-    let rejection = RejectReason::MoveNotAllowed {
-        edge: MoveName::try_from("unknown edge".to_owned()).unwrap(),
-        required_role: None,
-    };
-    let props = MoveRecordProps {
-        requester: envelope.actor.clone(),
-        envelope,
-        move_id: MoveId::generate(),
-        project,
-        move_name: MoveName::try_from("unknown edge".to_owned()).unwrap(),
-        endpoints: None,
-        evidence: vec![],
-        reason: "producer request".to_owned(),
-        outcome: MoveOutcome::Rejected {
-            reasons: vec![rejection],
-        },
-    };
-    roundtrip(MoveRecord::new(props.clone()).unwrap());
-    let mut invalid = props.clone();
-    invalid.outcome = MoveOutcome::Accepted {};
-    assert!(MoveRecord::new(invalid.clone()).is_err());
-    assert!(serde_json::from_value::<MoveRecord>(serde_json::to_value(invalid).unwrap()).is_err());
-    let mut accepted = props;
-    accepted.endpoints = Some(MoveEndpoints {
-        from: StatusName::try_from("started".to_owned()).unwrap(),
-        to: StatusName::try_from("finished".to_owned()).unwrap(),
-    });
-    accepted.outcome = MoveOutcome::Accepted {};
-    roundtrip(MoveRecord::new(accepted).unwrap());
-    let role_schema = schemars::schema_for!(RoleAssignment);
-    let properties = role_schema.get("properties").unwrap();
+fn role_schema_names_its_subject_and_authority() {
+    let schema = schemars::schema_for!(RoleAssignment);
+    let properties = schema.get("properties").unwrap();
     assert!(properties.get("subject").is_some());
     assert!(properties.get("role").is_some());
     assert!(properties.get("assignment").is_none());
-    let move_schema = schemars::schema_for!(MoveRecord);
-    assert!(
-        move_schema
-            .get("properties")
-            .unwrap()
-            .get("endpoints")
-            .is_some()
-    );
 }

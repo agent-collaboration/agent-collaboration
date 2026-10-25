@@ -1,4 +1,4 @@
-//! The built CLI must use typed SDK calls to the native board view/hook tools.
+//! The built CLI must use typed SDK calls to the native board view tools.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
@@ -10,8 +10,7 @@ use serde_json::json;
 
 #[tokio::test]
 #[allow(clippy::panic_in_result_fn)]
-async fn view_and_hook_commands_reach_the_real_service_and_report_read_marks()
--> Result<(), TestError> {
+async fn view_commands_reach_the_real_service_and_report_read_marks() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, workstream) = fixture.project().await?;
     let task = fixture.task(&project, &workstream).await?;
@@ -67,54 +66,6 @@ async fn view_and_hook_commands_reach_the_real_service_and_report_read_marks()
         Some(&json!("lead"))
     );
     assert_eq!(card.pointer("/result/record/readMark"), None);
-    let started = std::time::Instant::now();
-    let check = cli(
-        directory,
-        &[
-            "hook",
-            "check",
-            "--project-id",
-            project.as_str(),
-            "--actor",
-            &actor,
-            "--move-name",
-            "unregistered",
-            "--expected-revision",
-            "0",
-        ],
-    )
-    .await?;
-    eprintln!(
-        "G6 CLI hook_check including startup elapsed_us={}",
-        started.elapsed().as_micros()
-    );
-    assert_eq!(check.pointer("/result/record/kind"), Some(&json!("ok")));
-    assert_eq!(
-        check.pointer("/result/record/payload/payload/kind"),
-        Some(&json!("rejected"))
-    );
-    let card = cli(
-        directory,
-        &[
-            "hook",
-            "card",
-            "--project-id",
-            project.as_str(),
-            "--actor",
-            &actor,
-            "--subject",
-            &subject,
-        ],
-    )
-    .await?;
-    assert_eq!(
-        card.pointer("/result/record/payload/kind"),
-        Some(&json!("card"))
-    );
-    assert_eq!(
-        card.pointer("/result/record/payload/payload/readMark"),
-        None
-    );
     let owner = cli(directory, &["view", "owner"]).await?;
     assert_eq!(owner.pointer("/result/record/waiting"), Some(&json!([])));
     assert_eq!(owner.pointer("/result/record/readMarks"), None);
@@ -139,16 +90,16 @@ async fn view_and_hook_commands_reach_the_real_service_and_report_read_marks()
     assert_eq!(load.pointer("/result/record/owed"), Some(&json!([])));
     let own = cli_with_session(
         directory,
-        &["hook", "context", "--session", "self"],
+        &["view", "session-context", "--session", "self"],
         Some("fixture-current-session"),
     )
     .await?;
     assert_eq!(
-        own.pointer("/result/record/payload/payload/session/endpoint/serviceId"),
+        own.pointer("/result/record/payload/session/endpoint/serviceId"),
         Some(&json!("00000000-0000-4000-8000-000000000001"))
     );
     assert_eq!(
-        own.pointer("/result/record/payload/payload/session/sessionId"),
+        own.pointer("/result/record/payload/session/sessionId"),
         Some(&json!("fixture-current-session"))
     );
     let session=json!({"endpoint":{"endpointId":"codex-local","serviceId":"00000000-0000-4000-8000-000000000001"},"sessionId":"00000000-0000-4000-8000-000000000003"}).to_string();
@@ -160,30 +111,6 @@ async fn view_and_hook_commands_reach_the_real_service_and_report_read_marks()
     assert_eq!(
         context.pointer("/result/record/kind"),
         Some(&json!("context"))
-    );
-    let hook = cli(directory, &["hook", "context", "--session", &session]).await?;
-    assert_eq!(
-        hook.pointer("/result/record/payload/kind"),
-        Some(&json!("context"))
-    );
-    let absent = ProjectId::generate();
-    let unavailable = cli(
-        directory,
-        &[
-            "hook",
-            "card",
-            "--project-id",
-            absent.as_str(),
-            "--actor",
-            &actor,
-            "--subject",
-            r#"{"kind":"project"}"#,
-        ],
-    )
-    .await?;
-    assert_eq!(
-        unavailable.pointer("/result/record/kind"),
-        Some(&json!("unavailable"))
     );
     fixture.stop().await
 }

@@ -14,13 +14,6 @@ pub struct FleetRequest {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProcessDefinitionInput {
-    pub reference: ProcessDefinitionRef,
-    pub source: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -82,9 +75,6 @@ pub enum FleetOperation {
         adr: AdrId,
         transition: AdrTransition,
         expected_revision: SubjectRevision,
-    },
-    DefinitionRegister {
-        definition: ProcessDefinitionInput,
     },
 }
 

@@ -1,6 +1,5 @@
 //! Evidence and trail records decode typed rows; only redaction effects live solely in the feed.
 use crate::ProjectStorageError;
-use crate::project_actor_rows::decode_actor;
 use crate::project_record_codec::{
     stored_bool, stored_counter, stored_json, stored_project_row, stored_text, stored_timestamp,
 };
@@ -10,7 +9,6 @@ use sqlx_turso::Turso;
 use std::collections::BTreeMap;
 
 stored_project_row!(StoredFact, FactBody { fact: String, links: String, producer_time: String, anchor_epoch: Option<i64>, anchor_position: Option<i64>, late: i64 });
-stored_project_row!(StoredMove, MoveBody { move_name: String, from_status: Option<String>, to_status: Option<String>, evidence: String, reason: String, requester: String, requester_identity: Option<String>, outcome: String });
 stored_project_row!(StoredPlanRevision, PlanRevisionBody { content_hash: String, document: String, superseded_by: Option<String>, revision: i64 });
 stored_project_row!(
     StoredTrail,
@@ -34,7 +32,6 @@ pub(crate) struct StoredTrailLink {
 }
 pub(crate) enum StoredEvidenceRecord {
     Fact(StoredFact),
-    Move(StoredMove),
     PlanRevision(StoredPlanRevision),
     Trail {
         row: StoredTrail,
@@ -47,7 +44,6 @@ impl StoredEvidenceRecord {
     pub(crate) fn reference(&self) -> Result<RecordRef, ProjectStorageError> {
         match self {
             Self::Fact(row) => row.reference(RecordKind::Fact),
-            Self::Move(row) => row.reference(RecordKind::Move),
             Self::PlanRevision(row) => row.reference(RecordKind::PlanRevision),
             Self::Trail { row, .. } => row.reference(RecordKind::WorkTrailRow),
             Self::Redaction(row) => row.reference(RecordKind::TrailRedaction),
@@ -84,42 +80,6 @@ impl StoredEvidenceRecord {
                     anchor,
                     late: stored_bool(body.late, &reference, "late")?,
                 })
-            }
-            Self::Move(row) => {
-                let (raw, body) = row.into_parts();
-                let endpoints = match (body.from_status, body.to_status) {
-                    (None, None) => None,
-                    (Some(from), Some(to)) => Some(MoveEndpoints {
-                        from: stored_text(from, &reference, "from", StatusName::as_str)?,
-                        to: stored_text(to, &reference, "to", StatusName::as_str)?,
-                    }),
-                    _ => return Err(invalid("endpoints")),
-                };
-                Record::Move(
-                    MoveRecord::new(MoveRecordProps {
-                        envelope: raw.decode(&reference, project)?,
-                        move_id: MoveId::try_from(reference.id.as_str().to_owned())
-                            .map_err(|_| invalid("id"))?,
-                        project: project.clone(),
-                        move_name: stored_text(
-                            body.move_name,
-                            &reference,
-                            "moveName",
-                            MoveName::as_str,
-                        )?,
-                        endpoints,
-                        evidence: stored_json(&body.evidence, &reference, "evidence")?,
-                        reason: body.reason,
-                        requester: decode_actor(
-                            &body.requester,
-                            &body
-                                .requester_identity
-                                .ok_or_else(|| invalid("requester"))?,
-                        )?,
-                        outcome: stored_json(&body.outcome, &reference, "outcome")?,
-                    })
-                    .map_err(|_| invalid("move"))?,
-                )
             }
             Self::PlanRevision(row) => {
                 let (raw, body) = row.into_parts();
@@ -208,14 +168,6 @@ where
                 .await?
                 .into_iter()
                 .map(StoredEvidenceRecord::Fact)
-                .collect()
-        }
-        RecordKind::Move => {
-            sqlx_turso::query_file_as!(StoredMove, "src/project_move_batch.sql", project, keys)
-                .fetch_all(&mut *transaction)
-                .await?
-                .into_iter()
-                .map(StoredEvidenceRecord::Move)
                 .collect()
         }
         RecordKind::PlanRevision => sqlx_turso::query_file_as!(

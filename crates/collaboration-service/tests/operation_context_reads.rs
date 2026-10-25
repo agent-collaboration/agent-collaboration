@@ -291,31 +291,3 @@ async fn semantic_identity_matches_survive_json_end_reencoding_and_typed_acknowl
     sqlx::Connection::close(observer).await?;
     fixture.stop().await
 }
-
-#[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)]
-async fn scoped_guard_selection_preserves_the_existing_resource_name_meaning()
--> Result<(), TestError> {
-    use sha2::{Digest, Sha256};
-    let fixture = BoardFixture::start().await?;
-    let (project, _) = fixture.project().await?;
-    let source = json!({"initialStatus":"draft","edges":[{"name":"finish","from":"draft","to":"done","requiredRole":"lead","guards":[{"name":"tests","evaluator":{"kind":"human","humanId":"evaluator"}}]}]}).to_string();
-    let mut register = fixture.header();
-    register["workspaceId"] = json!(fixture.workspace);
-    register["name"] = json!("scoped guards");
-    register["version"] = json!("v1");
-    register["source"] = json!(source);
-    accepted(&fixture.api.call("process_register", register).await?);
-    let definition = json!({"name":"scoped guards","version":"v1","sourceHash":format!("{:x}",Sha256::digest(source.as_bytes()))});
-    accepted(&fixture.api.call("project_pin_definition",fixture.request(&project,json!({"kind":"projectPinDefinition","definition":definition,"expectedRevision":0}))).await?);
-    let evaluator = json!({"kind":"human","humanId":"evaluator"});
-    accepted(&fixture.api.call("fact_record",fixture.request(&project,json!({"kind":"factRecord","fact":{"factId":FactId::generate(),"kind":{"kind":"evaluatorResult","fact":{"guard":"\u{2003} tests\t","subject":{"kind":"project","id":project},"outcome":"met","evidence":[],"evaluator":{"actor":evaluator,"engine":null,"calibration":null},"executor":null}},"links":[{"kind":"project","id":project}],"producerTime":"2026-10-12T00:00:00Z","anchor":null}}))).await?);
-    let checked = fixture.api.call("move_check",json!({"projectId":project,"actor":fixture.actor,"moveName":"finish","expectedRevision":1})).await?;
-    assert_eq!(
-        checked.pointer("/result/kind"),
-        Some(&json!("allowed")),
-        "{checked}"
-    );
-    accepted(&fixture.api.call("move_request",fixture.request(&project,json!({"kind":"moveRequest","moveId":MoveId::generate(),"moveName":"finish","expectedRevision":1,"evidence":[],"reason":"recorded normalized guard","addressees":[]}))).await?);
-    fixture.stop().await
-}

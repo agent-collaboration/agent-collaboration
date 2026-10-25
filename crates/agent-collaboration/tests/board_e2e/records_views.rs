@@ -1,7 +1,7 @@
 //! BR07 / VD §5a U1,U2,U4-group,U79: applicable pending work, dependencies and read-only summaries.
 use super::{
     fixture::{BoardFixture, accepted, at, human, identity},
-    record_inputs::{definition, evidence, reference, task, trail},
+    record_inputs::{evidence, reference, task, trail},
     role_checks::Roles,
 };
 use codex_router_test_support::FixtureResult;
@@ -44,7 +44,6 @@ struct PendingViewCase {
     foreign: String,
     subtask: String,
     reader: Value,
-    definition: Value,
     plan: String,
     subject: Value,
     handback: String,
@@ -163,7 +162,6 @@ async fn prepare_case(fixture: &BoardFixture) -> FixtureResult<PendingViewCase> 
         foreign,
         subtask,
     } = prepare_tasks(fixture).await?;
-    let definition = definition(fixture, false).await?;
     let plan = "11".repeat(32);
     fixture
         .accept(
@@ -171,7 +169,7 @@ async fn prepare_case(fixture: &BoardFixture) -> FixtureResult<PendingViewCase> 
             fixture.request(
                 &fixture.owner,
                 json!({"kind":"projectPublishPlan",
-        "hash":plan,"document":evidence("task",&dependent),"expectedRevision":1}),
+        "hash":plan,"document":evidence("task",&dependent),"expectedRevision":0}),
             ),
         )
         .await?;
@@ -216,7 +214,6 @@ async fn prepare_case(fixture: &BoardFixture) -> FixtureResult<PendingViewCase> 
         foreign,
         subtask,
         reader,
-        definition,
         plan,
         subject,
         handback,
@@ -243,7 +240,6 @@ fn card_request(fixture: &BoardFixture, case: &PendingViewCase) -> Value {
 
 async fn observe_card(fixture: &BoardFixture, case: &PendingViewCase) -> FixtureResult {
     let PendingViewCase {
-        definition,
         plan,
         subject,
         handback,
@@ -267,14 +263,13 @@ async fn observe_card(fixture: &BoardFixture, case: &PendingViewCase) -> Fixture
     assert_eq!(at(&cli, "/record")?, &card);
     assert_eq!(
         json!([
-            card.get("processDefinition"),
             card.get("planRevision"),
             card.get("assignment"),
             card.get("pendingHandbacks"),
             card.get("pendingDecisions"),
             card.get("nextObligation")
         ]),
-        json!([definition,plan,{"kind":"implementer","subject":fixture.workstream},
+        json!([plan,{"kind":"implementer","subject":fixture.workstream},
         [reference("workTrailRow",handback)],[reference("workTrailRow",question)],null])
     );
     assert_eq!(
@@ -289,8 +284,6 @@ async fn observe_card(fixture: &BoardFixture, case: &PendingViewCase) -> Fixture
         ]),
         json!([3, 3, 1])
     );
-    let hook = read(fixture, "hook_card", card_request.clone()).await?;
-    assert_eq!(at(&hook, "/payload/payload")?, &card);
     Ok(())
 }
 
@@ -549,12 +542,6 @@ async fn isolate_corrupt_sibling(
     assert_eq!(
         read(fixture, "view_card", card_request.clone()).await?,
         healthy
-    );
-    assert_eq!(
-        read(fixture, "hook_card", card_request)
-            .await?
-            .pointer("/payload/payload"),
-        Some(&healthy)
     );
     let corrupt = fixture
         .host()?

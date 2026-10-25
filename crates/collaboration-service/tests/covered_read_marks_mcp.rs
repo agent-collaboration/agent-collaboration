@@ -57,8 +57,6 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
             .append_record(Record::Project(ProjectState {
                 envelope: envelope.clone(),
                 project_id: project.clone(),
-                status: None,
-                pinned_definition: None,
                 revision: SubjectRevision::INITIAL,
                 closed_at: None,
                 description: Description::try_from(String::new())?,
@@ -144,18 +142,6 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
         assert_eq!(
             content.pointer("/result/readMark/reason/refusal/kind"),
             Some(&json!(reason))
-        );
-        let hook = fixture
-            .api
-            .call(
-                "hook_card",
-                json!({"projectId":project,"actor":reader,"subject":{"kind":"project"}}),
-            )
-            .await?;
-        assert_eq!(hook.pointer("/result/kind"), Some(&json!("unavailable")));
-        assert_eq!(
-            hook.pointer("/result/payload/reason/kind"),
-            Some(&json!("schemaNotReady"))
         );
         let store = fixture
             ._registry

@@ -29,25 +29,7 @@ impl CollaborationClient {
     pub async fn view_session_context(
         &self,
         request: SessionContextRequest,
-    ) -> Result<HookPayload, BoardClientError> {
+    ) -> Result<SessionContext, BoardClientError> {
         self.board_call("view_session_context", request).await
-    }
-    pub async fn hook_context(
-        &self,
-        request: SessionContextRequest,
-    ) -> Result<HookResult, BoardClientError> {
-        self.board_call("hook_context", request).await
-    }
-    pub async fn hook_check(
-        &self,
-        request: ProjectMoveCheckRequest,
-    ) -> Result<HookResult, BoardClientError> {
-        self.board_call("hook_check", request).await
-    }
-    pub async fn hook_card(
-        &self,
-        request: ContinuationCardRequest,
-    ) -> Result<HookResult, BoardClientError> {
-        self.board_call("hook_card", request).await
     }
 }

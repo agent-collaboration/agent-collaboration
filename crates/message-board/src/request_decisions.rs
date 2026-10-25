@@ -6,7 +6,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Assignment, AuthorityRole, EpochNumber, Identity, MoveName, RecordRef, SchemaFingerprint,
+    Assignment, AuthorityRole, EpochNumber, Identity, RecordRef, SchemaFingerprint,
     SubjectRevision, TaskId, WorkstreamId,
 };
 
@@ -15,33 +15,6 @@ use crate::{
 pub enum ChangeOutcome {
     Changed,
     AlreadySo,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum RejectReason {
-    StaleRevision {
-        current: SubjectRevision,
-    },
-    MoveNotAllowed {
-        edge: MoveName,
-        required_role: Option<AuthorityRole>,
-    },
-    GuardUnmet {
-        guard: String,
-        evaluator: Identity,
-    },
-    GuardUnavailable {
-        guard: String,
-        evaluator: Identity,
-    },
-    Closed {},
-    Archived {},
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -135,7 +108,6 @@ pub enum RoleRefusal {
     deny_unknown_fields
 )]
 pub enum Refusal {
-    Move(RejectReason),
     Workstream(WorkstreamRefusal),
     Task(TaskRefusal),
     Trail(TrailRefusal),
@@ -161,7 +133,6 @@ pub enum Refusal {
         subject: RecordRef,
     },
     Archived,
-    DefinitionConflict,
     ProjectRejected {
         reason: Box<Refusal>,
     },

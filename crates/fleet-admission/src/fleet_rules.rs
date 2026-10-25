@@ -1,11 +1,10 @@
 //! Decide against a supplied transactional read set, never against IO or a clock.
 use crate::{
-    FleetAdmissionError, FleetDecision, FleetFeedEntry, FleetIds, FleetOperation, FleetRequest,
+    FleetAdmissionError, FleetDecision, FleetFeedEntry, FleetOperation, FleetRequest,
     FleetSnapshot, FleetWrite, canonical_hash, fleet_decision::envelope,
 };
 use chrono::{DateTime, Utc};
 use message_board::*;
-use sha2::{Digest, Sha256};
 
 pub(crate) struct OperationPlan {
     pub records: Vec<Record>,
@@ -33,7 +32,6 @@ pub fn decide(
     request: &FleetRequest,
     snapshot: &FleetSnapshot,
     accepted_at: DateTime<Utc>,
-    ids: &FleetIds,
     origin: &ActorOrigin,
 ) -> Result<FleetDecision, FleetAdmissionError> {
     if matches!(&request.actor, RecordedActor::Router { installation, .. }
@@ -83,9 +81,6 @@ pub fn decide(
                 Ok(_) => match &request.operation {
                     FleetOperation::AdrCreate { .. } | FleetOperation::AdrTransition { .. } => {
                         crate::fleet_adr_rules::adr_plan(request, snapshot, accepted_at, origin)
-                    }
-                    FleetOperation::DefinitionRegister { definition } => {
-                        definition_plan(request, snapshot, definition, accepted_at, ids, origin)
                     }
                     _ => crate::fleet_metadata_rules::metadata_plan(
                         request,
@@ -237,61 +232,4 @@ pub(crate) fn name_conflict(
             name: name.clone(),
             existing: owner.record.clone(),
         })
-}
-
-fn definition_plan(
-    request: &FleetRequest,
-    snapshot: &FleetSnapshot,
-    definition: &crate::ProcessDefinitionInput,
-    accepted_at: DateTime<Utc>,
-    ids: &FleetIds,
-    origin: &ActorOrigin,
-) -> Result<OperationPlan, Refusal> {
-    if format!("{:x}", Sha256::digest(definition.source.as_bytes()))
-        != definition.reference.source_hash.as_str()
-    {
-        return Err(Refusal::InvalidShape {
-            field: "sourceHash".into(),
-        });
-    }
-    let parsed =
-        ProcessDefinitionSource::parse(&definition.source).map_err(|_| Refusal::InvalidShape {
-            field: "source".into(),
-        })?;
-    if parsed
-        .edges
-        .iter()
-        .any(|edge| edge.required_role != AuthorityRole::Lead)
-    {
-        return Err(Refusal::InvalidShape {
-            field: "requiredRole".into(),
-        });
-    }
-    if let Some(existing) = snapshot.definitions.iter().find(|row| {
-        row.reference.name == definition.reference.name
-            && row.reference.version == definition.reference.version
-    }) {
-        if existing.reference.source_hash != definition.reference.source_hash {
-            return Err(Refusal::DefinitionConflict);
-        }
-        return Ok(OperationPlan::unchanged(Record::ProcessDefinition(
-            existing.clone(),
-        )));
-    }
-    Ok(OperationPlan::changed(Record::ProcessDefinition(
-        ProcessDefinition {
-            envelope: envelope(
-                request,
-                ids.generated_record.clone(),
-                accepted_at,
-                FleetPosition::ZERO,
-                None,
-                origin,
-            ),
-            reference: definition.reference.clone(),
-            source: definition.source.clone(),
-            initial_status: parsed.initial_status,
-            edges: parsed.edges,
-        },
-    )))
 }

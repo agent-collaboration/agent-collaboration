@@ -1,1 +1,0 @@
-CREATE INDEX cached_definition_reference ON cached_fleet_records(json_extract(payload, '$.record.reference.name'), json_extract(payload, '$.record.reference.version'), json_extract(payload, '$.record.reference.sourceHash'), id) WHERE kind = 'processDefinition';

@@ -216,7 +216,7 @@ async fn split_capture_maps_only_acknowledged_commits_and_survives_lost_answers(
         );
         assert!(matches!(
             pieces.last().and_then(|piece| piece.annotation.as_ref()),
-            Some(BoardAnnotation::ProjectSummary { status: None, .. })
+            Some(BoardAnnotation::ProjectSummary { .. })
         ));
     }
     // Recreate the sender with its durable assignments and copy positions intact.
@@ -292,7 +292,7 @@ async fn split_capture_maps_only_acknowledged_commits_and_survives_lost_answers(
     );
     // Malformed captured metadata refuses before a piece can leave the sender.
     let mut write = database.begin_write().await?;
-    (&mut write).execute("UPDATE project_feed SET project_status='' WHERE position=(SELECT MAX(position) FROM project_feed)").await?;
+    (&mut write).execute("UPDATE project_feed SET time_basis='invalid' WHERE position=(SELECT MAX(position) FROM project_feed)").await?;
     write.commit().await?;
     let before = transport.pieces.lock().await.len();
     assert!(matches!(

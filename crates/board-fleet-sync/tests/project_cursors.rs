@@ -53,7 +53,7 @@ async fn arrange_accepted_prefix(
         }
         .unwrap();
         if position == 1 {
-            sqlx::query("INSERT INTO project_state(project_id,workspace_id,board_id,actor_id,request_id,epoch,position,router_time,time_basis,status,description,pinned_definition,revision,closed_epoch,closed_position) VALUES (?,?,?,?,NULL,?,?,?,'router',NULL,'',NULL,?,NULL,NULL)")
+            sqlx::query("INSERT INTO project_state(project_id,workspace_id,board_id,actor_id,request_id,epoch,position,router_time,time_basis,description,revision,closed_epoch,closed_position) VALUES (?,?,?,?,NULL,?,?,?,'router','',?,NULL,NULL)")
                 .bind(project.as_str()).bind(state.envelope.scope.workspace.as_str()).bind(state.envelope.scope.board.as_ref().unwrap().as_str()).bind(actor_id.as_str()).bind(i64::try_from(epoch).unwrap()).bind(i64::try_from(position).unwrap()).bind("2026-10-18T12:00:00.000000000Z").bind(i64::try_from(position).unwrap()).execute(&mut write).await.unwrap();
         } else {
             sqlx::query(
@@ -67,7 +67,7 @@ async fn arrange_accepted_prefix(
             .await
             .unwrap();
         }
-        sqlx::query("INSERT INTO project_feed(entry_id,epoch,position,record_kind,record_id,request_id,actor_id,origin_installation,origin_machine,router_time,time_basis,content,project_status) VALUES (?,?,?,'project',?,NULL,?,?,?,?,'router',?,NULL)")
+        sqlx::query("INSERT INTO project_feed(entry_id,epoch,position,record_kind,record_id,request_id,actor_id,origin_installation,origin_machine,router_time,time_basis,content) VALUES (?,?,?,'project',?,NULL,?,?,?,?,'router',?)")
             .bind(RecordId::generate().as_str()).bind(i64::try_from(epoch).unwrap()).bind(i64::try_from(position).unwrap()).bind(project.as_str()).bind(actor_id.as_str()).bind(source.installation.as_str()).bind(source.machine.as_str()).bind("2026-10-18T12:00:00.000000000Z").bind(serde_json::to_string(&FeedContent::Shown(Box::new(record.clone()))).unwrap()).execute(&mut write).await.unwrap();
         last = record;
     }

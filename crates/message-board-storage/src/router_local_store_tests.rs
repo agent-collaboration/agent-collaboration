@@ -1,5 +1,5 @@
 use crate::*;
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -28,17 +28,11 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
     let path = directory.path().join("outbox.sqlite");
     let outbox = FleetOutbox::open(&path).await?;
     let original = request(WorkspaceId::generate())?;
-    let ids = FleetIds {
-        generated_record: RecordId::generate(),
-    };
-    let first = outbox.enqueue(&original, &ids).await?;
-    let different_ids = FleetIds {
-        generated_record: RecordId::generate(),
-    };
+    let first = outbox.enqueue(&original).await?;
     assert_eq!(
-        outbox.enqueue(&original, &different_ids).await?,
+        outbox.enqueue(&original).await?,
         first,
-        "retry uses the first supplied record ID"
+        "retry keeps the original request"
     );
     let mut conflicting = original.clone();
     conflicting.operation = FleetOperation::WorkspaceCreate {
@@ -46,7 +40,7 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
         description: Description::try_from("local stores".to_owned())?,
     };
     assert!(matches!(
-        outbox.enqueue(&conflicting, &ids).await,
+        outbox.enqueue(&conflicting).await,
         Err(RouterLocalStorageError::ConflictingRequest)
     ));
     outbox.close().await;
@@ -67,14 +61,16 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
             .mark_decided(
                 &original.request_id,
                 &RequestDecision::Rejected {
-                    reasons: vec![Refusal::DefinitionConflict]
+                    reasons: vec![Refusal::InvalidShape {
+                        field: "fixture".into()
+                    }]
                 }
             )
             .await,
         Err(RouterLocalStorageError::ConflictingRequest)
     ));
-    let kept = reopened.enqueue(&original, &different_ids).await?;
-    assert_eq!(kept.ids, ids);
+    let kept = reopened.enqueue(&original).await?;
+    assert_eq!(kept.request, original);
     assert_eq!(kept.state, FleetOutboxState::Decided { decision: rejected });
     reopened.close().await;
     Ok(())

@@ -113,7 +113,6 @@ fn malformed_request(tool: &str) -> BoardError {
 
 fn validate_required_identities(tool: &str, fields: &Map<String, Value>) -> Result<(), BoardError> {
     const ACTOR_METHODS: &[&str] = &[
-        "move_check",
         "workspace_create",
         "workspace_update",
         "workspace_archive",

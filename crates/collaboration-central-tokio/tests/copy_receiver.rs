@@ -14,9 +14,7 @@ async fn applied_summary_keeps_unknown_time_and_no_status_in_copy_and_directory(
     let fixture = Fixture::open(root.path()).await?;
     let proof = async {
         fixture.create(false).await?;
-        let annotation = BoardAnnotation::ProjectSummary {
-            status: None,
-            latest_record_at: RecordTime::LegacyUnknown,
+        let annotation = BoardAnnotation::ProjectSummary { latest_record_at: RecordTime::LegacyUnknown,
         };
         let piece = Piece::new(PieceContents {
             database: fixture.database,
@@ -65,7 +63,6 @@ fn schema_piece(database: fleet_sync_protocol::DatabaseId) -> TestResult<Piece<B
         }],
         part: None,
         annotation: Some(BoardAnnotation::ProjectSummary {
-            status: Some(message_board::StatusName::try_from("active".to_owned())?),
             latest_record_at: RecordTime::Router("2026-10-18T12:00:00Z".parse()?),
         }),
     })?)

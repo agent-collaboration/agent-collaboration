@@ -190,7 +190,7 @@ async fn omitted_and_explicit_empty_descriptions_share_the_creation_retry_hash()
 
 #[tokio::test]
 async fn a_directory_only_project_is_not_local_and_show_creates_no_file() -> Result<(), TestError> {
-    use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+    use fleet_admission::{FleetOperation, FleetRequest};
     let fixture = BoardFixture::start().await?;
     let project = ProjectId::generate();
     let directory = fixture
@@ -212,9 +212,6 @@ async fn a_directory_only_project_is_not_local_and_show_creates_no_file() -> Res
                     board: fixture.board.clone(),
                     title: ResourceName::try_from("directory only".to_owned())?,
                 },
-            },
-            &FleetIds {
-                generated_record: RecordId::generate(),
             },
             &fixture.record_origin()?,
         )

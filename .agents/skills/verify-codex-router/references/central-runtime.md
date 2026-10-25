@@ -676,7 +676,7 @@ cargo test --locked --offline -p collaboration-service \
   -- --exact --nocapture --test-threads 1
 cargo test --locked --offline -p collaboration-service \
   --test bounded_gate_reads \
-  covered_read_and_move_checks_have_operand_bounded_cost \
+  covered_reads_and_session_context_have_operand_bounded_cost \
   -- --exact --nocapture --test-threads 1
 ```
 

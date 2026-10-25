@@ -10,7 +10,7 @@ use std::{os::unix::fs::PermissionsExt, sync::Arc};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 #[tokio::test]
 #[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
-async fn adr_lifecycle_and_strict_process_source_are_replayable_through_mcp() -> TestResult {
+async fn adr_lifecycle_is_replayable_through_mcp() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let origin = ActorOrigin {
@@ -97,25 +97,6 @@ async fn adr_lifecycle_and_strict_process_source_are_replayable_through_mcp() ->
         Some(&json!(adr)),
         "{listed}"
     );
-    let source = "{\n  \"initialStatus\": \"draft\", \"edges\": []\n}";
-    let mut definition = header();
-    definition["name"] = json!("review");
-    definition["version"] = json!("v1");
-    definition["source"] = json!(source);
-    let registered = api.call("process_register", definition.clone()).await?;
-    assert_accepted(&registered);
-    assert_eq!(api.call("process_register", definition).await?, registered);
-    let mut invalid = header();
-    invalid["name"] = json!("review");
-    invalid["version"] = json!("v2");
-    invalid["source"] = json!("{\"initialStatus\":\"draft\",\"edges\":[],\"extra\":true}");
-    let refused = api.call("process_register", invalid.clone()).await?;
-    assert_eq!(
-        refused.pointer("/result/result/decision/reasons/0/kind"),
-        Some(&json!("invalidShape")),
-        "{refused}"
-    );
-    assert_eq!(api.call("process_register", invalid).await?, refused);
     api.stop().await?;
     fleet_runtime.shutdown().await?;
     Ok(())

@@ -68,8 +68,6 @@ pub(in crate::collaboration_runtime::board_composition) async fn captured_board_
         },
         project_id: project.clone(),
         description: Description::try_from("real imported prefix".to_owned())?,
-        status: None,
-        pinned_definition: None,
         revision: SubjectRevision::INITIAL,
         closed_at: None,
     });

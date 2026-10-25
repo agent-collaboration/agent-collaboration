@@ -57,7 +57,6 @@ where
     append_owner_keys!(read_board_snapshot_keys);
     append_owner_keys!(read_project_snapshot_keys);
     append_owner_keys!(read_adr_snapshot_keys);
-    append_owner_keys!(read_process_definition_snapshot_keys);
     append_owner_keys!(read_request_snapshot_keys);
     rows.sort_by(|left, right| (&left.record_id, &left.kind).cmp(&(&right.record_id, &right.kind)));
     rows.truncate(lookahead);
@@ -73,7 +72,6 @@ where
             "board" => RecordKind::Board,
             "project" => RecordKind::Project,
             "adr" => RecordKind::Adr,
-            "processDefinition" => RecordKind::ProcessDefinition,
             "request" => RecordKind::Request,
             _ => {
                 return Err(corrupt(

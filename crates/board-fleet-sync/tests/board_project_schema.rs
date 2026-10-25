@@ -49,7 +49,6 @@ async fn the_real_library_writer_admits_the_complete_project_schema() {
         "handoff_frontier",
         "mail_cancel_expansions",
         "mail_handoffs",
-        "moves",
         "notify_intents",
         "owner_grants",
         "plan_revisions",

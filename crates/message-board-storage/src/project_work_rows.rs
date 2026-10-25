@@ -8,7 +8,7 @@ use sqlx::Executor;
 use sqlx_turso::Turso;
 
 stored_project_row!(StoredProjectState, ProjectStateBody {
-    status: Option<String>, description: String, pinned_definition: Option<String>, revision: i64,
+    description: String, revision: i64,
     closed_epoch: Option<i64>, closed_position: Option<i64>,
 });
 stored_project_row!(
@@ -97,14 +97,6 @@ impl StoredWorkRecord {
                         "description",
                         Description::as_str,
                     )?,
-                    status: body
-                        .status
-                        .map(|status| stored_text(status, &reference, "status", StatusName::as_str))
-                        .transpose()?,
-                    pinned_definition: body
-                        .pinned_definition
-                        .map(|pinned| stored_json(&pinned, &reference, "pinnedDefinition"))
-                        .transpose()?,
                     revision: stored_counter(body.revision, &reference, "revision")?,
                     closed_at,
                 })

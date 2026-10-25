@@ -47,7 +47,7 @@ pub(crate) async fn prepare_registered_creation(
     admission: &crate::ProjectAdmission,
     input: &ProjectCreateRequest,
 ) -> Result<(), FixtureError> {
-    use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+    use fleet_admission::{FleetOperation, FleetRequest};
     use runtime_primitives::{Clock, SystemClock};
     let Some(Record::Board(board)) = admission
         .fleet
@@ -71,9 +71,6 @@ pub(crate) async fn prepare_registered_creation(
                     board: input.board_id.clone(),
                     title: input.title.clone(),
                 },
-            },
-            &FleetIds {
-                generated_record: RecordId::generate(),
             },
             &admission.record_origin(),
         )

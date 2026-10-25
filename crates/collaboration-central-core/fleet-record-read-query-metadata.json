@@ -4,14 +4,14 @@
     "core_migrations/0000_migration_history.sql": "d30bfbde01af17b339ef44b0c4034fd22250680b09b07011287a80f2b10be539",
     "core_migrations/0001_fleet_decisions.sql": "32dbcb0f9130a307c10c0f4be5d0d229a400915ff0a77fc8d1361cf51282e770",
     "core_migrations/0002_fleet_decision_receipts.sql": "4e56a7411eaba1fbd0c20601f38c215c0f73f1fa52a352cdecb400c620216cfb",
-    "core_migrations/0003_fleet_records.sql": "34fc38b1ae2d3ca1894bddcc6f95d98811df6f9def29e9aa086baf032fc74df3",
+    "core_migrations/0003_fleet_records.sql": "1a041693581c32700f46f6ef51bb7bbe82722977a2f743ec03162be1d906ce64",
     "core_migrations/0004_directory_copy_summary.sql": "0fd0ccb64479650ee17ea2c46c88b12617631bba3c5b18c9533671cd239ee148",
     "core_migrations/0005_claim_lease_projection.sql": "51fae3473797218a515088b5ea7c763fa01eec5e0d4735aa772ff1b4fe3bec29",
     "core_migrations/0006_archive_reports.sql": "0a808b5c57a9fb3250fd46ff0208638ef7bc8440b48a79defedeb08d6156cffb",
     "core_migrations/0007_creation_decisions.sql": "51f95c896d06ae224ab1cb97d111e6e93ea3fad126d5e293606c93ddade3c5ba",
     "core_migrations/0008_feed_readers.sql": "8d47a7e1753c5c6a72c596d8ec9fa266e27fe19f8f207ab3094e15699a58a185",
     "core_migrations/0009_migration_failures.sql": "cb66a15734e44a6dd6d022dc79601ae018824125c51104f95b8859cbdaf70674",
-    "fleet-record-read-queries.json": "09e70a4ee4a148b36c83e05b1e26442e7388541e794451854fd4bc4c5d25816b",
+    "fleet-record-read-queries.json": "122fd994e55b565f270c025de3d539275abb5945ddfc76fa31b7c5305737fe92",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -64,25 +64,23 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "9fde12d6703fbf8c0e97155b6e563598866136197e591236c5584cd16016d7ce",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/fleet/list_board_projects.sql": "0481f8fc8f8bd64b2fc712c371e19ded7b111fe0cf5d820aa76accb7655287dc",
-    "sql/fleet/list_workspace_boards.sql": "fb46a43d05694dcc1c86f4b10a17c9ff1d4571ced4aa81940e2883377b8fb92a",
+    "sql/fleet/list_board_projects.sql": "451c2b4e4a053fd5b8d89598268bb2ef42817e528d6d80155e6398530b442130",
+    "sql/fleet/list_workspace_boards.sql": "b78d7aba81bcb36e1be34456c56b7ef9788b995baedf37c1d7bcfb13e337ac09",
     "sql/fleet/read_adr_snapshot_keys.sql": "4c92b17a7753bd90384647e03cc520578ca614cee546b57d93bf4233fad10c2d",
     "sql/fleet/read_board_name.sql": "c72b45f74aebf57d840981813d744ba9c7e17e31435f694e9ae7c7bc24b80f82",
     "sql/fleet/read_board_snapshot_keys.sql": "de45f0920b17b265e1061849c60fe09a2fee9913795d7602abb7ec13af797f95",
-    "sql/fleet/read_canonical_fleet_record.sql": "1ea02c8e891e1d03132f0f7d0ad0038387256cd7dce9b03e602b074ad9fe189f",
+    "sql/fleet/read_canonical_fleet_record.sql": "832e09f3347ba75593b7c99c762428970bf1f9e601f877e91fcd781df0b257e0",
     "sql/fleet/read_directory_key_page.sql": "b4c65c02c0808b5145995577067f547e62a1fec11de824e630aa5c32242e1af5",
     "sql/fleet/read_directory_keys.sql": "6842924c114cb401489d3e197feee252c22ed04aa8ce3af27a28b3c11f8526e4",
     "sql/fleet/read_directory_summary.sql": "969cf9c5b01e3cb787c5ece15b466239ac186e63711303341c4fba1c4581d0f8",
-    "sql/fleet/read_global_definition.sql": "0b7ffc15b5e5f07b52495baf44c6e92af69560f71ec904bcbdaaf3286dd39798",
-    "sql/fleet/read_process_definition_snapshot_keys.sql": "d24dcf17cab5cb01ccc9dd84937448b32af6d90c2162c05b64a13270c30a5da4",
     "sql/fleet/read_project_name.sql": "456ba3a199c03afe9be625ee739d3524fb739372a490c31896c05d1e8bd1ccf8",
     "sql/fleet/read_project_snapshot_keys.sql": "9f12c2de845574138a76e665293bf131dbad46384c136bd387f3ca31325d336b",
     "sql/fleet/read_request_snapshot_keys.sql": "f97136d6790fae9594ff5c1f14ce395a6de585fae0f8e0f43014c8e8e5f06ee0",
     "sql/fleet/read_workspace_name.sql": "a01aeef61862d068407295e1d600f12fa288c6f02aa24bc81931f645887ad367",
     "sql/fleet/read_workspace_snapshot_keys.sql": "1f98fdbca17f4682ac03a6a8813e7f073aa34fbb78f77750353a4a9b2952a944",
-    "src/generated_fleet_record_reads.rs": "4db4054df699505c2112d06d7311651cefa725c56a26e5293cd8c0154bb7781c"
+    "src/generated_fleet_record_reads.rs": "cd2d320014f212f6884eefd08006a326c1ab5590ac9cded713660862c3aa10db"
   },
-  "queries_digest": "15b4677746fb33fa7790e76853eb5361638e84ebe85c0b02656720f7f0f691dc",
+  "queries_digest": "29ec72940b0d5cafd58047ed89fec58d0f79357cd717ca283b852331c38f96c9",
   "queries": [
     {
       "name": "read_canonical_fleet_record",
@@ -118,20 +116,6 @@
         },
         {
           "name": "business_name",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "business_version",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "source_hash",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -254,117 +238,6 @@
         },
         {
           "name": "business_name",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "business_version",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "source_hash",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "payload",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "router_time",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "time_basis",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "origin_installation",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "origin_machine",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "import_digest",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
-      "name": "read_global_definition",
-      "bind_slots": 2,
-      "columns": [
-        {
-          "name": "kind",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "record_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "workspace_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "board_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "business_name",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "business_version",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "source_hash",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -515,26 +388,6 @@
       ]
     },
     {
-      "name": "read_process_definition_snapshot_keys",
-      "bind_slots": 3,
-      "columns": [
-        {
-          "name": "kind",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "record_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
       "name": "read_request_snapshot_keys",
       "bind_slots": 3,
       "columns": [
@@ -592,20 +445,6 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
-        },
-        {
-          "name": "business_version",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "source_hash",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
         },
         {
           "name": "payload",

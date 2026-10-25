@@ -199,102 +199,10 @@ pub struct FactInput {
     pub anchor: Option<FeedCursor>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum MoveOutcome {
-    Accepted {},
-    Rejected { reasons: Vec<crate::RejectReason> },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MoveEndpoints {
-    pub from: crate::StatusName,
-    pub to: crate::StatusName,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MoveRecordProps {
-    pub envelope: crate::RecordEnvelope,
-    pub move_id: MoveId,
-    pub project: crate::ProjectId,
-    pub move_name: crate::MoveName,
-    pub endpoints: Option<MoveEndpoints>,
-    pub evidence: Vec<EvidenceRef>,
-    pub reason: String,
-    pub requester: RecordedActor,
-    pub outcome: MoveOutcome,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(try_from = "MoveRecordProps", into = "MoveRecordProps")]
-pub struct MoveRecord {
-    pub envelope: crate::RecordEnvelope,
-    pub move_id: MoveId,
-    pub project: crate::ProjectId,
-    pub move_name: crate::MoveName,
-    endpoints: Option<MoveEndpoints>,
-    pub evidence: Vec<EvidenceRef>,
-    pub reason: String,
-    pub requester: RecordedActor,
-    outcome: MoveOutcome,
-}
-
-impl MoveRecord {
-    pub fn new(props: MoveRecordProps) -> Result<Self, crate::TextValidationError> {
-        if matches!(&props.outcome, MoveOutcome::Accepted {}) && props.endpoints.is_none() {
-            return Err(crate::TextValidationError {
-                field: "endpoints",
-                requirement: "must be present on an accepted move",
-            });
-        }
-        Ok(Self {
-            envelope: props.envelope,
-            move_id: props.move_id,
-            project: props.project,
-            move_name: props.move_name,
-            endpoints: props.endpoints,
-            evidence: props.evidence,
-            reason: props.reason,
-            requester: props.requester,
-            outcome: props.outcome,
-        })
-    }
-    #[must_use]
-    pub fn endpoints(&self) -> Option<&MoveEndpoints> {
-        self.endpoints.as_ref()
-    }
-    #[must_use]
-    pub fn outcome(&self) -> &MoveOutcome {
-        &self.outcome
-    }
-}
-
-impl TryFrom<MoveRecordProps> for MoveRecord {
-    type Error = crate::TextValidationError;
-    fn try_from(props: MoveRecordProps) -> Result<Self, Self::Error> {
-        Self::new(props)
-    }
-}
-
-impl From<MoveRecord> for MoveRecordProps {
-    fn from(record: MoveRecord) -> Self {
-        Self {
-            envelope: record.envelope,
-            move_id: record.move_id,
-            project: record.project,
-            move_name: record.move_name,
-            endpoints: record.endpoints,
-            evidence: record.evidence,
-            reason: record.reason,
-            requester: record.requester,
-            outcome: record.outcome,
-        }
-    }
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum GuardOutcome {
+    Met,
+    Unmet,
+    Unavailable,
 }

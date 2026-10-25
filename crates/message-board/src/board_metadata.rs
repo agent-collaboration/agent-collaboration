@@ -61,8 +61,6 @@ bounded_text!(DropReason, "reason", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
 bounded_text!(TrailTag, "tag", 1, MAX_NAME_BYTES, true, true);
 bounded_text!(MarkdownText, "text", 1, MAX_MESSAGE_TEXT_BYTES, false, true);
 bounded_text!(MachineLabel, "machineLabel", 1, MAX_NAME_BYTES, true, true);
-bounded_text!(StatusName, "status", 1, MAX_NAME_BYTES, true, true);
-bounded_text!(MoveName, "move", 1, MAX_NAME_BYTES, true, true);
 
 #[cfg(test)]
 mod tests {

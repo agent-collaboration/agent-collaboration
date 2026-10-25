@@ -141,10 +141,6 @@ pub enum BoardOperation {
     RoleAcknowledgeCurrent {
         read_through: crate::FeedCursor,
     },
-    ProjectPinDefinition {
-        definition: crate::ProcessDefinitionRef,
-        expected_revision: SubjectRevision,
-    },
     ProjectPublishPlan {
         hash: crate::PlanRevisionHash,
         document: EvidencePointer,
@@ -157,14 +153,6 @@ pub enum BoardOperation {
     ProjectDescribe {
         description: crate::Description,
         expected_revision: SubjectRevision,
-    },
-    MoveRequest {
-        move_id: crate::MoveId,
-        move_name: crate::MoveName,
-        evidence: Vec<crate::EvidenceRef>,
-        reason: String,
-        expected_revision: SubjectRevision,
-        addressees: Vec<crate::NotifyTarget>,
     },
     FactRecord {
         fact: Box<crate::FactInput>,

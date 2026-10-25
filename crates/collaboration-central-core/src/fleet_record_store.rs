@@ -95,12 +95,6 @@ where
             (Record::Adr(old), Record::Adr(new)) if old.text != new.text => {
                 return Err(corrupt("adr.text", "ADR text is immutable"));
             }
-            (Record::ProcessDefinition(old), Record::ProcessDefinition(new)) if old != new => {
-                return Err(corrupt(
-                    "definition",
-                    "registered process definition is immutable",
-                ));
-            }
             _ => {}
         }
     }
@@ -122,18 +116,6 @@ where
         }
         Record::Adr(_) => {
             writes::put_adr(scope, payload, time, basis, installation, machine, digest).await
-        }
-        Record::ProcessDefinition(_) => {
-            writes::put_process_definition(
-                scope,
-                payload,
-                time,
-                basis,
-                installation,
-                machine,
-                digest,
-            )
-            .await
         }
         _ => return Err(corrupt("kind", "ledger writes use the decision owner")),
     }

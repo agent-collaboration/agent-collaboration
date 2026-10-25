@@ -13,7 +13,7 @@ use std::sync::Arc;
 
 #[allow(clippy::panic_in_result_fn)]
 async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
-    let fixture = BoardFixture::start().await?;
+    let mut fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
     let store = fixture
         ._registry
@@ -149,6 +149,9 @@ async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
         .bind(position).execute(&mut connection).await?;
     assert_eq!(changed.rows_affected(), 1);
     connection.close().await?;
+    // Only the native window read is measured. Stop and join the fixture's real
+    // central/session timers so their SQL cannot enter this process-wide counter.
+    fixture._fleet_runtime.disconnect().await?;
     let now = chrono::Utc::now();
     let before = current_cost();
     let added = windows
@@ -175,7 +178,7 @@ async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
 
 #[allow(clippy::panic_in_result_fn)]
 async fn feed_cost(size: usize) -> Result<ReadCost, TestError> {
-    let fixture = BoardFixture::start().await?;
+    let mut fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
     let store = fixture
         ._registry
@@ -210,6 +213,7 @@ async fn feed_cost(size: usize) -> Result<ReadCost, TestError> {
             .await?;
     }
     write.commit().await?;
+    fixture._fleet_runtime.disconnect().await?;
     let mut read = store.snapshot().await?;
     let before = current_cost();
     let page = read.feed_after(cursor, 5, false).await?;

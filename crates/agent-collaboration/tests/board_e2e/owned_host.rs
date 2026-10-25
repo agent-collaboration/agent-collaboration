@@ -158,7 +158,13 @@ impl BoardHost {
 
     pub async fn cli(&self, arguments: &[&OsStr]) -> FixtureResult<Value> {
         let output = self.cli_output(arguments).await?;
-        let reply: Value = serde_json::from_slice(&output.stdout)?;
+        let reply: Value = serde_json::from_slice(&output.stdout).map_err(|error| {
+            format!(
+                "CLI JSON failed: {error}; status={}; stderr={}",
+                output.status,
+                String::from_utf8_lossy(&output.stderr)
+            )
+        })?;
         if !output.status.success() {
             return Err(format!(
                 "CLI status {:?}: {reply}; stderr={}",

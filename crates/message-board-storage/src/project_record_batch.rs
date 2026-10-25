@@ -110,7 +110,6 @@ where
                     .collect()
             }
             RecordKind::Fact
-            | RecordKind::Move
             | RecordKind::PlanRevision
             | RecordKind::WorkTrailRow
             | RecordKind::TrailRedaction => evidence_records(transaction, project, kind, &keys)
@@ -130,10 +129,9 @@ where
                 .into_iter()
                 .map(|row| StoredProjectBody::ReadMark(Box::new(row)))
                 .collect(),
-            RecordKind::Workspace
-            | RecordKind::Board
-            | RecordKind::Adr
-            | RecordKind::ProcessDefinition => return Err(ProjectStorageError::InvalidFeed),
+            RecordKind::Workspace | RecordKind::Board | RecordKind::Adr => {
+                return Err(ProjectStorageError::InvalidFeed);
+            }
         };
         let mut seen = BTreeSet::new();
         for body in bodies {

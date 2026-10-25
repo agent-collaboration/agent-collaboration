@@ -3,7 +3,11 @@ use super::TestError;
 use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, path::Path, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio_tungstenite::tungstenite::Message;
 
 pub struct BoardContextBackend {
@@ -15,15 +19,7 @@ impl BoardContextBackend {
         root: &Path,
         identity: ServiceIdentity,
     ) -> Result<(ServiceIdentity, Self), TestError> {
-        let repository = root.join("context-repository");
-        std::fs::create_dir_all(&repository)?;
-        let status = std::process::Command::new("git")
-            .args(["init", "--quiet"])
-            .arg(&repository)
-            .status()?;
-        if !status.success() {
-            return Err("fixture git init failed".into());
-        }
+        let repository = create_context_repository(root)?;
         let socket = root.join("context-native.sock");
         let listener = tokio::net::UnixListener::bind(&socket)?;
         let generation: collaboration_protocol::CodexGeneration = serde_json::from_value(
@@ -119,4 +115,17 @@ impl BoardContextBackend {
         self.cancel.cancel();
         self.worker.await?
     }
+}
+
+fn create_context_repository(root: &Path) -> Result<PathBuf, TestError> {
+    let repository = root.join("context-repository");
+    std::fs::create_dir_all(&repository)?;
+    let status = std::process::Command::new("git")
+        .args(["init", "--quiet"])
+        .arg(&repository)
+        .status()?;
+    if !status.success() {
+        return Err("fixture git init failed".into());
+    }
+    Ok(repository)
 }

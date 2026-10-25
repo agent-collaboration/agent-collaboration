@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE project_state SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, description=?, revision=?, closed_epoch=?, closed_position=? WHERE project_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "792b3f2812d8874c5444b4f896372cc24ab2d431e9671da4b72f61c51e3a6159"
+}

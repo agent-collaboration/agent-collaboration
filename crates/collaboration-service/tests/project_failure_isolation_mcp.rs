@@ -62,16 +62,15 @@ async fn creation_recovery_contains_a_corrupt_sibling() -> Result<(), TestError>
     let bad = fixture
         .api
         .call(
-            "hook_card",
+            "view_card",
             json!({
                 "projectId":broken,"actor":fixture.actor,"subject":{"kind":"project"}
             }),
         )
         .await?;
-    assert_eq!(bad.pointer("/result/kind"), Some(&json!("unavailable")));
     assert_eq!(
-        bad.pointer("/result/payload/reason/project"),
-        Some(&json!(broken))
+        bad.pointer("/error/data/kind"),
+        Some(&json!("boardUnavailable"))
     );
     fixture.stop().await
 }

@@ -17,7 +17,6 @@ pub fn validate_fleet_decision_effect(effect: &DecisionEffect) -> Result<(), Tex
             crate::RecordKind::Workspace
                 | crate::RecordKind::Board
                 | crate::RecordKind::Adr
-                | crate::RecordKind::ProcessDefinition
                 | crate::RecordKind::Project
         )
     {

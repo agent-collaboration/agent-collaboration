@@ -79,8 +79,6 @@ pub fn project_record(project: &ProjectId, source: &ActorOrigin) -> Record {
             time: RecordTime::Router("2026-10-18T12:00:00Z".parse().unwrap()),
         },
         project_id: project.clone(),
-        status: None,
-        pinned_definition: None,
         revision: SubjectRevision::try_from(1).unwrap(),
         closed_at: None,
         description: Description::try_from(String::new()).unwrap(),

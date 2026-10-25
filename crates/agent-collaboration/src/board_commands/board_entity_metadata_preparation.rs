@@ -140,14 +140,8 @@ pub(super) fn file_write(
             ProjectWriteKind::OwnerGrantRecord,
             BoardOperation::OwnerGrantRecord { .. }
         ) | (
-            ProjectWriteKind::MoveRequest,
-            BoardOperation::MoveRequest { .. }
-        ) | (
             ProjectWriteKind::FactRecord,
             BoardOperation::FactRecord { .. }
-        ) | (
-            ProjectWriteKind::ProjectPinDefinition,
-            BoardOperation::ProjectPinDefinition { .. }
         ) | (
             ProjectWriteKind::ProjectPublishPlan,
             BoardOperation::ProjectPublishPlan { .. }
@@ -180,19 +174,6 @@ pub(super) fn prepare_role(
         RoleCommand::OwnerGrantRecord(args) => file_write(args, ProjectWriteKind::OwnerGrantRecord),
         RoleCommand::Show(args) => show(args, ProjectReadKind::RoleAssignment),
         RoleCommand::List(args) => list(args, ProjectReadKind::RoleAssignment),
-    }
-}
-pub(super) fn prepare_move(
-    command: MoveCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        MoveCommand::Check(args) => Ok(prepared(
-            PreparedEntityCommand::MoveCheck(read_file(&args)?),
-            args.common,
-        )),
-        MoveCommand::Request(args) => file_write(args, ProjectWriteKind::MoveRequest),
-        MoveCommand::Show(args) => show(args, ProjectReadKind::Move),
-        MoveCommand::List(args) => list(args, ProjectReadKind::Move),
     }
 }
 pub(super) fn prepare_fact(
@@ -260,16 +241,6 @@ pub(super) fn prepare_adr(
                 page: prepare_page_request(page)?,
             }),
             common,
-        )),
-    }
-}
-pub(super) fn prepare_process(
-    command: ProcessCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    match command {
-        ProcessCommand::Register(args) => Ok(prepared(
-            PreparedEntityCommand::ProcessRegister(Box::new(read_file(&args)?)),
-            args.common,
         )),
     }
 }

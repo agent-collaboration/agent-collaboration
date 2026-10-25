@@ -159,11 +159,6 @@ impl<'request> OperationContext<'request> {
             BoardOperation::WorkTrailAdd { subject: None, .. } => {
                 keys.extend(write.active_trail_assignment_keys(&request.actor).await?)
             }
-            BoardOperation::MoveRequest { move_name, .. } => keys.extend(
-                write
-                    .prior_rejected_move_keys(move_name, &request.actor)
-                    .await?,
-            ),
             _ => {}
         }
         load_keys(write, &mut records, keys).await?;
@@ -192,25 +187,6 @@ impl<'request> OperationContext<'request> {
                 .into_iter()
                 .collect();
             load_keys(write, &mut records, keys).await?;
-        }
-        let mut definitions = Vec::new();
-        let definition = match &request.operation {
-            BoardOperation::ProjectPinDefinition { definition, .. } => Some(definition),
-            BoardOperation::MoveRequest { .. } => project.pinned_definition.as_ref(),
-            _ => None,
-        };
-        if let Some(reference) = definition
-            && let Some(definition) = admission.fleet.process_definition(reference).await?
-        {
-            if let BoardOperation::MoveRequest { move_name, .. } = &request.operation
-                && let Some(edge) = definition.edges.iter().find(|edge| {
-                    edge.name == *move_name && project.status.as_ref() == Some(&edge.from)
-                })
-            {
-                let keys = write.guard_fact_keys(&edge.guards).await?;
-                load_keys(write, &mut records, keys).await?;
-            }
-            definitions.push(definition);
         }
         let mut workspace_adrs = Vec::new();
         if let BoardOperation::ThreadCreate {
@@ -257,7 +233,6 @@ impl<'request> OperationContext<'request> {
             links,
             live_subtasks,
             archived,
-            definitions,
             workspace_adrs,
         })
     }
@@ -299,10 +274,8 @@ fn needs_project_lead(operation: &BoardOperation) -> bool {
             | BoardOperation::RoleGrant { .. }
             | BoardOperation::RoleRelease { .. }
             | BoardOperation::RoleReplaceLead { .. }
-            | BoardOperation::ProjectPinDefinition { .. }
             | BoardOperation::ProjectPublishPlan { .. }
             | BoardOperation::ProjectClose { .. }
-            | BoardOperation::MoveRequest { .. }
     )
 }
 
@@ -460,7 +433,6 @@ fn direct_operand_keys(request: &ProjectRequest) -> Vec<RecordRef> {
         } => vec![id.clone().into()],
         BoardOperation::OwnerGrantRecord { grant_id, .. } => vec![grant_id.clone().into()],
         BoardOperation::RoleReplaceLead { owner_grant, .. } => vec![owner_grant.clone().into()],
-        BoardOperation::MoveRequest { move_id, .. } => vec![move_id.clone().into()],
         BoardOperation::FactRecord { fact } => vec![fact.fact_id.clone().into()],
         BoardOperation::ThreadCreate { post_id, about, .. } => {
             let mut keys = vec![
@@ -500,7 +472,6 @@ fn direct_operand_keys(request: &ProjectRequest) -> Vec<RecordRef> {
         BoardOperation::RoleGrant { .. }
         | BoardOperation::RoleRelease { .. }
         | BoardOperation::RoleAcknowledgeCurrent { .. }
-        | BoardOperation::ProjectPinDefinition { .. }
         | BoardOperation::ProjectPublishPlan { .. }
         | BoardOperation::ProjectClose { .. }
         | BoardOperation::ProjectDescribe { .. }

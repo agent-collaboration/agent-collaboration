@@ -134,22 +134,6 @@ pub(crate) fn lead_owed(
             }
         }
     }
-    for rejection in super::work_view(snapshot, false)?.rejected_since_last_move {
-        let cursor = snapshot
-            .position(&rejection.move_id.clone().into())
-            .ok_or_else(BoardError::board_unavailable)?;
-        owed.push((
-            cursor.position,
-            LeadOwed {
-                project: snapshot.project.clone(),
-                subject: rejection.move_id.into(),
-                obligation: LeadObligation::AnswerRejection,
-                source: snapshot.source,
-                as_of: snapshot.as_of,
-                replicated_through: snapshot.replicated_through,
-            },
-        ));
-    }
     owed.sort_by_key(|(position, _)| *position);
     Ok(owed)
 }

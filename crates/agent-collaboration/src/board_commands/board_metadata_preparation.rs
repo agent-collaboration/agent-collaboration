@@ -215,10 +215,6 @@ pub(super) fn prepare_project(
             args,
             super::super::board_entity_preparation::ProjectWriteKind::ProjectDescribe,
         ),
-        ProjectCommand::PinDefinition(args) => super::super::board_entity_preparation::file_write(
-            args,
-            super::super::board_entity_preparation::ProjectWriteKind::ProjectPinDefinition,
-        ),
         ProjectCommand::PublishPlan(args) => super::super::board_entity_preparation::file_write(
             args,
             super::super::board_entity_preparation::ProjectWriteKind::ProjectPublishPlan,

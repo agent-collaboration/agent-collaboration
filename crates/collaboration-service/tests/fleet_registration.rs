@@ -4,7 +4,7 @@ use collaboration_service::{
     ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
     ProjectRegistrationState,
 };
-use fleet_admission::{FleetIds, FleetOperation, FleetRequest};
+use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use message_board_storage::{FleetOutbox, FleetOutboxState};
 use std::{
@@ -106,9 +106,6 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
         protocol_version: ProtocolVersion::CURRENT,
         operation,
     };
-    let ids = || FleetIds {
-        generated_record: RecordId::generate(),
-    };
     for operation in [
         FleetOperation::WorkspaceCreate {
             name: ResourceName::try_from("workspace".to_owned())?,
@@ -123,7 +120,7 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
     ] {
         assert!(matches!(
             client
-                .submit(&request(RequestId::generate(), operation), &ids(), &origin)
+                .submit(&request(RequestId::generate(), operation), &origin)
                 .await?
                 .result,
             RequestResult::Decided(RequestDecision::Accepted { .. })
@@ -141,7 +138,6 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
                         title: ResourceName::try_from("accepted".to_owned())?,
                     }
                 ),
-                &ids(),
                 &origin
             )
             .await,
@@ -168,7 +164,6 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
                     title: ResourceName::try_from("rejected".to_owned())?,
                 },
             ),
-            &ids(),
             &origin,
         )
         .await?;

@@ -30,7 +30,7 @@ fn header() -> ConformanceResult<AdminImportHeader> {
             "schema":{"version":1,"fingerprint":"staging-fixture"},"tables":[]
         },
         "pages":1,
-        "summary":{"kind":"projectSummary","value":{"status":null,"latestRecordAt":{"kind":"legacyUnknown"}}}
+        "summary":{"kind":"projectSummary","value":{"latestRecordAt":{"kind":"legacyUnknown"}}}
     }))?)
 }
 

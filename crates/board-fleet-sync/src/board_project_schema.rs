@@ -22,7 +22,6 @@ static REPLICATED_TABLES: LazyLock<Result<Vec<TableName>, TextValueError>> = Laz
         "work_trail_rows",
         "work_trail_tags",
         "work_trail_links",
-        "moves",
         "facts",
         "plan_revisions",
         "read_marks",

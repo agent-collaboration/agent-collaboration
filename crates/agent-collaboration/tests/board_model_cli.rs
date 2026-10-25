@@ -9,7 +9,6 @@ use collaboration_service::{
 };
 use message_board::*;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 #[path = "support/board_cli_execution.rs"]
@@ -385,77 +384,7 @@ async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_reque
         )
         .await?,
     );
-    let source = r#"{"initialStatus":"draft","edges":[{"name":"finish","from":"draft","to":"done","requiredRole":"lead","guards":[]}]}"#;
     let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"workspaceId":workspace,"actor":{"kind":"human","humanId":"owner"},"actingFor":null});
-    let mut definition = header();
-    definition["name"] = json!("CLI workflow");
-    definition["version"] = json!("v1");
-    definition["source"] = json!(source);
-    let definition_file = request_file(directory.path(), "definition.json", &definition)?;
-    accepted(
-        &cli(
-            directory.path(),
-            &["process", "register", "--request-file", &definition_file],
-        )
-        .await?,
-    );
-    let definition_ref = json!({"name":"CLI workflow","version":"v1","sourceHash":format!("{:x}",Sha256::digest(source.as_bytes()))});
-    let pin = request_file(
-        directory.path(),
-        "pin.json",
-        &request(
-            &project,
-            json!({"kind":"projectPinDefinition","definition":definition_ref,"expectedRevision":0}),
-        ),
-    )?;
-    accepted(
-        &cli(
-            directory.path(),
-            &["project", "pin-definition", "--request-file", &pin],
-        )
-        .await?,
-    );
-    let check_file = request_file(
-        directory.path(),
-        "move-check.json",
-        &json!({"projectId":project,"actor":{"kind":"human","humanId":"owner"},"moveName":"finish","expectedRevision":1}),
-    )?;
-    let check_store = registry
-        .existing_project(&project)
-        .await?
-        .ok_or("native project missing")?;
-    let read = check_store.snapshot().await?;
-    let before_check = read.high_water();
-    read.finish().await?;
-    let checked = cli(
-        directory.path(),
-        &["move", "check", "--request-file", &check_file],
-    )
-    .await?;
-    assert_eq!(
-        checked.pointer("/result/record/kind"),
-        Some(&json!("allowed")),
-        "{checked}"
-    );
-    let read = check_store.snapshot().await?;
-    assert_eq!(read.high_water(), before_check);
-    read.finish().await?;
-    let movement = MoveId::generate();
-    let move_file = request_file(
-        directory.path(),
-        "move.json",
-        &request(
-            &project,
-            json!({"kind":"moveRequest","moveId":movement,"moveName":"finish","evidence":[],"reason":"CLI proof","expectedRevision":1,"addressees":[]}),
-        ),
-    )?;
-    accepted(
-        &cli(
-            directory.path(),
-            &["move", "request", "--request-file", &move_file],
-        )
-        .await?,
-    );
     let fact = FactId::generate();
     let proof_kind = FactKind::EvaluatorResult {
         guard: "CLI proof".to_owned(),

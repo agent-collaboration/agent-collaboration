@@ -3,12 +3,6 @@ use super::{BoardClientError, CollaborationClient};
 use message_board::public_replies::WriteReply;
 use message_board::*;
 impl CollaborationClient {
-    pub async fn move_check(
-        &self,
-        request: ProjectMoveCheckRequest,
-    ) -> Result<MoveVerdict, BoardClientError> {
-        self.board_call("move_check", request).await
-    }
     pub async fn workstream_create(
         &self,
         request: ProjectRequest,
@@ -236,16 +230,6 @@ impl CollaborationClient {
         self.board_mutation_call("role_acknowledge_current", request, resource)
             .await
     }
-    pub async fn project_pin_definition(
-        &self,
-        request: ProjectRequest,
-    ) -> Result<WriteReply, BoardClientError> {
-        let resource = ResourceIdentity::Project {
-            project_id: request.project_id.clone(),
-        };
-        self.board_mutation_call("project_pin_definition", request, resource)
-            .await
-    }
     pub async fn project_publish_plan(
         &self,
         request: ProjectRequest,
@@ -284,16 +268,6 @@ impl CollaborationClient {
             project_id: request.project_id.clone(),
         };
         self.board_mutation_call("project_notification_cancel", request, resource)
-            .await
-    }
-    pub async fn move_request(
-        &self,
-        request: ProjectRequest,
-    ) -> Result<WriteReply, BoardClientError> {
-        let resource = ResourceIdentity::Project {
-            project_id: request.project_id.clone(),
-        };
-        self.board_mutation_call("move_request", request, resource)
             .await
     }
     pub async fn fact_record(
@@ -353,18 +327,6 @@ impl CollaborationClient {
         request: ProjectRecordListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
         self.board_call("role_list", request).await
-    }
-    pub async fn move_show(
-        &self,
-        request: ProjectRecordShowRequest,
-    ) -> Result<Record, BoardClientError> {
-        self.board_call("move_show", request).await
-    }
-    pub async fn move_list(
-        &self,
-        request: ProjectRecordListRequest,
-    ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("move_list", request).await
     }
     pub async fn fact_show(
         &self,

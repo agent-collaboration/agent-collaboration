@@ -1,4 +1,4 @@
-//! View and hook flags become typed SDK requests; the CLI never opens a board store.
+//! View flags become typed SDK requests; the CLI never opens a board store.
 use super::{
     board_arguments::CommonArguments,
     board_preparation::{
@@ -41,19 +41,6 @@ pub(super) struct ContextArguments {
     #[command(flatten)]
     common: CommonArguments,
 }
-#[derive(Args)]
-pub(super) struct CheckArguments {
-    #[arg(long)]
-    project_id: String,
-    #[arg(long)]
-    actor: String,
-    #[arg(long)]
-    move_name: String,
-    #[arg(long)]
-    expected_revision: u64,
-    #[command(flatten)]
-    common: CommonArguments,
-}
 #[derive(Subcommand)]
 pub(super) enum ViewCommand {
     Work(WorkViewArguments),
@@ -71,13 +58,6 @@ pub(super) enum ViewCommand {
     },
     SessionContext(ContextArguments),
 }
-#[derive(Subcommand)]
-pub(super) enum HookCommand {
-    Context(ContextArguments),
-    Check(CheckArguments),
-    Card(CardArguments),
-}
-
 pub(super) enum ContextInput {
     Session(SessionRef),
     Self_,
@@ -88,9 +68,6 @@ pub(super) enum PreparedViewCommand {
     Owner(OwnerViewRequest),
     LeadLoad(LeadLoadRequest),
     Context(ContextInput),
-    HookContext(ContextInput),
-    HookCard(ContinuationCardRequest),
-    HookCheck(ProjectMoveCheckRequest),
 }
 fn prepared(
     command: PreparedViewCommand,
@@ -154,42 +131,10 @@ pub(super) fn prepare_view(
         }
     })
 }
-pub(super) fn prepare_hook(
-    command: HookCommand,
-) -> Result<(PreparedBoardCommand, CommandContext), String> {
-    Ok(match command {
-        HookCommand::Card(args) => {
-            let (request, common) = card(args)?;
-            prepared(PreparedViewCommand::HookCard(request), common)
-        }
-        HookCommand::Context(args) => {
-            let (input, common) = context(args)?;
-            prepared(PreparedViewCommand::HookContext(input), common)
-        }
-        HookCommand::Check(args) => prepared(
-            PreparedViewCommand::HookCheck(ProjectMoveCheckRequest {
-                project_id: parse_uuid_v7(args.project_id, "--project-id")?,
-                actor: parse_identity(&args.actor, "--actor")?,
-                move_name: args
-                    .move_name
-                    .try_into()
-                    .map_err(|error: TextValidationError| error.to_string())?,
-                expected_revision: args
-                    .expected_revision
-                    .try_into()
-                    .map_err(|error: NumericValidationError| error.to_string())?,
-            }),
-            args.common,
-        ),
-    })
-}
 impl PreparedViewCommand {
     pub(super) fn finalize(&mut self, client: &CollaborationClient) -> Result<(), String> {
         match self {
-            Self::Card(request) | Self::HookCard(request) => {
-                finalize_identity(&mut request.actor, client)
-            }
-            Self::HookCheck(request) => finalize_identity(&mut request.actor, client),
+            Self::Card(request) => finalize_identity(&mut request.actor, client),
             _ => Ok(()),
         }
     }
@@ -229,10 +174,5 @@ pub(super) async fn dispatch(
                 .view_session_context(context_request(input, client)?)
                 .await?,
         ),
-        PreparedViewCommand::HookContext(input) => {
-            serialized(client.hook_context(context_request(input, client)?).await?)
-        }
-        PreparedViewCommand::HookCard(request) => serialized(client.hook_card(request).await?),
-        PreparedViewCommand::HookCheck(request) => serialized(client.hook_check(request).await?),
     }
 }

@@ -11,7 +11,6 @@ pub(crate) fn decode_fleet_reference(
         RecordKind::Board => "boardId",
         RecordKind::Project => "projectId",
         RecordKind::Adr => "adrId",
-        RecordKind::ProcessDefinition => "definitionId",
         RecordKind::Request => "requestId",
         _ => "id",
     };
@@ -62,7 +61,6 @@ pub(crate) fn validate_fleet_record(record: &Record) -> Result<(), FleetStorageE
         Record::Adr(row) => {
             row.workspace == envelope.scope.workspace && envelope.scope.board.is_none()
         }
-        Record::ProcessDefinition(_) => envelope.scope.board.is_none(),
         Record::Request(row) => row.accepted_in.is_none(),
         _ => false,
     };
@@ -78,7 +76,6 @@ pub(crate) fn fleet_record_kind(tag: &str) -> Result<RecordKind, FleetStorageErr
         "board" => Ok(RecordKind::Board),
         "project" => Ok(RecordKind::Project),
         "adr" => Ok(RecordKind::Adr),
-        "processDefinition" => Ok(RecordKind::ProcessDefinition),
         "request" => Ok(RecordKind::Request),
         _ => Err(FleetStorageError::InvalidRecord),
     }

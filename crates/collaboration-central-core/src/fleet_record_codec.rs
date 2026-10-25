@@ -7,7 +7,6 @@ use message_board::{
     ActorOrigin, MachineLabel, Record, RecordKind, RecordPlacement, RecordTime, ServiceId,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sha2::{Digest, Sha256};
 
 #[derive(serde::Serialize)]
 pub(crate) struct FleetRecordHeader {
@@ -98,14 +97,12 @@ pub(crate) fn decode(stored: StoredFleetRecord) -> Result<DecodedFleetRecord, St
     validate_record(&record)?;
     let reference = record.reference();
     let envelope = record.envelope();
-    let (name, version, hash) = business_keys(&record)?;
+    let name = business_name(&record)?;
     if required(stored.kind, "kind")? != kind_tag(reference.kind)?
         || required(stored.record_id, "record_id")? != reference.id.as_str()
         || required(stored.workspace_id, "workspace_id")? != envelope.scope.workspace.as_str()
         || stored.board_id.as_deref() != envelope.scope.board.as_ref().map(|id| id.as_str())
         || stored.business_name.as_deref() != Some(name)
-        || stored.business_version.as_deref() != version
-        || stored.source_hash.as_deref() != hash
     {
         return Err(corrupt(
             "index",
@@ -158,10 +155,6 @@ pub(crate) fn validate_record(record: &Record) -> Result<(), StoreError> {
         Record::Adr(value) => {
             value.workspace == envelope.scope.workspace && envelope.scope.board.is_none()
         }
-        Record::ProcessDefinition(value) => {
-            validate_definition(value)?;
-            envelope.scope.board.is_none()
-        }
         Record::Request(value) => {
             crate::fleet_decision_step::validate_ledger(value)?;
             true
@@ -174,55 +167,23 @@ pub(crate) fn validate_record(record: &Record) -> Result<(), StoreError> {
     Ok(())
 }
 
-fn validate_definition(value: &message_board::ProcessDefinition) -> Result<(), StoreError> {
-    if format!("{:x}", Sha256::digest(value.source.as_bytes()))
-        != value.reference.source_hash.as_str()
-    {
-        return Err(corrupt(
-            "definition.source_hash",
-            "stored source disagrees with its immutable hash",
-        ));
-    }
-    let parsed = message_board::ProcessDefinitionSource::parse(&value.source)
-        .map_err(|error| corrupt("definition.source", error))?;
-    if parsed.initial_status != value.initial_status
-        || parsed.edges != value.edges
-        || parsed
-            .edges
-            .iter()
-            .any(|edge| edge.required_role != message_board::AuthorityRole::Lead)
-    {
-        return Err(corrupt(
-            "definition.source",
-            "stored process graph disagrees with registered source",
-        ));
-    }
-    Ok(())
-}
-
 pub(crate) fn kind_tag(kind: RecordKind) -> Result<&'static str, StoreError> {
     match kind {
         RecordKind::Workspace => Ok("workspace"),
         RecordKind::Board => Ok("board"),
         RecordKind::Project => Ok("project"),
         RecordKind::Adr => Ok("adr"),
-        RecordKind::ProcessDefinition => Ok("processDefinition"),
         RecordKind::Request => Ok("request"),
         _ => Err(corrupt("kind", "project-only record requested from Fleet")),
     }
 }
 
-fn business_keys(record: &Record) -> Result<(&str, Option<&str>, Option<&str>), StoreError> {
+fn business_name(record: &Record) -> Result<&str, StoreError> {
     match record {
-        Record::Workspace(value) => Ok((value.name.as_str(), None, None)),
-        Record::Board(value) => Ok((value.name.as_str(), None, None)),
-        Record::DirectoryEntry(value) => Ok((value.title.as_str(), None, None)),
-        Record::Adr(value) => Ok((value.title.as_str(), None, None)),
-        Record::ProcessDefinition(value) => Ok((
-            value.reference.name.as_str(),
-            Some(value.reference.version.as_str()),
-            Some(value.reference.source_hash.as_str()),
-        )),
+        Record::Workspace(value) => Ok(value.name.as_str()),
+        Record::Board(value) => Ok(value.name.as_str()),
+        Record::DirectoryEntry(value) => Ok(value.title.as_str()),
+        Record::Adr(value) => Ok(value.title.as_str()),
         _ => Err(corrupt(
             "kind",
             "record does not belong in a metadata table",

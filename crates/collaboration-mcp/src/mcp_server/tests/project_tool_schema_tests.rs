@@ -150,10 +150,6 @@ fn operation_cases() -> Vec<(&'static str, Value)> {
             json!({"kind":"roleAcknowledgeCurrent","readThrough":cursor}),
         ),
         (
-            "project_pin_definition",
-            json!({"kind":"projectPinDefinition","definition":{"name":"process","version":"v1","sourceHash":"a".repeat(64)},"expectedRevision":0}),
-        ),
-        (
             "project_publish_plan",
             json!({"kind":"projectPublishPlan","hash":"a".repeat(64),"document":{"kind":"url","url":"https://example.com/plan"},"expectedRevision":0}),
         ),
@@ -164,10 +160,6 @@ fn operation_cases() -> Vec<(&'static str, Value)> {
         (
             "project_describe",
             json!({"kind":"projectDescribe","description":"metadata","expectedRevision":1}),
-        ),
-        (
-            "move_request",
-            json!({"kind":"moveRequest","moveId":PROJECT_ID,"moveName":"advance","evidence":[],"reason":"ready","expectedRevision":0,"addressees":[]}),
         ),
         (
             "fact_record",
@@ -226,12 +218,12 @@ async fn all_project_schemas_match_real_handler_classification() {
     use message_board::{ProjectRequest, ProjectTool};
 
     let cases = operation_cases();
-    assert_eq!(cases.len(), 46);
+    assert_eq!(cases.len(), 44);
     let kinds = cases
         .iter()
         .map(|(_, operation)| operation["kind"].as_str().unwrap())
         .collect::<BTreeSet<_>>();
-    assert_eq!(kinds.len(), 44);
+    assert_eq!(kinds.len(), 42);
     for (_, operation) in &cases {
         serde_json::from_value::<ProjectRequest>(request(operation.clone())).unwrap_or_else(
             |error| panic!("invalid {} parity fixture: {error}", operation["kind"]),
@@ -251,7 +243,7 @@ async fn all_project_schemas_match_real_handler_classification() {
         .unwrap()
         .as_array()
         .unwrap();
-    assert_eq!(ProjectTool::ALL.len(), 30);
+    assert_eq!(ProjectTool::ALL.len(), 28);
     let mut accepted = 0;
     let mut refused = 0;
     for tool in ProjectTool::ALL {
@@ -294,8 +286,8 @@ async fn all_project_schemas_match_real_handler_classification() {
             }
         }
     }
-    assert_eq!(accepted, 30);
-    assert_eq!(refused, 1350);
+    assert_eq!(accepted, 28);
+    assert_eq!(refused, 1204);
     println!(
         "schema_handler_pairs={} selector_accepted={accepted} selector_refused={refused}",
         accepted + refused
@@ -336,7 +328,7 @@ async fn real_tools_list_reports_input_and_output_bytes_separately() {
         }
         jsonschema::validator_for(&tool["inputSchema"]).expect("all local references resolve");
     }
-    assert_eq!(tools.len(), 176);
+    assert_eq!(tools.len(), 167);
     println!(
         "tools={} input_bytes={input_bytes} output_bytes={output_bytes} project_input_bytes={project_input_bytes} advisor_input_estimate=338678",
         tools.len()

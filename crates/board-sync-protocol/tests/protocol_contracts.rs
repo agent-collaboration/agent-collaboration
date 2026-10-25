@@ -125,7 +125,8 @@ fn every_request_family_round_trips_inside_the_real_library_frame() {
 
 #[test]
 fn annotation_never_substitutes_a_time_for_imported_history() {
-    let expected = json!({"kind":"projectSummary","value":{"status":"open","latestRecordAt":{"kind":"legacyUnknown"}}});
+    let expected =
+        json!({"kind":"projectSummary","value":{"latestRecordAt":{"kind":"legacyUnknown"}}});
     let annotation: BoardAnnotation = serde_json::from_value(expected.clone()).unwrap();
     assert_eq!(serde_json::to_value(annotation).unwrap(), expected);
 }

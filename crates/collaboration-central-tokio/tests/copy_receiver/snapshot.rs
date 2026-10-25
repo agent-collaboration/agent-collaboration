@@ -38,7 +38,6 @@ async fn ordinary_seed_keeps_summary_absent_until_an_annotated_piece() -> TestRe
             }],
             part: None,
             annotation: Some(BoardAnnotation::ProjectSummary {
-                status: None,
                 latest_record_at: RecordTime::LegacyUnknown,
             }),
         })?;
@@ -65,7 +64,7 @@ async fn admin_seed_summary_and_follow_up_share_publication_and_never_rewrite_on
     let fixture = Fixture::open(root.path()).await?;
     let proof=async {
         let done=fixture.prepare_seed(true).await?;
-        let summary=BoardAnnotation::ProjectSummary{status:None,latest_record_at:RecordTime::LegacyUnknown};
+        let summary=BoardAnnotation::ProjectSummary{ latest_record_at:RecordTime::LegacyUnknown};
         fixture.copy_sql("CREATE TRIGGER reject_snapshot_summary BEFORE INSERT ON _copy_summary BEGIN SELECT RAISE(ABORT,'publication summary unavailable'); END").await?;
         let failed=fixture.complete_seed(true,&done,Some(summary.clone())).await?;
         assert!(matches!(failed,ReplicationAnswer::CopyUnavailable {reason:CopyUnavailableReason::Damaged {..}}),"snapshot SQL failure lost its storage class: {failed:?}");

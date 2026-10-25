@@ -4,14 +4,6 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ProjectMoveCheckRequest {
-    pub project_id: ProjectId,
-    pub actor: crate::Identity,
-    pub move_name: crate::MoveName,
-    pub expected_revision: crate::SubjectRevision,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ProjectRecordShowRequest {
     pub project_id: ProjectId,
     pub record: RecordRef,
@@ -104,7 +96,6 @@ pub enum ProjectReadKind {
     Subtask,
     WorkTrailRow,
     RoleAssignment,
-    Move,
     Fact,
     NotifyIntent,
 }
@@ -116,7 +107,6 @@ impl From<ProjectReadKind> for RecordKind {
             ProjectReadKind::Subtask => Self::Subtask,
             ProjectReadKind::WorkTrailRow => Self::WorkTrailRow,
             ProjectReadKind::RoleAssignment => Self::RoleAssignment,
-            ProjectReadKind::Move => Self::Move,
             ProjectReadKind::Fact => Self::Fact,
             ProjectReadKind::NotifyIntent => Self::NotifyIntent,
         }

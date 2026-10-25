@@ -7,6 +7,7 @@ use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use serde::{Deserialize, Serialize};
 use std::{os::unix::process::ExitStatusExt as _, path::PathBuf, process::Stdio, sync::Arc};
 use tokio::{io::AsyncReadExt as _, net::UnixListener};
+use tracing::instrument::WithSubscriber;
 
 const CHILD_ROOT: &str = "CODEX_ROUTER_TEST_CANCEL_CRASH_ROOT";
 const CHILD_TEST: &str =
@@ -70,7 +71,16 @@ async fn crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen
         "child data escaped its owning test directory"
     );
     // Assert through the native owner after the killed process has fully exited.
-    let owner = Arc::new(InteractionStore::open(&state.path).await.unwrap());
+    let diagnostics = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .finish();
+    let owner = Arc::new(
+        InteractionStore::open(&state.path)
+            .with_subscriber(diagnostics)
+            .await
+            .expect("cold reopen after owned crash; startup phase and driver code are logged"),
+    );
     assert!(
         owner
             .local_cancel_delivery(&mail_id(state.item))

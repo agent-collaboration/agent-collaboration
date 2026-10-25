@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use fleet_sync_protocol::{Epoch, ReplicationPosition, SyncTime};
 use message_board::LeaseVersion;
 use message_board::{
-    BoardId, BoardState, ProjectId, RecordTime, ResourceName, ServiceId, StatusName, WorkspaceId,
+    BoardId, BoardState, ProjectId, RecordTime, ResourceName, ServiceId, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,6 @@ pub struct DirectoryQuery {
     pub text: Option<String>,
     pub workspace: Option<WorkspaceId>,
     pub board: Option<BoardId>,
-    pub status: Option<String>,
     pub holder: Option<ServiceId>,
 }
 
@@ -38,7 +37,6 @@ pub struct CopyMetadataAsOf {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CopyMetadata {
-    pub status: Option<StatusName>,
     pub latest_record_at: RecordTime,
     pub as_of: CopyMetadataAsOf,
 }
@@ -108,17 +106,6 @@ impl DirectoryQuery {
                 .is_some_and(|board| board != &entry.board)
         {
             return false;
-        }
-        if let Some(status) = &self.status {
-            match &entry.copy_side {
-                DirectorySide::Known(metadata)
-                    if metadata
-                        .status
-                        .as_ref()
-                        .map(message_board::StatusName::as_str)
-                        == Some(status.as_str()) => {}
-                DirectorySide::Known(_) | DirectorySide::NotYetReported => return false,
-            }
         }
         if let Some(holder) = &self.holder {
             match &entry.lease_side {

@@ -7,10 +7,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    Assignment, EpochNumber, FactId, FeedCursor, MoveId, MoveVerdict, PlanRevisionHash,
-    ProcessDefinitionRef, ProjectId, RecordKind, RecordRef, RecordedActor, RejectReason,
-    ResourceName, SessionRef, SubjectRevision, TaskId, TaskStatus, TaskTitle, WorkTrailRow,
-    WorkstreamId, WorkstreamState,
+    Assignment, EpochNumber, FactId, FeedCursor, PlanRevisionHash, ProjectId, RecordKind,
+    RecordRef, RecordedActor, ResourceName, SessionRef, SubjectRevision, TaskId, TaskStatus,
+    TaskTitle, WorkTrailRow, WorkstreamId, WorkstreamState,
 };
 
 macro_rules! view {
@@ -48,7 +47,7 @@ pub enum CurrentWriter {
 
 view!(ContinuationCard {
     subject: RecordRef, plan_revision: Option<PlanRevisionHash>,
-    process_definition: Option<ProcessDefinitionRef>, assignment: Option<Assignment>,
+    assignment: Option<Assignment>,
     pending_handbacks: Vec<RecordRef>, pending_decisions: Vec<RecordRef>,
     next_obligation: Option<LeadOwed>, recent_trail: Vec<WorkTrailRow>,
     counts: BTreeMap<RecordKind, u64>, as_of: FeedCursor, replicated_through: FeedCursor,
@@ -74,7 +73,7 @@ pub enum SessionRunningState {
 view!(WorkView {
     project: ProjectId, as_of: FeedCursor, replicated_through: FeedCursor,
     workstreams: Vec<WorkstreamLane>, ready_queue: Vec<TaskId>, blocked: Vec<BlockedTask>,
-    open_in_closed_workstreams: Vec<TaskId>, rejected_since_last_move: Vec<RejectedRow>,
+    open_in_closed_workstreams: Vec<TaskId>,
     current_writer: CurrentWriter, source: CopySource,
     writer_observation: Option<crate::WriterObservation>,
 });
@@ -89,7 +88,6 @@ view!(WorkTask {
     revision: SubjectRevision
 });
 view!(BlockedTask { task: TaskId, blockers: Vec<TaskId>, by_dropped: bool });
-view!(RejectedRow { move_id: MoveId, reasons: Vec<RejectReason>, repeat_count: u32 });
 view!(OwnerView { as_of: DateTime<Utc>, waiting: Vec<OwnerWait>, unavailable_projects: Vec<ProjectId> });
 view!(OwnerWait { project: ProjectId, subject: RecordRef, blocks: Vec<RecordRef>, since: FeedCursor,
     source: CopySource, as_of: FeedCursor, replicated_through: FeedCursor });
@@ -108,7 +106,6 @@ view!(LeadOwed {
 pub enum LeadObligation {
     Assess,
     CloseOut,
-    AnswerRejection,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -133,27 +130,12 @@ pub enum UnavailableReason {
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
-pub enum HookPayload {
+pub enum SessionContext {
     Context {
         session: SessionRef,
         assignments: Vec<Assignment>,
         acknowledged_scopes: Vec<FactId>,
     },
-    Check(MoveVerdict),
-    Card(Box<ContinuationCard>),
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    content = "payload",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum HookResult {
-    Ok(HookPayload),
-    Unavailable { reason: UnavailableReason },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

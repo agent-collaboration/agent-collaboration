@@ -441,12 +441,6 @@ async fn maximum_record_rows_and_reconstructed_schema_fit_storage_budgets() -> T
     let state = project_state()?;
     let mut described = state.clone();
     described.description = Description::try_from("\0".repeat(MAX_DESCRIPTION_BYTES))?;
-    described.status = Some(StatusName::try_from("\"".repeat(MAX_NAME_BYTES))?);
-    described.pinned_definition = Some(ProcessDefinitionRef {
-        name: ResourceName::try_from("\"".repeat(MAX_NAME_BYTES))?,
-        version: ResourceName::try_from("\"".repeat(MAX_NAME_BYTES))?,
-        source_hash: CanonicalHash::try_from("f".repeat(64))?,
-    });
     described.revision = SubjectRevision::try_from(i64::MAX as u64)?;
     described.closed_at = Some(FeedCursor {
         epoch: EpochNumber::try_from(i64::MAX as u64)?,

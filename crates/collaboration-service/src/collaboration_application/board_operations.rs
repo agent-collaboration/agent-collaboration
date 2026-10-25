@@ -23,8 +23,6 @@ mod board_fleet_operations;
 mod board_fleet_pages;
 #[path = "board_forwarded_posts.rs"]
 mod board_forwarded_posts;
-#[path = "board_hook_operations.rs"]
-mod board_hook_operations;
 #[path = "board_inbox_events.rs"]
 mod board_inbox_events;
 #[path = "board_inbox_reads.rs"]
@@ -49,6 +47,8 @@ mod board_read_operations;
 mod board_receipt_pages;
 #[path = "board_record_paging.rs"]
 mod board_record_paging;
+#[path = "board_session_context.rs"]
+mod board_session_context;
 #[path = "board_subscription_operations.rs"]
 mod board_subscription_operations;
 #[path = "board_thread_pages.rs"]

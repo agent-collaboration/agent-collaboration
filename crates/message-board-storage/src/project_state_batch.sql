@@ -21,9 +21,7 @@ SELECT
     f.time_basis AS "feed_time_basis?: String",
     f.origin_installation AS "origin_installation?: String",
     f.origin_machine AS "origin_machine?: String",
-    r.status AS "status?: String",
     r.description AS "description!: String",
-    r.pinned_definition AS "pinned_definition?: String",
     r.revision AS "revision!: i64",
     r.closed_epoch AS "closed_epoch?: i64",
     r.closed_position AS "closed_position?: i64"

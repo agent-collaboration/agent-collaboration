@@ -23,7 +23,6 @@ impl ProjectWriteTransaction {
             Record::StandDownAcknowledgement(row) => {
                 self.write_stand_down_acknowledgement(row, envelope).await
             }
-            Record::Move(row) => self.write_move(row, envelope).await,
             Record::Fact(row) => self.write_fact(row, envelope).await,
             Record::PlanRevision(row) => self.write_plan_revision(row, envelope, mode).await,
             Record::NotifyIntent(row) => self.write_notify_intent(row, envelope, mode).await,
@@ -36,7 +35,6 @@ impl ProjectWriteTransaction {
             | Record::Workspace(_)
             | Record::Board(_)
             | Record::Adr(_)
-            | Record::ProcessDefinition(_)
             | Record::DirectoryEntry(_) => Err(ProjectStorageError::InvalidRecord {
                 record: record.reference(),
                 field: "scope",

@@ -112,62 +112,6 @@ pub(crate) fn work_view(
             tasks: lane_tasks,
         });
     }
-    let latest_accepted = snapshot
-        .records
-        .values()
-        .filter_map(|record| match record {
-            Record::Move(row) if matches!(row.outcome(), MoveOutcome::Accepted {}) => {
-                snapshot.position(&row.move_id.clone().into())
-            }
-            _ => None,
-        })
-        .max_by_key(|cursor| cursor.position)
-        .map_or(FeedPosition::ZERO, |cursor| cursor.position);
-    let mut rejected_moves: Vec<_> = snapshot
-        .records
-        .values()
-        .filter_map(|record| match record {
-            Record::Move(row)
-                if matches!(row.outcome(), MoveOutcome::Rejected { .. })
-                    && snapshot
-                        .position(&row.move_id.clone().into())
-                        .is_some_and(|cursor| cursor.position > latest_accepted) =>
-            {
-                Some(row)
-            }
-            _ => None,
-        })
-        .collect();
-    rejected_moves.sort_by_key(|row| {
-        snapshot
-            .position(&row.move_id.clone().into())
-            .map(|cursor| cursor.position)
-    });
-    let mut groups: Vec<(&MoveRecord, u32)> = Vec::new();
-    for movement in rejected_moves {
-        if let Some((_, count)) = groups.iter_mut().find(|(first, _)| {
-            first.requester.declared_identity() == movement.requester.declared_identity()
-                && first.move_name == movement.move_name
-                && first.outcome() == movement.outcome()
-        }) {
-            *count = count
-                .checked_add(1)
-                .ok_or_else(BoardError::board_unavailable)?;
-        } else {
-            groups.push((movement, 1));
-        }
-    }
-    let rejected = groups
-        .into_iter()
-        .filter_map(|(row, repeat_count)| match row.outcome() {
-            MoveOutcome::Rejected { reasons } => Some(RejectedRow {
-                move_id: row.move_id.clone(),
-                reasons: reasons.clone(),
-                repeat_count,
-            }),
-            _ => None,
-        })
-        .collect();
     Ok(WorkView {
         project: snapshot.project.clone(),
         as_of: snapshot.as_of,
@@ -176,7 +120,6 @@ pub(crate) fn work_view(
         ready_queue,
         blocked,
         open_in_closed_workstreams,
-        rejected_since_last_move: rejected,
         current_writer: snapshot.current_writer,
         writer_observation: snapshot.writer_observation,
         source: snapshot.source,

@@ -54,7 +54,7 @@ async fn a_normal_session_applies_annotations_and_another_peer_cannot_replay_its
             let position=|sequence| -> ConformanceResult<ReplicationPosition>{Ok(ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence)))};
             let piece=Piece::new(PieceContents{database,epoch:Epoch::new(1)?,continues_from:position(0)?,through:position(1)?,
                 transactions:vec![ReplicatedTransaction::SchemaStep{commit_id:CommitSequence::new(1),migration_version:1,statements:vec!["CREATE TABLE board_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL)".into()]}],part:None,
-                annotation:Some(BoardAnnotation::ProjectSummary{status:None,latest_record_at:RecordTime::LegacyUnknown})})?;
+                annotation:Some(BoardAnnotation::ProjectSummary{ latest_record_at:RecordTime::LegacyUnknown})})?;
             assert_eq!(request(&mut holder.socket,ReplicationRequest::Piece(piece.clone())).await?,ReplicationAnswer::Applied{through:position(1)?});
             assert_eq!(request(&mut holder.socket,ReplicationRequest::Piece(piece.clone())).await?,ReplicationAnswer::AlreadyApplied{through:position(1)?});
             assert_eq!(request(&mut other.socket,ReplicationRequest::Piece(piece)).await?,ReplicationAnswer::Refused(PieceRefusal::NotWriter{current:Some(Epoch::new(1)?)}));
@@ -82,9 +82,7 @@ async fn a_normal_session_applies_annotations_and_another_peer_cannot_replay_its
     let summary: serde_json::Value = serde_json::from_str(&row.try_get::<String, _>("record")?)?;
     assert_eq!(
         summary.get("summary"),
-        Some(
-            &json!({"kind":"projectSummary","value":{"status":null,"latestRecordAt":{"kind":"legacyUnknown"}}})
-        )
+        Some(&json!({"kind":"projectSummary","value":{"latestRecordAt":{"kind":"legacyUnknown"}}}))
     );
     assert_eq!(
         summary.get("position"),

@@ -45,7 +45,6 @@ pub async fn header(
         manifest: report.manifest.clone(),
         pages,
         summary: board_sync_protocol::BoardAnnotation::ProjectSummary {
-            status: None,
             latest_record_at: message_board::RecordTime::LegacyUnknown,
         },
     })
@@ -127,7 +126,6 @@ pub async fn published_copies(
         assert_eq!(
             summary.summary,
             board_sync_protocol::BoardAnnotation::ProjectSummary {
-                status: None,
                 latest_record_at: message_board::RecordTime::LegacyUnknown,
             }
         );

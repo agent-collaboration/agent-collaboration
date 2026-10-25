@@ -1,11 +1,10 @@
-//! ADR lifecycle and immutable process sources travel through the fleet port.
+//! ADR lifecycle operations travel through the Fleet port.
 use super::BoardOperations;
 use super::board_fleet_operations::FleetHeader;
 use super::board_paging::fingerprint;
-use fleet_admission::{FleetOperation, ProcessDefinitionInput};
+use fleet_admission::FleetOperation;
 use message_board::public_replies::WriteReply;
 use message_board::*;
-use sha2::{Digest, Sha256};
 impl BoardOperations<'_> {
     pub async fn adr_create(&self, request: AdrCreateRequest) -> Result<WriteReply, BoardError> {
         let header = FleetHeader {
@@ -45,35 +44,6 @@ impl BoardOperations<'_> {
                 adr: request.adr_id,
                 transition: request.transition,
                 expected_revision: request.expected_revision,
-            },
-        )?)
-        .await
-    }
-    pub async fn process_register(
-        &self,
-        request: ProcessRegisterRequest,
-    ) -> Result<WriteReply, BoardError> {
-        let header = FleetHeader {
-            request_id: request.request_id,
-            protocol_version: request.protocol_version,
-            workspace: request.workspace_id,
-            actor: request.actor,
-            acting_for: request.acting_for,
-        };
-        let source_hash =
-            CanonicalHash::try_from(format!("{:x}", Sha256::digest(request.source.as_bytes())))
-                .map_err(|_| BoardError::board_unavailable())?;
-        self.fleet_write(self.fleet_request(
-            header,
-            FleetOperation::DefinitionRegister {
-                definition: ProcessDefinitionInput {
-                    reference: ProcessDefinitionRef {
-                        name: request.name,
-                        version: request.version,
-                        source_hash,
-                    },
-                    source: request.source,
-                },
             },
         )?)
         .await

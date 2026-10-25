@@ -127,12 +127,6 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
             .ok_or_else(|| format!("card: {answer}"))?,
         &expected,
     )?;
-    let hook = fixture.api.call("hook_card", request.clone()).await?;
-    assert_eq!(hook.pointer("/result/kind"), Some(&json!("ok")), "{hook}");
-    assert_card(
-        hook.pointer("/result/payload/payload").ok_or("hook card")?,
-        &expected,
-    )?;
     let foreign = foreign.ok_or("foreign candidate")?;
     let mut raw = sqlx_turso::TursoConnectOptions::new()
         .filename(store.path())
@@ -149,16 +143,8 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
         1
     );
     raw.close().await?;
-    for tool in ["view_card", "hook_card"] {
-        let answer = fixture.api.call(tool, request.clone()).await?;
-        let body = if tool == "view_card" {
-            answer.get("result")
-        } else {
-            answer.pointer("/result/payload/payload")
-        }
-        .ok_or_else(|| format!("foreign pending corruption broke {tool}: {answer}"))?;
-        assert_card(body, &expected)?;
-    }
+    let answer = fixture.api.call("view_card", request.clone()).await?;
+    assert_card(answer.get("result").ok_or("card")?, &expected)?;
     let mut relevant = request;
     relevant.as_object_mut().ok_or("card")?.insert(
         "subject".to_owned(),
@@ -168,12 +154,6 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
     assert!(
         answer.get("error").is_some(),
         "relevant pending corruption accepted: {answer}"
-    );
-    let hook = fixture.api.call("hook_card", relevant).await?;
-    assert_eq!(
-        hook.pointer("/result/kind"),
-        Some(&json!("unavailable")),
-        "{hook}"
     );
     let mut read = store.snapshot().await?;
     assert!(

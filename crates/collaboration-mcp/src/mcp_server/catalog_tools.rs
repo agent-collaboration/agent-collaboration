@@ -169,12 +169,9 @@ pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServe
     board_tool!(router, "owner_grant_record", ProjectRequest => WriteReply, owner_grant_record, true);
     board_tool!(router, "role_replace_lead", ProjectRequest => WriteReply, role_replace_lead, true);
     board_tool!(router, "role_acknowledge_current", ProjectRequest => WriteReply, role_acknowledge_current, true);
-    board_tool!(router, "project_pin_definition", ProjectRequest => WriteReply, project_pin_definition, true);
     board_tool!(router, "project_publish_plan", ProjectRequest => WriteReply, project_publish_plan, true);
     board_tool!(router, "project_close", ProjectRequest => WriteReply, project_close, true);
     board_tool!(router, "project_describe", ProjectRequest => WriteReply, project_describe, true);
-    board_tool!(router, "move_request", ProjectRequest => WriteReply, move_request, true);
-    board_tool!(router, "move_check", ProjectMoveCheckRequest => MoveVerdict, move_check, false);
     board_tool!(router, "fact_record", ProjectRequest => WriteReply, fact_record, true);
     board_tool!(router, "thread_renew", ThreadRenewRequest => WriteReply, thread_renew, true);
     board_tool!(router, "workstream_show", ProjectRecordShowRequest => Record, workstream_show, false);
@@ -185,8 +182,6 @@ pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServe
     board_tool!(router, "subtask_list", SubtaskListRequest => RecordListResult, subtask_list, false);
     board_tool!(router, "role_show", ProjectRecordShowRequest => Record, role_show, false);
     board_tool!(router, "role_list", ProjectRecordListRequest => RecordListResult, role_list, false);
-    board_tool!(router, "move_show", ProjectRecordShowRequest => Record, move_show, false);
-    board_tool!(router, "move_list", ProjectRecordListRequest => RecordListResult, move_list, false);
     board_tool!(router, "fact_show", ProjectRecordShowRequest => Record, fact_show, false);
     board_tool!(router, "fact_list", ProjectRecordListRequest => RecordListResult, fact_list, false);
     board_tool!(router, "intent_show", ProjectRecordShowRequest => Record, intent_show, false);
@@ -195,14 +190,10 @@ pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServe
     board_tool!(router,"adr_transition",AdrTransitionRequest => WriteReply,adr_transition,true);
     board_tool!(router,"adr_show",FleetRecordShowRequest => Record,adr_show,false);
     board_tool!(router,"adr_list",FleetRecordListRequest => RecordListResult,adr_list,false);
-    board_tool!(router,"process_register",ProcessRegisterRequest => WriteReply,process_register,true);
     board_tool!(router, "feed_read", FeedReadRequest => BoardReadReply<FeedRead>, feed_read, true);
     board_tool!(router, "view_work", ProjectViewRequest => WorkView, view_work, false);
     board_tool!(router, "view_card", ContinuationCardRequest => ContinuationCard, view_card, false);
-    board_tool!(router, "view_session_context", SessionContextRequest => HookPayload, view_session_context, false);
-    board_tool!(router, "hook_context", SessionContextRequest => HookResult, hook_context, false);
-    board_tool!(router, "hook_check", ProjectMoveCheckRequest => HookResult, hook_check, false);
-    board_tool!(router, "hook_card", ContinuationCardRequest => HookResult, hook_card, false);
+    board_tool!(router, "view_session_context", SessionContextRequest => SessionContext, view_session_context, false);
     board_tool!(router, "view_owner", OwnerViewRequest => OwnerView, view_owner, false);
     board_tool!(router, "view_lead_load", LeadLoadRequest => LeadLoad, view_lead_load, false);
     board_tool!(router, "work_trail_show", WorkTrailShowRequest => BoardReadReply<WorkTrailReadResult>, work_trail_show, true);

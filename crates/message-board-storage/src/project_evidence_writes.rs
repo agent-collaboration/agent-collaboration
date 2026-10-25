@@ -34,29 +34,6 @@ impl ProjectWriteTransaction {
         require_one_row(changed.rows_affected(), row.fact_id.clone().into())
     }
 
-    pub(crate) async fn write_move(
-        &mut self,
-        row: &MoveRecord,
-        envelope: &ProjectRowEnvelope,
-    ) -> Result<(), ProjectStorageError> {
-        let requester = self.intern_actor(&row.requester).await?;
-        let requester = requester.as_str();
-        let id = row.move_id.as_str();
-        let actor = envelope.actor_id.as_str();
-        let request = envelope.request_id.as_deref();
-        let move_name = row.move_name.as_str();
-        let from = row.endpoints().map(|endpoints| endpoints.from.as_str());
-        let to = row.endpoints().map(|endpoints| endpoints.to.as_str());
-        let evidence = serde_json::to_string(&row.evidence)?;
-        let outcome = serde_json::to_string(row.outcome())?;
-        let changed = sqlx_turso::query!(
-            "INSERT INTO moves(move_id, actor_id, request_id, epoch, position, router_time, time_basis, move_name, from_status, to_status, evidence, reason, requester, outcome) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            id, actor, request, envelope.epoch, envelope.position, envelope.router_time,
-            envelope.time_basis, move_name, from, to, evidence, row.reason, requester, outcome
-        ).execute(&mut self.transaction).await?;
-        require_one_row(changed.rows_affected(), row.move_id.clone().into())
-    }
-
     pub(crate) async fn write_plan_revision(
         &mut self,
         row: &PlanRevision,

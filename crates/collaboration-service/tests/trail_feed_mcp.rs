@@ -52,8 +52,6 @@ async fn redacted_41_and_shown_42_keep_feed_coverage_and_descending_register_bou
         .append_record(Record::Project(ProjectState {
             envelope: envelope(project.clone().into())?,
             project_id: project.clone(),
-            status: None,
-            pinned_definition: None,
             revision: SubjectRevision::INITIAL,
             closed_at: None,
             description: Description::try_from(String::new())?,

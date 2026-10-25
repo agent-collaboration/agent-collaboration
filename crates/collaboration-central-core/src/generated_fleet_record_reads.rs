@@ -14,8 +14,6 @@ pub(crate) struct StoredFleetRecord {
     pub workspace_id: Option<String>,
     pub board_id: Option<String>,
     pub business_name: Option<String>,
-    pub business_version: Option<String>,
-    pub source_hash: Option<String>,
     pub payload: Option<String>,
     pub router_time: Option<String>,
     pub time_basis: Option<String>,
@@ -51,8 +49,6 @@ where
                     workspace_id: row.try_get("workspace_id")?,
                     board_id: row.try_get("board_id")?,
                     business_name: row.try_get("business_name")?,
-                    business_version: row.try_get("business_version")?,
-                    source_hash: row.try_get("source_hash")?,
                     payload: row.try_get("payload")?,
                     router_time: row.try_get("router_time")?,
                     time_basis: row.try_get("time_basis")?,
@@ -180,8 +176,6 @@ where
                     workspace_id: row.try_get("workspace_id")?,
                     board_id: row.try_get("board_id")?,
                     business_name: row.try_get("business_name")?,
-                    business_version: row.try_get("business_version")?,
-                    source_hash: row.try_get("source_hash")?,
                     payload: row.try_get("payload")?,
                     router_time: row.try_get("router_time")?,
                     time_basis: row.try_get("time_basis")?,
@@ -191,47 +185,6 @@ where
                 })
             })
             .collect()
-    }
-}
-pub(crate) fn read_global_definition<S>(
-    scope: &mut S,
-    name: String,
-    version: String,
-) -> impl std::future::Future<Output = Result<Option<StoredFleetRecord>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/read_global_definition.sql"
-        )))
-        .bind(name)
-        .bind(version);
-        let row = statement.fetch_optional(scope.executor()).await?;
-        row.as_ref()
-            .map(|row| {
-                Ok(StoredFleetRecord {
-                    kind: row.try_get("kind")?,
-                    record_id: row.try_get("record_id")?,
-                    workspace_id: row.try_get("workspace_id")?,
-                    board_id: row.try_get("board_id")?,
-                    business_name: row.try_get("business_name")?,
-                    business_version: row.try_get("business_version")?,
-                    source_hash: row.try_get("source_hash")?,
-                    payload: row.try_get("payload")?,
-                    router_time: row.try_get("router_time")?,
-                    time_basis: row.try_get("time_basis")?,
-                    origin_installation: row.try_get("origin_installation")?,
-                    origin_machine: row.try_get("origin_machine")?,
-                    import_digest: row.try_get("import_digest")?,
-                })
-            })
-            .transpose()
     }
 }
 
@@ -402,38 +355,6 @@ where
             .collect()
     }
 }
-pub(crate) fn read_process_definition_snapshot_keys<S>(
-    scope: &mut S,
-    after_id: String,
-    after_kind: String,
-    limit: String,
-) -> impl std::future::Future<Output = Result<Vec<StoredFleetRecordKey>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/fleet/read_process_definition_snapshot_keys.sql"
-        )))
-        .bind(after_id)
-        .bind(after_kind)
-        .bind(limit);
-        let rows = statement.fetch_all(scope.executor()).await?;
-        rows.iter()
-            .map(|row| {
-                Ok(StoredFleetRecordKey {
-                    kind: row.try_get("kind")?,
-                    record_id: row.try_get("record_id")?,
-                })
-            })
-            .collect()
-    }
-}
 pub(crate) fn read_request_snapshot_keys<S>(
     scope: &mut S,
     after_id: String,
@@ -492,8 +413,6 @@ where
                     workspace_id: row.try_get("workspace_id")?,
                     board_id: row.try_get("board_id")?,
                     business_name: row.try_get("business_name")?,
-                    business_version: row.try_get("business_version")?,
-                    source_hash: row.try_get("source_hash")?,
                     payload: row.try_get("payload")?,
                     router_time: row.try_get("router_time")?,
                     time_basis: row.try_get("time_basis")?,

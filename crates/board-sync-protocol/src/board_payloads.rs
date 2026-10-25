@@ -1,5 +1,5 @@
 use fleet_sync_protocol::{Epoch, PeerId, ReplicationPosition};
-use message_board::{ActorOrigin, BoardId, ProjectId, RecordTime, RequestId, StatusName};
+use message_board::{ActorOrigin, BoardId, ProjectId, RecordTime, RequestId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 /// An opaque board-owned body. Its receiving owner decodes its existing contract.
@@ -48,10 +48,7 @@ pub struct FleetRequestEnvelope {
     deny_unknown_fields
 )]
 pub enum BoardAnnotation {
-    ProjectSummary {
-        status: Option<StatusName>,
-        latest_record_at: RecordTime,
-    },
+    ProjectSummary { latest_record_at: RecordTime },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

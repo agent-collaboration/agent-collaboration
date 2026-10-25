@@ -158,44 +158,6 @@
       ]
     },
     {
-      "name": "put_process_definition",
-      "sql": "sql/fleet/put_process_definition.sql",
-      "row": null,
-      "result": "execute",
-      "parameters": [
-        {
-          "name": "payload",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "router_time",
-          "kind": "text",
-          "nullable": true
-        },
-        {
-          "name": "time_basis",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "origin_installation",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "origin_machine",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "import_digest",
-          "kind": "text",
-          "nullable": true
-        }
-      ]
-    },
-    {
       "name": "store_directory_summary",
       "sql": "sql/fleet/store_directory_summary.sql",
       "result": "execute",

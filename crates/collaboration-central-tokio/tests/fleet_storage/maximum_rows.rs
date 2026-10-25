@@ -1,6 +1,4 @@
 //! Bounded large Fleet records round-trip through canonical writes, reads and encoding.
-#[path = "maximum_rows/definition.rs"]
-mod definition;
 #[path = "maximum_rows/support.rs"]
 mod support;
 use super::support::TestResult;
@@ -192,35 +190,6 @@ async fn maximum_adr_row_round_trips_in_the_canonical_store() -> TestResult {
             revision: SubjectRevision::try_from(2)?,
         });
         measure(&fixture, "Adr", expected).await
-    }
-    .await;
-    fixture.objects.close().await?;
-    proof
-}
-
-#[tokio::test]
-async fn maximum_process_definition_row_round_trips_in_the_canonical_store() -> TestResult {
-    let root = tempfile::tempdir()?;
-    let fixture = open(root.path()).await?;
-    let proof = async {
-        workspace(&fixture).await?;
-        let definition = definition::maximum_definition()?;
-        let parsed = ProcessDefinitionSource::parse(&definition.source)?;
-        let (request, effect) = admit(
-            &fixture,
-            FleetOperation::DefinitionRegister {
-                definition: definition.clone(),
-            },
-        )
-        .await?;
-        let expected = Record::ProcessDefinition(ProcessDefinition {
-            envelope: envelope(&request, effect, None)?,
-            reference: definition.reference,
-            source: definition.source,
-            initial_status: parsed.initial_status,
-            edges: parsed.edges,
-        });
-        measure(&fixture, "ProcessDefinition", expected).await
     }
     .await;
     fixture.objects.close().await?;
