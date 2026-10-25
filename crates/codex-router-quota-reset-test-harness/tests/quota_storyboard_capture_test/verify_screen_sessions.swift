@@ -45,7 +45,9 @@ extension VerifyScreenImage {
       return
         (overlap >= min(query.bounds.height, label.bounds.height) / 2
         && query.bounds.minX >= label.bounds.minX)
-        || (query.bounds.maxY <= label.bounds.minY
+        // Distinct adjacent native rows can have touching OCR boxes. Use the
+        // same half-taller-height centre rule as the no-match row below.
+        || (label.bounds.midY - query.bounds.midY >= max(query.bounds.height, label.bounds.height) / 2
           && label.bounds.minY - query.bounds.maxY <= label.bounds.height * 1.5
           && query.bounds.minX >= label.bounds.minX)
     }.sorted {

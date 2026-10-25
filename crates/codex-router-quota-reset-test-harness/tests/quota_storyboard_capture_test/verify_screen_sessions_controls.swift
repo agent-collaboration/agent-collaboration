@@ -414,6 +414,103 @@ extension VerifyScreenImage {
         failures.append(name)
       }
     }
+    // Actual 015 Quota 48x24 native boxes: the query and provider label
+    // overlap by .0041, but their row centres are .0372 apart.
+    let stackedProviderQuery = [
+      region("Account filters", 0.0817, 0.6653, 0.3152, 0.0413),
+      region("Account provider", 0.0817, 0.6198, 0.3385, 0.0413),
+      region("Search: zznomatchzz", 0.1167, 0.5826, 0.4086, 0.0413),
+      region("No matching choices", 0.1206, 0.5413, 0.4008, 0.0372),
+      region("Disabled accounts", 0.0817, 0.5000, 0.3580, 0.0372),
+      region("Shown", 0.1167, 0.4584, 0.1597, 0.0378),
+      region("Cancel", 0.0817, 0.2521, 0.1323, 0.0372),
+      region("Select", 0.2296, 0.2521, 0.1479, 0.0372),
+    ]
+    let stackedProviderCases: [(String, [ScreenTextRegion], Bool)] = [
+      ("provider-query-native-stacked-overlap", stackedProviderQuery, true),
+      (
+        "provider-query-stacked-above-label",
+        stackedProviderQuery.map {
+          $0.text.hasPrefix("Search:")
+            ? region($0.text, 0.1167, 0.6653, 0.4086, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-too-far",
+        stackedProviderQuery.map {
+          $0.text.hasPrefix("Search:")
+            ? region($0.text, 0.1167, 0.4500, 0.4086, 0.0413)
+            : $0.text == "No matching choices"
+              ? region($0.text, 0.1206, 0.4087, 0.4008, 0.0372) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-above-label-inside-body",
+        stackedProviderQuery.map {
+          $0.text == "Account filters"
+            ? region($0.text, 0.0817, 0.8000, 0.3152, 0.0413)
+            : $0.text.hasPrefix("Search:")
+              ? region($0.text, 0.1167, 0.6570, 0.4086, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-left-of-label",
+        stackedProviderQuery.map {
+          $0.text.hasPrefix("Search:")
+            ? region($0.text, 0.0700, 0.5826, 0.4086, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-same-row-left-of-label",
+        stackedProviderQuery.map {
+          $0.text.hasPrefix("Search:")
+            ? region($0.text, 0.0700, 0.6198, 0.4086, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-wrong-field",
+        stackedProviderQuery.map {
+          $0.text == "Account provider"
+            ? region("Disabled accounts", 0.0817, 0.6198, 0.3385, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-short-query",
+        stackedProviderQuery.map {
+          $0.text.hasPrefix("Search:")
+            ? region("Search: zznomatch", 0.1167, 0.5826, 0.4086, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-extra-character",
+        stackedProviderQuery.map {
+          $0.text.hasPrefix("Search:")
+            ? region("Search: zznomatchzzx", 0.1167, 0.5826, 0.4086, 0.0413) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-missing-no-match",
+        stackedProviderQuery.filter { $0.text != "No matching choices" }, false
+      ),
+      (
+        "provider-query-stacked-no-match-same-row",
+        stackedProviderQuery.map {
+          $0.text == "No matching choices"
+            ? region($0.text, 0.1206, 0.5826, 0.4008, 0.0372) : $0
+        }, false
+      ),
+      (
+        "provider-query-stacked-duplicate-observation",
+        stackedProviderQuery + [region("Search: zznomatchzz", 0.1167, 0.5826, 0.4086, 0.0413)], false
+      ),
+    ]
+    for (name, regions, shouldPass) in stackedProviderCases {
+      let pairs = sessionsChoiceQueryPairs(
+        regions, title: "account filters", field: "account provider")
+      if (pairs == ["field account provider query zznomatchzz"]) != shouldPass {
+        failures.append(name)
+      }
+    }
     let sessionsFieldCases: [(String, [ScreenTextRegion], Bool)] = [
       ("sessions-client-same-line", [region("Client Codex", 0.1, 0.7, 0.5, 0.03)], true),
       (
@@ -461,6 +558,6 @@ extension VerifyScreenImage {
         failures.append(name)
       }
     }
-    return (sessionsChoiceCases.count + sessionsFieldCases.count, failures)
+    return (sessionsChoiceCases.count + stackedProviderCases.count + sessionsFieldCases.count, failures)
   }
 }
