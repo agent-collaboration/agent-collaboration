@@ -47,8 +47,14 @@ mod tests {
         );
         let (change_sender, change_receiver) = tokio::sync::oneshot::channel();
         let (stop_sender, stop_receiver) = tokio::sync::oneshot::channel();
-        let fixture = tokio::spawn(async move {
+        let receipt_stages = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let fixture_receipts = Arc::clone(&receipt_stages);
+        let mut fixture = tokio::spawn(async move {
             let mut wire = WebSocketStream::from_raw_socket(server, Role::Server, None).await;
+            fixture_receipts
+                .lock()
+                .unwrap_or_else(|error| panic!("receipt lock: {error}"))
+                .push("loaded-list-awaiting-request");
             let list = read_request(&mut wire).await;
             assert_eq!(list["method"], "thread/loaded/list");
             write_message(
@@ -56,8 +62,28 @@ mod tests {
                 json!({"id":list["id"],"result":{"data":["a","b"],"nextCursor":null}}),
             )
             .await;
+            fixture_receipts
+                .lock()
+                .unwrap_or_else(|error| panic!("receipt lock: {error}"))
+                .push("loaded-list-replied");
             for thread in ["a", "b"] {
+                fixture_receipts
+                    .lock()
+                    .unwrap_or_else(|error| panic!("receipt lock: {error}"))
+                    .push(if thread == "a" {
+                        "a-awaiting-request"
+                    } else {
+                        "b-awaiting-request"
+                    });
                 answer_thread_read(&mut wire, thread, "idle").await;
+                fixture_receipts
+                    .lock()
+                    .unwrap_or_else(|error| panic!("receipt lock: {error}"))
+                    .push(if thread == "a" {
+                        "a-replied"
+                    } else {
+                        "b-replied"
+                    });
             }
             change_receiver
                 .await
@@ -79,11 +105,13 @@ mod tests {
             schemas: fixture_schemas(),
         })
         .unwrap_or_else(|error| panic!("observer: {error}"));
-        let observer = tokio::spawn(observer.run(tokio_util::sync::CancellationToken::new()));
+        let mut observer = tokio::spawn(observer.run(tokio_util::sync::CancellationToken::new()));
         let (client, served) = connect_public_reader(&scope, Arc::clone(&store)).await;
 
         // Act: wait through the public journal, capture page one, then change native state.
-        let ready_position = tokio::time::timeout(Duration::from_secs(3), async {
+        let mut last_public_position = initial_position.clone();
+        let mut last_public_page = None;
+        let readiness = tokio::time::timeout(Duration::from_secs(3), async {
             let mut position = initial_position.clone();
             loop {
                 let page = client
@@ -91,6 +119,8 @@ mod tests {
                     .await
                     .unwrap_or_else(|error| panic!("journal: {error}"));
                 position = page.next;
+                last_public_position = position.clone();
+                last_public_page = Some((page.bounds, position.clone()));
                 if page.records.iter().any(|record| {
                     matches!(record.observation.change, LifecycleChange::CoverageRestored)
                 }) {
@@ -98,8 +128,43 @@ mod tests {
                 }
             }
         })
-        .await
-        .unwrap_or_else(|error| panic!("coverage readiness: {error}"));
+        .await;
+        let ready_position = match readiness {
+            Ok(position) => position,
+            Err(error) => {
+                // Inspect only after the original readiness deadline fails.
+                // Finished tasks can reveal an earlier producer/fixture error;
+                // unfinished tasks are never awaited by this diagnostic branch.
+                let observer_finished = observer.is_finished();
+                let observer_result = if observer_finished {
+                    Some((&mut observer).await)
+                } else {
+                    None
+                };
+                let fixture_finished = fixture.is_finished();
+                let fixture_result = if fixture_finished {
+                    Some((&mut fixture).await)
+                } else {
+                    None
+                };
+                let receipts = receipt_stages
+                    .lock()
+                    .unwrap_or_else(|error| panic!("receipt lock: {error}"))
+                    .clone();
+                let direct_page = tokio::time::timeout(
+                    Duration::from_secs(3),
+                    store.read_wait(&scope.endpoint, initial_position.clone(), 100, 0),
+                )
+                .await;
+                panic!(
+                    "coverage readiness: {error}; observer_finished={observer_finished}; \
+                     observer_result={observer_result:?}; fixture_finished={fixture_finished}; \
+                     fixture_result={fixture_result:?}; receipts={receipts:?}; \
+                     last_public_position={last_public_position:?}; last_public_page={last_public_page:?}; \
+                     direct_zero_wait_page={direct_page:?}"
+                );
+            }
+        };
         let first = client
             .list_addresses(&scope.endpoint, 1, None)
             .await

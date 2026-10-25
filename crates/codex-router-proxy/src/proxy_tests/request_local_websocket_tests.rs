@@ -20,6 +20,8 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("provider should bind");
     let runtime = fixture.start(listener.local_addr().expect("address should read"));
     let router_address = runtime.local_addr();
+    let (accepted_turn_sender, accepted_turn_receiver) = std::sync::mpsc::channel();
+    let (release_turn_sender, release_turn_receiver) = std::sync::mpsc::channel();
     let upstream_thread = thread::spawn(move || {
         let mut authorizations = Vec::new();
         if scenario == UpstreamHandshakeScenario::RejectThenAccept {
@@ -78,6 +80,12 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
             .read()
             .expect("provider should receive exactly one initial frame");
         assert_eq!(original_frame.to_string(), ORIGINAL_FRAME);
+        accepted_turn_sender
+            .send(())
+            .expect("accepted turn receipt");
+        release_turn_receiver
+            .recv_timeout(Duration::from_secs(5))
+            .expect("live acquisition must be observed before the turn finishes");
         let response = match scenario {
             UpstreamHandshakeScenario::RejectThenAccept => COMPLETED_RESPONSE,
             UpstreamHandshakeScenario::AcceptThenAuthError => ACCEPTED_AUTH_ERROR,
@@ -97,7 +105,19 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
         });
         (authorizations, extra_authorization)
     });
-    let runtime_thread = thread::spawn(move || runtime.serve_protocol_connections(1));
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let _shutdown_on_drop = shutdown.clone().drop_guard();
+    let runtime_shutdown = shutdown.clone();
+    let runtime_thread = thread::spawn(move || {
+        runtime.serve_protocol_connections_until_cancelled(usize::MAX, runtime_shutdown)
+    });
+    let observation_runtime = must_ok(
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build(),
+    );
+    let state = observation_runtime
+        .block_on(async { must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await) });
     let mut request = format!("ws://{router_address}/v1/responses")
         .into_client_request()
         .expect("local request should build");
@@ -116,6 +136,19 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
     client
         .send(Message::text(ORIGINAL_FRAME))
         .expect("first frame should send");
+    accepted_turn_receiver
+        .recv_timeout(Duration::from_secs(5))
+        .expect("accepted provider received the original frame");
+    let accepted_account = match scenario {
+        UpstreamHandshakeScenario::RejectThenAccept => fixture.fallback.account_id(),
+        UpstreamHandshakeScenario::AcceptThenAuthError => fixture.primary.account_id(),
+    };
+    observation_runtime.block_on(wait_for_live_durable_client_count(
+        &state,
+        accepted_account,
+        1,
+    ));
+    release_turn_sender.send(()).expect("release accepted turn");
     let actual_response = client
         .read()
         .expect("same local socket should receive provider response")
@@ -142,18 +175,20 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
         extra_authorization.is_none(),
         "no additional account handshake is allowed after first-frame send"
     );
+    // The mirror is best-effort during bounded runtime shutdown. Observe the
+    // acquired lease and its real release while its write owner is still live.
+    observation_runtime.block_on(wait_for_live_durable_client_count(
+        &state,
+        accepted_account,
+        0,
+    ));
+    shutdown.cancel();
     assert_eq!(
         must_ok(runtime_thread.join().expect("runtime should join")),
         1
     );
     assert_eq!(fixture.credential_metadata(), original_credential_metadata);
-    let observation_runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    );
     observation_runtime.block_on(async {
-        let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
         let counts = must_ok(
             state
                 .active_client_counts_for_route_band_read_only("responses", 1_030, 60)
@@ -169,6 +204,36 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
         );
         must_ok(state.close().await);
     });
+}
+
+async fn wait_for_live_durable_client_count(
+    state: &AsyncSqliteStateStore,
+    accepted_account: &AccountId,
+    expected_count: u32,
+) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let counts = must_ok(
+                state
+                    .active_client_counts_for_route_band_read_only("responses", 1_030, 60)
+                    .await,
+            );
+            let total = counts
+                .iter()
+                .map(|count| count.active_clients())
+                .sum::<u32>();
+            let accepted = counts
+                .iter()
+                .find(|count| count.account_id() == accepted_account)
+                .map_or(0, |count| count.active_clients());
+            if total == expected_count && accepted == expected_count {
+                return;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("accepted account's durable live acquisition/release must be observed");
 }
 
 #[test]
