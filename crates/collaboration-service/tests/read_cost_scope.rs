@@ -11,6 +11,39 @@ use sqlx::{ConnectOptions, Connection, Executor};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
+async fn data_budget_ignores_real_pragma_but_detects_an_extra_select() -> TestResult {
+    let mut connection = sqlx_turso::TursoConnectOptions::new().connect().await?;
+    let first = ReadCostObservation::default();
+    first.observe(connection.execute("SELECT 1")).await?;
+    let second = ReadCostObservation::default();
+    second
+        .observe(async {
+            connection.execute("PRAGMA user_version").await?;
+            connection.execute("SELECT 1").await?;
+            Ok::<_, sqlx::Error>(())
+        })
+        .await?;
+    assert_eq!(
+        first.data_statement_counts(),
+        second.data_statement_counts()
+    );
+    assert_eq!(first.cost().statements, 1);
+    assert_eq!(
+        second.cost().statements,
+        2,
+        "the legacy counter must retain non-data work"
+    );
+    second.observe(connection.execute("SELECT 2")).await?;
+    assert_ne!(
+        first.data_statement_counts(),
+        second.data_statement_counts(),
+        "an extra data query must change the exact budget"
+    );
+    connection.close().await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn scoped_read_cost_excludes_real_concurrent_sql_and_separates_observations() -> TestResult {
     read_cost_counter::install();
     let mut measured = sqlx_turso::TursoConnectOptions::new().connect().await?;

@@ -7,6 +7,43 @@ use turso_parser::{ast::Cmd, parser::Parser};
 #[derive(Debug, Default, Eq, PartialEq)]
 pub struct StatementTables(BTreeSet<String>);
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct DataStatementCounts {
+    pub selects: u64,
+    pub inserts: u64,
+    pub updates: u64,
+    pub deletes: u64,
+}
+impl DataStatementCounts {
+    pub fn total(self) -> u64 {
+        self.selects + self.inserts + self.updates + self.deletes
+    }
+    pub fn count_sql(&mut self, sql: &str) -> Option<u64> {
+        use turso_parser::ast::Stmt;
+        let mut parser = Parser::new(sql.as_bytes());
+        let mut other = 0;
+        let mut parsed = false;
+        while let Some(command) = parser.next_cmd().ok()? {
+            parsed = true;
+            let statement = match command {
+                Cmd::Stmt(statement)
+                | Cmd::Explain(statement)
+                | Cmd::ExplainQueryPlan {
+                    stmt: statement, ..
+                } => statement,
+            };
+            match statement {
+                Stmt::Select(_) => self.selects += 1,
+                Stmt::Insert { .. } => self.inserts += 1,
+                Stmt::Update(_) => self.updates += 1,
+                Stmt::Delete { .. } => self.deletes += 1,
+                _ => other += 1,
+            }
+        }
+        parsed.then_some(other)
+    }
+}
+
 impl StatementTables {
     /// Diagnostics expose only fixed operation and schema labels, never SQL values or names.
     pub fn diagnostic_kind(statement: &str) -> String {

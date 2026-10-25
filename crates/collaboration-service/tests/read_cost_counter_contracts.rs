@@ -1,7 +1,26 @@
 //! A bookkeeping exclusion must not hide a board read, wherever SQL nests it.
 #[path = "support/sql_cost_classification.rs"]
 mod sql_cost_classification;
-use sql_cost_classification::StatementTables;
+use sql_cost_classification::{DataStatementCounts, StatementTables};
+
+#[test]
+fn data_budget_counts_each_sql_kind_and_keeps_non_data_separate() {
+    let mut data = DataStatementCounts::default();
+    let other = data.count_sql("PRAGMA user_version; SELECT 1; INSERT INTO posts VALUES(1); UPDATE posts SET id=2; DELETE FROM posts; BEGIN; COMMIT;");
+    assert_eq!(other, Some(3));
+    assert_eq!(
+        data,
+        DataStatementCounts {
+            selects: 1,
+            inserts: 1,
+            updates: 1,
+            deletes: 1
+        }
+    );
+    assert_eq!(data.total(), 4);
+    assert_eq!(data.count_sql("SELECT * FROM"), None);
+    assert_eq!(data.count_sql(""), None);
+}
 
 #[test]
 fn diagnostic_kinds_never_expose_values_or_unrecognized_identifiers() {

@@ -6,13 +6,14 @@ mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use collaboration_service::SubscriptionWindowStore;
 use message_board::*;
-use read_cost_counter::{ReadCost, ReadCostObservation};
+use read_cost_counter::{DataStatementCounts, ReadCost, ReadCostObservation};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 use std::sync::Arc;
 
 struct PageReadCost {
     cost: ReadCost,
+    data_statements: DataStatementCounts,
     statement_kinds: Vec<String>,
 }
 impl PageReadCost {
@@ -25,6 +26,10 @@ impl PageReadCost {
             }
         }
         assert_eq!(self.cost, other.cost, "{page} read cost changed");
+        assert_eq!(
+            self.data_statements, other.data_statements,
+            "{page} SQL kinds changed"
+        );
     }
 }
 
@@ -174,7 +179,9 @@ async fn window_cost(size: usize) -> Result<PageReadCost, TestError> {
     let added = observation
         .observe(windows.rescan_missing_subscription_windows(&reader, now))
         .await?;
-    let cost = observation.cost();
+    let data_statements = observation.data_statement_counts();
+    let mut cost = observation.cost();
+    cost.statements = data_statements.total();
     let statement_kinds = observation.statement_kinds();
     assert_eq!(
         added, 5,
@@ -193,6 +200,7 @@ async fn window_cost(size: usize) -> Result<PageReadCost, TestError> {
     fixture.stop().await?;
     Ok(PageReadCost {
         cost,
+        data_statements,
         statement_kinds,
     })
 }
@@ -240,7 +248,9 @@ async fn feed_cost(size: usize) -> Result<PageReadCost, TestError> {
     let page = observation
         .observe(read.feed_after(cursor, 5, false))
         .await?;
-    let cost = observation.cost();
+    let data_statements = observation.data_statement_counts();
+    let mut cost = observation.cost();
+    cost.statements = data_statements.total();
     let statement_kinds = observation.statement_kinds();
     let FeedRead::Entries { entries, .. } = page else {
         return Err("feed page".into());
@@ -255,6 +265,7 @@ async fn feed_cost(size: usize) -> Result<PageReadCost, TestError> {
     fixture.stop().await?;
     Ok(PageReadCost {
         cost,
+        data_statements,
         statement_kinds,
     })
 }

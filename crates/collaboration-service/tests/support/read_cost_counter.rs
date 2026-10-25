@@ -9,6 +9,8 @@ use tracing::instrument::WithSubscriber;
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 #[path = "sql_cost_classification.rs"]
 mod sql_cost_classification;
+#[allow(unused_imports)] // Only the two data-budget proofs use per-kind equality.
+pub use sql_cost_classification::DataStatementCounts;
 use sql_cost_classification::StatementTables;
 #[path = "alarm_read_costs.rs"]
 mod alarm_read_costs;
@@ -153,6 +155,20 @@ pub struct ReadCostObservation(Arc<Mutex<ReadCostState>>);
 impl ReadCostObservation {
     pub fn cost(&self) -> ReadCost {
         self.0.lock().unwrap().cost
+    }
+    pub fn data_statement_counts(&self) -> DataStatementCounts {
+        let mut data = DataStatementCounts::default();
+        let mut other = Vec::new();
+        for statement in self.statements() {
+            let Some(non_data) = data.count_sql(&statement) else {
+                panic!("read-cost SQL must parse before it can enter the data budget");
+            };
+            if non_data > 0 {
+                other.push((non_data, StatementTables::diagnostic_kind(&statement)));
+            }
+        }
+        eprintln!("informational non-data SQL: {other:?}");
+        data
     }
     pub fn project_statements(&self, project: &str) -> u64 {
         self.0

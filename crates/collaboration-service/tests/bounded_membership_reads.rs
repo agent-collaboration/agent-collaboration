@@ -5,13 +5,14 @@ pub mod board_fixture;
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
-use read_cost_counter::{ReadCost, ReadCostObservation};
+use read_cost_counter::{DataStatementCounts, ReadCost, ReadCostObservation};
 use serde_json::json;
 use std::sync::Arc;
 
 #[derive(Debug)]
 struct MembershipScopeCost {
     write_cost: ReadCost,
+    data_statements: DataStatementCounts,
     unrelated_write_statements: u64,
     written_project_statements: u64,
     unrelated_reader_probes: Vec<u64>,
@@ -79,7 +80,9 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
             Ok::<_, TestError>(())
         })
         .await?;
-    let write_cost = observation.cost();
+    let data_statements = observation.data_statement_counts();
+    let mut write_cost = observation.cost();
+    write_cost.statements = data_statements.total();
     let statement_kinds = observation.statement_kinds();
     let unrelated_write_statements = others
         .iter()
@@ -124,6 +127,7 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
     fixture.stop().await?;
     Ok(MembershipScopeCost {
         write_cost,
+        data_statements,
         unrelated_write_statements,
         written_project_statements,
         unrelated_reader_probes,
@@ -149,6 +153,7 @@ async fn writes_reconcile_only_their_project_and_reader_wide_reads_probe_once()
         small.write_cost, large.write_cost,
         "other projects changed the write cost"
     );
+    assert_eq!(small.data_statements, large.data_statements);
     assert_eq!(
         small.written_project_statements,
         large.written_project_statements
