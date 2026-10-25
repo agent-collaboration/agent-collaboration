@@ -257,8 +257,6 @@ impl OwnedServeProcess {
     pub(super) async fn stop(&mut self) -> io::Result<()> {
         let mut failure = None;
         if self.child.try_wait()?.is_none() {
-            #[cfg(all(test, target_os = "linux"))]
-            let mut diagnostic_send = tests::ServeSigintSendOutcome::PidUnavailable;
             if let Some(pid) = self
                 .child
                 .id()
@@ -266,16 +264,8 @@ impl OwnedServeProcess {
                 .and_then(rustix::process::Pid::from_raw)
             {
                 // Tailscale's foreground CLI handles SIGINT and closes its IPN watcher.
-                #[cfg(all(test, target_os = "linux"))]
-                {
-                    diagnostic_send = tests::ServeSigintSendOutcome::Sent;
-                }
                 if let Err(error) = rustix::process::kill_process(pid, rustix::process::Signal::INT)
                 {
-                    #[cfg(all(test, target_os = "linux"))]
-                    {
-                        diagnostic_send = tests::ServeSigintSendOutcome::Failed;
-                    }
                     failure = Some(io::Error::other(error));
                 }
             }
@@ -283,8 +273,6 @@ impl OwnedServeProcess {
                 .await
                 .is_err()
             {
-                #[cfg(all(test, target_os = "linux"))]
-                tests::report_linux_serve_shutdown_timeout(self.child.id(), diagnostic_send);
                 self.child.kill().await?;
                 failure.get_or_insert_with(|| {
                     io::Error::other("Tailscale Serve required forced termination")
