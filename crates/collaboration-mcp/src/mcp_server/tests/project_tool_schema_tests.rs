@@ -54,10 +54,6 @@ fn operation_cases() -> Vec<(&'static str, Value)> {
     let scope = json!({"kind":"project","projectId":PROJECT_ID});
     vec![
         (
-            "project_notification_cancel",
-            json!({"kind":"notificationCancel","cancelId":REQUEST_ID,"target":PROJECT_ID}),
-        ),
-        (
             "workstream_create",
             json!({"kind":"workstreamCreate","workstreamId":PROJECT_ID,"name":"work","goal":"goal"}),
         ),
@@ -218,12 +214,12 @@ async fn all_project_schemas_match_real_handler_classification() {
     use message_board::{ProjectRequest, ProjectTool};
 
     let cases = operation_cases();
-    assert_eq!(cases.len(), 44);
+    assert_eq!(cases.len(), 43);
     let kinds = cases
         .iter()
         .map(|(_, operation)| operation["kind"].as_str().unwrap())
         .collect::<BTreeSet<_>>();
-    assert_eq!(kinds.len(), 42);
+    assert_eq!(kinds.len(), 41);
     for (_, operation) in &cases {
         serde_json::from_value::<ProjectRequest>(request(operation.clone())).unwrap_or_else(
             |error| panic!("invalid {} parity fixture: {error}", operation["kind"]),
@@ -243,7 +239,7 @@ async fn all_project_schemas_match_real_handler_classification() {
         .unwrap()
         .as_array()
         .unwrap();
-    assert_eq!(ProjectTool::ALL.len(), 28);
+    assert_eq!(ProjectTool::ALL.len(), 27);
     let mut accepted = 0;
     let mut refused = 0;
     for tool in ProjectTool::ALL {
@@ -286,8 +282,8 @@ async fn all_project_schemas_match_real_handler_classification() {
             }
         }
     }
-    assert_eq!(accepted, 28);
-    assert_eq!(refused, 1204);
+    assert_eq!(accepted, 27);
+    assert_eq!(refused, 1134);
     println!(
         "schema_handler_pairs={} selector_accepted={accepted} selector_refused={refused}",
         accepted + refused
@@ -328,7 +324,7 @@ async fn real_tools_list_reports_input_and_output_bytes_separately() {
         }
         jsonschema::validator_for(&tool["inputSchema"]).expect("all local references resolve");
     }
-    assert_eq!(tools.len(), 167);
+    assert_eq!(tools.len(), 165);
     println!(
         "tools={} input_bytes={input_bytes} output_bytes={output_bytes} project_input_bytes={project_input_bytes} advisor_input_estimate=338678",
         tools.len()

@@ -29,8 +29,6 @@ mod board_inbox_events;
 mod board_inbox_reads;
 #[path = "board_non_post_refusals.rs"]
 mod board_non_post_refusals;
-#[path = "board_notification_cancel.rs"]
-mod board_notification_cancel;
 #[path = "board_paging.rs"]
 mod board_paging;
 #[path = "board_participant_pages.rs"]

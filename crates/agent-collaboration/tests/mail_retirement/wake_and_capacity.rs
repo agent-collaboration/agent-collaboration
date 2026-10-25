@@ -120,37 +120,3 @@ pub async fn wakes(fixture: &mut BoardFixture, sender_host: &mut SecondHost) -> 
     }
     Ok(())
 }
-
-pub async fn requested_control(
-    fixture: &mut BoardFixture,
-    sender_host: &mut SecondHost,
-) -> FixtureResult {
-    let service: String = fixture
-        .installation
-        .as_ref()
-        .ok_or("recipient absent")?
-        .service_id
-        .clone()
-        .into();
-    let endpoint: EndpointRef =
-        serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
-    run_scenario(start_peer(fixture, &endpoint).await?, async |peer: &mut PeerFixture| {
-        let sender=sender(sender_host)?;
-        let original=fixture::identity();
-        call(sender_host.host()?,"message_send",json!({"itemId":original,"target":peer.target,
-            "message":{"kind":"agent","sender":sender,"text":"requested control marker"},"delivery":"auto"})).await?;
-        peer.expect_marker("requested control marker").await?;
-        assert_eq!(readback::terminal(sender_host.host()?,&sender,&original).await?.get("kind"),Some(&json!("delivered")));
-        let cancel=fixture::identity();
-        let request=json!({"cancelId":cancel,"target":original,"sender":{"kind":"agent","sender":sender}});
-        sender_host.host()?.mcp("message_cancel",request.clone()).await?;
-        readback::await_compacted(fixture,&service,&cancel).await?;
-        let answered=sender_host.host()?.mcp("message_cancel",request.clone()).await?;
-        assert_eq!(answered.pointer("/outcome/kind"),Some(&json!("tooLate")),"{answered}");
-        sender_host.stop_host().await?;
-        sender_host.reopen_host().await?;
-        assert_eq!(sender_host.host()?.mcp("message_cancel",request).await?,answered);
-        assert_eq!(peer.count_matching_after_barrier("requested control marker").await?,1);
-        readback::require_compacted(fixture,&service,&cancel).await
-    }, PeerFixture::shutdown, || Ok(())).await
-}

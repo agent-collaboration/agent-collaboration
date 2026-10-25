@@ -48,7 +48,6 @@ pub enum MailRefusal {
     RecipientRevoked {},
     RecipientUnsupported {},
     DroppedByPolicy {},
-    CancelSenderMismatch { target: MailItemId },
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]

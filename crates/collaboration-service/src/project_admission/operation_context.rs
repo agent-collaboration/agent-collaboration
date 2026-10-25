@@ -230,9 +230,6 @@ impl<'request> OperationContext<'request> {
             }));
         }
         let plan = match &self.request.operation {
-            BoardOperation::NotificationCancel { .. } => Err(Refusal::InvalidShape {
-                field: "operation".into(),
-            }),
             BoardOperation::WorkstreamCreate { .. }
             | BoardOperation::WorkstreamRename { .. }
             | BoardOperation::WorkstreamClose { .. }

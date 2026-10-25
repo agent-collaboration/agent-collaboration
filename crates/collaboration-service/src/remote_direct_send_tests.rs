@@ -3,8 +3,6 @@ use super::*;
 use collaboration_protocol::{
     MessageContent, MessageDelivery, MessageSendResult, SessionMessageSendParams,
 };
-#[path = "requested_message_cancel_tests.rs"]
-mod requested_cancel;
 
 fn application(
     runtime: &Runtime,

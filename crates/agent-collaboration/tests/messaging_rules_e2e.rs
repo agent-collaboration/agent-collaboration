@@ -39,8 +39,6 @@ mod owned_host;
 )]
 mod records_reopen;
 
-#[path = "board_e2e/messaging_cancel.rs"]
-mod messaging_cancel;
 #[path = "board_e2e/messaging_capacity.rs"]
 mod messaging_capacity;
 #[path = "board_e2e/messaging_expiry.rs"]
@@ -89,9 +87,4 @@ async fn handoff_commit_before_outbox_write_recovers_the_same_item() -> FixtureR
 #[tokio::test]
 async fn lost_carrier_receipt_stays_uncertain() -> FixtureResult {
     mail_scenario(messaging_uncertainty::carrier_receipt_is_lost).await
-}
-
-#[tokio::test]
-async fn cancel_with_lost_custody_receipt_stays_pending_until_recipient_decides() -> FixtureResult {
-    mail_scenario(messaging_cancel::lost_custody_then_cancel).await
 }

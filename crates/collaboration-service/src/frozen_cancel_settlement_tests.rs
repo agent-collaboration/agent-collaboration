@@ -6,7 +6,7 @@ use fleet_sync_protocol::DeliveryEnvelope;
 
 #[tokio::test]
 async fn a_frozen_local_child_rederives_the_earlier_control_after_reopen_without_false_custody() {
-    // Arrange a requested cancel before its original: the canonical control is pending.
+    // Arrange a automatic cancel before its original: the canonical control is pending.
     let runtime = Runtime::new().await;
     let draft = runtime.fixture.draft();
     let first = ItemId::new(uuid::Uuid::now_v7()).unwrap();
@@ -26,7 +26,7 @@ async fn a_frozen_local_child_rederives_the_earlier_control_after_reopen_without
     let canonical = local_reference(
         mail.cancel_local(
             cancel_for(&runtime, &draft, first),
-            requester("earlier request"),
+            CancelCause::BoardDerived {},
         )
         .await
         .unwrap(),
@@ -43,7 +43,7 @@ async fn a_frozen_local_child_rederives_the_earlier_control_after_reopen_without
 
     // Act: the original arrives after the real owner reopen, then replay the frozen child.
     let answer = mail
-        .send_local(draft, "target of the earlier requested cancel".into())
+        .send_local(draft, "target of the earlier automatic cancel".into())
         .await
         .unwrap();
     let prevented = mail
@@ -87,7 +87,7 @@ async fn a_frozen_local_child_rederives_the_earlier_control_after_reopen_without
         retained.outcome,
         Some(RecipientOutcome::Prevented { cancel: first })
     );
-    assert_eq!(retained.attribution, requester("earlier request"));
+    assert_eq!(retained.attribution, CancelCause::BoardDerived {});
     assert!(local_proposed.is_none() && epoch.is_none() && still_absent);
     assert_eq!(calls, 0);
     assert_eq!(

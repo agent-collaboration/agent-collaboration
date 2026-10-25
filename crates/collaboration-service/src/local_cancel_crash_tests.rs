@@ -87,7 +87,7 @@ async fn crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen
             .await
             .unwrap()
             .is_none(),
-        "uncommitted requester association survived the crash"
+        "uncommitted board attribution survived the crash"
     );
     // Use the public SDK with the same ID and changed target. A committed earlier
     // custody row would refuse ItemConflict instead of accepting this fresh control.
@@ -158,7 +158,7 @@ async fn local_cancel_crash_child_entry() {
     let result = mail
         .cancel_local(
             cancel_for(&runtime, &draft, item),
-            requester("uncommitted requester"),
+            CancelCause::BoardDerived {},
         )
         .await;
     // The parent must kill this process; ordinary error/return is not crash proof.

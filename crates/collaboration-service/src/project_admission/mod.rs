@@ -156,11 +156,6 @@ impl ProjectAdmission {
         request: &ProjectRequest,
         origin: ActorOrigin,
     ) -> Result<WriteReply, ProjectAdmissionError> {
-        if matches!(request.operation, BoardOperation::NotificationCancel { .. }) {
-            return Err(ProjectAdmissionError::InvalidRecord(
-                "requested notification cancel requires its read-only admission".into(),
-            ));
-        }
         let result = self.decide(request, origin).await?;
         let reader = self.reader_after_result(request, &result).await?;
         Ok(WriteReply { result, reader })

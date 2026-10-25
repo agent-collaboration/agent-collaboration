@@ -21,7 +21,7 @@ async fn local_cancel_journals_the_report_for_an_actual_relayed_inbox_original()
     let cancel = ItemId::new(uuid::Uuid::now_v7()).unwrap();
     mail.cancel_local(
         cancel_for(&runtime, &draft, cancel),
-        requester("remote report producer"),
+        CancelCause::BoardDerived {},
     )
     .await
     .unwrap();

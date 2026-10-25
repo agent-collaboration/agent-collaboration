@@ -151,6 +151,8 @@ async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable
 #[tokio::test]
 async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retried()
 -> Result<(), TestError> {
+    // This executable otherwise has no process-wide tracing dispatcher.
+    tracing::subscriber::set_global_default(tracing_subscriber::registry())?;
     timeout(BOUND, async {
         let fixture = BoardFixture::start().await?;
         let (project, _) = fixture.project().await?;

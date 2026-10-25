@@ -123,7 +123,7 @@ and authentication before any input. This is the [documented native alias bindin
 | Distinct handoffs | Public frozen intent IDs, distinct local/remote recipients, stable IDs on replay and correlated arrival; stopped-owner handoff-body readback/reopen unqualified |
 | Receipt retention | Pause the actual recipient, freeze original, stop/reopen sender and compare closed-store bytes, replay identical envelope while unsettled, resume and observe arrival; terminal normal retirement and original replay preserve public sender status and cause no second injection in a bounded quiet window. Compact row/reopen/conflict proof remains separate Tokio evidence |
 | Offline retry | Pause recipient Session, same-item retries, reconnect, actual output, then no repeated input/output in a bounded quiet window; receipt-retention covers unsettled sender reopen. Provider restart and long-term dedup remain unqualified |
-| Cancellation | Post-injection direct-mail cancel settles `tooLate{delivered}`; a pending result after the driver's 30s window means settlement was unobserved, not a violation of a contractual deadline. Prevention and board membership/generation/copy controls remain unqualified |
+| Automatic board cancellation | Board membership/generation/copy controls remain unqualified across machines; local native and real-Host cases provide their separately declared coverage |
 | Wakes | Actual timer arrival, original-operation slot replay, unrelated actual-controller refusal, creator replacement; target replacement and lifetime/timing matrix unqualified |
 
 The central conformance selector is **pre-apply Copy dispatch hold, which

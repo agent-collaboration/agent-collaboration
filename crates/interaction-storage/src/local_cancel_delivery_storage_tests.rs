@@ -20,9 +20,7 @@ async fn private_sdk_failure_roundtrips_without_changing_first_attribution_or_cl
     let store = NativeStore::new(owner.clone(), Arc::new(NoDispatchHost));
     let item = MailItemId::generate();
     let target = MailItemId::generate();
-    let original = CancelCause::ByRequester {
-        by: serde_json::from_value(json!({"kind":"human","humanId":"cancel-requester"})).unwrap(),
-    };
+    let original = CancelCause::BoardDerived {};
     let failure = RecipientOutcome::<CarrierAcceptance>::Refused {
         reason: DeliveryRefusal::ProcessingFailed {
             kind: DeliveryFailureKind::CustodyCorrupt,
@@ -32,7 +30,7 @@ async fn private_sdk_failure_roundtrips_without_changing_first_attribution_or_cl
     let target_id = target.clone();
     let expected_attribution = original.clone();
     let expected_outcome = failure.clone();
-    // Act: duplicate preparation must keep the first requester and first clock.
+    // Act: duplicate preparation must keep the initial attribution and clock.
     store
         .transaction(move |scope| {
             Box::pin(async move {
@@ -91,7 +89,7 @@ async fn invalid_private_cancel_rows_refuse_on_cold_read() {
     let invalid = [
         ("target_item", "not-a-uuid".to_owned()),
         ("attribution_json", "{\"kind\":\"futureCause\"}".to_owned()),
-        ("attribution_json", "{\"kind\":\"bySender\",\"unknown\":true}".to_owned()),
+        ("attribution_json", "{\"kind\":\"boardDerived\",\"unknown\":true}".to_owned()),
         ("outcome_json", "{".to_owned()),
         ("outcome_json", "{\"kind\":\"futureOutcome\"}".to_owned()),
         ("outcome_json", "{\"kind\":\"refused\",\"value\":{\"reason\":{\"kind\":\"processingFailed\",\"value\":{\"kind\":\"futureFailure\"}}}}".to_owned()),
@@ -104,9 +102,13 @@ async fn invalid_private_cancel_rows_refuse_on_cold_read() {
         let path = directory.path().join("interaction.sqlite");
         let owner = InteractionStore::open(&path).await.unwrap();
         let target = MailItemId::generate();
-        sqlx::query("INSERT INTO local_cancel_deliveries VALUES (?,?,'{\"kind\":\"bySender\"}',NULL,'2026-10-20T12:00:00.000000000Z')")
+        sqlx::query("INSERT INTO local_cancel_deliveries VALUES (?,?,'{\"kind\":\"boardDerived\"}',NULL,'2026-10-20T12:00:00.000000000Z')")
             .bind(item.as_str()).bind(target.as_str())
             .execute(&mut *owner.writer.lock().await).await.unwrap();
+        assert!(
+            owner.local_cancel_delivery(&item).await.unwrap().is_some(),
+            "corruption fixture must start with a valid row"
+        );
         let corrupt_row = match column {
             "target_item" => "UPDATE local_cancel_deliveries SET target_item=? WHERE item_id=?",
             "attribution_json" => {

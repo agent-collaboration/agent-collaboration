@@ -138,22 +138,6 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
         let (_,direct)=tokio::time::timeout(BOUND,peer_received.recv()).await.map_err(|_|"connected recipient did not receive a new direct message after its initial fetch")?.ok_or("peer stopped")?;
         assert!(direct.ok_or("missing direct message")?.contains("mail after initial fetch"));
         sender.send_message(message.clone()).await?;
-        eprintln!("REMOTE_WAKE_STAGE connected-control");
-        let cancellation=collaboration_protocol::MessageCancelRequest{
-            cancel_id:Some(collaboration_protocol::MailItemId::generate()),
-            target:message.item_id.ok_or("missing direct item identity")?,
-            sender:collaboration_protocol::MessageCancelSender::HumanUser,
-        };
-        let cancelled=tokio::time::timeout(BOUND,async{
-            loop {
-                let outcome=sender.message_cancel(cancellation.clone()).await?;
-                if !matches!(outcome.outcome,collaboration_protocol::RequestedCancelOutcome::Pending){
-                    return Ok::<_,collaboration_client::ClientError>(outcome);
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        }).await??;
-        assert!(matches!(cancelled.outcome,collaboration_protocol::RequestedCancelOutcome::TooLate{..}));
         eprintln!("REMOTE_WAKE_STAGE connected-notification");
         let project=registered_route_project::route_project_requests();
         registered_route_project::assert_board_accepted(&registered_route_project::settled_creation(||sender.workspace_create(project.workspace.clone())).await);

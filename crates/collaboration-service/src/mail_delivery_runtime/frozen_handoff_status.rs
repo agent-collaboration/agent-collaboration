@@ -110,7 +110,7 @@ impl MailDeliveryRuntime {
             return Ok(false);
         };
         if canonical.item != control.id() {
-            // Decision 949: an earlier requested control is not this group's custody.
+            // An earlier automatic group's canonical control remains its own custody.
             return Ok(true);
         }
         self.retire_remote_reference(control.recipient().peer, &canonical)

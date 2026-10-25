@@ -46,7 +46,6 @@ mod remote_wakes;
 pub(crate) use remote_wakes::LocalWakeOwner;
 mod remote_calls;
 mod remote_status;
-mod requested_cancellation;
 mod terminal_retirement;
 pub(crate) use installation_directory::InstallationPeerResolutionError;
 pub use local_cancellation::LocalCancelReference;

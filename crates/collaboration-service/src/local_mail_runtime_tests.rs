@@ -21,11 +21,6 @@ mod report_admission;
 fn mail_id(item: ItemId) -> MailItemId {
     item.as_uuid().to_string().try_into().unwrap()
 }
-fn requester(name: &str) -> CancelCause {
-    CancelCause::ByRequester {
-        by: serde_json::from_value(serde_json::json!({"kind":"human","humanId":name})).unwrap(),
-    }
-}
 fn cancel_for(
     runtime: &Runtime,
     draft: &PushRecordDraft,
@@ -61,9 +56,12 @@ async fn local_intake_prepares_attribution_before_the_original_is_prevented_with
     let cancel = ItemId::new(uuid::Uuid::now_v7()).unwrap();
     assert_eq!(
         local_reference(
-            mail.cancel_local(cancel_for(&runtime, &draft, cancel), requester("first"))
-                .await
-                .unwrap()
+            mail.cancel_local(
+                cancel_for(&runtime, &draft, cancel),
+                CancelCause::BoardDerived {}
+            )
+            .await
+            .unwrap()
         )
         .item,
         cancel
@@ -75,7 +73,7 @@ async fn local_intake_prepares_attribution_before_the_original_is_prevented_with
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(pending.attribution, requester("first"));
+    assert_eq!(pending.attribution, CancelCause::BoardDerived {});
     assert!(pending.outcome.is_none());
     let result = mail
         .send_local(draft, "frozen cancelled target".into())
@@ -107,16 +105,19 @@ async fn local_intake_prepares_attribution_before_the_original_is_prevented_with
 }
 
 #[tokio::test]
-async fn canonical_cancel_keeps_the_first_requester_and_removes_only_the_new_tentative_row() {
+async fn canonical_cancel_keeps_the_first_attribution_and_removes_only_the_new_tentative_row() {
     let runtime = Runtime::new().await;
     let mail = runtime.local_mail_runtime();
     let draft = runtime.fixture.draft();
     let first = ItemId::new(uuid::Uuid::now_v7()).unwrap();
     let second = ItemId::new(uuid::Uuid::now_v7()).unwrap();
     let reference = local_reference(
-        mail.cancel_local(cancel_for(&runtime, &draft, first), requester("first"))
-            .await
-            .unwrap(),
+        mail.cancel_local(
+            cancel_for(&runtime, &draft, first),
+            CancelCause::BoardDerived {},
+        )
+        .await
+        .unwrap(),
     );
     let before = runtime
         .fixture
@@ -128,9 +129,12 @@ async fn canonical_cancel_keeps_the_first_requester_and_removes_only_the_new_ten
     runtime.set_time(60_000);
     for proposed in [first, second] {
         let repeated = local_reference(
-            mail.cancel_local(cancel_for(&runtime, &draft, proposed), requester("later"))
-                .await
-                .unwrap(),
+            mail.cancel_local(
+                cancel_for(&runtime, &draft, proposed),
+                CancelCause::BoardDerived {},
+            )
+            .await
+            .unwrap(),
         );
         assert_eq!(repeated, reference);
     }
@@ -139,7 +143,7 @@ async fn canonical_cancel_keeps_the_first_requester_and_removes_only_the_new_ten
     assert!(matches!(
         mail.cancel_local(
             cancel_for(&runtime, &other, first),
-            requester("conflicting")
+            CancelCause::BoardDerived {}
         )
         .await,
         Err(DeliveryTransactionFailure::Refused(
@@ -164,7 +168,7 @@ async fn canonical_cancel_keeps_the_first_requester_and_removes_only_the_new_ten
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(after.attribution, requester("first"));
+    assert_eq!(after.attribution, CancelCause::BoardDerived {});
     assert_eq!(after.recorded_at, before.recorded_at);
     assert_eq!(after.target_item, before.target_item);
     assert!(after.outcome.is_none());
@@ -188,7 +192,7 @@ async fn remote_canonical_cancel_returns_unknown_local_attribution_without_inven
     let result = mail
         .cancel_local(
             cancel_for(&runtime, &draft, proposed),
-            requester("must not be reconstructed"),
+            CancelCause::BoardDerived {},
         )
         .await
         .unwrap();
@@ -258,7 +262,7 @@ async fn late_local_intake_records_the_control_outcome_and_only_marks_the_delive
         let cancel = ItemId::new(uuid::Uuid::now_v7()).unwrap();
         mail.cancel_local(
             cancel_for(&runtime, &draft, cancel),
-            requester("late requester"),
+            CancelCause::BoardDerived {},
         )
         .await
         .unwrap();
@@ -276,7 +280,7 @@ async fn late_local_intake_records_the_control_outcome_and_only_marks_the_delive
             stored.outcome,
             Some(RecipientOutcome::TooLate { cancel, at: late })
         );
-        assert_eq!(stored.attribution, requester("late requester"));
+        assert_eq!(stored.attribution, CancelCause::BoardDerived {});
         let after = runtime
             .fixture
             .owner
@@ -329,7 +333,7 @@ async fn failed_control_projection_rolls_back_the_local_record_and_sdk_admission
     let error = mail
         .cancel_local(
             cancel_for(&runtime, &draft, cancel),
-            requester("rollback requester"),
+            CancelCause::BoardDerived {},
         )
         .await
         .unwrap_err();
@@ -369,7 +373,7 @@ async fn failed_control_projection_rolls_back_the_local_record_and_sdk_admission
         local_reference(
             mail.cancel_local(
                 cancel_for(&runtime, &draft, cancel),
-                requester("successful retry")
+                CancelCause::BoardDerived {}
             )
             .await
             .unwrap()
@@ -386,72 +390,10 @@ async fn failed_control_projection_rolls_back_the_local_record_and_sdk_admission
             .unwrap()
             .unwrap()
             .attribution,
-        requester("successful retry")
+        CancelCause::BoardDerived {}
     );
     assert_eq!(runtime.client.calls(original), 1);
     drop(mail);
-    runtime.close().await;
-}
-
-#[tokio::test]
-async fn sender_mismatch_refuses_only_the_local_control_and_delivers_the_original_once() {
-    let runtime = Runtime::new().await;
-    let mail = runtime.local_mail_runtime();
-    let draft = runtime.fixture.draft();
-    let original = runtime.fixture.item(&draft);
-    let id = original.id();
-    let cancel = ItemId::new(uuid::Uuid::now_v7()).unwrap();
-    let mismatched = DeliveryCancel::<RouterDeliveryTypes>::new(
-        cancel,
-        collaboration_mail_protocol::MailSender::HumanUser {
-            installation: "00000000-0000-4000-8000-000000000002"
-                .to_owned()
-                .try_into()
-                .unwrap(),
-        },
-        original.recipient().clone(),
-        None,
-        CancelBody { target: id },
-    )
-    .unwrap();
-    mail.cancel_local(mismatched, CancelCause::BySender {})
-        .await
-        .unwrap();
-    runtime.client.script(id, vec![accepted()]);
-    let sent = mail
-        .send_local(draft.clone(), "sender mismatch target".into())
-        .await
-        .unwrap();
-    assert_eq!(sent.delivery_state, PushDeliveryState::Delivered);
-    assert_eq!(sent.receipt.outcome, DeliveryOutcome::Started);
-    assert_eq!(runtime.client.calls(id), 1);
-    drop(mail);
-    let runtime = runtime.reopen().await;
-    let row = runtime
-        .fixture
-        .owner
-        .local_cancel_delivery(&mail_id(cancel))
-        .await
-        .unwrap()
-        .unwrap();
-    assert_eq!(
-        row.outcome,
-        Some(RecipientOutcome::Refused {
-            reason: DeliveryRefusal::CancelSenderMismatch
-        })
-    );
-    assert!(
-        runtime
-            .fixture
-            .owner
-            .get_push_record(&draft.push_id)
-            .await
-            .unwrap()
-            .unwrap()
-            .cancelled_after_delivery
-            .is_none()
-    );
-    assert_eq!(runtime.client.calls(id), 1);
     runtime.close().await;
 }
 
@@ -464,7 +406,7 @@ async fn failed_prevented_projection_rolls_back_the_original_but_keeps_the_pendi
     let cancel = ItemId::new(uuid::Uuid::now_v7()).unwrap();
     mail.cancel_local(
         cancel_for(&runtime, &draft, cancel),
-        requester("pending requester"),
+        CancelCause::BoardDerived {},
     )
     .await
     .unwrap();

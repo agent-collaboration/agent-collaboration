@@ -12,18 +12,10 @@ mod fixture;
 #[allow(dead_code)]
 #[path = "board_e2e/fixture_inputs.rs"]
 mod fixture_inputs;
-#[path = "mail_reconcile/local_cancel.rs"]
-mod local_cancel;
 #[allow(dead_code)]
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
 use codex_router_test_support::FixtureResult;
-
-#[tokio::test]
-async fn local_cancellation_reports_remote_original_prevention_and_replay_never_injects()
--> FixtureResult {
-    central_pair::scenario(local_cancel::remote_original).await
-}
 
 #[tokio::test]
 async fn connected_timer_repairs_lost_live_status_without_reconnect_or_another_send()

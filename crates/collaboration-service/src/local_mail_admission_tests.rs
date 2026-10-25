@@ -280,7 +280,7 @@ async fn a_full_real_inbox_refuses_new_projections_but_reserves_space_to_cancel_
         local_reference(
             mail.cancel_local(
                 cancel_for(&runtime, &first, cancel),
-                requester("reserved cancellation")
+                CancelCause::BoardDerived {}
             )
             .await
             .unwrap()

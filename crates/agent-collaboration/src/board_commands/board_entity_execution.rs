@@ -13,9 +13,6 @@ pub(super) async fn dispatch(
 ) -> Result<Value, BoardClientError> {
     match command {
         PreparedEntityCommand::ProjectWrite(kind, request) => match kind {
-            ProjectWriteKind::ProjectNotificationCancel => {
-                serialized(client.project_notification_cancel(*request).await?)
-            }
             ProjectWriteKind::WorkstreamCreate => {
                 serialized(client.workstream_create(*request).await?)
             }

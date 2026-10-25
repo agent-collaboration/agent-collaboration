@@ -241,53 +241,8 @@ fn sender_installation_and_content_kind_are_bound_without_fabricating_sessions()
 }
 
 #[test]
-fn cancel_causes_and_sender_mismatch_refusal_round_trip_as_closed_variants() {
-    let original = item();
-    let target = original.id().clone();
-    let refusal = MailRefusal::CancelSenderMismatch {
-        target: target.clone(),
-    };
-    let expected = json!({"kind":"cancelSenderMismatch","target":target});
-    assert_eq!(serde_json::to_value(&refusal).unwrap(), expected);
-    assert_eq!(
-        serde_json::from_value::<MailRefusal>(expected).unwrap(),
-        refusal
-    );
-    let requester: message_board::Identity =
-        serde_json::from_value(json!({"kind":"human","humanId":"declared-owner"})).unwrap();
-    for cause in [
-        CancelCause::BySender {},
-        CancelCause::ByRequester { by: requester },
-        CancelCause::BoardDerived {},
-    ] {
-        let wire = serde_json::to_value(&cause).unwrap();
-        assert_eq!(serde_json::from_value::<CancelCause>(wire).unwrap(), cause);
-        let mut extra = serde_json::to_value(&cause).unwrap();
-        extra["extra"] = json!(true);
-        assert!(serde_json::from_value::<CancelCause>(extra).is_err());
-    }
-    let mut cancel = content(fixture());
-    cancel.body = MailBody::Cancel(CancelBody {
-        target: CancelTarget::Item(target),
-        cause: CancelCause::BySender {},
-    });
-    let cancel = MailItem::new(cancel).unwrap();
-    assert_eq!(cancel.kind(), MailKind::Cancel);
-    assert_eq!(
-        serde_json::from_value::<MailItem>(serde_json::to_value(&cancel).unwrap()).unwrap(),
-        cancel
-    );
-    assert!(
-        serde_json::from_value::<MailRefusal>(
-            json!({"kind":"cancelSenderMismatch","target":original.id(),"extra":true})
-        )
-        .is_err()
-    );
-    assert!(serde_json::from_value::<CancelCause>(json!({"kind":"requested","by":{}})).is_err());
-}
-
-#[test]
 fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
+    let target = item().id().clone();
     let cursor = |epoch, position| {
         serde_json::from_value::<message_board::FeedCursor>(
             json!({"epoch":epoch,"position":position}),
@@ -368,7 +323,6 @@ fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
             .unwrap(),
         source
     );
-    let target = item().id().clone();
     for status in [
         MailStatus::Queued {},
         MailStatus::Sent {
@@ -383,9 +337,7 @@ fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
         MailStatus::Expired {},
         MailStatus::Cancelled {},
         MailStatus::Refused {
-            reason: MailRefusal::CancelSenderMismatch {
-                target: target.clone(),
-            },
+            reason: MailRefusal::RecipientRevoked {},
         },
     ] {
         assert_eq!(
@@ -407,7 +359,7 @@ fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
             cancel: target.clone(),
         },
         RecipientOutcome::TooLate {
-            cancel: target.clone(),
+            cancel: target,
             at: TooLateAt::Uncertain,
         },
         RecipientOutcome::Dropped {},
@@ -435,7 +387,6 @@ fn ranges_statuses_and_reports_keep_their_validated_distinct_shapes() {
         MailRefusal::RecipientRevoked {},
         MailRefusal::RecipientUnsupported {},
         MailRefusal::DroppedByPolicy {},
-        MailRefusal::CancelSenderMismatch { target },
     ] {
         let wire = serde_json::to_value(&refusal).unwrap();
         assert_eq!(
@@ -517,5 +468,33 @@ fn message_body_requires_a_valid_nullable_reply_reference() {
             .as_array()
             .unwrap()
             .contains(&json!("replyTo"))
+    );
+}
+
+#[test]
+fn automatic_cancel_cause_and_project_sender_round_trip_as_closed_shapes() {
+    let cause = CancelCause::BoardDerived {};
+    let wire = json!({"kind":"boardDerived"});
+    assert_eq!(serde_json::to_value(&cause).unwrap(), wire);
+    assert_eq!(serde_json::from_value::<CancelCause>(wire).unwrap(), cause);
+    assert!(
+        serde_json::from_value::<CancelCause>(json!({"kind":"boardDerived","extra":true})).is_err()
+    );
+    let mut cancel = content(fixture());
+    cancel.sender = MailSender::Project {
+        project: "01900000-0000-7000-8000-000000000001"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+    };
+    cancel.body = MailBody::Cancel(CancelBody {
+        target: CancelTarget::Item(item().id().clone()),
+        cause,
+    });
+    let cancel = MailItem::new(cancel).unwrap();
+    assert_eq!(cancel.kind(), MailKind::Cancel);
+    assert_eq!(
+        serde_json::from_value::<MailItem>(serde_json::to_value(&cancel).unwrap()).unwrap(),
+        cancel
     );
 }

@@ -4,8 +4,8 @@ use crate::{
     MessageText,
 };
 use message_board::{
-    FeedCursor, Identity, MAX_SUBSCRIPTION_NOTICE_ROOTS, NotifyIntentId, ProjectId, RecordRef,
-    SessionRef, SubscriptionGeneration, ThreadId,
+    FeedCursor, MAX_SUBSCRIPTION_NOTICE_ROOTS, NotifyIntentId, ProjectId, RecordRef, SessionRef,
+    SubscriptionGeneration, ThreadId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -70,27 +70,9 @@ impl MailBody {
             Self::Message(body) => body.validate_sender(sender),
             Self::Notification(body) => body.validate_sender(sender),
             Self::Wake(body) => body.validate_sender(sender),
-            Self::Cancel(body) => {
-                let valid = matches!(
-                    (sender, body),
-                    (
-                        MailSender::Session(_) | MailSender::HumanUser { .. },
-                        CancelBody {
-                            target: CancelTarget::Item(_),
-                            cause: CancelCause::BySender {},
-                        },
-                    ) | (
-                        MailSender::Project { .. },
-                        CancelBody {
-                            cause: CancelCause::ByRequester { .. } | CancelCause::BoardDerived {},
-                            ..
-                        },
-                    )
-                );
-                valid
-                    .then_some(())
-                    .ok_or(MailValidationError { field: "sender" })
-            }
+            Self::Cancel(_) => matches!(sender, MailSender::Project { .. })
+                .then_some(())
+                .ok_or(MailValidationError { field: "sender" }),
         }
     }
 }
@@ -300,10 +282,5 @@ pub enum CancelTarget {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum CancelCause {
-    BySender {},
-    #[serde(rename_all = "camelCase")]
-    ByRequester {
-        by: Identity,
-    },
     BoardDerived {},
 }

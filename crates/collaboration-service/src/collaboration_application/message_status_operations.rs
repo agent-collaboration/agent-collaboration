@@ -398,9 +398,8 @@ fn public_status(
                 DeliveryRefusal::RecipientUnknown => RemoteDeliveryRefusal::RecipientUnknown,
                 DeliveryRefusal::RecipientRevoked => RemoteDeliveryRefusal::RecipientRevoked,
                 DeliveryRefusal::DroppedByPolicy => RemoteDeliveryRefusal::DroppedByPolicy,
-                DeliveryRefusal::CancelSenderMismatch => {
-                    RemoteDeliveryRefusal::CancelSenderMismatch
-                }
+                // Retired caller-control refusals have no public status shape.
+                _ => return Err(()),
             },
         },
     })
