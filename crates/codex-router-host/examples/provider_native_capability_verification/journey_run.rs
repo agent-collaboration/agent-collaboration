@@ -276,7 +276,7 @@ impl Journey {
         let arguments = [
             "--no-alt-screen".to_owned(),
             "--remote".to_owned(),
-            format!("unix://{}", plan.endpoint_socket().display()),
+            format!("unix://{}", plan.endpoint_socket.display()),
             "--cd".to_owned(),
             self.target.fixture.workspace.display().to_string(),
             "-c".to_owned(),

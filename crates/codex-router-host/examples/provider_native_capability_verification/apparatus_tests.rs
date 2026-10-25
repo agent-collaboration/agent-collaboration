@@ -52,6 +52,7 @@ fn plan() -> NativeCapabilitiesPlan {
         "sourceHead": "0".repeat(40),
         "binaries": {"codexRouter": binary, "agentCollaboration": binary, "agentSessions": binary},
         "routerRoot": "/router-root",
+        "endpointSocket": "/router-root/agent-communication/router-sessions/claude-local.sock",
         "binaryQualification": "/build/record.json",
         "routerPort": 18080,
         "expectedVersion": "0.0.0",

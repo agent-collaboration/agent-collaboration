@@ -117,6 +117,11 @@ pub(crate) struct NativeCapabilitiesPlan {
     pub(crate) source_head: String,
     pub(crate) binaries: CandidateBinaries,
     pub(crate) router_root: PathBuf,
+    /// The endpoint socket the installed client and consumer requests actually use:
+    /// the declared transport, distinct from the canonical root's storage identity.
+    /// A short alias of the same socket fits the Unix socket path limit (SUN_LEN) when
+    /// the canonical spelling does not.
+    pub(crate) endpoint_socket: PathBuf,
     pub(crate) router_port: u16,
     pub(crate) expected_version: String,
     pub(crate) router_process: RecordedProcess,
@@ -158,10 +163,13 @@ impl NativeCapabilitiesPlan {
         self.router_root.join("agent-communication")
     }
 
-    pub(crate) fn endpoint_socket(&self) -> PathBuf {
-        self.service_directory()
-            .join("router-sessions")
-            .join(format!("{}.sock", self.endpoint_id.as_str()))
+    /// Where the Host keeps endpoint sockets, under the canonical Router root.
+    pub(crate) fn router_sessions_directory(&self) -> PathBuf {
+        self.service_directory().join("router-sessions")
+    }
+
+    pub(crate) fn endpoint_socket_name(&self) -> String {
+        format!("{}.sock", self.endpoint_id.as_str())
     }
 }
 

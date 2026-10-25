@@ -17,7 +17,7 @@ use std::{
     collections::BTreeMap,
     ffi::OsStr,
     fs,
-    os::unix::fs::MetadataExt,
+    os::unix::fs::{FileTypeExt, MetadataExt},
     path::{Path, PathBuf},
     process::Command,
 };
@@ -110,6 +110,48 @@ pub(crate) fn require_private_router_root(
     }
     if metadata.mode() & 0o077 != 0 {
         return Err("Router root is readable or writable by other users".to_owned());
+    }
+    Ok(())
+}
+
+/// The declared endpoint socket is the Host's actual socket for this endpoint: an
+/// absolute path whose final component is itself a Unix socket (not a regular file or
+/// a symlink to one) named `<endpointId>.sock`, in a directory that canonically is
+/// `<routerRoot>/agent-communication/router-sessions`, owned by this verifier's real
+/// user and private to it. A short alias spelling of that directory qualifies; another
+/// directory, endpoint or owner does not.
+pub(crate) fn require_endpoint_socket(
+    plan: &NativeCapabilitiesPlan,
+    owner: u32,
+) -> Result<(), String> {
+    let socket = &plan.endpoint_socket;
+    if !socket.is_absolute() {
+        return Err("endpoint socket is not an absolute path".to_owned());
+    }
+    if socket.file_name().and_then(OsStr::to_str) != Some(plan.endpoint_socket_name().as_str()) {
+        return Err(format!(
+            "endpoint socket is not named {}",
+            plan.endpoint_socket_name()
+        ));
+    }
+    let metadata = fs::symlink_metadata(socket)
+        .map_err(|error| format!("endpoint socket unreadable: {error}"))?;
+    if !metadata.file_type().is_socket() {
+        return Err("endpoint socket path is not a Unix socket".to_owned());
+    }
+    let parent = socket.parent().ok_or("endpoint socket has no directory")?;
+    let actual = fs::canonicalize(parent)
+        .map_err(|error| format!("endpoint socket directory unreadable: {error}"))?;
+    let expected = fs::canonicalize(plan.router_sessions_directory())
+        .map_err(|error| format!("Router sessions directory unreadable: {error}"))?;
+    if actual != expected {
+        return Err("endpoint socket is outside the Router root's sessions directory".to_owned());
+    }
+    if metadata.uid() != owner {
+        return Err("endpoint socket is not owned by this verifier's real user".to_owned());
+    }
+    if metadata.mode() & 0o077 != 0 {
+        return Err("endpoint socket is accessible to other users".to_owned());
     }
     Ok(())
 }
@@ -265,6 +307,7 @@ pub(crate) fn qualify_target(
 ) -> Result<QualifiedTarget, String> {
     let owner = own_real_uid()?;
     require_private_router_root(&plan.router_root, home, owner)?;
+    require_endpoint_socket(&plan, owner)?;
     let head = git_output(&plan.repository, &["rev-parse", "HEAD"])?;
     if head != plan.source_head
         || !git_output(&plan.repository, &["status", "--porcelain"])?.is_empty()
@@ -343,6 +386,7 @@ pub(crate) fn qualify_target(
         "sourceHead": head,
         "binaries": plan.binaries,
         "routerVersion": version,
+        "endpointSocket": plan.endpoint_socket,
         "serviceId": publication.service_id,
         "routerProcess": plan.router_process,
         "hostProcess": plan.host_process,

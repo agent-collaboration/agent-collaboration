@@ -13,8 +13,8 @@ use crate::process_identity::{
     parse_process_table,
 };
 use crate::target_qualification::{
-    adapter_install_root, process_running_from, require_native_binding, require_normal_build,
-    require_private_router_root,
+    adapter_install_root, process_running_from, require_endpoint_socket, require_native_binding,
+    require_normal_build, require_private_router_root,
 };
 use crate::verification_models::{BuildRecord, NativeCapabilitiesPlan, QualifiedBinary};
 use serde_json::json;
@@ -22,7 +22,10 @@ use std::{
     collections::BTreeMap,
     ffi::OsStr,
     fs,
-    os::unix::fs::{PermissionsExt, symlink},
+    os::unix::{
+        fs::{PermissionsExt, symlink},
+        net::UnixListener,
+    },
     path::{Path, PathBuf},
     process::{Command, Stdio},
     thread,
@@ -175,6 +178,7 @@ fn claude_plan(native: &Path, search_path: Option<String>) -> NativeCapabilities
         json!({"pid": 1, "realUid": 501, "group": 1, "birth": "b", "executable": "/candidate/bin"});
     serde_json::from_value(json!({
         "repository": "/repo", "sourceHead": "0", "routerRoot": "/router", "routerPort": 1,
+        "endpointSocket": "/router/agent-communication/router-sessions/claude-local.sock",
         "binaries": {"codexRouter": any, "agentCollaboration": any, "agentSessions": any},
         "binaryQualification": "/build/record.json", "expectedVersion": "0", "routerProcess": process,
         "hostProcess": process, "codexCli": any, "nativeExecutable": {"path": native, "sha256": "00"},
@@ -336,4 +340,121 @@ fn acp_adapter_binding_is_the_install_the_host_actually_runs() {
         None
     );
     assert!(parse_process_arguments("node without pid\n").is_err());
+}
+
+/// A private Router root under `/tmp` with its sessions directory. Sockets are bound
+/// through the short `/tmp` alias; the canonical root is `/private/tmp/...` on macOS.
+struct SocketSetup {
+    _directory: TempDir,
+    alias_root: PathBuf,
+    canonical_root: PathBuf,
+}
+
+impl SocketSetup {
+    fn new() -> Self {
+        let directory = TempDir::new_in("/tmp").unwrap();
+        let alias_root = directory.path().join("r");
+        private_directory(&alias_root.join("agent-communication/router-sessions"));
+        let canonical_root = fs::canonicalize(&alias_root).unwrap();
+        Self {
+            _directory: directory,
+            alias_root,
+            canonical_root,
+        }
+    }
+
+    fn sessions(&self) -> PathBuf {
+        self.alias_root.join("agent-communication/router-sessions")
+    }
+
+    /// A real listening socket at `path`, private unless `mode` says otherwise.
+    fn bind(&self, path: &Path, mode: u32) -> UnixListener {
+        let listener = UnixListener::bind(path).unwrap();
+        fs::set_permissions(path, fs::Permissions::from_mode(mode)).unwrap();
+        listener
+    }
+
+    fn plan(&self, socket: &Path) -> NativeCapabilitiesPlan {
+        let mut plan = claude_plan(Path::new("/candidate/claude"), None);
+        plan.router_root = self.canonical_root.clone();
+        plan.endpoint_socket = socket.to_owned();
+        plan
+    }
+}
+
+#[test]
+fn endpoint_socket_is_the_hosts_private_socket_under_the_canonical_root() {
+    let owner = own_real_uid().unwrap();
+    let setup = SocketSetup::new();
+    let socket = setup.sessions().join("claude-local.sock");
+    let _listener = setup.bind(&socket, 0o600);
+    // The short alias spelling and the canonical spelling name the same socket.
+    require_endpoint_socket(&setup.plan(&socket), owner).unwrap();
+    let canonical = setup
+        .canonical_root
+        .join("agent-communication/router-sessions/claude-local.sock");
+    require_endpoint_socket(&setup.plan(&canonical), owner).unwrap();
+    expect_error(
+        require_endpoint_socket(&setup.plan(&socket), owner + 1),
+        "not owned",
+    );
+    expect_error(
+        require_endpoint_socket(
+            &setup.plan(Path::new(
+                "agent-communication/router-sessions/claude-local.sock",
+            )),
+            owner,
+        ),
+        "absolute",
+    );
+    fs::set_permissions(&socket, fs::Permissions::from_mode(0o666)).unwrap();
+    expect_error(
+        require_endpoint_socket(&setup.plan(&socket), owner),
+        "accessible to other users",
+    );
+}
+
+#[test]
+fn another_directory_endpoint_or_file_kind_never_qualifies() {
+    let owner = own_real_uid().unwrap();
+    let setup = SocketSetup::new();
+    // The right name in another directory.
+    let elsewhere = setup.alias_root.join("other");
+    private_directory(&elsewhere);
+    let stray = elsewhere.join("claude-local.sock");
+    let _stray = setup.bind(&stray, 0o600);
+    expect_error(
+        require_endpoint_socket(&setup.plan(&stray), owner),
+        "outside the Router root's sessions directory",
+    );
+    // Another endpoint's socket in the right directory.
+    let cursor = setup.sessions().join("cursor-local.sock");
+    let _cursor = setup.bind(&cursor, 0o600);
+    expect_error(
+        require_endpoint_socket(&setup.plan(&cursor), owner),
+        "not named claude-local.sock",
+    );
+    // A symlink named like the socket, pointing at a real socket elsewhere.
+    let link = setup.sessions().join("claude-local.sock");
+    symlink(&stray, &link).unwrap();
+    expect_error(
+        require_endpoint_socket(&setup.plan(&link), owner),
+        "not a Unix socket",
+    );
+    // A regular file named like the socket.
+    let file_setup = SocketSetup::new();
+    let file = file_setup.sessions().join("claude-local.sock");
+    fs::write(&file, "").unwrap();
+    fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
+    expect_error(
+        require_endpoint_socket(&file_setup.plan(&file), owner),
+        "not a Unix socket",
+    );
+    expect_error(
+        require_endpoint_socket(
+            &file_setup.plan(&file_setup.sessions().join("missing/claude-local.sock")),
+            owner,
+        ),
+        "unreadable",
+    );
 }

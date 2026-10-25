@@ -32,7 +32,7 @@ pub(crate) async fn consumer_requests(
     evidence: &Path,
     label: &str,
 ) -> Result<Vec<RpcReply>, String> {
-    let stream = UnixStream::connect(plan.endpoint_socket())
+    let stream = UnixStream::connect(&plan.endpoint_socket)
         .await
         .map_err(|error| format!("endpoint socket unreachable: {error}"))?;
     let config = WebSocketConfig::default().max_message_size(Some(16 * 1024 * 1024));
