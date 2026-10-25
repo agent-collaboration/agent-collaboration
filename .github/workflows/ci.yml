@@ -15,10 +15,6 @@ permissions:
   contents: read
   actions: read
 
-defaults:
-  run:
-    shell: bash --noprofile --norc -e -o pipefail scripts/tooling/time-step.sh {0}
-
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.98.1
@@ -62,7 +58,7 @@ jobs:
         run: |
           scripts/tooling/bootstrap-tools.sh ci
           echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
-      - name: Test workflow timing and failure propagation
+      - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
       - name: Test tool bootstrap
         id: tool_bootstrap
@@ -240,7 +236,9 @@ jobs:
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
-        run: cargo test --locked -p codex-router-cli --features keychain-test-support --test default_router_port_cutover -- --ignored --nocapture
+        # Keep the same opt-in case, with a per-test elapsed status as well as
+        # its uncaptured CLI proof. The default profile adds no CI deadline.
+        run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test default_router_port_cutover --run-ignored only --no-capture
 
   board-e2e:
     name: Rust local end-to-end

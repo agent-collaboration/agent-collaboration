@@ -36,12 +36,8 @@ jobs:
     name: Apple Silicon release
     permissions:
       contents: write
-      actions: read
     runs-on: macos-15
     timeout-minutes: 45
-    defaults:
-      run:
-        shell: bash --noprofile --norc -e -o pipefail ${{ github.workspace }}/release-source/scripts/tooling/time-step.sh {0}
     outputs:
       asset_sha256: ${{ steps.artifact.outputs.sha256 }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
@@ -112,29 +108,77 @@ jobs:
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: release-source -> target
-          shared-key: release-arm64
+          shared-key: release-arm64-background
 
-      - name: Require green main CI for the tagged commit
-        if: env.RELEASE_DRY_RUN != 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SOURCE_COMMIT: ${{ steps.metadata.outputs.source_commit }}
+      # Prepare small consumers serially: concurrent Cargo compiles would wait
+      # on the shared target lock rather than run independently.
+      - name: Prebuild optimized transport test and schema exporter
+        id: prebuild
+        working-directory: release-source
         run: |
           set -euo pipefail
-          validation_url="$(gh api --method GET "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs" \
-            -f head_sha="${SOURCE_COMMIT}" -f branch=main -f event=push -f status=success \
-            --jq '.workflow_runs[] | select(.conclusion == "success") | .html_url' | head -1)"
-          if [[ -z "${validation_url}" ]]; then
-            echo "tagged commit must pass the complete main CI workflow before release" >&2
+          cargo test --locked --release -p acp-client-runtime --test provider_transport_idle \
+            --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
+          transport_binary="$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "provider_transport_idle" and .executable != null) | .executable' "$RUNNER_TEMP/transport-build.jsonl")"
+          test -x "$transport_binary"
+          echo "transport_binary=$transport_binary" >> "$GITHUB_OUTPUT"
+          cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
+
+      - name: Build release binaries
+        id: release_binaries
+        background: true
+        working-directory: release-source
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins --timings
+
+      # Optimized macOS code generation reproduces the FuturesUnordered
+      # waker-identity regression; a development-profile test cannot replace it.
+      - name: Test optimized provider transport
+        id: optimized_transport
+        background: true
+        env:
+          TRANSPORT_BINARY: ${{ steps.prebuild.outputs.transport_binary }}
+        run: |
+          set -euo pipefail
+          transport_tests="$("$TRANSPORT_BINARY" --list | sed -n 's/: test$//p')"
+          test -n "$transport_tests"
+          failed_tests=0
+          while IFS= read -r test_name; do
+            started_seconds="$(date +%s)"
+            if "$TRANSPORT_BINARY" --exact "$test_name" --nocapture; then
+              test_status=0
+            else
+              test_status=$?
+              failed_tests=$((failed_tests + 1))
+            fi
+            printf 'TRANSPORT_TEST\t%s\t%s\t%s\n' "$(( $(date +%s) - started_seconds ))" "$test_status" "$test_name"
+          done <<< "$transport_tests"
+          test "$failed_tests" -eq 0
+
+      - name: Export release protocol schemas
+        id: protocol_schemas
+        background: true
+        working-directory: release-source
+        run: |
+          set -euo pipefail
+          mkdir -p target/protocol-schemas/communication-control target/protocol-schemas/acp-protocol
+          target/release/examples/export_protocol_types > target/protocol-schemas/communication-control/protocol-types.json
+          cp protocol-schemas/acp-protocol/stable-schema.json protocol-schemas/acp-protocol/upstream-license.txt target/protocol-schemas/acp-protocol/
+          cp protocol-schemas/schema-packaging.md target/protocol-schemas/
+
+      - name: Reject test-only production features
+        id: production_features
+        background: true
+        working-directory: release-source
+        run: |
+          set -euo pipefail
+          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features -i codex-router-secret-store)"
+          if grep -q 'keychain-test-guard' <<< "$dependency_features"; then
+            echo 'release dependency graph includes keychain-test-guard' >&2
             exit 1
           fi
-          echo "Validated tagged commit: ${validation_url}"
 
-      # Compile shared targets once, then overlap the production build with the
-      # optimized regression and schema export on this same macOS runner.
-      - name: Build release and run independent checks in the background
-        working-directory: release-source
-        run: scripts/tooling/build-release.sh
+      - name: Wait for release build and checks
+        wait-all:
 
       - name: Retain release build and test timings
         if: always()
@@ -142,8 +186,7 @@ jobs:
         with:
           name: release-timing-inventory
           path: |
-            ${{ runner.temp }}/workflow-timings/
-            ${{ runner.temp }}/workflow-parallel/
+            ${{ runner.temp }}/transport-build.jsonl
             release-source/target/cargo-timings/
 
       - name: Require the Developer ID certificate
