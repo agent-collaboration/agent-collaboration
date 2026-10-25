@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import { createHash } from "node:crypto";
 import { encode } from "./exact-json.ts";
 import type { Declaration } from "./declaration.ts";
+import type { ImportDeclaration } from "./import-declaration.ts";
 
 export class ObservationOpen extends Error {}
 export class ObservationFailure extends Error {}
@@ -15,7 +16,7 @@ export class Receipt {
   constructor(directory: string) {
     this.directory = directory;
   }
-  async begin(declaration: Declaration): Promise<void> {
+  async begin(declaration: Declaration | ImportDeclaration): Promise<void> {
     await mkdir(this.directory, { mode: 0o700 });
     await this.save("tuple.json", declaration);
   }

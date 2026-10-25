@@ -2,9 +2,10 @@
 #![allow(clippy::unwrap_used, clippy::panic)] // A broken test counter must fail the proof.
 use std::{
     collections::BTreeMap,
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex, OnceLock},
 };
 use tracing::field::{Field, Visit};
+use tracing::instrument::WithSubscriber;
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 #[path = "sql_cost_classification.rs"]
 mod sql_cost_classification;
@@ -33,6 +34,7 @@ pub struct ReadCost {
     pub core_feed_input_bodies: u64,
 }
 impl ReadCost {
+    #[allow(dead_code)] // Scoped observations read their complete cost rather than a global delta.
     pub fn since(self, before: Self) -> Self {
         Self {
             statements: self.statements - before.statements,
@@ -47,12 +49,13 @@ impl ReadCost {
         }
     }
 }
-fn counter() -> &'static Mutex<ReadCost> {
-    static COUNTER: OnceLock<Mutex<ReadCost>> = OnceLock::new();
-    COUNTER.get_or_init(|| Mutex::new(ReadCost::default()))
+fn counter() -> &'static Mutex<ReadCostState> {
+    static COUNTER: OnceLock<Mutex<ReadCostState>> = OnceLock::new();
+    COUNTER.get_or_init(|| Mutex::new(ReadCostState::default()))
 }
+#[allow(dead_code)] // Legacy process-wide proof targets still use a before/after delta.
 pub fn current_cost() -> ReadCost {
-    *counter().lock().unwrap()
+    counter().lock().unwrap().cost
 }
 
 #[derive(Debug, Default)]
@@ -88,13 +91,9 @@ fn only_library_bookkeeping(statement: &str) -> bool {
                 .is_some_and(|tables| tables.only_library_bookkeeping())
         })
 }
-fn statements() -> &'static Mutex<Vec<String>> {
-    static STATEMENTS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
-    STATEMENTS.get_or_init(|| Mutex::new(Vec::new()))
-}
 #[allow(dead_code)] // Only query-plan proof targets consume the captured SQL.
 pub fn observed_statements() -> Vec<String> {
-    statements().lock().unwrap().clone()
+    counter().lock().unwrap().statements.clone()
 }
 struct StatementField(String);
 impl Visit for StatementField {
@@ -118,28 +117,22 @@ impl Visit for DecodeKind {
     }
     fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
 }
-fn project_counts() -> &'static Mutex<BTreeMap<String, u64>> {
-    static COUNTS: OnceLock<Mutex<BTreeMap<String, u64>>> = OnceLock::new();
-    COUNTS.get_or_init(|| Mutex::new(BTreeMap::new()))
-}
-fn project_open_counts() -> &'static Mutex<BTreeMap<String, u64>> {
-    static COUNTS: OnceLock<Mutex<BTreeMap<String, u64>>> = OnceLock::new();
-    COUNTS.get_or_init(|| Mutex::new(BTreeMap::new()))
-}
 #[allow(dead_code)]
 pub fn project_open_attempts(project: &str) -> u64 {
-    project_open_counts()
+    counter()
         .lock()
         .unwrap()
+        .opens
         .get(project)
         .copied()
         .unwrap_or(0)
 }
 #[allow(dead_code)]
 pub fn project_statements(project: &str) -> u64 {
-    project_counts()
+    counter()
         .lock()
         .unwrap()
+        .projects
         .get(project)
         .copied()
         .unwrap_or(0)
@@ -157,7 +150,42 @@ impl Visit for ProjectField {
         }
     }
 }
-struct ReadCostLayer;
+#[derive(Default)]
+struct ReadCostState {
+    cost: ReadCost,
+    statements: Vec<String>,
+    projects: BTreeMap<String, u64>,
+    opens: BTreeMap<String, u64>,
+}
+
+#[derive(Clone, Default)]
+#[allow(dead_code)] // Only scoped cost proofs use the per-operation recorder.
+pub struct ReadCostObservation(Arc<Mutex<ReadCostState>>);
+
+#[allow(dead_code)]
+impl ReadCostObservation {
+    pub fn cost(&self) -> ReadCost {
+        self.0.lock().unwrap().cost
+    }
+    pub fn project_statements(&self, project: &str) -> u64 {
+        self.0
+            .lock()
+            .unwrap()
+            .projects
+            .get(project)
+            .copied()
+            .unwrap_or(0)
+    }
+    pub fn statements(&self) -> Vec<String> {
+        self.0.lock().unwrap().statements.clone()
+    }
+    pub async fn observe<F: std::future::Future>(&self, operation: F) -> F::Output {
+        let subscriber = tracing_subscriber::registry().with(ReadCostLayer(Some(self.clone())));
+        operation.with_subscriber(subscriber).await
+    }
+}
+
+struct ReadCostLayer(Option<ReadCostObservation>);
 impl<TSubscriber> Layer<TSubscriber> for ReadCostLayer
 where
     TSubscriber:
@@ -176,17 +204,16 @@ where
         }
     }
     fn on_event(&self, event: &tracing::Event<'_>, context: Context<'_, TSubscriber>) {
-        let mut cost = counter().lock().unwrap();
+        let mut state = self.0.as_ref().map_or_else(
+            || counter().lock().unwrap(),
+            |observation| observation.0.lock().unwrap(),
+        );
         match event.metadata().target() {
             "message_board_storage::open" => {
-                cost.project_opens += 1;
+                state.cost.project_opens += 1;
                 let mut project = ProjectField(String::new());
                 event.record(&mut project);
-                *project_open_counts()
-                    .lock()
-                    .unwrap()
-                    .entry(project.0)
-                    .or_default() += 1;
+                *state.opens.entry(project.0).or_default() += 1;
             }
             "sqlx::query" => {
                 let mut query = ObservedSqlQuery::default();
@@ -207,19 +234,19 @@ where
                 // These are input rows at the actual Core query boundaries,
                 // not observations of how often serde invokes a decoder.
                 if statement.trim() == CORE_CANONICAL_INPUT.trim() {
-                    cost.core_canonical_input_bodies += query.rows_returned;
+                    state.cost.core_canonical_input_bodies += query.rows_returned;
                 }
                 if [CORE_FEED_INPUT, CORE_EXPIRED_FEED_INPUT]
                     .iter()
                     .any(|input| statement.trim() == input.trim())
                 {
-                    cost.core_feed_input_bodies += query.rows_returned;
+                    state.cost.core_feed_input_bodies += query.rows_returned;
                 }
-                cost.statements += 1;
+                state.cost.statements += 1;
                 let mut statement = StatementField(String::new());
                 event.record(&mut statement);
                 if !statement.0.is_empty() {
-                    statements().lock().unwrap().push(statement.0);
+                    state.statements.push(statement.0);
                 }
                 if let Some(project) = context.event_scope(event).and_then(|mut scope| {
                     scope.find_map(|span| {
@@ -228,17 +255,17 @@ where
                             .map(|project| project.0.clone())
                     })
                 }) {
-                    *project_counts().lock().unwrap().entry(project).or_default() += 1;
+                    *state.projects.entry(project).or_default() += 1;
                 }
             }
             "message_board_storage::decode" => {
                 let mut kind = DecodeKind(String::new());
                 event.record(&mut kind);
                 match kind.0.as_str() {
-                    "record" => cost.records += 1,
-                    "participant" => cost.participants += 1,
-                    "feed" => cost.feed_entries += 1,
-                    "trailMetadata" => cost.trail_metadata += 1,
+                    "record" => state.cost.records += 1,
+                    "participant" => state.cost.participants += 1,
+                    "feed" => state.cost.feed_entries += 1,
+                    "trailMetadata" => state.cost.trail_metadata += 1,
                     _ => panic!("unknown decode event"),
                 }
             }
@@ -259,7 +286,7 @@ pub fn install() {
             ),
         )
         .with(
-            ReadCostLayer.with_filter(
+            ReadCostLayer(None).with_filter(
                 tracing_subscriber::filter::Targets::new()
                     .with_target("sqlx::query", tracing::Level::TRACE)
                     .with_target(

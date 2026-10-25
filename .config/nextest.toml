@@ -26,7 +26,7 @@ threads-required = "num-test-threads"
 # delayed NotWriter check can cross the SDK retry deadline; starving the archive
 # or Serve child crosses their unchanged request and shutdown deadlines.
 [[profile.ci.overrides]]
-filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(=tailscale_exposure::tests::shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_retired)))"
+filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(=tailscale_exposure::tests::shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_retired) | test(=tailscale_process::tests::cancelling_an_observation_keeps_the_child_owned_until_explicit_shutdown)))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 

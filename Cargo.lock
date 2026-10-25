@@ -825,6 +825,7 @@ dependencies = [
  "chrono",
  "clap",
  "codex-router-host",
+ "codex-router-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-central-core",

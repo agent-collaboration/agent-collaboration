@@ -5,7 +5,7 @@ pub mod board_fixture;
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
-use read_cost_counter::{ReadCost, current_cost, project_statements};
+use read_cost_counter::{ReadCost, ReadCostObservation};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -17,7 +17,7 @@ struct MembershipScopeCost {
     unrelated_reader_probes: Vec<u64>,
 }
 async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestError> {
-    let fixture = BoardFixture::start_poll().await?;
+    let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
     let mut others = Vec::new();
     for index in 0..other_projects {
@@ -35,31 +35,66 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
         accepted(&fixture.api.call("project_create", request).await?);
         others.push(other);
     }
-    fixture.quiesce_mail_publication().await?;
-    let before_others: u64 = others
-        .iter()
-        .map(|project| project_statements(project.as_str()))
-        .sum();
-    let before_own = project_statements(project.as_str());
-    let before_cost = current_cost();
-    accepted(&fixture.api.call("workstream_rename", fixture.request(&project, json!({"kind":"workstreamRename","workstreamId":workstream,"name":"changed","expectedRevision":0}))).await?);
-    fixture
-        ._delivery
-        .as_ref()
-        .ok_or("delivery")?
-        .shutdown()
-        .await;
-    let write_cost = current_cost().since(before_cost);
+    // Arrange the reader owner only after setup, so no earlier request can
+    // retain a different observation. Native admission and reconciliation stay real.
+    let board_fixture::FixturePollServices {
+        identity,
+        delivery,
+        native,
+        publisher,
+    } = board_fixture::fixture_poll_services(
+        fixture._directory.path(),
+        &fixture._admission,
+        collaboration_service::ServiceIdentity::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(fixture._admission.clone()),
+    )
+    .await?;
+    let application = collaboration_service::CollaborationApplication::new(identity);
+    publisher.shutdown().await;
+    native.begin_shutdown();
+    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        while !native.is_stopped() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?;
+    let observation = ReadCostObservation::default();
+    // Count the typed application handler and its owned reader task; the
+    // transport carries no part of this native-storage cost claim.
+    let request = serde_json::from_value(fixture.request(&project, json!({"kind":"workstreamRename","workstreamId":workstream,"name":"changed","expectedRevision":0})))?;
+    observation
+        .observe(async {
+            let reply = application.board().workstream_rename(request).await?;
+            assert!(matches!(
+                reply.result,
+                message_board::public_replies::RequestResult::Decided(
+                    message_board::public_replies::RequestDecision::Accepted { .. }
+                )
+            ));
+            delivery.shutdown().await;
+            Ok::<_, TestError>(())
+        })
+        .await?;
+    let write_cost = observation.cost();
     let unrelated_write_statements = others
         .iter()
-        .map(|project| project_statements(project.as_str()))
-        .sum::<u64>()
-        - before_others;
-    let written_project_statements = project_statements(project.as_str()) - before_own;
-    let before_probes: Vec<_> = others
-        .iter()
-        .map(|project| project_statements(project.as_str()))
-        .collect();
+        .map(|project| observation.project_statements(project.as_str()))
+        .sum::<u64>();
+    let written_project_statements = observation.project_statements(project.as_str());
+    assert!(
+        observation
+            .statements()
+            .iter()
+            .any(|statement| statement.contains("FROM subscription_memberships")),
+        "the scoped recorder missed the actual reader reconciliation"
+    );
+    drop(application);
+    drop(delivery);
+    drop(publisher);
+    native.close().await?;
     let interactions = Arc::new(
         interaction_storage::InteractionStore::open(
             &fixture._directory.path().join("membership-costs.sqlite"),
@@ -73,16 +108,16 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
     let reader = Identity::Human {
         human_id: HumanId::try_from("absent-reader".to_owned())?,
     };
-    let records = windows
-        .list_reader_subscriptions(&reader, chrono::Utc::now())
+    let observation = ReadCostObservation::default();
+    let records = observation
+        .observe(windows.list_reader_subscriptions(&reader, chrono::Utc::now()))
         .await?;
     if !records.records.is_empty() || !records.unavailable.is_empty() {
         return Err("unexpected reader memberships".into());
     }
     let unrelated_reader_probes = others
         .iter()
-        .zip(before_probes)
-        .map(|(project, before)| project_statements(project.as_str()) - before)
+        .map(|project| observation.project_statements(project.as_str()))
         .collect();
     fixture.stop().await?;
     Ok(MembershipScopeCost {

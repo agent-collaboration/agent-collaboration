@@ -6,7 +6,7 @@ mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use collaboration_service::SubscriptionWindowStore;
 use message_board::*;
-use read_cost_counter::{ReadCost, current_cost};
+use read_cost_counter::{ReadCost, ReadCostObservation};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 use std::sync::Arc;
@@ -150,14 +150,14 @@ async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
     assert_eq!(changed.rows_affected(), 1);
     connection.close().await?;
     // Only the native window read is measured. Stop and join the fixture's real
-    // central/session timers so their SQL cannot enter this process-wide counter.
+    // central/session timers before observing the native window operation.
     fixture._fleet_runtime.disconnect().await?;
     let now = chrono::Utc::now();
-    let before = current_cost();
-    let added = windows
-        .rescan_missing_subscription_windows(&reader, now)
+    let observation = ReadCostObservation::default();
+    let added = observation
+        .observe(windows.rescan_missing_subscription_windows(&reader, now))
         .await?;
-    let cost = current_cost().since(before);
+    let cost = observation.cost();
     assert_eq!(
         added, 5,
         "unrelated non-post body suppressed a watched window"
@@ -215,9 +215,11 @@ async fn feed_cost(size: usize) -> Result<ReadCost, TestError> {
     write.commit().await?;
     fixture._fleet_runtime.disconnect().await?;
     let mut read = store.snapshot().await?;
-    let before = current_cost();
-    let page = read.feed_after(cursor, 5, false).await?;
-    let cost = current_cost().since(before);
+    let observation = ReadCostObservation::default();
+    let page = observation
+        .observe(read.feed_after(cursor, 5, false))
+        .await?;
+    let cost = observation.cost();
     let FeedRead::Entries { entries, .. } = page else {
         return Err("feed page".into());
     };

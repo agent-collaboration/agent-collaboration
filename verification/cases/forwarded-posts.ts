@@ -169,7 +169,7 @@ async function publicRefusals(input: {
   if (gate === undefined) throw new ObservationOpen("holder Session gate is unavailable");
   const unheld = context.imported.report.projects[0];
   if (unheld === undefined)
-    throw new ObservationOpen("no actual imported unheld project is available");
+    throw new ObservationOpen("no imported synthetic unheld project is available");
   const root = {
     ...writeHeader(requester.actor),
     postId: boardIdentity(),
@@ -182,7 +182,7 @@ async function publicRefusals(input: {
     watch: false,
   };
   await receipt.equal(
-    "an actually imported unheld project refuses forwarding",
+    "an imported synthetic unheld project refuses forwarding",
     field(await requester.installation.mcp.call("thread_create", root), "result", "kind"),
     "notHeld",
   );

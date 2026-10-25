@@ -716,7 +716,6 @@ fn board_model_command_groups_have_new_names_and_keep_no_level_aliases() {
         "work-trail",
         "thread",
         "role",
-        "move",
         "fact",
         "feed",
         "adr",
@@ -729,6 +728,16 @@ fn board_model_command_groups_have_new_names_and_keep_no_level_aliases() {
             output.status.success(),
             "{group}: {}",
             String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    for retired in ["move", "hook", "process"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+            .args([retired, "--help"])
+            .output()
+            .unwrap();
+        assert!(
+            !output.status.success(),
+            "retired group still accepted: {retired}"
         );
     }
     for old in [["board", "project", "--help"], ["board", "topic", "--help"]] {

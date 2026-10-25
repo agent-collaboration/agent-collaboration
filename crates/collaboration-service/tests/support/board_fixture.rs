@@ -11,6 +11,10 @@ use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 #[path = "board_context_backend.rs"]
 mod board_context_backend;
+#[path = "board_poll_services.rs"]
+mod board_poll_services;
+#[allow(unused_imports)] // Only the membership cost proof names the composed-owner type.
+pub use board_poll_services::{FixturePollServices, fixture_poll_services};
 #[path = "native_mail_owner.rs"]
 pub mod native_mail_owner;
 use board_context_backend::BoardContextBackend;
@@ -175,45 +179,11 @@ impl BoardFixture {
         let mut native_mail = None;
         let mut publisher = None;
         let delivery = if with_poll {
-            let interactions = Arc::new(
-                interaction_storage::InteractionStore::open(
-                    directory.path().join("interaction.sqlite"),
-                )
-                .await?,
-            );
-            let automation = Arc::new(tokio::sync::Mutex::new(
-                automation_storage::AutomationStore::open(
-                    &directory.path().join("automation.sqlite"),
-                )
-                .await?,
-            ));
-            let routes = Arc::new(collaboration_service::SessionDeliveryRouter::new(Vec::new()));
-            let service = fixture_subscription_service(&admission, &interactions, &routes)?;
-            identity = identity
-                .with_automation_store(automation)
-                .with_subscription_delivery_service(service.clone(), routes.clone());
-            let (configured, native) = native_mail_owner::NativeMailOwner::start(
-                identity,
-                fixture_peer()?,
-                collaboration_service::MailPushDeliveryProps {
-                    interactions: interactions.clone(),
-                    actors: service.clone(),
-                    presence: routes,
-                    machine: fixture_machine_identity()?,
-                    clock: Arc::new(collaboration_service::SystemSubscriptionClock),
-                },
-            )?;
-            let notification_publisher =
-                Arc::new(collaboration_service::NotificationPublisher::new(
-                    admission.clone(),
-                    interactions,
-                    Arc::downgrade(&native.runtime_handle()),
-                ));
-            identity = configured.with_notification_publisher(notification_publisher.clone());
-            service.start().await?;
-            native_mail = Some(native);
-            publisher = Some(notification_publisher);
-            Some(service)
+            let services = fixture_poll_services(directory.path(), &admission, identity).await?;
+            identity = services.identity;
+            native_mail = Some(services.native);
+            publisher = Some(services.publisher);
+            Some(services.delivery)
         } else {
             None
         };

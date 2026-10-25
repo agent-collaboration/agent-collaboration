@@ -35,6 +35,7 @@ use message_board::{BoardError, Identity, ProjectId};
 use std::{collections::HashMap, sync::Arc};
 use tokio::sync::{Mutex, mpsc, oneshot};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use tracing::instrument::WithSubscriber;
 
 pub struct SubscriptionDeliveryServiceProps {
     pub board_availability: BoardAvailability,
@@ -557,16 +558,19 @@ impl SubscriptionDeliveryService {
             owners.insert(reader.clone(), sender.clone());
             let inner = self.inner.clone();
             let owner_sender = sender.clone();
-            self.inner.tasks.spawn(async move {
-                owner.run().await;
-                let mut owners = inner.owners.lock().await;
-                if owners
-                    .get(&reader)
-                    .is_some_and(|current| current.same_channel(&owner_sender))
-                {
-                    owners.remove(&reader);
+            self.inner.tasks.spawn(
+                async move {
+                    owner.run().await;
+                    let mut owners = inner.owners.lock().await;
+                    if owners
+                        .get(&reader)
+                        .is_some_and(|current| current.same_channel(&owner_sender))
+                    {
+                        owners.remove(&reader);
+                    }
                 }
-            });
+                .with_current_subscriber(),
+            );
             return Ok(sender);
         }
     }

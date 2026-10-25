@@ -12,6 +12,7 @@ import { ObservationOpen, type Receipt } from "../receipt.ts";
 const digestSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const upgradeSchema = z.object({
   owner: z.string(),
+  fleet: z.object({ provenance: z.unknown() }),
   fleetDigest: digestSchema,
   collisions: z.array(z.unknown()),
   skipped: z.array(z.string()),
@@ -24,7 +25,12 @@ const upgradeSchema = z.object({
       posts: z.bigint().nonnegative(),
       feedRows: z.bigint().nonnegative(),
       digest: digestSchema,
-      manifest: z.object({ position: z.object({ epoch: z.bigint(), sequence: z.bigint() }) }),
+      manifest: z.object({
+        database: z.uuid(),
+        position: z.object({ epoch: z.bigint(), sequence: z.bigint() }),
+        schema: z.unknown(),
+        tables: z.unknown(),
+      }),
     }),
   ),
 });
@@ -34,6 +40,7 @@ const reportSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("refused"), reason: z.string(), report: upgradeSchema.nullable() }),
 ]);
 export type UpgradeResult = z.infer<typeof reportSchema>;
+export type UploadedUpgrade = Extract<UpgradeResult, { kind: "uploaded" }>;
 type Publication =
   | { readonly kind: "dryRun" }
   | {

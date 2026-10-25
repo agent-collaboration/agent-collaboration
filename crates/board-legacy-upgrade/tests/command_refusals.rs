@@ -1,12 +1,19 @@
 #![allow(clippy::panic_in_result_fn)]
+#[allow(
+    dead_code,
+    reason = "The shared CLI owner is also used by the IB and BC05 integration targets."
+)]
+#[path = "upload_support/actual_cli.rs"]
+mod actual_cli;
 mod support;
+use actual_cli::{ImporterCliInvocation, run_importer_cli};
+use codex_router_test_support::owned_cli_process::run_cli_output;
 use std::{
     path::{Path, PathBuf},
     process::{Output, Stdio},
     time::Duration,
 };
 use support::*;
-use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[tokio::test]
 async fn version_is_the_released_executable_name_and_workspace_version() -> TestResult {
@@ -14,15 +21,13 @@ async fn version_is_the_released_executable_name_and_workspace_version() -> Test
     let runner =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/cargo_debug_signing_runner.sh");
     // Act
-    let output = tokio::time::timeout(
-        Duration::from_secs(30),
-        tokio::process::Command::new(runner)
-            .arg(env!("CARGO_BIN_EXE_codex-router-board-upgrade"))
-            .arg("--version")
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await??;
+    let mut command = tokio::process::Command::new(runner);
+    command
+        .arg(env!("CARGO_BIN_EXE_codex-router-board-upgrade"))
+        .arg("--version");
+    let output = run_cli_output(command, Duration::from_secs(30))
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
     // Assert
     assert_eq!(output.status.code(), Some(0));
     assert_eq!(
@@ -49,31 +54,23 @@ async fn run_many(
     report: &Path,
     dry_run: bool,
 ) -> TestResult<Output> {
-    let runner =
+    let cli_binary = PathBuf::from(env!("CARGO_BIN_EXE_codex-router-board-upgrade"));
+    let signing_runner =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/cargo_debug_signing_runner.sh");
-    let mut command = tokio::process::Command::new(runner);
-    command.arg(env!("CARGO_BIN_EXE_codex-router-board-upgrade"));
-    for source in sources {
-        command.arg("--source").arg(source);
-    }
-    command
-        .arg("--router-directory")
-        .arg(root)
-        .arg("--report")
-        .arg(report)
-        .args([
-            "--owner-human-id",
-            "legacy-owner",
-            "--machine-label",
-            "fixture machine",
-        ])
-        .kill_on_drop(true);
-    if dry_run {
-        command.arg("--dry-run");
-    } else {
-        command.args(["--central-url", "http://127.0.0.1:1"]);
-    }
-    Ok(tokio::time::timeout(Duration::from_secs(30), command.output()).await??)
+    let output = run_importer_cli(ImporterCliInvocation {
+        cli_binary: &cli_binary,
+        signing_runner: &signing_runner,
+        source_copies: sources,
+        router_directory: root,
+        report_path: report,
+        central_url: (!dry_run).then_some("http://127.0.0.1:1"),
+        access_assertion: None,
+        owner_human_id: "legacy-owner",
+        machine_label: "fixture machine",
+    })
+    .await
+    .map_err(|error| std::io::Error::other(error.to_string()))?;
+    Ok(output)
 }
 
 #[tokio::test]
@@ -177,6 +174,10 @@ async fn dry_run_drives_the_binary_and_writes_only_the_report_with_resource_coun
 async fn a_collision_refuses_real_publication_and_reports_both_ids() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let (_collision_directory, collision) = fixture_copy("collision.sqlite")?;
+    let source_before = std::fs::read(&source)?;
+    let source_modified = source.metadata()?.modified()?;
+    let collision_before = std::fs::read(&collision)?;
+    let collision_modified = collision.metadata()?.modified()?;
     let root = identity(directory.path())?;
     let report = directory.path().join("report.json");
     let output = run_many(&[&source, &collision], &root, &report, false).await?;
@@ -184,21 +185,11 @@ async fn a_collision_refuses_real_publication_and_reports_both_ids() -> TestResu
     let report: serde_json::Value = serde_json::from_slice(&std::fs::read(report)?)?;
     assert_eq!(report["kind"], "refused");
     assert_eq!(report["reason"], "name collisions refuse publication");
-    let collisions = report["report"]["collisions"]
-        .as_array()
-        .ok_or("collision report missing")?;
-    assert!(collisions.iter().any(|collision| {
-        collision["kind"] == "workspace"
-            && collision["ids"]
-                .as_array()
-                .is_some_and(|ids| ids.len() == 2)
-    }));
-    assert!(collisions.iter().any(|collision| {
-        collision["kind"] == "board"
-            && collision["ids"]
-                .as_array()
-                .is_some_and(|ids| ids.len() == 2)
-    }));
+    assert_collision_ids(&report)?;
+    assert_eq!(std::fs::read(&source)?, source_before);
+    assert_eq!(source.metadata()?.modified()?, source_modified);
+    assert_eq!(std::fs::read(&collision)?, collision_before);
+    assert_eq!(collision.metadata()?.modified()?, collision_modified);
     Ok(())
 }
 
@@ -206,6 +197,10 @@ async fn a_collision_refuses_real_publication_and_reports_both_ids() -> TestResu
 async fn collision_refusal_precedes_credentials_and_any_central_connection() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let (_collision_directory, collision) = fixture_copy("collision.sqlite")?;
+    let source_before = std::fs::read(&source)?;
+    let source_modified = source.metadata()?.modified()?;
+    let collision_before = std::fs::read(&collision)?;
+    let collision_modified = collision.metadata()?.modified()?;
     let root = identity(directory.path())?;
     let report = directory.path().join("refused.json");
     let listener = std::net::TcpListener::bind(("127.0.0.1", 0))?;
@@ -213,39 +208,43 @@ async fn collision_refusal_precedes_credentials_and_any_central_connection() -> 
     let endpoint = format!("http://{}", listener.local_addr()?);
     let runner =
         Path::new(env!("CARGO_MANIFEST_DIR")).join("../../scripts/cargo_debug_signing_runner.sh");
-    let output = tokio::time::timeout(
-        Duration::from_secs(30),
-        tokio::process::Command::new(runner)
-            .arg(env!("CARGO_BIN_EXE_codex-router-board-upgrade"))
-            .arg("--source")
-            .arg(source)
-            .arg("--source")
-            .arg(collision)
-            .arg("--router-directory")
-            .arg(root)
-            .arg("--report")
-            .arg(&report)
-            .args([
-                "--central-url",
-                &endpoint,
-                "--owner-human-id",
-                "legacy-owner",
-                "--machine-label",
-                "fixture",
-            ])
-            // This would refuse immediately if credentials were read first.
-            .env(
-                "CODEX_ROUTER_DEBUG_CENTRAL_ACCESS_ASSERTION_FILE",
-                "relative.assertion",
-            )
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await??;
+    let mut command = tokio::process::Command::new(runner);
+    command
+        .arg(env!("CARGO_BIN_EXE_codex-router-board-upgrade"))
+        .arg("--source")
+        .arg(&source)
+        .arg("--source")
+        .arg(&collision)
+        .arg("--router-directory")
+        .arg(root)
+        .arg("--report")
+        .arg(&report)
+        .args([
+            "--central-url",
+            &endpoint,
+            "--owner-human-id",
+            "legacy-owner",
+            "--machine-label",
+            "fixture",
+        ])
+        // This would refuse immediately if credentials were read first.
+        .env(
+            "CODEX_ROUTER_DEBUG_CENTRAL_ACCESS_ASSERTION_FILE",
+            "relative.assertion",
+        )
+        .kill_on_drop(true);
+    let output = run_cli_output(command, Duration::from_secs(30))
+        .await
+        .map_err(|error| std::io::Error::other(error.to_string()))?;
     assert_eq!(output.status.code(), Some(2));
     let report: serde_json::Value = serde_json::from_slice(&std::fs::read(report)?)?;
     assert_eq!(report["kind"], "refused");
     assert_eq!(report["reason"], "name collisions refuse publication");
+    assert_collision_ids(&report)?;
+    assert_eq!(std::fs::read(&source)?, source_before);
+    assert_eq!(source.metadata()?.modified()?, source_modified);
+    assert_eq!(std::fs::read(&collision)?, collision_before);
+    assert_eq!(collision.metadata()?.modified()?, collision_modified);
     match listener.accept() {
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {}
         _ => return Err("collision-bearing run contacted central".into()),
@@ -355,26 +354,144 @@ async fn another_process_holding_the_legacy_file_refuses_the_run() -> TestResult
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = identity(directory.path())?;
     let report = directory.path().join("report.json");
-    let mut holder=tokio::process::Command::new("python3")
-        .args(["-c","import sqlite3,sys; c=sqlite3.connect(sys.argv[1]); c.execute('SELECT COUNT(*) FROM sqlite_schema').fetchone(); print('ready',flush=True); sys.stdin.read(); c.close()"])
-        .arg(&source).stdin(Stdio::piped()).stdout(Stdio::piped()).kill_on_drop(true).spawn()?;
-    let stdout = holder.stdout.take().ok_or("holder stdout missing")?;
-    let mut reader = BufReader::new(stdout);
-    let mut ready = String::new();
-    tokio::time::timeout(Duration::from_secs(5), reader.read_line(&mut ready)).await??;
-    assert_eq!(ready.trim(), "ready");
-    let output = run(&source, &root, &report, true).await?;
-    holder.kill().await?;
-    holder.wait().await?;
-    assert_eq!(output.status.code(), Some(2));
-    let report: serde_json::Value = serde_json::from_slice(&std::fs::read(report)?)?;
-    assert!(
-        report["reason"]
-            .as_str()
-            .ok_or("reason missing")?
-            .contains("open in another process")
+    let source_bytes = std::fs::read(&source)?;
+    let source_modified = source.metadata()?.modified()?;
+    let holder = SourceFileHolder {
+        child: tokio::process::Command::new("tail")
+            .arg("-f")
+            .arg(&source)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true)
+            .spawn()?,
+        source: source.clone(),
+    };
+
+    codex_router_test_support::scenario_finalization::run_scenario(
+        holder,
+        async |holder| {
+            wait_until_lsof_reports(&holder.child, &holder.source).await?;
+            let output = run(&holder.source, &root, &report, true)
+                .await
+                .map_err(promote_test_error)?;
+            assert_eq!(output.status.code(), Some(2));
+            let report: serde_json::Value = serde_json::from_slice(&std::fs::read(&report)?)?;
+            assert!(
+                report["reason"]
+                    .as_str()
+                    .ok_or("reason missing")?
+                    .contains("open in another process")
+            );
+            assert_eq!(std::fs::read(&holder.source)?, source_bytes);
+            assert_eq!(holder.source.metadata()?.modified()?, source_modified);
+            Ok(())
+        },
+        async |mut holder| {
+            if holder.child.try_wait()?.is_none() {
+                holder.child.kill().await?;
+            }
+            holder.child.wait().await?;
+            let output = tokio::process::Command::new("lsof")
+                .args(["-t", "--"])
+                .arg(holder.source)
+                .output()
+                .await?;
+            if !output.status.success() && output.status.code() != Some(1) {
+                return Err(std::io::Error::other(
+                    String::from_utf8_lossy(&output.stderr).into_owned(),
+                )
+                .into());
+            }
+            if !output.stdout.is_empty() {
+                return Err(std::io::Error::other("source file still has an open process").into());
+            }
+            Ok(())
+        },
+        || Ok(()),
+    )
+    .await
+    .map_err(|error| std::io::Error::other(error.to_string()))?;
+    Ok(())
+}
+
+struct SourceFileHolder {
+    child: tokio::process::Child,
+    source: PathBuf,
+}
+
+async fn wait_until_lsof_reports(
+    holder: &tokio::process::Child,
+    source: &Path,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let holder_pid = holder.id().ok_or("holder process id missing")?.to_string();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let output = tokio::process::Command::new("lsof")
+                .args(["-t", "--"])
+                .arg(source)
+                .output()
+                .await?;
+            if !output.status.success() && output.status.code() != Some(1) {
+                return Err(std::io::Error::other(
+                    String::from_utf8_lossy(&output.stderr).into_owned(),
+                )
+                .into());
+            }
+            if String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .any(|pid| pid == holder_pid)
+            {
+                return Ok::<(), Box<dyn std::error::Error + Send + Sync>>(());
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await??;
+    Ok(())
+}
+
+fn assert_collision_ids(report: &serde_json::Value) -> TestResult {
+    let collisions = report
+        .get("report")
+        .and_then(|report| report.get("collisions"))
+        .and_then(serde_json::Value::as_array)
+        .ok_or("collision report missing")?;
+    let workspace = collisions
+        .iter()
+        .find(|collision| {
+            collision.get("kind").and_then(serde_json::Value::as_str) == Some("workspace")
+        })
+        .ok_or("workspace collision missing")?;
+    let board = collisions
+        .iter()
+        .find(|collision| {
+            collision.get("kind").and_then(serde_json::Value::as_str) == Some("board")
+        })
+        .ok_or("board collision missing")?;
+    let workspace_ids = workspace
+        .get("ids")
+        .ok_or("workspace collision ids missing")?;
+    let board_ids = board.get("ids").ok_or("board collision ids missing")?;
+    assert_eq!(
+        workspace_ids,
+        &serde_json::json!([
+            "019a0000-0000-7000-8000-000000000002",
+            "019a0000-0000-7000-8000-000000000009"
+        ])
+    );
+    assert_eq!(
+        board_ids,
+        &serde_json::json!([
+            "019a0000-0000-7000-8000-00000000000b",
+            "019a0000-0000-7000-8000-000000000013"
+        ])
     );
     Ok(())
+}
+
+fn promote_test_error(error: Box<dyn std::error::Error>) -> std::io::Error {
+    std::io::Error::other(error.to_string())
 }
 
 #[tokio::test]

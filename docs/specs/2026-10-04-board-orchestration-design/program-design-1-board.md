@@ -1,5 +1,7 @@
 # Program design 1: the board and the collaboration API
 
+> **0.1.102 cut (owner decision 1217, 2026-10-24).** E12 Move, `move_rules`, process definitions, pinning, the project stage and the three hook tools were removed before release. Rows here that name them no longer exist in code. Everything else stands.
+
 **What this is:** how Router realizes [spec 1](spec-1-board-and-contracts.md), which traces to [requirements.md](requirements.md): the board's records and admission, and the collaboration API they're reached through. The spec's entity names (E1–E22, E28, E29) and obligation IDs are used unchanged; retired IDs (E4, E14, ST-2, ST-4, ST-7, MV-5, MV-6) have no realization here. Project storage and replication are in [program-design-2-project-storage.md](program-design-2-project-storage.md); the central server is in [program-design-3-central-fleet.md](program-design-3-central-fleet.md). Exact files, task order and test commands belong to the plan, not here.
 
 ```text

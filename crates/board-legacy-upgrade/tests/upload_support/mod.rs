@@ -1,4 +1,5 @@
 #![allow(clippy::panic_in_result_fn)]
+pub mod actual_cli;
 use board_legacy_upgrade::PreparedUpgrade;
 use sqlx_turso::sqlx::{ConnectOptions, Connection, Executor, Row};
 use std::path::Path;

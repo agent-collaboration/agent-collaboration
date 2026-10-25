@@ -51,8 +51,9 @@ const machineBase = z.object({
     ])
     .default({ kind: "unattached" }),
 });
+export const localMachineSchema = machineBase.extend({ kind: z.literal("local") });
 export const machineSchema = z.discriminatedUnion("kind", [
-  machineBase.extend({ kind: z.literal("local") }),
+  localMachineSchema,
   machineBase.extend({
     kind: z.literal("ssh"),
     host: z.string().regex(/^[a-zA-Z0-9_.@:-]+$/),
@@ -74,12 +75,13 @@ const deploySchema = z.object({
   undiciFactoryExport: z.string().min(1),
   inventoryArguments: z.array(z.string()),
 });
+export const tokioTargetSchema = localTarget.extend({
+  kind: z.literal("tokio"),
+  binary: artifactSchema,
+  projects: z.array(z.uuid()).min(1),
+});
 export const targetSchema = z.discriminatedUnion("kind", [
-  localTarget.extend({
-    kind: z.literal("tokio"),
-    binary: artifactSchema,
-    projects: z.array(z.uuid()).min(1),
-  }),
+  tokioTargetSchema,
   localTarget.extend({
     kind: z.literal("workerd"),
     jwksFile: absolutePath,
@@ -97,20 +99,26 @@ export const targetSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 export type Target = z.infer<typeof targetSchema>;
-export const declarationSchema = z
-  .object({
+export const runSourceSchema = z.object({
+  repository: absolutePath,
+  productPin: z.string().regex(/^[a-f0-9]{40}$/),
+  productVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
+  harnessPin: z.string().regex(/^[a-f0-9]{40}$/),
+  purpose: z.enum(["discovery", "confirmation"]),
+  importer: artifactSchema,
+  evidenceDirectory: absolutePath,
+  vd: z.object({
     repository: absolutePath,
-    productPin: z.string().regex(/^[a-f0-9]{40}$/),
-    productVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
-    harnessPin: z.string().regex(/^[a-f0-9]{40}$/),
-    purpose: z.enum(["discovery", "confirmation"]),
-    importer: artifactSchema,
-    evidenceDirectory: absolutePath,
-    vd: z.object({
-      repository: absolutePath,
-      revision: z.string().regex(/^[a-f0-9]{8,40}$/),
-      path: z.string().regex(/^docs\/specs\/.+\.md$/),
-    }),
+    revision: z.string().regex(/^[a-f0-9]{8,40}$/),
+    path: z.string().regex(/^docs\/specs\/.+\.md$/),
+  }),
+  deadline: z.iso.datetime(),
+});
+export type RunSource = z.infer<typeof runSourceSchema>;
+export const declarationSchema = runSourceSchema
+  .extend({
+    dataBoundary: z.literal("syntheticOnly"),
+    syntheticFixture: fileSchema,
     rung: z.enum(["R1", "R2", "R3"]),
     rows: z
       .array(z.string().min(1))
@@ -123,9 +131,8 @@ export const declarationSchema = z
       provider: z.literal("openai"),
       effort: z.enum(["low", "medium", "high"]),
     }),
-    deadline: z.iso.datetime(),
-    legacyStores: z.array(sealedCopySchema.extend({ oracle: artifactSchema })).min(1),
   })
+  .strict()
   .superRefine((declaration, context): void => {
     const expected = { R1: "tokio", R2: "workerd", R3: "staging" }[declaration.rung];
     if (declaration.target.kind !== expected)

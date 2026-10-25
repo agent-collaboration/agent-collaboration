@@ -1,11 +1,7 @@
-import { execFileSync } from "node:child_process";
-import { lstat, readFile, realpath } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { checkSource } from "./source-identity.ts";
+import { lstat, readFile } from "node:fs/promises";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
-import { isDeepStrictEqual } from "node:util";
-import { parse } from "smol-toml";
-import { z } from "zod";
 import { declarationSchema, type Declaration } from "./declaration.ts";
 import { encode } from "./exact-json.ts";
 import { casesFor, type RunnableCase } from "./case-registry.ts";
@@ -19,29 +15,6 @@ import {
 import { ObservationOpen, Receipt } from "./receipt.ts";
 import { prepareRun, type PreparedRun } from "./run-setup.ts";
 import { RunLifetime } from "./run-lifetime.ts";
-
-function lockGraph(text: string): unknown {
-  const value = z
-    .object({
-      package: z.array(
-        z
-          .object({
-            dependencies: z.array(z.string()).optional(),
-          })
-          .passthrough(),
-      ),
-    })
-    .passthrough()
-    .parse(parse(text));
-  return {
-    ...value,
-    package: value.package.map((entry) =>
-      entry.dependencies === undefined
-        ? entry
-        : { ...entry, dependencies: [...entry.dependencies].sort() },
-    ),
-  };
-}
 
 async function declarationFromArguments(): Promise<Declaration> {
   const path = process.argv[2];
@@ -71,83 +44,6 @@ async function declarationFromArguments(): Promise<Declaration> {
   if (roots.some((root): boolean => resolve(root) !== root || !root.startsWith(`${cache}/`)))
     throw new ObservationOpen("run-owned state and evidence require canonical cache task roots");
   return declaration;
-}
-async function checkSource(declaration: Declaration, receipt: Receipt): Promise<void> {
-  if ((await realpath(fileURLToPath(new URL("..", import.meta.url)))) !== declaration.repository)
-    throw new ObservationOpen("declaration repository differs from the running harness");
-  const git = (arguments_: readonly string[]): string =>
-    execFileSync("git", arguments_, {
-      cwd: declaration.repository,
-      encoding: "utf8",
-      timeout: 10_000,
-      stdio: ["ignore", "pipe", "pipe"],
-    }).trim();
-  // Discovery permits inherited unbuilt test/example/Python work. Executed
-  // artifacts remain frozen by hash/signature. Confirmation requires the clean tree.
-  const discoveryExclusions =
-    declaration.purpose === "discovery"
-      ? [
-          ":(exclude)**/tests/**",
-          ":(exclude)**/examples/**",
-          ":(exclude)crates/codex-router-test-support",
-          ":(exclude)scripts/verification/*.py",
-          ":(exclude)Cargo.lock",
-        ]
-      : [];
-  const sourcePaths = [
-    ".",
-    ":(exclude)docs",
-    ":(exclude)tmp",
-    ":(exclude).agents",
-    ":(exclude).github",
-    ...discoveryExclusions,
-  ];
-  const checkoutHead = git(["rev-parse", "HEAD"]);
-  if (checkoutHead !== declaration.harnessPin)
-    git(["diff", "--quiet", declaration.harnessPin, checkoutHead, "--", ...sourcePaths]);
-  if (
-    git([
-      "status",
-      "--porcelain",
-      "--",
-      ".",
-      ":(exclude)docs",
-      ":(exclude)tmp",
-      ":(exclude).agents",
-      ":(exclude).github",
-      ...discoveryExclusions,
-    ]) !== ""
-  )
-    throw new ObservationOpen("harness source is not the declared immutable pin");
-  git([
-    "diff",
-    "--quiet",
-    declaration.productPin,
-    declaration.harnessPin,
-    "--",
-    ".",
-    ":(exclude)verification",
-    ":(exclude)docs",
-    ":(exclude)tmp",
-    ":(exclude).agents",
-    ":(exclude).github",
-    ...discoveryExclusions,
-  ]);
-  if (
-    declaration.purpose === "discovery" &&
-    !isDeepStrictEqual(
-      lockGraph(git(["show", `${declaration.productPin}:Cargo.lock`])),
-      lockGraph(await readFile(`${declaration.repository}/Cargo.lock`, "utf8")),
-    )
-  )
-    throw new ObservationOpen("discovery dependency graph differs from the frozen product");
-  if (Date.parse(declaration.deadline) <= Date.now())
-    throw new ObservationOpen("declared run deadline has passed");
-  await receipt.record("sourceInputsChecked", {
-    declaredHarnessPin: declaration.harnessPin,
-    checkoutHead,
-    unchangedExecutedInputs: true,
-  });
 }
 async function checkRun(context: PreparedRun): Promise<void> {
   for (const link of context.links) await link.assertAlive();
@@ -253,6 +149,11 @@ async function main(): Promise<void> {
       ownedWriteAttribution: "notEstablished",
       limit:
         "Owned open-file descriptors sampled; syscall writes not traced. Changes alone are notes.",
+    },
+    dataBoundary: declaration.dataBoundary,
+    crossMachineRealCopies: {
+      kind: "open",
+      reason: "owner authorization: real board metadata to Sunclaw",
     },
     exit,
   });

@@ -1,5 +1,5 @@
-import { randomBytes, randomUUID } from "node:crypto";
-import { readFile, writeFile } from "node:fs/promises";
+import { startCentral, enroll } from "./run-infrastructure.ts";
+import { prepareSyntheticLegacy } from "./inputs/synthetic-legacy.ts";
 import type { Declaration, Identity } from "./declaration.ts";
 import { ObservationFailure, ObservationOpen, type Receipt } from "./receipt.ts";
 import { RunLifetime } from "./run-lifetime.ts";
@@ -7,17 +7,9 @@ import type { JourneyMachine } from "./run-context.ts";
 import { Installation } from "./machines/installation.ts";
 import { Link } from "./machines/link.ts";
 import { SealedLegacyCopy } from "./inputs/sealed-legacy-copy.ts";
-import { TokioCentral } from "./targets/tokio-central.ts";
-import { WorkerdCentral } from "./targets/workerd-central.ts";
-import { StagingCentral } from "./targets/staging-central.ts";
 import type { CentralTarget } from "./targets/central-target.ts";
-import { FixtureEdge } from "./access/fixture-edge.ts";
 import { SessionGate } from "./access/session-gate.ts";
-import { fixtureMachineAssertion } from "./access/fixture-assertion.ts";
-import { enrollInstallation } from "./clients/fleet-enrollment.ts";
-import { environmentValue } from "./clients/central-owner.ts";
 import { runUpgrade, type UpgradeResult } from "./clients/board-upgrade.ts";
-import { readLegacyOracle, type LegacyOracle } from "./clients/legacy-oracle.ts";
 import { acceptedWrite, boardIdentity, writeHeader } from "./clients/board-requests.ts";
 import { RouterNative } from "./clients/router-native.ts";
 import { CodexSession } from "./recipients/codex-session.ts";
@@ -27,106 +19,7 @@ export interface PreparedRun {
   readonly central: CentralTarget;
   readonly gates: ReadonlyMap<string, SessionGate>;
   readonly links: readonly Link[];
-  readonly copies: readonly SealedLegacyCopy[];
-  readonly oracles: readonly LegacyOracle[];
   readonly imported: Extract<UpgradeResult, { kind: "uploaded" }>;
-}
-async function startCentral(declaration: Declaration, receipt: Receipt): Promise<CentralTarget> {
-  switch (declaration.target.kind) {
-    case "tokio":
-      return TokioCentral.start({
-        target: declaration.target,
-        repository: declaration.repository,
-        receipt,
-      });
-    case "workerd":
-      return WorkerdCentral.start(declaration.target);
-    case "staging":
-      return new StagingCentral(declaration.target);
-  }
-}
-async function enroll(input: {
-  installation: Installation;
-  declaration: Declaration;
-  central: CentralTarget;
-  lifetime: RunLifetime;
-  receipt: Receipt;
-  gates: Map<string, SessionGate>;
-  links: Link[];
-}): Promise<void> {
-  const { installation, declaration, lifetime, receipt } = input;
-  let enrollment;
-  let ownerToken: string;
-  if (declaration.target.kind === "staging") {
-    const binding = installation.machine.enrollment;
-    if (binding.kind !== "access") throw new Error("staging requires Access enrollment inputs");
-    if (new URL(binding.endpoint).origin !== declaration.target.origin)
-      throw new Error("machine endpoint differs from declared central");
-    enrollment = binding;
-    ownerToken = environmentValue(binding.ownerTokenEnv);
-  } else {
-    if (installation.machine.enrollment.kind !== "fixture")
-      throw new Error("local run requires explicit fixture enrollment");
-    const accessClientId = `verification-${randomUUID()}.access`;
-    const accessSecret = randomBytes(32).toString("hex");
-    const expiresAt = new Date(
-      Math.floor(Date.parse(declaration.deadline) / 1000) * 1000,
-    ).toISOString();
-    ownerToken = randomBytes(32).toString("hex");
-    const edge = lifetime.own(
-      `edge-${installation.machine.name}`,
-      await FixtureEdge.start({
-        upstream: input.central.origin,
-        assertion: await fixtureMachineAssertion({
-          key: declaration.target.fixtureKey,
-          accessClientId,
-          expiresAt,
-        }),
-        owner: {
-          token: ownerToken,
-          assertion: (await readFile(declaration.target.assertionFile, "utf8")).trim(),
-        },
-        accessId: accessClientId,
-        accessSecret,
-      }),
-    );
-    const relative = "fixture-access-secret";
-    if (installation.remote === undefined)
-      await writeFile(`${installation.machine.root}/${relative}`, accessSecret, {
-        mode: 0o600,
-        flag: "wx",
-      });
-    else await installation.remote.writePrivate(relative, accessSecret);
-    enrollment = {
-      endpoint: `${edge.origin}/v1/session`,
-      label: installation.enrollmentLabel,
-      accessClientId,
-      accessSecretFile: `${installation.machine.root}/${relative}`,
-      expiresAt,
-      ownerTokenEnv: "HARNESS_FLEET_OWNER_TOKEN",
-    };
-  }
-  const gate = lifetime.own(
-    `session-gate-${installation.machine.name}`,
-    await SessionGate.start(enrollment.endpoint),
-  );
-  input.gates.set(installation.machine.name, gate);
-  if (installation.remote !== undefined)
-    input.links.push(
-      lifetime.own(
-        `link-${installation.machine.name}`,
-        await Link.start({
-          remote: installation.remote,
-          port: Number(new URL(gate.origin).port),
-          receipt,
-          repository: declaration.repository,
-        }),
-      ),
-    );
-  enrollment = { ...enrollment, endpoint: `${gate.origin}/v1/session` };
-  const result = await enrollInstallation({ installation, enrollment, ownerToken, receipt });
-  if (result.kind !== "published")
-    throw new ObservationFailure("product CLI did not publish enrollment");
 }
 export async function projectForCases(
   installation: Installation,
@@ -156,7 +49,7 @@ export async function projectForCases(
         boardId,
         projectId,
         title: projectId,
-        description: "Live verification records after real import",
+        description: "Disposable synthetic verification records",
       },
     ],
     [
@@ -230,7 +123,6 @@ export async function prepareRun(input: {
 }): Promise<PreparedRun> {
   const { declaration, receipt, lifetime } = input;
   const copies: SealedLegacyCopy[] = [];
-  const oracles: LegacyOracle[] = [];
   lifetime.own("sealed-inputs", {
     close: async (): Promise<void> => {
       const results = await Promise.allSettled(copies.map((copy): Promise<void> => copy.verify()));
@@ -238,12 +130,7 @@ export async function prepareRun(input: {
         throw new Error("sealed source integrity changed");
     },
   });
-  for (const source of declaration.legacyStores) {
-    const copy = await SealedLegacyCopy.qualify(source);
-    copies.push(copy);
-    if (declaration.rows.includes("OB5"))
-      oracles.push(await readLegacyOracle({ copy, artifact: source.oracle, receipt }));
-  }
+  copies.push(await prepareSyntheticLegacy(declaration, receipt));
   const central = lifetime.own("central", await startCentral(declaration, receipt));
   const installations: Installation[] = [];
   const gates = new Map<string, SessionGate>();
@@ -302,5 +189,5 @@ export async function prepareRun(input: {
     second = actors[1];
   if (first === undefined || second === undefined)
     throw new ObservationOpen("recipient pair not prepared");
-  return { machines: [first, second], central, gates, links, copies, oracles, imported };
+  return { machines: [first, second], central, gates, links, imported };
 }
