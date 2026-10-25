@@ -6,14 +6,13 @@
 //! never product proof.
 use crate::conversation_oracle::{
     QueueObservation, check_command_catalogues, check_display_operations, check_native_invocation,
-    check_recorded_selection, check_rejected_input, check_selected_history, recorded_user_turns,
-    require_fresh_session, selected_steer_raced,
+    check_recorded_selection, check_rejected_input, recorded_user_turns, require_fresh_session,
+    selected_steer_raced,
 };
 use crate::oracle_test_support::{
-    ARGUMENTS, CANARY, NativeSetup, SECOND_CANARY, SECOND_SKILL, SKILL, agent, catalogue,
-    expect_error, item, observation, operation, thread, turn_started, user,
+    ARGUMENTS, CANARY, NativeSetup, SECOND_CANARY, SECOND_SKILL, SKILL, catalogue, expect_error,
+    item, observation, operation, turn_started,
 };
-use crate::verification_models::HistoryThread;
 use serde_json::{Value, json};
 
 const PROMPT: &str = "conversationPrompt";
@@ -431,92 +430,6 @@ fn turn_count_must_match_the_case() {
     expect_error(
         check_recorded_selection(&records, &setup.fixture, &selected_text(), &[SKILL], 2),
         "expected 2 recorded user turns",
-    );
-}
-
-fn history(user_text: &str, reply: &str, thread_id: &str) -> HistoryThread {
-    thread(
-        thread_id,
-        vec![user("user", user_text), agent("reply", reply)],
-    )
-}
-
-fn canonical() -> HistoryThread {
-    history(&format!("/{SKILL} {ARGUMENTS}"), &native_reply(), "thread")
-}
-
-#[test]
-fn canonical_command_with_outer_trim_only_passes() {
-    let setup = NativeSetup::new();
-    let views = [canonical(), canonical()];
-    let trimmed = check_selected_history(
-        &views,
-        "thread",
-        &setup.fixture,
-        &format!("  {ARGUMENTS}  "),
-    )
-    .unwrap();
-    assert!(trimmed.trimmed_outer_whitespace);
-    let same = check_selected_history(&views, "thread", &setup.fixture, ARGUMENTS).unwrap();
-    assert!(!same.trimmed_outer_whitespace);
-}
-
-#[test]
-fn changed_history_is_rejected() {
-    let setup = NativeSetup::new();
-    let wrong = [
-        history(&format!("${SKILL} {ARGUMENTS}"), &native_reply(), "thread"),
-        history(
-            &format!("/{SECOND_SKILL} {ARGUMENTS}"),
-            &native_reply(),
-            "thread",
-        ),
-        history(
-            &format!("/{SKILL} literal-value café second-line"),
-            &native_reply(),
-            "thread",
-        ),
-        history(&format!("/{SKILL} {ARGUMENTS}"), "ORDINARY", "thread"),
-        history(&format!("/{SKILL} {ARGUMENTS}"), &native_reply(), "other"),
-    ];
-    for view in wrong {
-        assert!(
-            check_selected_history(&[view, canonical()], "thread", &setup.fixture, ARGUMENTS)
-                .is_err()
-        );
-    }
-    assert!(check_selected_history(&[canonical()], "thread", &setup.fixture, ARGUMENTS).is_err());
-}
-
-#[test]
-fn other_invocations_of_the_command_do_not_hide_the_selected_one() {
-    // J3 invokes the same native command through Router with different arguments.
-    let setup = NativeSetup::new();
-    let items = vec![
-        user("router-user", &format!("/{SKILL} router-probe")),
-        agent("router-reply", &format!("{CANARY}::router-probe")),
-        user("user", &format!("/{SKILL} {ARGUMENTS}")),
-        agent("reply", &native_reply()),
-    ];
-    let view = thread("thread", items.clone());
-    let result = check_selected_history(
-        &[view.clone(), view.clone()],
-        "thread",
-        &setup.fixture,
-        ARGUMENTS,
-    )
-    .unwrap();
-    assert_eq!(result.user_item_ids, ["user", "user"]);
-    let mut repeated_items = items.clone();
-    repeated_items.push(items[2].clone());
-    expect_error(
-        check_selected_history(
-            &[thread("thread", repeated_items), view],
-            "thread",
-            &setup.fixture,
-            ARGUMENTS,
-        ),
-        "repeated",
     );
 }
 

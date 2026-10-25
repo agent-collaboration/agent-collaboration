@@ -8,6 +8,174 @@ use collaboration_service::{
 use session_event_model::{InputId, SessionEvent, SessionItem, SessionItemKind};
 
 #[tokio::test]
+async fn native_capabilities_selected_no_echo_retains_canonical_user_task_in_live_read_and_resume()
+{
+    let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
+    write(&fixture._directory.path().join("no-user-echo"), "enabled");
+    let skill_path = fixture.workspace.join(".claude/skills/chosen/SKILL.md");
+    write(&skill_path, "Native chosen body $ARGUMENTS");
+    let created = fixture
+        .rpc_params("thread/start", json!({"cwd": fixture.workspace}))
+        .await;
+    let thread_id = created["result"]["thread"]["id"].clone();
+    assert!(thread_id.is_string(), "{created}");
+    let target = collaboration_service::SessionEventHub::sessions(
+        fixture.hub.as_ref(),
+        fixture.board_endpoint.clone(),
+    )
+    .await
+    .expect("real session inventory")
+    .into_iter()
+    .next()
+    .expect("created session")
+    .session;
+    fixture
+        .hub
+        .publish(
+            target.clone(),
+            SessionEvent::ItemStarted {
+                item: SessionItem {
+                    item_id: uuid::Uuid::new_v4().to_string(),
+                    kind: SessionItemKind::Notice,
+                    text: Some(
+                        r#"{"availableCommands":[{"name":"chosen","description":"Chosen"}]}"#
+                            .into(),
+                    ),
+                },
+            },
+        )
+        .await
+        .expect("controlled native command advertisement");
+
+    let submitted = fixture.rpc_params("turn/start", json!({
+        "threadId": thread_id,
+        "input": [
+            {"type":"text","text":"$chosen  λ\n$HOME"},
+            {"type":"skill","name":"chosen","path":fs::canonicalize(&skill_path).expect("actual source")}
+        ]
+    })).await;
+    assert_eq!(
+        submitted["result"]["turn"]["status"], "inProgress",
+        "{submitted}"
+    );
+    let turn_id = submitted["result"]["turn"]["id"].as_str().expect("turn ID");
+    let mut live =
+        collaboration_service::SessionEventHub::attach(fixture.hub.as_ref(), target.clone())
+            .await
+            .expect("actual completion subscription");
+    let ended = |event: &SessionEvent| {
+        matches!(event,
+        SessionEvent::TurnEnded { turn_id: observed, .. } if observed == turn_id)
+    };
+    if !live.snapshot.iter().any(|event| ended(&event.event)) {
+        tokio::time::timeout(Duration::from_secs(5), async {
+            while !ended(&live.receiver.recv().await.expect("live completion").event) {}
+        })
+        .await
+        .expect("bounded actual prompt completion");
+    }
+    let outbound = fs::read_to_string(&fixture.trace).expect("actual ACP receipt");
+    let requests = outbound
+        .lines()
+        .map(|line| serde_json::from_str::<Value>(line).expect("ACP JSON"))
+        .collect::<Vec<_>>();
+    assert_eq!(requests.len(), 2, "one create and one prompt");
+    let prompts = requests
+        .iter()
+        .filter(|request| request["method"] == "session/prompt")
+        .collect::<Vec<_>>();
+    assert_eq!(prompts.len(), 1);
+    assert_eq!(
+        prompts[0]["params"]["prompt"],
+        json!([{"type":"text","text":"/chosen  λ\n$HOME"}])
+    );
+    let native_reads =
+        fs::read_to_string(&fixture.native_export_trace).expect("source-read receipt");
+    let mut histories = Vec::new();
+    for method in ["thread/read", "thread/resume"] {
+        let history = fixture
+            .rpc_params(method, json!({"threadId":thread_id,"includeTurns":true}))
+            .await;
+        let turns = history["result"]["thread"]["turns"]
+            .as_array()
+            .expect("actual history");
+        let items = turns
+            .iter()
+            .flat_map(|turn| turn["items"].as_array().expect("items"))
+            .collect::<Vec<_>>();
+        assert!(
+            items.iter().any(|item| item["type"] == "agentMessage"
+                && item["text"] == "Fixture native reply without user echo"),
+            "{method}: {history}"
+        );
+        histories.push((method, history));
+    }
+    assert_eq!(
+        fs::read_to_string(&fixture.trace).expect("no history replay dispatch"),
+        outbound
+    );
+    assert_eq!(
+        fs::read_to_string(&fixture.native_export_trace).expect("no history discovery"),
+        native_reads
+    );
+    let snapshot = collaboration_service::SessionEventHub::attach(fixture.hub.as_ref(), target)
+        .await
+        .expect("live retained snapshot")
+        .snapshot;
+    assert!(snapshot.iter().any(|event| matches!(&event.event,
+        SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+            if item.kind == SessionItemKind::AgentMessage
+                && item.text.as_deref() == Some("Fixture native reply without user echo"))));
+    // The outbound canonical task and real assistant reply above must survive
+    // even when the provider sends no UserMessageChunk. The reply is not body-
+    // execution proof; it is the ACP fixture's real output through the hub.
+    let mut historical_user_ids = Vec::new();
+    for (method, history) in histories {
+        let tasks = history["result"]["thread"]["turns"]
+            .as_array()
+            .expect("turns")
+            .iter()
+            .flat_map(|turn| turn["items"].as_array().expect("items"))
+            .filter(|item| item["type"] == "userMessage")
+            .collect::<Vec<_>>();
+        assert_eq!(
+            tasks.len(),
+            1,
+            "missing canonical task without native echo: {method}: {history}"
+        );
+        assert_eq!(
+            tasks[0]["content"],
+            json!([{"type":"text","text":"/chosen  λ\n$HOME"}])
+        );
+        historical_user_ids.push(
+            tasks[0]["id"]
+                .as_str()
+                .expect("retained user ID")
+                .to_owned(),
+        );
+    }
+    let user_items = snapshot
+        .iter()
+        .filter_map(|event| match &event.event {
+            SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+                if item.kind == SessionItemKind::UserMessage =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(user_items.len(), 1, "one retained live user item");
+    assert_eq!(user_items[0].text.as_deref(), Some("/chosen  λ\n$HOME"));
+    assert!(
+        historical_user_ids
+            .iter()
+            .all(|item_id| item_id == &user_items[0].item_id)
+    );
+    fixture.stop().await;
+}
+
+#[tokio::test]
 async fn native_capabilities_selected_host_prepares_delivers_once_and_preserves_history() {
     let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
     let actor: message_board::Identity =
@@ -173,6 +341,32 @@ async fn native_capabilities_selected_host_prepares_delivers_once_and_preserves_
         .expect("actual prompt");
     assert_eq!(prompt["params"]["prompt"][0]["text"], "/chosen  λ\n$HOME");
     let native_reads = fs::read_to_string(&fixture.native_export_trace).expect("native read trace");
+    let retained =
+        collaboration_service::SessionEventHub::attach(fixture.hub.as_ref(), target.clone())
+            .await
+            .expect("retained submitted and native identities")
+            .snapshot;
+    let retained_user_ids = retained
+        .iter()
+        .filter_map(|event| match &event.event {
+            SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+                if item.kind == SessionItemKind::UserMessage =>
+            {
+                assert_eq!(item.text.as_deref(), Some("/chosen  λ\n$HOME"));
+                Some(item.item_id.clone())
+            }
+            _ => None,
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(
+        retained_user_ids.len(),
+        2,
+        "submitted and native facts both survive"
+    );
+    assert!(
+        retained_user_ids.contains("native-catalogue-user-1"),
+        "provider message ID is preserved"
+    );
     for method in ["thread/read", "thread/resume"] {
         let history = fixture
             .rpc_params(method, json!({"threadId":thread_id,"includeTurns":true}))
@@ -189,13 +383,22 @@ async fn native_capabilities_selected_host_prepares_delivers_once_and_preserves_
             .collect::<Vec<_>>();
         assert_eq!(
             user_tasks.len(),
-            1,
-            "exactly one selected user task, without duplicates or an original dollar task: {history}"
+            2,
+            "exactly the submitted task and native user group: {history}"
         );
         assert_eq!(
-            user_tasks.first().expect("canonical task").get("content"),
-            Some(&json!([{"type":"text","text":"/chosen  λ\n$HOME"}]))
+            user_tasks
+                .iter()
+                .map(|item| item["id"].as_str().expect("user item ID").to_owned())
+                .collect::<std::collections::BTreeSet<_>>(),
+            retained_user_ids
         );
+        for task in user_tasks {
+            assert_eq!(
+                task["content"],
+                json!([{"type":"text","text":"/chosen  λ\n$HOME"}])
+            );
+        }
         assert_eq!(
             fs::read_to_string(&fixture.trace).expect("no replay dispatch"),
             after_prompt

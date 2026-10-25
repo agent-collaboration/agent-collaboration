@@ -279,3 +279,7 @@ impl<P: InteractionPort> Drop for AgentSessionClient<P> {
 #[cfg(test)]
 #[path = "agent_session_client/turn_admission_tests.rs"]
 mod turn_admission_tests;
+
+#[cfg(test)]
+#[path = "agent_session_client/submitted_prompt_tests.rs"]
+mod submitted_prompt_tests;

@@ -5,9 +5,7 @@
 //! Design J2-J4) and from the controlled fixture: its native skill name, file and
 //! body-only canary, and the arguments the driver typed.
 use crate::native_file_facts::same_path;
-use crate::verification_models::{
-    FixtureRecord, HistoryThread, OperationRow, ProviderItem, ProviderObservation,
-};
+use crate::verification_models::{FixtureRecord, OperationRow, ProviderItem, ProviderObservation};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::{collections::BTreeMap, path::Path};
@@ -468,76 +466,6 @@ pub(crate) fn check_recorded_selection(
         text,
         text_element_count: elements,
     })
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct HistoryCheck {
-    pub(crate) user_item_ids: Vec<String>,
-    pub(crate) reply_item_ids: Vec<String>,
-    pub(crate) trimmed_outer_whitespace: bool,
-}
-
-fn user_text(item: &crate::verification_models::HistoryItem) -> String {
-    item.content
-        .iter()
-        .filter(|part| part.kind == "text")
-        .filter_map(|part| part.text.as_deref())
-        .collect()
-}
-
-/// J4: read and resume show the canonical native command and the submitted task (C4).
-/// Only leading/trailing argument whitespace may differ. The same Session may hold
-/// other invocations, so the selected one is found by its exact submitted text.
-pub(crate) fn check_selected_history(
-    views: &[HistoryThread],
-    session_id: &str,
-    fixture: &FixtureRecord,
-    arguments: &str,
-) -> Result<HistoryCheck, String> {
-    if views.len() != 2 || views.iter().any(|view| view.id != session_id) {
-        return Err("both read and resume views of the same thread are required".to_owned());
-    }
-    let exact = format!("/{} {arguments}", fixture.skill_name);
-    let trimmed = format!("/{} {}", fixture.skill_name, arguments.trim());
-    let reply = expected_native_reply(&fixture.canary, arguments);
-    let mut check = HistoryCheck {
-        user_item_ids: Vec::new(),
-        reply_item_ids: Vec::new(),
-        trimmed_outer_whitespace: false,
-    };
-    for view in views {
-        let items: Vec<_> = view
-            .turns
-            .iter()
-            .flat_map(|turn| turn.items.iter())
-            .collect();
-        let users: Vec<_> = items
-            .iter()
-            .filter(|item| item.kind == "userMessage")
-            .map(|item| (item, user_text(item)))
-            .filter(|(_, text)| *text == exact || *text == trimmed)
-            .collect();
-        let [(user, text)] = users.as_slice() else {
-            return Err(
-                "history lost, changed or repeated the native command and its task".to_owned(),
-            );
-        };
-        check.trimmed_outer_whitespace |= *text != exact;
-        let replies: Vec<_> = items
-            .iter()
-            .filter(|item| {
-                item.kind == "agentMessage"
-                    && item.text.as_deref().map(str::trim) == Some(reply.as_str())
-            })
-            .collect();
-        let [reply_item] = replies.as_slice() else {
-            return Err("native effect missing or repeated in history".to_owned());
-        };
-        check.user_item_ids.push(user.id.clone());
-        check.reply_item_ids.push(reply_item.id.clone());
-    }
-    Ok(check)
 }
 
 /// J4: pure loaded display adds no Router operation or turn (R7). An explicit unloaded

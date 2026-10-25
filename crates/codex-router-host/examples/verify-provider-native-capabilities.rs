@@ -13,6 +13,8 @@ mod command_reload_probe;
 mod conversation_oracle;
 #[path = "provider_native_capability_verification/global_claude_binding.rs"]
 mod global_claude_binding;
+#[path = "provider_native_capability_verification/history_oracle.rs"]
+mod history_oracle;
 #[path = "provider_native_capability_verification/installed_client_terminal.rs"]
 mod installed_client_terminal;
 #[path = "provider_native_capability_verification/journey_run.rs"]
@@ -209,6 +211,9 @@ mod conversation_oracle_tests;
 #[cfg(test)]
 #[path = "provider_native_capability_verification/driver_tests.rs"]
 mod driver_tests;
+#[cfg(test)]
+#[path = "provider_native_capability_verification/history_oracle_tests.rs"]
+mod history_oracle_tests;
 #[cfg(test)]
 #[path = "provider_native_capability_verification/metadata_oracle_tests.rs"]
 mod metadata_oracle_tests;

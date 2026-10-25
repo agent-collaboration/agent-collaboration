@@ -32,15 +32,21 @@ const ACP_FIXTURE: &str = r#"
 IFS= read -r request || exit 1
 request_id=$(printf '%s\n' "$request" | sed -n 's/.*"id":\([^,}]*\).*/\1/p')
 printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":1,"agentCapabilities":{"mcpCapabilities":{"http":true}},"agentInfo":{"name":"catalogue-transport-fixture","version":"1"}}}\n' "$request_id"
+prompt_count=0
 while IFS= read -r request; do
   printf '%s\n' "$request" >> "$ACP_TRACE_FILE"
   request_id=$(printf '%s\n' "$request" | sed -n 's/.*"id":\([^,}]*\).*/\1/p')
   case "$request" in
     *'"method":"session/new"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"sessionId":"selection-fixture-session"}}\n' "$request_id" ;;
     *'"method":"session/prompt"'*)
+      prompt_count=$((prompt_count + 1))
       prompt_text=$(printf '%s\n' "$request" | sed -En 's/.*"text":("(\\.|[^"\\])*").*/\1/p')
       test -n "$prompt_text" || exit 24
-      printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"selection-fixture-session","update":{"sessionUpdate":"user_message_chunk","content":{"type":"text","text":%s}}}}\n' "$prompt_text"
+      if test -f "$ACP_NO_USER_ECHO_FILE"; then
+        printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"selection-fixture-session","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Fixture native reply without user echo"}}}}\n'
+      else
+        printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"selection-fixture-session","update":{"sessionUpdate":"user_message_chunk","messageId":"native-catalogue-user-%s","content":{"type":"text","text":%s}}}}\n' "$prompt_count" "$prompt_text"
+      fi
       if test -f "$ACP_HOLD_PROMPT_FILE"; then
         pending_prompt=$request_id
         printf '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"selection-fixture-session","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Fixture held prompt received"}}}}\n'
@@ -119,6 +125,10 @@ impl CatalogueFixture {
             ),
             ("NATIVE_EXPORT_FILE".into(), export.display().to_string()),
             ("ACP_TRACE_FILE".into(), trace.display().to_string()),
+            (
+                "ACP_NO_USER_ECHO_FILE".into(),
+                directory.path().join("no-user-echo").display().to_string(),
+            ),
             (
                 "ACP_HOLD_PROMPT_FILE".into(),
                 hold_prompt.display().to_string(),

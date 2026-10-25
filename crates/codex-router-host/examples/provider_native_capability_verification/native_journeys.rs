@@ -9,9 +9,10 @@ use crate::command_reload_probe::reload_after_fixture_removal;
 use crate::conversation_oracle::{
     QueueObservation, advertised_command_names, any_turn_ended, check_command_catalogues,
     check_display_operations, check_native_invocation, check_ordinary_completion,
-    check_picker_refusal, check_recorded_selection, check_rejected_input, check_selected_history,
-    expected_native_reply, new_operations, require_fresh_session, selected_steer_raced,
+    check_picker_refusal, check_recorded_selection, check_rejected_input, expected_native_reply,
+    new_operations, require_fresh_session, selected_steer_raced,
 };
+use crate::history_oracle::check_selected_history;
 use crate::installed_client_terminal::{CAPTURE_MAX_BYTES, CLEAR_LINE, ESCAPE, terminal_text};
 use crate::journey_run::{Journey, JourneyResult, PICKER_SECONDS, json_value, name_fragment};
 use crate::metadata_oracle::check_metadata_observation;
@@ -552,7 +553,8 @@ pub(crate) async fn history_journey(
         &journey.observe("display", Some(retained.cursor())).await?,
         unloaded_resume,
     )?;
-    let history = check_selected_history(&threads, &plan.session_id, fixture, arguments)?;
+    let history =
+        check_selected_history(&retained, &threads, &plan.session_id, fixture, arguments)?;
     let reopened =
         read_bounded_bytes(&journey.capture("history-reopen"), CAPTURE_MAX_BYTES as u64)?;
     let metadata = check_metadata_observation(
