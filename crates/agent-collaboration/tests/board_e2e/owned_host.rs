@@ -190,7 +190,14 @@ impl BoardHost {
             || url.scheme() != "http"
             || matches!(url.port(), None | Some(8787 | 8788 | 43127))
         {
-            return Err("Host ready/manifest/listener identity mismatch".into());
+            return Err(format!(
+                "Host ready/manifest/listener identity mismatch: same_url={}, http={}, loopback={}, port={:?}",
+                ready.mcp_url == manifest.mcp.url,
+                url.scheme() == "http",
+                url.host_str() == Some("127.0.0.1"),
+                url.port()
+            )
+            .into());
         }
         self.mcp_url = ready.mcp_url;
         Ok(())
