@@ -375,3 +375,44 @@ fn text_that_never_appears_is_never_submitted() {
     assert!(error.contains("never appeared"), "{error}");
     terminal.shutdown(Duration::from_secs(10)).unwrap();
 }
+
+#[test]
+fn history_requires_an_explicit_ordinary_live_offset() {
+    let base = [
+        "history",
+        "plan.json",
+        "--arguments",
+        "x",
+        "--output",
+        "out",
+        "--ordinary-live-capture",
+        "live.pty",
+    ];
+    let mut with_offset = words(&base);
+    with_offset.extend(words(&["--ordinary-live-offset", "4447"]));
+    assert_eq!(
+        parse_command(&with_offset).unwrap(),
+        VerifierCommand::History {
+            plan: "plan.json".into(),
+            output: "out".into(),
+            arguments: "x".to_owned(),
+            unloaded_resume: false,
+            ordinary_live_capture: "live.pty".into(),
+            ordinary_live_offset: 4447,
+        }
+    );
+    // No default: a missing offset is an error, never 0.
+    assert!(
+        parse_command(&words(&base))
+            .unwrap_err()
+            .contains("--ordinary-live-offset is required")
+    );
+    for invalid in ["", "-1", "4k", "1.5"] {
+        let mut command = words(&base);
+        command.extend(words(&["--ordinary-live-offset", invalid]));
+        assert!(
+            parse_command(&command).unwrap_err().contains("byte count"),
+            "{invalid:?}"
+        );
+    }
+}

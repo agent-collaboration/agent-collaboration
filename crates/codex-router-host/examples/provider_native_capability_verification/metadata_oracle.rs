@@ -2,11 +2,35 @@
 //! metadata stays retained outside assistant items, and genuine prose appears in both
 //! history views and both installed-client captures with no raw metadata keys.
 use crate::conversation_oracle::{catalogue_names, require_complete, retained_items};
+use crate::installed_client_terminal::terminal_text;
 use crate::verification_models::{HistoryThread, ProviderItem, ProviderObservation};
 use serde::Serialize;
 use serde_json::Value;
 
 const METADATA_KINDS: [&str; 4] = ["usage", "modeChange", "configChange", "sessionInfo"];
+
+/// The original live client capture of the ordinary turn: its raw bytes and the byte
+/// offset recorded just before the ordinary input was typed. A resumed client redraws
+/// earlier history before any input, so only bytes after this offset can show the new
+/// live reply; the whole capture is still scanned for metadata leaks.
+pub(crate) struct LiveCapture<'a> {
+    pub(crate) raw: &'a [u8],
+    pub(crate) pre_input_offset: usize,
+}
+
+impl LiveCapture<'_> {
+    /// Terminal text after the pre-input offset, sliced from raw bytes before decoding.
+    fn after_input(&self) -> Result<String, String> {
+        let after = self.raw.get(self.pre_input_offset..).ok_or_else(|| {
+            format!(
+                "ordinary live offset {} is outside the {}-byte capture",
+                self.pre_input_offset,
+                self.raw.len()
+            )
+        })?;
+        Ok(terminal_text(after))
+    }
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,10 +61,12 @@ fn terminal_shows_reply(capture: &str, reply: &str) -> bool {
 pub(crate) fn check_metadata_observation(
     observation: &ProviderObservation,
     views: &[HistoryThread],
-    live_capture: &str,
+    live: &LiveCapture<'_>,
     reopened_capture: &str,
     expected_reply: &str,
 ) -> Result<MetadataCheck, String> {
+    let live_after_input = live.after_input()?;
+    let live_capture = terminal_text(live.raw);
     require_complete(observation)?;
     let retained = retained_items(observation);
     let metadata: Vec<&ProviderItem> = retained
@@ -93,12 +119,20 @@ pub(crate) fn check_metadata_observation(
             return Err("ordinary assistant reply missing from Codex history".to_owned());
         }
     }
-    for capture in [live_capture, reopened_capture] {
-        if !terminal_shows_reply(capture, expected_reply) {
-            return Err(
-                "ordinary assistant reply absent from original installed-client PTY".to_owned(),
-            );
-        }
+    // The original live reply must be drawn after the input; redrawn history before it
+    // never counts as live. The reopened capture is judged whole.
+    if !terminal_shows_reply(&live_after_input, expected_reply) {
+        return Err(
+            "ordinary assistant reply absent from original live PTY after the input".to_owned(),
+        );
+    }
+    if !terminal_shows_reply(reopened_capture, expected_reply) {
+        return Err(
+            "ordinary assistant reply absent from reopened installed-client PTY".to_owned(),
+        );
+    }
+    // Leaks are judged over both whole captures, including the pre-input redraw.
+    for capture in [live_capture.as_str(), reopened_capture] {
         let compact: String = capture
             .chars()
             .filter(|character| !character.is_whitespace())

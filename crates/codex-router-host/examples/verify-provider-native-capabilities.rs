@@ -164,6 +164,7 @@ async fn run_command(command: VerifierCommand) -> Result<String, String> {
             arguments,
             unloaded_resume,
             ordinary_live_capture,
+            ordinary_live_offset,
         } => {
             run_journey(&plan, &output, async |journey| {
                 native_journeys::history_journey(
@@ -171,6 +172,7 @@ async fn run_command(command: VerifierCommand) -> Result<String, String> {
                     &arguments,
                     unloaded_resume,
                     &ordinary_live_capture,
+                    ordinary_live_offset,
                 )
                 .await
             })

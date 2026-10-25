@@ -20,12 +20,16 @@ Usage: scripts/verification/native-capabilities.sh <command> [options]
       J3 catalogue replacement, Router `/` invocation, installed-Codex picker refusal.
       --reload-probe then removes the second fixture skill (exact recorded bytes),
       sends /reload-skills through Router, observes the lists and restores the file.
-  history PLAN --arguments TEXT --output DIR --ordinary-live-capture PTY [--unloaded-resume]
+  history PLAN --arguments TEXT --output DIR --ordinary-live-capture PTY
+          --ordinary-live-offset BYTES [--unloaded-resume]
       J4 read/resume canonical history, display operations, client reopen and the
       ACP metadata oracle. PTY is an original live client capture on the same
       Session that actually drew the ordinary STEER_BASE_OK reply. The selected-steer
       run's select-selected-steer.pty qualifies only if it drew that reply; otherwise
       use a separate genuine live ordinary control. Reopened history is never live.
+      BYTES is the raw capture length recorded just before the ordinary input; only
+      the bytes after it can show the live reply (a resumed client redraws history
+      first). The whole capture is still scanned for metadata leaks.
   processes capture --root-pid PID --output FILE
       Record the owned process closure of a Lead-started Router or Host (observe only).
   processes check --inventory FILE
@@ -70,6 +74,8 @@ pub(crate) enum VerifierCommand {
         arguments: String,
         unloaded_resume: bool,
         ordinary_live_capture: PathBuf,
+        /// Raw capture bytes recorded before the ordinary input; required, no default.
+        ordinary_live_offset: usize,
     },
     CaptureProcesses {
         root_pid: u32,
@@ -193,7 +199,12 @@ pub(crate) fn parse_command(words: &[String]) -> Result<VerifierCommand, String>
         "history" => {
             let mut options = ParsedOptions::parse(
                 rest,
-                &["output", "arguments", "ordinary-live-capture"],
+                &[
+                    "output",
+                    "arguments",
+                    "ordinary-live-capture",
+                    "ordinary-live-offset",
+                ],
                 &["unloaded-resume"],
             )?;
             Ok(VerifierCommand::History {
@@ -202,6 +213,10 @@ pub(crate) fn parse_command(words: &[String]) -> Result<VerifierCommand, String>
                 arguments: options.required("arguments")?,
                 unloaded_resume: options.flag("unloaded-resume"),
                 ordinary_live_capture: options.required("ordinary-live-capture")?.into(),
+                ordinary_live_offset: options
+                    .required("ordinary-live-offset")?
+                    .parse()
+                    .map_err(|_| "--ordinary-live-offset must be a byte count".to_owned())?,
             })
         }
         "processes" => {

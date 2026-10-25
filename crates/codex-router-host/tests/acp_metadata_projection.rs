@@ -201,7 +201,7 @@ async fn check_metadata_projection(replay: bool) {
     let submitted_id = if replay {
         None
     } else {
-        let submitted = &items[0];
+        let submitted = items.first().expect("submitted user item");
         assert_eq!(submitted.text.as_deref(), Some("Reply"));
         assert_eq!(
             uuid::Uuid::parse_str(&submitted.item_id)

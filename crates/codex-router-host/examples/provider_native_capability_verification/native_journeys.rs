@@ -15,7 +15,7 @@ use crate::conversation_oracle::{
 use crate::history_oracle::check_selected_history;
 use crate::installed_client_terminal::{CAPTURE_MAX_BYTES, CLEAR_LINE, ESCAPE, terminal_text};
 use crate::journey_run::{Journey, JourneyResult, PICKER_SECONDS, json_value, name_fragment};
-use crate::metadata_oracle::check_metadata_observation;
+use crate::metadata_oracle::{LiveCapture, check_metadata_observation};
 use crate::native_exports::{read_bounded_bytes, read_session_recorder};
 use crate::native_file_facts::{native_plugin_facts, plugin_namespace, plugin_skill_files};
 use crate::native_fixture::write_private;
@@ -518,10 +518,18 @@ pub(crate) async fn history_journey(
     arguments: &str,
     unloaded_resume: bool,
     ordinary_live_capture: &Path,
+    ordinary_live_offset: usize,
 ) -> Result<JourneyResult, String> {
     let plan = &journey.target.plan;
     let fixture = &journey.target.fixture;
     let live_capture = read_bounded_bytes(ordinary_live_capture, CAPTURE_MAX_BYTES as u64)?;
+    // Reject an offset outside the capture before any request or client drive.
+    if ordinary_live_offset > live_capture.len() {
+        return Err(format!(
+            "ordinary live offset {ordinary_live_offset} is outside the {}-byte capture",
+            live_capture.len()
+        ));
+    }
     let retained = journey.observe("before", None).await?;
     let before = journey.operations("before").await?;
     let replies = journey
@@ -560,11 +568,15 @@ pub(crate) async fn history_journey(
     let metadata = check_metadata_observation(
         &retained,
         &threads,
-        &terminal_text(&live_capture),
+        &LiveCapture {
+            raw: &live_capture,
+            pre_input_offset: ordinary_live_offset,
+        },
         &terminal_text(&reopened),
         STEER_BASE_REPLY,
     )?;
     let mut checks = Map::new();
+    checks.insert("ordinaryLiveOffset".to_owned(), json!(ordinary_live_offset));
     checks.insert("history".to_owned(), json_value(&history)?);
     checks.insert("display".to_owned(), json_value(&display)?);
     checks.insert("metadata".to_owned(), json_value(&metadata)?);
