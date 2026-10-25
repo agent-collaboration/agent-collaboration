@@ -227,14 +227,17 @@ async fn assert_copy_cut(
     };
     assert_eq!(copy.epoch.value(), cursor.epoch.get());
     match prefix {
-        ReplicatedPrefix::Neither => match cause {
-            Some(cause) => assert!(copy.sequence < cause.sequence),
+        ReplicatedPrefix::Neither => {
             // An earlier Copy call can be held before the post gets a native
             // capture assignment. The durable source post and unchanged
             // native ACK still establish the discarded prefix; the successor
             // is checked independently for absence of both post and custody.
-            None => assert_eq!(copy, copy_before_crash),
-        },
+            assert!(discarded_copy_excludes_cause(
+                cause,
+                copy,
+                copy_before_crash
+            ));
+        }
         ReplicatedPrefix::CauseOnly => {
             assert!(
                 copy.sequence
@@ -258,6 +261,49 @@ async fn assert_copy_cut(
         "T native prefix evidence: {}",
         json!({"prefix":name,"cause":cause,"handoff":handoff,"copyAck":copy,"copyBeforeCrash":copy_before_crash})
     );
+    Ok(())
+}
+
+fn discarded_copy_excludes_cause(
+    cause_capture: Option<ReplicationPosition>,
+    acknowledged_copy: ReplicationPosition,
+    copy_before_crash: ReplicationPosition,
+) -> bool {
+    match cause_capture {
+        Some(captured_cause) => {
+            acknowledged_copy.epoch == captured_cause.epoch
+                && acknowledged_copy.sequence < captured_cause.sequence
+        }
+        None => acknowledged_copy == copy_before_crash,
+    }
+}
+
+#[test]
+fn uncaptured_cause_requires_an_unchanged_native_ack() -> FixtureResult {
+    let ack_before_crash = serde_json::from_value(json!({"epoch":1,"sequence":99}))?;
+    let advanced_ack = serde_json::from_value(json!({"epoch":1,"sequence":100}))?;
+    let regressed_ack = serde_json::from_value(json!({"epoch":1,"sequence":98}))?;
+    let ack_in_other_epoch = serde_json::from_value(json!({"epoch":2,"sequence":99}))?;
+    assert!(discarded_copy_excludes_cause(
+        None,
+        ack_before_crash,
+        ack_before_crash
+    ));
+    assert!(!discarded_copy_excludes_cause(
+        None,
+        advanced_ack,
+        ack_before_crash
+    ));
+    assert!(!discarded_copy_excludes_cause(
+        None,
+        regressed_ack,
+        ack_before_crash
+    ));
+    assert!(!discarded_copy_excludes_cause(
+        None,
+        ack_in_other_epoch,
+        ack_before_crash
+    ));
     Ok(())
 }
 
