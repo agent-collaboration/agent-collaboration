@@ -27,8 +27,10 @@ while IFS=$'\t' read -r job_id job_name; do
     curl --fail --silent --show-error --location --config - \
       "https://api.github.com/repos/$repository/actions/jobs/$job_id/logs" > "$output_directory/job-$job_id.log"
   bash "$(dirname "$0")/extract-test-timings.sh" "$job_name" "$output_directory/job-$job_id.log" >> "$output_directory/tests.tsv"
-done < <(jq -r '.[].jobs[] | select(.status == "completed") | [.id, .name] | @tsv' "$output_directory/jobs.json")
-sort -nr -u "$output_directory/tests.tsv" > "$output_directory/tests-sorted.tsv"
+done < <(jq -r '.[].jobs[] | select(.status == "completed" and .conclusion != "skipped" and (.steps | length) > 0) | [.id, .name] | @tsv' "$output_directory/jobs.json")
+# Deduplicate whole rows before numeric ordering; sort -nu would collapse
+# distinct tests that happen to have the same duration.
+sort -u "$output_directory/tests.tsv" | sort -nr > "$output_directory/tests-sorted.tsv"
 {
   printf '## Slowest workflow steps\n\n| Seconds | Result | Job | Step |\n| ---: | --- | --- | --- |\n'
   head -20 "$output_directory/steps.tsv" | awk -F '\t' '{print "| " $1 " | " $2 " | " $3 " | " $4 " |"}'
