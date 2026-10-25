@@ -79,17 +79,6 @@ impl ProviderNativeReadContext {
         }
     }
 
-    pub(crate) fn plugin_read_workspace(&self) -> Result<PathBuf, CatalogueUnsupported> {
-        // The selector has no conversation/cwd and the provider socket serves
-        // multiple native setups. User installation scope does not supply the
-        // missing request context; no existing lookup here disambiguates it.
-        Err(if self.provider == ProviderKind::ClaudeCode {
-            CatalogueUnsupported::ScopeUnavailable
-        } else {
-            CatalogueUnsupported::NativeOperationMissing
-        })
-    }
-
     pub(crate) fn home_directory(&self) -> Option<&std::path::Path> {
         self.home.as_deref()
     }

@@ -274,20 +274,6 @@ fn native_capabilities_regular_plugin_ignores_ordinary_skill_overrides_in_both_c
     assert_eq!(project_items.len(), 1);
     assert_eq!(home_items[0].availability, NativeAvailability::Available);
     assert_eq!(project_items[0].availability, NativeAvailability::Available);
-    let launch = crate::ExternalProviderLaunch {
-        executable: PathBuf::from("/native/adapter"),
-        arguments: Vec::new(),
-        environment: vec![("HOME".into(), home.to_str().expect("UTF8").into())],
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-    };
-    let context = ProviderNativeReadContext::capture(
-        collaboration_protocol::ProviderKind::ClaudeCode,
-        &launch,
-    );
-    assert_eq!(
-        context.plugin_read_workspace(),
-        Err(CatalogueUnsupported::ScopeUnavailable)
-    );
 }
 
 fn native_plugin_fixture(root: &Path, enabled: bool) -> NativePlugin {

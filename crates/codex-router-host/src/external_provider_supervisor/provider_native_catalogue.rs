@@ -186,57 +186,9 @@ impl NativeCataloguePort for ExternalProviderSupervisor {
                     reason: CatalogueUnsupported::NativeOperationMissing,
                 };
             }
-            let workspace = match context.plugin_read_workspace() {
-                Ok(workspace) => workspace,
-                Err(reason) => return NativePluginReadResult::Unsupported { reason },
-            };
-            let cancelled = binding.runtime.retirement().child_token();
-            let _cancel_on_drop = cancelled.clone().drop_guard();
-            // Only an independently qualified setup may be re-enumerated.
-            // A supplied selector never authorizes opening an arbitrary path.
-            let scope_cwd = match CapabilityPath::new(workspace.clone()) {
-                Ok(cwd) => cwd,
-                Err(reason) => return NativePluginReadResult::Failed { reason },
-            };
-            let package_read = match context.claude_plugins(workspace, cancelled).await {
-                Ok(package_read) => package_read,
-                Err(reason) => return NativePluginReadResult::Failed { reason },
-            };
-            let plugins = match package_read.plugins {
-                CatalogueSection::Supported {
-                    items,
-                    enumeration: SourceEnumeration::Accounted,
-                    errors,
-                } if errors.is_empty() => items,
-                _ => {
-                    return NativePluginReadResult::Failed {
-                        reason: CatalogueReadFailure::InvalidNativeData,
-                    };
-                }
-            };
-            let mut matching = plugins.into_iter().filter(|plugin| {
-                plugin.name == request.selector.plugin_name
-                    && matches!((&plugin.marketplace, &request.selector.marketplace),
-                        (NativeMarketplaceObservation::Qualified { source: NativeMarketplaceSource::Filesystem { manifest_path: observed }, .. },
-                         NativeMarketplaceSelector::Filesystem { manifest_path: selected }) if observed == selected)
-            });
-            let Some(plugin) = matching.next() else {
-                return NativePluginReadResult::Failed {
-                    reason: CatalogueReadFailure::NotFound,
-                };
-            };
-            if matching.next().is_some() {
-                return NativePluginReadResult::Failed {
-                    reason: CatalogueReadFailure::AmbiguousSelector,
-                };
-            }
-            NativePluginReadResult::Ready {
-                scope: Box::new(CatalogueScope {
-                    binding: binding.identity.clone(),
-                    query: CatalogueQuery::Workspace { cwd: scope_cwd },
-                    view: CatalogueView::FilesystemCatalogues,
-                }),
-                plugin: Box::new(plugin),
+            // The selector has no conversation/cwd to qualify a native setup.
+            NativePluginReadResult::Unsupported {
+                reason: CatalogueUnsupported::ScopeUnavailable,
             }
         })
     }

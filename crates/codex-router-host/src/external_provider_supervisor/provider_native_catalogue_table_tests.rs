@@ -3,6 +3,83 @@
 use super::*;
 
 #[tokio::test]
+async fn native_capabilities_socket_plugin_read_rejects_unqualified_scope_without_native_dispatch()
+{
+    for (provider, expected_reason) in [
+        (
+            ProviderKind::ClaudeCode,
+            CatalogueUnsupported::ScopeUnavailable,
+        ),
+        (
+            ProviderKind::Cursor,
+            CatalogueUnsupported::NativeOperationMissing,
+        ),
+    ] {
+        let mut fixture = CatalogueFixture::new(provider).await;
+        let selector_path = fixture
+            ._directory
+            .path()
+            .join("unread-selector/marketplace.json");
+        let request = NativePluginRead {
+            endpoint: fixture.board_endpoint.clone(),
+            selector: NativePluginSelector {
+                marketplace: NativeMarketplaceSelector::Filesystem {
+                    manifest_path: CapabilityPath::new(selector_path.clone())
+                        .expect("absolute selector"),
+                },
+                plugin_name: CapabilityName::new("not-installed".into()).expect("plugin name"),
+            },
+            actor: fixture.read_request(CatalogueQuery::Home).actor,
+        };
+        let before = fs::read_to_string(&fixture.trace).expect("initial ACP trace");
+
+        let direct = fixture.supervisor.read_plugin(request.clone()).await;
+        let mut foreign = request;
+        foreign.endpoint.endpoint_id =
+            message_board::EndpointId::try_from("foreign-provider".to_owned())
+                .expect("foreign endpoint");
+        let rejected_foreign = fixture.supervisor.read_plugin(foreign).await;
+        let response = fixture
+            .rpc_params(
+                "plugin/read",
+                json!({
+                    "marketplacePath": selector_path, "pluginName": "not-installed"
+                }),
+            )
+            .await;
+
+        assert_eq!(
+            direct,
+            NativePluginReadResult::Unsupported {
+                reason: expected_reason
+            }
+        );
+        assert_eq!(
+            rejected_foreign,
+            NativePluginReadResult::Failed {
+                reason: CatalogueReadFailure::InvalidScope,
+            }
+        );
+        assert_eq!(response["error"]["code"], -32000);
+        assert_eq!(
+            response["error"]["message"],
+            "native capability discovery is unsupported for this provider binding"
+        );
+        assert!(response.get("result").is_none(), "{response}");
+        fixture.assert_no_native_export();
+        assert_eq!(
+            fs::read_to_string(&fixture.trace).expect("final ACP trace"),
+            before
+        );
+        assert!(
+            !selector_path.exists(),
+            "selector must not create or qualify a setup"
+        );
+        fixture.finish().await;
+    }
+}
+
+#[tokio::test]
 async fn native_capabilities_socket_user_scope_cannot_qualify_reserved_synced_repository() {
     let mut fixture = CatalogueFixture::new(ProviderKind::ClaudeCode).await;
     let manifest = fixture.install_package_fixture(false);
