@@ -19,7 +19,7 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::Command,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tempfile::TempDir;
 
@@ -329,4 +329,49 @@ fn existing_capture_is_never_reused() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn submission_waits_for_the_drawn_text_and_the_enter_window() {
+    // Codex 0.163 turns an Enter within 120 ms of a fast-typed burst into a newline;
+    // the driver submits only after the text is drawn and that window has passed.
+    let directory = TempDir::new().unwrap();
+    let mut terminal = cat_terminal(directory.path());
+    let started = Instant::now();
+    let mark = terminal
+        .type_and_submit(
+            "/router-native-arguments refusal-probe",
+            Duration::from_secs(10),
+        )
+        .unwrap();
+    assert!(started.elapsed() >= Duration::from_millis(120));
+    assert!(terminal.screen_since(0).contains("refusal-probe"));
+    // cat repeats the submitted line only after Enter, i.e. after the returned mark.
+    terminal
+        .wait_for("refusal-probe", mark, Duration::from_secs(10))
+        .unwrap();
+    terminal.shutdown(Duration::from_secs(10)).unwrap();
+}
+
+#[test]
+fn text_that_never_appears_is_never_submitted() {
+    let directory = TempDir::new().unwrap();
+    // A terminal with echo off never draws the typed text.
+    let mut terminal = InstalledClientTerminal::spawn(
+        Path::new("/bin/sh"),
+        &[
+            "-c".to_owned(),
+            "stty -echo; exec cat >/dev/null".to_owned(),
+        ],
+        directory.path(),
+        &[],
+        &directory.path().join("silent.pty"),
+    )
+    .unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    let error = terminal
+        .type_and_submit("never drawn", Duration::from_millis(500))
+        .unwrap_err();
+    assert!(error.contains("never appeared"), "{error}");
+    terminal.shutdown(Duration::from_secs(10)).unwrap();
 }

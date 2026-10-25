@@ -12,9 +12,7 @@ use crate::conversation_oracle::{
     check_selected_history, expected_native_reply, new_operations, require_fresh_session,
     selected_steer_raced,
 };
-use crate::installed_client_terminal::{
-    CAPTURE_MAX_BYTES, CLEAR_LINE, ENTER, ESCAPE, terminal_text,
-};
+use crate::installed_client_terminal::{CAPTURE_MAX_BYTES, CLEAR_LINE, ESCAPE, terminal_text};
 use crate::journey_run::{Journey, JourneyResult, PICKER_SECONDS, json_value, name_fragment};
 use crate::metadata_oracle::check_metadata_observation;
 use crate::native_exports::{read_bounded_bytes, read_session_recorder};
@@ -289,25 +287,25 @@ fn drive_selection(
 ) -> Result<(Option<&'static str>, String), String> {
     let fixture = &journey.target.fixture;
     if case == SelectionCase::SelectedSteer {
-        client.type_text(STEER_BASE_PROMPT)?;
-        client.send(ENTER)?;
+        client.type_and_submit(STEER_BASE_PROMPT, PICKER_SECONDS)?;
     }
     let prefix = if case == SelectionCase::Nonleading {
         "Please apply "
     } else {
         ""
     };
+    // Each Tab selection inserts its own trailing separator (Codex 0.163
+    // `chat_composer.rs` insert_selected_mention → advance_past_completion_separator,
+    // lines 2772-2820 and 2393-2425), so the driver types no space of its own after a
+    // selection. The expected text keeps exactly one space between parts.
     journey.select_skill(client, prefix, &fixture.skill_name, PICKER_ROW)?;
     let mut text = format!("{prefix}${}", fixture.skill_name);
     if case == SelectionCase::TwoSkills {
-        client.type_text(" ")?;
         journey.select_skill(client, "", &fixture.second_skill_name, SECOND_PICKER_ROW)?;
         text.push_str(&format!(" ${}", fixture.second_skill_name));
     }
-    client.type_text(&format!(" {arguments}"))?;
     text.push_str(&format!(" {arguments}"));
-    let mark = client.mark();
-    client.send(ENTER)?;
+    let mark = client.type_and_submit(arguments, PICKER_SECONDS)?;
     if case == SelectionCase::Leading {
         client.wait_for(&fixture.canary, mark, REPLY)?;
         return Ok((Some("effect"), text));
@@ -418,9 +416,10 @@ pub(crate) async fn commands_journey(
         check_native_invocation(&after, fixture, arguments, &[text], &before, &invoked)?;
     let screen = journey.drive_client("picker-refusal", |client| {
         client.wait_for_ready_composer(COMPOSER_READY, STARTUP, COMPOSER_SETTLE)?;
-        let mark = client.mark();
-        client.type_text(&format!("/{} refusal-probe", fixture.skill_name))?;
-        client.send(ENTER)?;
+        let mark = client.type_and_submit(
+            &format!("/{} refusal-probe", fixture.skill_name),
+            PICKER_SECONDS,
+        )?;
         client.wait_for("Unrecognized command", mark, PICKER_SECONDS)
     })?;
     check_picker_refusal(&screen, &fixture.skill_name)?;

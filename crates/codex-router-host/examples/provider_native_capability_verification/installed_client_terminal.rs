@@ -21,6 +21,8 @@ pub(crate) const ENTER: &[u8] = b"\r";
 pub(crate) const ESCAPE: &[u8] = b"\x1b";
 pub(crate) const CLEAR_LINE: &[u8] = b"\x15";
 const CTRL_C: &[u8] = b"\x03";
+/// Quiet time before Enter: more than Codex 0.163's 120 ms paste Enter-suppression window.
+const SUBMIT_QUIET: Duration = Duration::from_millis(300);
 /// One drive's raw terminal output; past this the capture is incomplete and fails.
 pub(crate) const CAPTURE_MAX_BYTES: usize = 64 * 1024 * 1024;
 const CURSOR_POSITION_QUERY: &[u8] = b"\x1b[6n";
@@ -250,6 +252,51 @@ impl InstalledClientTerminal {
         } else {
             self.send(text.as_bytes())
         }
+    }
+
+    /// Type `text` and submit it with Enter, as a person would: only after the typed text
+    /// is drawn and the composer has been quiet past its Enter-suppression window.
+    ///
+    /// Codex 0.163 treats fast plain typing as a non-bracketed paste burst
+    /// (`codex-rs/tui/src/bottom_pane/paste_burst.rs` at 83086188: three characters
+    /// within 8 ms start one, and an Enter within `PASTE_ENTER_SUPPRESS_WINDOW`, 120 ms,
+    /// after it is inserted as a newline instead of submitting;
+    /// `chat_composer.rs:3612-3621`). A PTY writes typed text at once, so an immediate
+    /// Enter would never submit. Single-line text must be visible first (the burst has
+    /// been flushed); a bracketed paste clears burst state but still waits out the window.
+    /// Returns a mark taken just before Enter, so later output is judged after it.
+    pub(crate) fn type_and_submit(
+        &mut self,
+        text: &str,
+        timeout: Duration,
+    ) -> Result<usize, String> {
+        let typed_mark = self.mark();
+        self.type_text(text)?;
+        if !text.contains('\n') {
+            let expected: String = text
+                .chars()
+                .filter(|character| !character.is_whitespace())
+                .collect();
+            self.wait_until(typed_mark, timeout, |screen| {
+                let compact: String = screen
+                    .chars()
+                    .filter(|character| !character.is_whitespace())
+                    .collect();
+                compact.contains(&expected).then_some("typed")
+            })
+            .ok_or_else(|| "typed input never appeared in the composer".to_owned())?;
+        }
+        let quiet_until = Instant::now() + SUBMIT_QUIET;
+        loop {
+            let remaining = quiet_until.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                break;
+            }
+            self.pump(remaining);
+        }
+        let mark = self.mark();
+        self.send(ENTER)?;
+        Ok(mark)
     }
 
     /// Read what has arrived within `timeout`; answer a cursor-position query as a
