@@ -23,6 +23,7 @@ async fn owned_host_automatically_prunes_events_without_deleting_current_state()
         .await?;
     store.close().await?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("unavailable.sock"),

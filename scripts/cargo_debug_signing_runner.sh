@@ -11,17 +11,25 @@
 #
 # Usage: as the cargo runner, `<executable> [arguments...]`; or
 # `--sign-only <executable>...` to sign builds another process starts directly,
-# such as the debug Router a debug-host example launches.
+# such as the debug Router a debug-host example launches, or the
+# board-debug-runtime Host that end-to-end tests start.
 #
 # Signing is a convenience: when it cannot happen the executable still runs,
 # linker-signed, and Keychain access prompts again after the next rebuild.
 set -euo pipefail
 
+if [[ "$(uname -s)" != Darwin ]]; then
+  if [[ "${1:-}" == --sign-only ]]; then
+    exit 0
+  fi
+  exec "$@"
+fi
+
 readonly DEVELOPER_ID_TEAM="974QD84WVC"
 
 debug_identifier_for() {
   case "$(basename "$1")" in
-    codex-router | agent-collaboration | agent-sessions)
+    codex-router | agent-collaboration | agent-sessions | codex-router-board-upgrade | board-debug-runtime)
       echo "dev.shravansunder.$(basename "$1").debug"
       ;;
   esac

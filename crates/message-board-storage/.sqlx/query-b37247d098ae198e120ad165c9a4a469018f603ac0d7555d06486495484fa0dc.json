@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT watch_id AS \"watch_id!: String\", start_epoch AS \"start_epoch!: i64\", start_position AS \"start_position!: i64\", active AS \"active!: i64\" FROM thread_watches WHERE reader_actor=? AND thread_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "watch_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "start_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "start_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "active!: i64",
+        "type_info": {
+          "name": "BOOLEAN"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b37247d098ae198e120ad165c9a4a469018f603ac0d7555d06486495484fa0dc"
+}

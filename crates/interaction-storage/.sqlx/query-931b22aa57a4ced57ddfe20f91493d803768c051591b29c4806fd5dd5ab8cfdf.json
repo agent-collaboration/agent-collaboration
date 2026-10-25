@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT metadata_id AS \"metadata_id!: i64\", revision AS \"revision!: i64\", typeof(metadata_id) AS \"metadata_storage!: String\", typeof(revision) AS \"revision_storage!: String\" FROM interaction_history_revision",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "metadata_id!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "revision!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "metadata_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "revision_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "931b22aa57a4ced57ddfe20f91493d803768c051591b29c4806fd5dd5ab8cfdf"
+}

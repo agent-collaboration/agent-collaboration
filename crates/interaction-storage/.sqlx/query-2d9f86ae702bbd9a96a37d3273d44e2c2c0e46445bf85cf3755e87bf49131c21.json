@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO pending_poll_mail(item_id,recipient_service_id,recipient_endpoint_id,recipient_session_id,membership_id,received_at) VALUES(?,?,?,?,?,?) ON CONFLICT(item_id) DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "2d9f86ae702bbd9a96a37d3273d44e2c2c0e46445bf85cf3755e87bf49131c21"
+}

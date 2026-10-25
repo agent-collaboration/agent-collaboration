@@ -1,13 +1,13 @@
 use super::super::{
     SubscriptionClock, subscription_push::target_session, subscription_service::OwnerObservation,
 };
+use super::native_worker_faults;
 use super::owner_fixture::*;
 use crate::{DeliveryPrecondition, LoadPolicy, TargetPresence};
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId,
     PushKind, PushOrigin, PushRecord, PushRecordDraft,
 };
-use sqlx::Connection;
 use std::time::Duration;
 
 async fn draft(
@@ -35,9 +35,7 @@ async fn draft(
 
 async fn record(fixture: &OwnerFixture, push_id: &PushId) -> PushRecord {
     fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .get_push_record(push_id)
         .await
         .unwrap()
@@ -66,9 +64,7 @@ async fn insert(
     let draft = draft(fixture, mode, guard).await;
     let push_id = draft.push_id.clone();
     fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .insert_push_record(draft)
         .await
         .unwrap();
@@ -87,9 +83,7 @@ async fn queue_and_previously_held_auto_wait_until_loaded_and_recover_their_exac
         let push_id = insert(&fixture, mode, None).await;
         if mode == MessageDelivery::Auto {
             fixture
-                .push_store
-                .lock()
-                .await
+                .interactions
                 .hold_unsent_direct_message(
                     &push_id,
                     collaboration_protocol::DeliveryReceipt {
@@ -193,10 +187,10 @@ async fn unavailable_board_holds_dm_and_rechecks_presence_at_thirty_seconds() {
         .await
         .unwrap();
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.clock.advance_without_tokio_time(29);
-    runtime.synchronize(&fixture.reader).await;
+    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance_without_tokio_time(1);
     assert_eq!(request(&runtime).await.mode, MessageDelivery::Queue);
@@ -231,9 +225,7 @@ async fn steer_and_guarded_send_to_nonrunning_reject_without_any_hold() {
         assert!(runtime.requests.lock().await.try_recv().is_err());
         assert!(
             fixture
-                .push_store
-                .lock()
-                .await
+                .interactions
                 .direct_message_recovery_targets()
                 .await
                 .unwrap()
@@ -294,6 +286,9 @@ async fn restarted_nonrunning_steer_and_guarded_pending_records_are_rejected() {
 async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
     let fixture = OwnerFixture::new().await;
     let runtime = fixture.runtime().await;
+    let (app, native, publisher) =
+        super::local_mail_proofs::native_follow_mail_proofs::follow_application(&fixture, &runtime)
+            .await;
     fixture.post(&fixture.root, "subscription body").await;
     let subscription = request(&runtime).await;
     let dm_id = insert(&fixture, MessageDelivery::Auto, None).await;
@@ -308,7 +303,7 @@ async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
     .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     assert_eq!(subscription.payload.load_policy, LoadPolicy::LoadedOnly);
-    runtime.await_settled().await;
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
     assert_eq!(request(&runtime).await.payload.push_id, dm_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     assert_eq!(
@@ -316,19 +311,33 @@ async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
         PushDeliveryState::Delivered
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            if fixture
+                .interactions
+                .get_push_record(&subscription.payload.push_id)
+                .await
+                .unwrap()
+                .is_some_and(|record| record.delivery_state == PushDeliveryState::Delivered)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    publisher.shutdown().await;
+    drop(publisher);
+    drop(app);
     runtime.close().await;
+    fixture.close_native(native).await;
 }
 
 #[tokio::test]
 async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
     let fixture = OwnerFixture::new().await;
-    let mut observer = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(fixture.directory.path().join("automation.sqlite")),
-    )
-    .await
-    .unwrap();
-    sqlx::query("CREATE TRIGGER fail_dm_settle BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='delivered' BEGIN SELECT RAISE(FAIL, 'injected settlement failure'); END").execute(&mut observer).await.unwrap();
+    native_worker_faults::execute(fixture.interactions.clone(), "CREATE TRIGGER fail_dm_settle BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='delivered' BEGIN SELECT RAISE(FAIL, 'injected settlement failure'); END", None).await.unwrap();
     let push_id = insert(&fixture, MessageDelivery::Auto, None).await;
     let runtime = fixture.runtime_without_board().await;
     assert_eq!(request(&runtime).await.payload.push_id, push_id);
@@ -338,10 +347,13 @@ async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
     })
     .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    sqlx::query("DROP TRIGGER fail_dm_settle")
-        .execute(&mut observer)
-        .await
-        .unwrap();
+    native_worker_faults::execute(
+        fixture.interactions.clone(),
+        "DROP TRIGGER fail_dm_settle",
+        None,
+    )
+    .await
+    .unwrap();
     fixture.clock.advance_without_tokio_time(1);
     bounded_observe(&runtime, |event| {
         matches!(event, OwnerObservation::DirectMessageSettled)
@@ -352,7 +364,6 @@ async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
         PushDeliveryState::Delivered
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    observer.close().await.unwrap();
     runtime.close().await;
 }
 
@@ -392,9 +403,7 @@ async fn restored_guarded_generation_mismatch_is_terminal_without_any_broadened_
     let restored = fixture.runtime_without_board().await;
     assert!(
         fixture
-            .push_store
-            .lock()
-            .await
+            .interactions
             .direct_message_recovery_targets()
             .await
             .unwrap()
@@ -409,9 +418,7 @@ async fn attempted_dm_on_restart_becomes_unknown_and_never_reenters_layer_zero()
     let fixture = OwnerFixture::new().await;
     let push_id = insert(&fixture, MessageDelivery::Auto, None).await;
     fixture
-        .push_store
-        .lock()
-        .await
+        .interactions
         .mark_push_attempted(&push_id)
         .await
         .unwrap();
@@ -438,14 +445,17 @@ impl crate::SessionDeliveryRoute for LiveElsewhereRoute {
     fn claim(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> crate::DeliveryFuture<'_, crate::RouteClaim> {
+    ) -> crate::DeliveryFuture<'_, crate::NativeRouteClaim> {
         self.claims
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async {
-            Ok(crate::RouteClaim::LiveElsewhere {
-                writable: false,
-                detail: Some("live peer cannot receive Router input".to_owned()),
-            })
+            Ok(crate::NativeRouteClaim::live_elsewhere(
+                false,
+                Some("live peer cannot receive Router input".to_owned()),
+                crate::UnsentCause::for_rejection(
+                    collaboration_protocol::DeliveryRejectionReason::LiveElsewhere,
+                ),
+            ))
         })
     }
     fn presence(
@@ -462,7 +472,7 @@ impl crate::SessionDeliveryRoute for LiveElsewhereRoute {
         &'a self,
         _: crate::layer_zero::DeliveryRequest,
         _: &'a dyn crate::AttemptEvidenceSink,
-    ) -> crate::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+    ) -> crate::DeliveryFuture<'a, crate::NativeDeliveryResult> {
         self.effects
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async { Err(crate::DeliveryContractError::InvalidEvidence) })
@@ -481,7 +491,7 @@ fn live_elsewhere_service(
 ) -> super::super::SubscriptionDeliveryService {
     super::super::SubscriptionDeliveryService::new(super::super::SubscriptionDeliveryServiceProps {
         board_availability: super::super::BoardAvailability::Unavailable,
-        push_store: fixture.push_store.clone(),
+        push_store: fixture.interactions.clone(),
         delivery: router.clone(),
         presence: router,
         machine_identity: crate::MachineIdentity::new(
@@ -512,9 +522,7 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
         let target = pending.target.clone();
         let push_id = pending.push_id.clone();
         fixture
-            .push_store
-            .lock()
-            .await
+            .interactions
             .insert_push_record(pending)
             .await
             .unwrap();
@@ -533,9 +541,7 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
         assert_eq!(route.effects.load(Ordering::SeqCst), 0);
         assert!(
             fixture
-                .push_store
-                .lock()
-                .await
+                .interactions
                 .direct_message_recovery_targets()
                 .await
                 .unwrap()
@@ -552,4 +558,82 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
         assert_eq!(route.effects.load(Ordering::SeqCst), 0);
         restored.shutdown().await;
     }
+}
+
+#[tokio::test]
+async fn board_notification_wakeable_hold_recovers_one_exact_push_when_running() {
+    let fixture = OwnerFixture::new().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    let intent = message_board::NotifyIntentId::generate();
+    let origin = collaboration_protocol::RouterOriginRef::BoardIntent {
+        project: fixture.project.clone(),
+        intent: intent.clone(),
+    }
+    .canonical_string()
+    .unwrap();
+    let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).unwrap();
+    fixture
+        .interactions
+        .insert_push_record(PushRecordDraft {
+            push_id: push_id.clone(),
+            kind: PushKind::BoardNotification,
+            origin: PushOrigin::Router(PushKind::BoardNotification),
+            origin_router_ref: Some(origin.clone()),
+            target: target_session(&fixture.reader).unwrap(),
+            mode: None,
+            guard: None,
+            reply_to_push_id: None,
+            header_facts: PushHeaderFacts::BoardNotification {
+                project: fixture.project.clone(),
+                intent,
+                cause: message_board::PostId::generate().into(),
+                summary: collaboration_protocol::MessageText::try_from(
+                    "board notification".to_owned(),
+                )
+                .unwrap(),
+            },
+            body: None,
+            activity: None,
+            created_at: fixture.clock.now(),
+        })
+        .await
+        .unwrap();
+    let runtime = fixture.runtime_without_board().await;
+    bounded_observe(&runtime, |event| {
+        matches!(event, OwnerObservation::DirectMessageHeld)
+    })
+    .await;
+    let held = record(&fixture, &push_id).await;
+    assert_eq!(held.delivery_state, PushDeliveryState::Held);
+    assert_eq!(held.origin_router_ref.as_deref(), Some(origin.as_str()));
+    assert!(runtime.requests.lock().await.try_recv().is_err());
+    runtime.close().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    let restored = fixture.runtime_without_board().await;
+    let submitted = request(&restored).await;
+    assert_eq!(submitted.payload.push_id, push_id);
+    assert_eq!(submitted.mode, MessageDelivery::Auto);
+    assert!(matches!(
+        submitted.precondition,
+        DeliveryPrecondition::Unpinned
+    ));
+    assert_eq!(submitted.payload.load_policy, LoadPolicy::LoadedOnly);
+    restored.completions.send(DeliveryOutcome::Started).unwrap();
+    bounded_observe(&restored, |event| {
+        matches!(event, OwnerObservation::DirectMessageSettled)
+    })
+    .await;
+    assert_eq!(
+        record(&fixture, &push_id).await.delivery_state,
+        PushDeliveryState::Delivered
+    );
+    assert_eq!(
+        record(&fixture, &push_id)
+            .await
+            .origin_router_ref
+            .as_deref(),
+        Some(origin.as_str())
+    );
+    assert!(restored.requests.lock().await.try_recv().is_err());
+    restored.close().await;
 }

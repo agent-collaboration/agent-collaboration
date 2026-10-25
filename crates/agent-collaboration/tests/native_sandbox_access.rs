@@ -23,6 +23,7 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
         PathBuf::from("/tmp").join(format!("ipc-proof-{}", OperationId::generate().as_str()));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: home,
         backend_socket: root.join("absent.sock"),

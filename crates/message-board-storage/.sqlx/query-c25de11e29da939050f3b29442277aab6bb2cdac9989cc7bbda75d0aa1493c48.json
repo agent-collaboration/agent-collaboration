@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT acknowledgement_id AS \"id!: String\" FROM stand_down_acknowledgements WHERE acknowledgement_id>? ORDER BY acknowledgement_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "c25de11e29da939050f3b29442277aab6bb2cdac9989cc7bbda75d0aa1493c48"
+}

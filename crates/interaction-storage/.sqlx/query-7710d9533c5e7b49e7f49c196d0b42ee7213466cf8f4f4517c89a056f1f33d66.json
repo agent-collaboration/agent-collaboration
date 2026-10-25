@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO mail_retirement_progress(project_id,retired_through) VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET retired_through=excluded.retired_through WHERE mail_retirement_progress.retired_through<=excluded.retired_through",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7710d9533c5e7b49e7f49c196d0b42ee7213466cf8f4f4517c89a056f1f33d66"
+}

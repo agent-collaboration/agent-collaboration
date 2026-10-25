@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO work_trail_links(link_id, row_id, place, target) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "3ebc6892dae0d99624a3502576239bb43548670b8c3627103e7c188cb9d89d97"
+}

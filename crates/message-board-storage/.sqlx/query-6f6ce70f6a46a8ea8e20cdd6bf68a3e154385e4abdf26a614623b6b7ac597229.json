@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT frontier_id AS \"frontier_id!: String\",settled_through AS \"settled_through!: i64\" FROM handoff_frontier LIMIT 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "frontier_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "settled_through!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "6f6ce70f6a46a8ea8e20cdd6bf68a3e154385e4abdf26a614623b6b7ac597229"
+}

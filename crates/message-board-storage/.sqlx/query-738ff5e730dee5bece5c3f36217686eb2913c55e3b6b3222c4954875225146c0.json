@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO project_state(project_id, workspace_id, board_id, actor_id, request_id, epoch, position, router_time, time_basis, description, revision, closed_epoch, closed_position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "738ff5e730dee5bece5c3f36217686eb2913c55e3b6b3222c4954875225146c0"
+}

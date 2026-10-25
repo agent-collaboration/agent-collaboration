@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT epoch AS \"epoch!: i64\", position AS \"position!: i64\" FROM board_intent_scan_cursors WHERE project_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "d5c9c236d49a006c037590c0430d8fd8005787368bd495a93ea270f82a5b3cd9"
+}

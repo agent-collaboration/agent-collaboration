@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO task_links(link_id, from_task, link_kind, to_task) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "b14b3cde5115c81898bb2f2b3eb011847372736d1283ef29cff48cfe38a5853b"
+}

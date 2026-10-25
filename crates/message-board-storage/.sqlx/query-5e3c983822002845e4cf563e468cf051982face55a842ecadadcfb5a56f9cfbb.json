@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT EXISTS(SELECT 1 FROM actors a WHERE a.canonical_identity=? AND (EXISTS(SELECT 1 FROM read_marks m WHERE m.reader_actor=a.actor_id) OR EXISTS(SELECT 1 FROM project_watches w WHERE w.reader_actor=a.actor_id AND w.active=1) OR EXISTS(SELECT 1 FROM thread_watches w WHERE w.reader_actor=a.actor_id AND w.active=1))) AS \"present!: i64\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "5e3c983822002845e4cf563e468cf051982face55a842ecadadcfb5a56f9cfbb"
+}

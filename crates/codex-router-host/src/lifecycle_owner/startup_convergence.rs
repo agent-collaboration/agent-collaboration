@@ -193,7 +193,6 @@ mod tests {
     use crate::{ExternalProviderLaunchBinding, ExternalProviderStartup};
     use codex_router_core::local_auth::LocalRouterTokenRecord;
     use collaboration_protocol::ProviderKind;
-    use std::io::{Read, Write};
     use std::net::{SocketAddr, TcpListener};
     use std::path::PathBuf;
 
@@ -337,9 +336,72 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
+    async fn router_health_fixture_consumes_headers_before_closing() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // A legal header spans more than the fixture's old single-read buffer.
+        // The real TCP peer must consume it before closing its response socket.
+        let router_root = tempfile::tempdir().expect("isolated Router root");
+        let secret_root = router_root.path().join("secrets");
+        provision_local_router_token(&secret_root).expect("provision fixture token");
+        let endpoint = unused_loopback_endpoint();
+        let observation_path = router_root.path().join("router-token-at-startup");
+        let command = ChildCommandSpec::new(std::env::current_exe().expect("Host test executable"))
+            .with_arguments([
+                "--ignored",
+                "router_child_reads_host_token_and_serves_health",
+            ])
+            .with_environment(TEST_ROUTER_SECRET_ROOT_ENV, secret_root.as_os_str())
+            .with_environment(
+                TEST_ROUTER_ENDPOINT_ENV,
+                std::ffi::OsString::from(endpoint.to_string()),
+            )
+            .with_environment(
+                TEST_ROUTER_TOKEN_OBSERVATION_ENV,
+                observation_path.as_os_str(),
+            )
+            .with_output(crate::ChildOutput::Null);
+        let mut child = RouterChild::spawn(&mut command.command()).expect("start Router fixture");
+        let ready = await_router_readiness(endpoint, std::time::Duration::from_secs(10)).await;
+        if !matches!(&ready, Ok(RouterProbeResult::Compatible)) {
+            child.shutdown().await.expect("stop unready Router fixture");
+        }
+        assert_eq!(
+            ready.expect("fixture readiness"),
+            RouterProbeResult::Compatible
+        );
+
+        let response = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let mut stream = tokio::net::TcpStream::connect(endpoint).await?;
+            let request = format!(
+                "GET /healthz HTTP/1.1\r\nhost: {endpoint}\r\nx-fixture-padding: {}\r\nconnection: close\r\n\r\n",
+                "a".repeat(4096)
+            );
+            stream.write_all(request.as_bytes()).await?;
+            let mut bytes = Vec::new();
+            stream.read_to_end(&mut bytes).await?;
+            Ok::<_, std::io::Error>(bytes)
+        })
+        .await;
+        child.shutdown().await.expect("stop Router fixture");
+        let bytes = response
+            .expect("bounded health response")
+            .expect("valid HTTP headers receive the complete response without a reset");
+        assert!(bytes.starts_with(b"HTTP/1.1 200 OK\r\n"));
+        let body_offset = bytes
+            .windows(4)
+            .position(|bytes| bytes == b"\r\n\r\n")
+            .expect("HTTP response headers")
+            + 4;
+        let body: serde_json::Value =
+            serde_json::from_slice(&bytes[body_offset..]).expect("complete compatibility body");
+        assert_eq!(body["product"], "codex-router");
+    }
+
+    #[tokio::test]
     #[ignore = "spawned by the Host startup-convergence acceptance test"]
-    fn router_child_reads_host_token_and_serves_health() {
+    async fn router_child_reads_host_token_and_serves_health() {
         let secret_root = std::env::var_os(TEST_ROUTER_SECRET_ROOT_ENV)
             .map(PathBuf::from)
             .expect("isolated Router secret root");
@@ -358,24 +420,20 @@ mod tests {
         std::fs::write(&observation_path, token.token().expose_secret())
             .expect("record token observed at Router process start");
 
-        let listener = TcpListener::bind(endpoint).expect("bind isolated Router endpoint");
-        let body = serde_json::to_string(
-            &codex_router_core::router_compatibility::RouterCompatibility::current(false),
-        )
-        .expect("serialize Host-compatible Router health");
-        for incoming in listener.incoming() {
-            let mut stream = incoming.expect("Host Router readiness probe");
-            let mut health_request_buffer = [0; 1024];
-            let _request_bytes = stream
-                .read(&mut health_request_buffer)
-                .expect("read health request");
-            write!(
-                stream,
-                "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                body.len()
-            )
-            .expect("write Host-compatible Router health");
-        }
+        let listener = tokio::net::TcpListener::bind(endpoint)
+            .await
+            .expect("bind isolated Router endpoint");
+        let health = axum::Router::new().route(
+            "/healthz",
+            axum::routing::get(|| async {
+                axum::Json(
+                    codex_router_core::router_compatibility::RouterCompatibility::current(false),
+                )
+            }),
+        );
+        axum::serve(listener, health)
+            .await
+            .expect("serve Router health fixture");
     }
 
     fn load_current_local_router_token(secret_root: &Path) -> LocalRouterTokenRecord {

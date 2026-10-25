@@ -10,6 +10,8 @@ use sqlx::{Connection, Row, SqliteConnection};
 
 pub struct WakeCreate<TMessage> {
     pub operation_id: OperationId,
+    pub requested_by: collaboration_protocol::WakeCreator,
+    pub replace: bool,
     pub message: TMessage,
     pub timing: TimingRule,
     pub expiry: ExpiryRule,
@@ -19,7 +21,7 @@ impl AutomationStore {
     pub async fn create_wakeup<TMessage: DurableMessage + DeserializeOwned>(
         &mut self,
         request: &WakeCreate<TMessage>,
-    ) -> Result<WakeRecord<TMessage>, StorageError> {
+    ) -> Result<WakeRecord<TMessage, collaboration_protocol::WakeCreator>, StorageError> {
         if request.now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
@@ -29,8 +31,14 @@ impl AutomationStore {
                 reason: "must be auto, steer or queue",
             });
         }
-        let canonical = serde_json::to_vec(&(&request.message, &request.timing, &request.expiry))
-            .map_err(|_| StorageError::InvalidRecord)?;
+        let canonical = serde_json::to_vec(&(
+            &request.message,
+            &request.timing,
+            &request.expiry,
+            &request.requested_by,
+            request.replace,
+        ))
+        .map_err(|_| StorageError::InvalidRecord)?;
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
         if let Some(existing) = local_operation_receipts::replay(
             &mut transaction,
@@ -47,10 +55,15 @@ impl AutomationStore {
         }
         let anchor = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(request.now_ms)
             .ok_or(StorageError::InvalidRecord)?;
-        let expiry = request
-            .expiry
-            .resolve(anchor)?
-            .map(|time| time.timestamp_millis());
+        let expiry = Some(
+            crate::wake_limits::resolve_expiry(
+                &request.timing,
+                anchor,
+                request.expiry.resolve(anchor)?,
+            )?
+            .timestamp_millis(),
+        );
+        replace_occupant(&mut transaction, request).await?;
         let due = request
             .timing
             .next_due(anchor, None)?
@@ -68,6 +81,7 @@ impl AutomationStore {
         let definition = WakeDefinition {
             wakeup_id: WakeupId::generate(),
             change_id: ChangeId::generate(),
+            created_by: request.requested_by.clone(),
             message: request.message.clone(),
             timing: request.timing.clone(),
             anchor_at_ms: request.now_ms,
@@ -114,17 +128,74 @@ impl AutomationStore {
     pub async fn read_wakeup<TMessage: DeserializeOwned>(
         &mut self,
         id: &WakeupId,
-    ) -> Result<WakeRecord<TMessage>, StorageError> {
+    ) -> Result<WakeRecord<TMessage, collaboration_protocol::WakeCreator>, StorageError> {
         read_current(&mut self.connection, id).await
     }
+}
+
+async fn replace_occupant<TMessage: DurableMessage + DeserializeOwned>(
+    connection: &mut SqliteConnection,
+    request: &WakeCreate<TMessage>,
+) -> Result<(), StorageError> {
+    use collaboration_protocol::{WakeCreator, WakeRefusal};
+    if matches!(request.requested_by, WakeCreator::Unrecorded {}) {
+        return Err(StorageError::InvalidWake {
+            field: "requestedBy",
+            reason: "unrecorded is reserved for upgraded wakes",
+        });
+    }
+    let target =
+        serde_json::to_string(request.message.target()).map_err(|_| StorageError::InvalidRecord)?;
+    let occupant = sqlx::query_scalar!("SELECT wakeup_id FROM wakeup_definitions WHERE wakeup_status IN ('active','paused') AND json_extract(definition_json,'$.message.target.endpoint.serviceId')=json_extract(?,'$.endpoint.serviceId') AND json_extract(definition_json,'$.message.target.endpoint.endpointId')=json_extract(?,'$.endpoint.endpointId') AND json_extract(definition_json,'$.message.target.sessionId')=json_extract(?,'$.sessionId') LIMIT 1", target, target, target)
+        .fetch_optional(&mut *connection).await?;
+    // The legacy TEXT primary key is nullable in SQLite; a matching row must
+    // still carry a valid identity, rather than disappearing from the slot.
+    let occupant = occupant
+        .map(|id| id.ok_or(StorageError::InvalidRecord))
+        .transpose()?;
+    let Some(id) = occupant else {
+        return Ok(());
+    };
+    let id: WakeupId = id.try_into().map_err(|_| StorageError::InvalidRecord)?;
+    let previous: WakeRecord<TMessage, WakeCreator> = read_current(connection, &id).await?;
+    let creator = &previous.definition.created_by;
+    let is_target = match &request.requested_by {
+        WakeCreator::Session(session) => {
+            serde_json::to_string(session).map_err(|_| StorageError::InvalidRecord)? == target
+        }
+        _ => false,
+    };
+    let is_creator =
+        !matches!(creator, WakeCreator::Unrecorded {}) && creator == &request.requested_by;
+    if !request.replace
+        || !(is_creator || is_target || matches!(request.requested_by, WakeCreator::Owner {}))
+    {
+        return Err(StorageError::WakeRefused(WakeRefusal::WakeExists {
+            wakeup: id,
+            creator: creator.clone(),
+        }));
+    }
+    crate::wakeup_evaluation::discard_undispatched(connection, &id).await?;
+    sqlx::query!("UPDATE wakeup_definitions SET wakeup_status='cancelled',next_due_at_ms=NULL,updated_at_ms=? WHERE wakeup_id=?", request.now_ms, id.as_str()).execute(&mut *connection).await?;
+    crate::wakeup_evaluation::append_event(
+        connection,
+        crate::wakeup_evaluation::WakeEvent {
+            id: &id,
+            kind: "replaced",
+            body: &serde_json::json!({"kind":"stateChange","before":previous.state,"after":"cancelled"}),
+            now_ms: request.now_ms,
+        },
+    )
+    .await?;
+    Ok(())
 }
 pub(crate) async fn read_current<TMessage: DeserializeOwned>(
     connection: &mut SqliteConnection,
     id: &WakeupId,
-) -> Result<WakeRecord<TMessage>, StorageError> {
+) -> Result<WakeRecord<TMessage, collaboration_protocol::WakeCreator>, StorageError> {
     let row=sqlx::query("SELECT definition_json,wakeup_status,next_due_at_ms,first_fire_json,pending_delivery_id,COALESCE((SELECT seq FROM sqlite_sequence WHERE name='automation_events'),0) AS event_sequence FROM wakeup_definitions WHERE wakeup_id=?")
         .bind(id.as_str()).fetch_optional(connection).await?.ok_or(StorageError::WakeNotFound)?;
-    let definition: WakeDefinition<TMessage> =
+    let definition: WakeDefinition<TMessage, collaboration_protocol::WakeCreator> =
         serde_json::from_str(&row.try_get::<String, _>("definition_json")?)
             .map_err(|_| StorageError::InvalidRecord)?;
     if definition.wakeup_id != *id {

@@ -55,6 +55,8 @@ async fn explicit_host_recovery_preserves_identity_without_replaying_dispatch()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
@@ -134,6 +136,8 @@ async fn unselected_claim_recovers_as_known_not_submitted_and_retries()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
@@ -205,6 +209,8 @@ async fn paused_unselected_claim_is_discarded_after_recovery()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),

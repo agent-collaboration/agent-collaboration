@@ -1,19 +1,21 @@
-//! One-pass cleanup attempts through the run's existing client; replies are local evidence only.
+//! One-pass cleanup mutations followed by reads of the existing M2 state owners.
+#[path = "owned_resource_cleanup_readback.rs"]
+pub(super) mod readback;
 use super::owned_resources::{
     CleanupIntent, MatrixCleanupPlan, MatrixCreationHistory, UnresolvedCreation,
 };
 use collaboration_client::{
     BoardClientError, ClientError, CollaborationClient, ScheduleClientError, WakeClientError,
     board::{
-        BoardFailureKind, BoardFailureStage, EndReason, Identity, MessageId, SubscriptionScope,
+        BoardFailureKind, BoardFailureStage, Identity, SubscriptionScope, ThreadId,
         ThreadUnwatchRequest,
     },
     protocol::{
         ChangeId, DeliveryDisposition, DeliveryId, LocalMutationEvidence, LocalMutationState,
         ObservationTimestamp, OperationId, RunId, ScheduleEffects, ScheduleEnableRequest,
         ScheduleFailureKind, ScheduleFailureStage, ScheduleId, ThreadSubscriptionState,
-        ThreadUnsubscribeRequest, WakeFailureReason, WakeFailureStage, WakeMutationRequest,
-        WakeMutationResult, WakeState, WakeupId,
+        ThreadSubscriptionsRequest, ThreadUnsubscribeRequest, WakeFailureReason, WakeFailureStage,
+        WakeMutationRequest, WakeMutationResult, WakeState, WakeupId,
     },
 };
 
@@ -50,8 +52,7 @@ impl OwnedMatrixScope {
                         next_due_at: None,
                         ..
                     }) | CleanupOutcome::Returned(CleanupObservation::Subscription {
-                        state: ThreadSubscriptionState::Ended,
-                        ..
+                        delivery_eligible: false,
                     }) | CleanupOutcome::Returned(CleanupObservation::Watch { watching: false })
                 )
             });
@@ -108,11 +109,11 @@ pub(super) enum CleanupAction {
     },
     Unsubscribe {
         actor: Identity,
-        root_message_id: MessageId,
+        root_message_id: ThreadId,
     },
     Unwatch {
         actor: Identity,
-        root_message_id: MessageId,
+        root_message_id: ThreadId,
     },
 }
 
@@ -142,9 +143,7 @@ pub(super) enum CleanupObservation {
         waiting_run_id: Option<RunId>,
     },
     Subscription {
-        state: ThreadSubscriptionState,
-        end_reason: Option<EndReason>,
-        pending_count: u64,
+        delivery_eligible: bool,
     },
     Watch {
         watching: bool,
@@ -181,8 +180,8 @@ pub(super) enum ReportedCleanupFailure {
 }
 
 /// The wire InvalidField variant also carries arbitrary strings; retain its closed tag only.
-#[derive(Debug)]
 pub(super) enum WakeCleanupFailureKind {
+    Refused(collaboration_protocol::WakeRefusal),
     InvalidField,
     OperationConflict,
     AutomationUnavailable,
@@ -190,6 +189,25 @@ pub(super) enum WakeCleanupFailureKind {
     InvalidRecord,
     LifecycleConflict,
     Overloaded,
+    RemoteUnavailable,
+    DeadlineExpired,
+}
+
+impl std::fmt::Debug for WakeCleanupFailureKind {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Refused(reason) => formatter.debug_tuple("Refused").field(reason).finish(),
+            Self::InvalidField => formatter.write_str("InvalidField"),
+            Self::OperationConflict => formatter.write_str("OperationConflict"),
+            Self::AutomationUnavailable => formatter.write_str("AutomationUnavailable"),
+            Self::ResourceNotFound => formatter.write_str("ResourceNotFound"),
+            Self::InvalidRecord => formatter.write_str("InvalidRecord"),
+            Self::LifecycleConflict => formatter.write_str("LifecycleConflict"),
+            Self::Overloaded => formatter.write_str("Overloaded"),
+            Self::RemoteUnavailable => formatter.write_str("RemoteUnavailable"),
+            Self::DeadlineExpired => formatter.write_str("DeadlineExpired"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -205,6 +223,7 @@ pub(super) enum CleanupUncertainty {
     BoardOutcomeUnknown,
     UnexpectedWaitOutcomeUnknown,
     ResponseIdentityMismatch,
+    ReadbackUnavailable,
 }
 
 #[derive(Debug)]
@@ -320,20 +339,16 @@ async fn execute_cleanup_action(
         } => {
             let scope = SubscriptionScope::thread(root_message_id.clone());
             match client
-                .board_thread_unsubscribe(ThreadUnsubscribeRequest {
+                .thread_unsubscribe(ThreadUnsubscribeRequest {
+                    request_id: message_board::RequestId::generate(),
+                    protocol_version: message_board::ProtocolVersion::CURRENT,
+                    acting_for: None,
                     actor: actor.clone(),
-                    scope: scope.clone(),
+                    scope: scope.clone().into(),
                 })
                 .await
             {
-                Ok(result) if result.scope == scope => {
-                    CleanupOutcome::Returned(CleanupObservation::Subscription {
-                        state: result.state,
-                        end_reason: result.end_reason,
-                        pending_count: result.pending_count,
-                    })
-                }
-                Ok(_) => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
+                Ok(_) => read_subscription_cleanup(client, actor, root_message_id).await,
                 Err(error) => project_board_failure(error),
             }
         }
@@ -342,22 +357,82 @@ async fn execute_cleanup_action(
             root_message_id,
         } => {
             match client
-                .board_thread_unwatch(ThreadUnwatchRequest {
-                    root_message_id: root_message_id.clone(),
+                .thread_unwatch(ThreadUnwatchRequest {
+                    request_id: message_board::RequestId::generate(),
+                    protocol_version: message_board::ProtocolVersion::CURRENT,
+                    thread: root_message_id.clone().into(),
                     actor: actor.clone(),
                     acting_for: None,
                 })
                 .await
             {
-                Ok(result) if &result.thread.root_message_id == root_message_id => {
-                    CleanupOutcome::Returned(CleanupObservation::Watch {
-                        watching: result.watch_status.watching,
-                    })
+                Ok(_) => {
+                    match client
+                        .thread_show(message_board::ThreadShowRequest {
+                            thread: root_message_id.clone().into(),
+                            reader: message_board::ReadActor::Identified {
+                                reader: actor.clone(),
+                            },
+                            include_redacted: false,
+                        })
+                        .await
+                    {
+                        Ok(result) if &result.thread.thread_id == root_message_id => {
+                            match result.watch_status {
+                                Some(watch) => {
+                                    CleanupOutcome::Returned(CleanupObservation::Watch {
+                                        watching: watch.watching,
+                                    })
+                                }
+                                None => {
+                                    CleanupOutcome::Unknown(CleanupUncertainty::ReadbackUnavailable)
+                                }
+                            }
+                        }
+                        Ok(_) => {
+                            CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch)
+                        }
+                        Err(error) => project_board_failure(error),
+                    }
                 }
-                Ok(_) => CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch),
                 Err(error) => project_board_failure(error),
             }
         }
+    }
+}
+
+async fn read_subscription_cleanup(
+    client: &CollaborationClient,
+    actor: &Identity,
+    thread: &ThreadId,
+) -> CleanupOutcome {
+    match client
+        .thread_subscriptions(ThreadSubscriptionsRequest {
+            actor: actor.clone(),
+        })
+        .await
+    {
+        Ok(snapshot) => {
+            if !snapshot.unavailable.is_empty() {
+                return CleanupOutcome::Unknown(CleanupUncertainty::ReadbackUnavailable);
+            }
+            let scope = SubscriptionScope::thread(thread.clone());
+            let mut matching = snapshot
+                .subscriptions
+                .iter()
+                .filter(|record| record.scope == scope);
+            let delivery_eligible = matching.next().is_some_and(|record| {
+                matches!(
+                    record.state,
+                    ThreadSubscriptionState::Active | ThreadSubscriptionState::Draining
+                )
+            });
+            if matching.next().is_some() {
+                return CleanupOutcome::Unknown(CleanupUncertainty::ResponseIdentityMismatch);
+            }
+            CleanupOutcome::Returned(CleanupObservation::Subscription { delivery_eligible })
+        }
+        Err(error) => project_board_failure(error),
     }
 }
 
@@ -397,6 +472,9 @@ fn project_wake_failure(error: WakeClientError) -> CleanupOutcome {
                 WakeFailureReason::InvalidRecord => WakeCleanupFailureKind::InvalidRecord,
                 WakeFailureReason::LifecycleConflict => WakeCleanupFailureKind::LifecycleConflict,
                 WakeFailureReason::Overloaded => WakeCleanupFailureKind::Overloaded,
+                WakeFailureReason::RemoteUnavailable => WakeCleanupFailureKind::RemoteUnavailable,
+                WakeFailureReason::DeadlineExpired => WakeCleanupFailureKind::DeadlineExpired,
+                WakeFailureReason::Refused(reason) => WakeCleanupFailureKind::Refused(reason),
             };
             let LocalMutationEvidence::Local { mutation } = failure.effects;
             CleanupOutcome::Rejected(ReportedCleanupFailure::Wake {

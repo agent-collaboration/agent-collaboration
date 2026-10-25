@@ -1,8 +1,7 @@
 //! CLI producers and recipient observations for the isolated push matrix.
-use super::cli_process::run_cli_output;
 use super::owned_resources::OwnedMatrixResources;
 use super::{OBSERVATION_TIMEOUT, ProofContext, ProofResult};
-use automation_storage::AutomationStore;
+use codex_router_test_support::owned_cli_process::run_cli_output;
 use collaboration_client::{
     ConversationClient, ConversationCreateActor, ConversationCreateInput,
     protocol::{
@@ -16,6 +15,7 @@ use collaboration_protocol::{
     MachineLabel, PushLineInput, PushRecord, PushRecordNotice, PushRecordShowResult, RouterLink,
     RouterOriginRef, render_push_line,
 };
+use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 use tokio::process::Command;
@@ -277,12 +277,15 @@ pub(super) async fn dm_notice_and_show(
             reference: notice.link,
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(show) = show else {
+        return Err("native proof expected a stored local push".into());
+    };
     if show.record.target != *recipient || show.record.push_id.as_str() != push_id {
         return Err("router/show returned a different DM record".into());
     }
     let expected = expected_push_line(&show, &machine_label(proof)?)?;
     assert_eq!(notice.line, expected);
-    Ok((show, expected))
+    Ok((*show, expected))
 }
 
 pub(super) fn machine_label(proof: &ProofContext) -> ProofResult<MachineLabel> {
@@ -503,7 +506,7 @@ pub(super) async fn create_existing_session_schedule(
 
 pub(super) async fn wait_for_schedule_push(
     proof: &mut ProofContext,
-    automation: &mut AutomationStore,
+    interactions: &InteractionStore,
     schedule_id: agent_automation::ScheduleId,
     timeout: Duration,
 ) -> ProofResult<(RouterOriginRef, PushRecord)> {
@@ -524,7 +527,7 @@ pub(super) async fn wait_for_schedule_push(
                 schedule_id: schedule_id.clone(),
                 run_id: run.run_id.clone(),
             };
-            if let Some(record) = automation
+            if let Some(record) = interactions
                 .get_push_record_by_origin_reference(&origin)
                 .await?
             {
@@ -578,8 +581,4 @@ pub(super) async fn wait_for_acp_input(
 
 pub(super) fn matrix_marker(producer: &str) -> String {
     format!("PUSH_DELIVERY_MATRIX_{producer}_{}", uuid::Uuid::now_v7())
-}
-
-pub(super) fn user_text_contains_marker(text: &str, marker: &str) -> bool {
-    text.contains(marker)
 }

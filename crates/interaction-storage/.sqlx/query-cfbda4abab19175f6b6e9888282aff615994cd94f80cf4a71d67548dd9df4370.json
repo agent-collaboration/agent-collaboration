@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT item_id AS \"item_id!: String\",project AS \"project!: String\",epoch AS \"epoch!: i64\",recorded_at AS \"recorded_at!: String\" FROM mail_submission_epochs WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "project!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recorded_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "cfbda4abab19175f6b6e9888282aff615994cd94f80cf4a71d67548dd9df4370"
+}

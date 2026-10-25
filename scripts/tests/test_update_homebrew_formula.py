@@ -1,8 +1,9 @@
 import unittest
 
-from scripts.update_homebrew_formula import FormulaUpdateError
-from scripts.update_homebrew_formula import update_codex_router_formula
-
+from scripts.update_homebrew_formula import (
+    FormulaUpdateError,
+    update_codex_router_formula,
+)
 
 BASE_FORMULA = """class CodexRouter < Formula
   desc "Local account and quota router for Codex CLI"
@@ -54,8 +55,10 @@ class UpdateCodexRouterFormulaTests(unittest.TestCase):
         # Assert
         self.assertIn('    bin.install "agent-collaboration"', updated)
         self.assertIn('    bin.install "agent-sessions"', updated)
+        self.assertIn('    bin.install "codex-router-board-upgrade"', updated)
         self.assertEqual(updated.count('bin.install "agent-collaboration"'), 1)
         self.assertEqual(updated.count('bin.install "agent-sessions"'), 1)
+        self.assertEqual(updated.count('bin.install "codex-router-board-upgrade"'), 1)
 
     def test_replaces_legacy_agent_session_install(self) -> None:
         # Arrange

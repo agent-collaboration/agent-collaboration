@@ -1,7 +1,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Closed Claude peers hold Auto DMs until their owner publishes a writer.
 
-use automation_storage::AutomationStore;
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
 use codex_router_host::ClaudeCodePeerDeliveryRoute;
 use collaboration_protocol::{
@@ -14,11 +13,11 @@ use collaboration_service::{
     SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
     TargetPresenceProbe,
 };
+use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, sync::Arc, time::Duration};
 use tokio::io::{AsyncBufReadExt as _, BufReader};
-use tokio::sync::Mutex;
 
 fn target() -> SessionRef {
     SessionRef {
@@ -91,17 +90,17 @@ async fn start_peer_delivery_service(
     root: &std::path::Path,
 ) -> (
     std::path::PathBuf,
-    Arc<Mutex<AutomationStore>>,
+    Arc<InteractionStore>,
     SubscriptionDeliveryService,
     Arc<SessionDeliveryRouter>,
 ) {
     let registry = root.join("claude-sessions");
     std::fs::create_dir(&registry).expect("peer registry directory");
-    let automation = Arc::new(Mutex::new(
-        AutomationStore::open(&root.join("automation.sqlite"))
+    let automation = Arc::new(
+        InteractionStore::open(root.join("interaction.sqlite"))
             .await
             .expect("push storage"),
-    ));
+    );
     let route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
         target().endpoint,
         Arc::new(ClaudeCodeSessionRegistry::new(registry.clone())),
@@ -138,8 +137,6 @@ async fn closed_peer_holds_auto_dm_then_delivers_once_when_writable() {
     let push_draft = draft(&target, MessageDelivery::Auto, None);
     let push_id = push_draft.push_id.clone();
     automation
-        .lock()
-        .await
         .insert_push_record(push_draft)
         .await
         .expect("store the DM before delivery");
@@ -161,8 +158,6 @@ async fn closed_peer_holds_auto_dm_then_delivers_once_when_writable() {
     ));
     assert_eq!(
         automation
-            .lock()
-            .await
             .list_unsent_direct_messages(&target)
             .await
             .expect("list held DMs")
@@ -223,8 +218,6 @@ async fn closed_peer_holds_auto_dm_then_delivers_once_when_writable() {
     );
     assert!(
         automation
-            .lock()
-            .await
             .list_unsent_direct_messages(&target)
             .await
             .expect("list remaining DMs")
@@ -261,8 +254,6 @@ async fn closed_peer_rejects_queue_steer_and_guarded_dms() {
         let push_draft = draft(&target, mode, guard);
         let push_id = push_draft.push_id.clone();
         automation
-            .lock()
-            .await
             .insert_push_record(push_draft)
             .await
             .expect("store the DM before delivery");
@@ -287,8 +278,6 @@ async fn closed_peer_rejects_queue_steer_and_guarded_dms() {
     }
     assert!(
         automation
-            .lock()
-            .await
             .list_unsent_direct_messages(&target)
             .await
             .expect("rejected DMs are not queued")
@@ -310,8 +299,6 @@ async fn queue_to_same_endpoint_label_on_another_service_keeps_queue_hold_behavi
     let push_draft = draft(&target, MessageDelivery::Queue, None);
     let push_id = push_draft.push_id.clone();
     automation
-        .lock()
-        .await
         .insert_push_record(push_draft)
         .await
         .expect("store the DM before delivery");

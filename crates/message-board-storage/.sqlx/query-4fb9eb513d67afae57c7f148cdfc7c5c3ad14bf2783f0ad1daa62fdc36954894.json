@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT CAST(k.value AS TEXT) AS \"thread_id!: String\", w.start_epoch AS \"epoch: i64\", w.start_position AS \"position: i64\", w.active AS \"active: i64\", w.watch_id AS \"watch_id?: String\", f.epoch AS \"assigning_epoch?: i64\" FROM json_each(?) k LEFT JOIN thread_watches w ON w.reader_actor = ? AND w.thread_id = CAST(k.value AS TEXT) LEFT JOIN project_feed f ON f.position=w.start_position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "position: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "active: i64",
+        "type_info": {
+          "name": "BOOLEAN"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "watch_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "assigning_epoch?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "4fb9eb513d67afae57c7f148cdfc7c5c3ad14bf2783f0ad1daa62fdc36954894"
+}

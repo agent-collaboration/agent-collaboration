@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT project_id AS \"id!: String\" FROM project_state WHERE project_id>? ORDER BY project_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "a785764d1ef9284c21483193448fbd1c6fc7f31b3e0c754152ec1d878003a1a9"
+}

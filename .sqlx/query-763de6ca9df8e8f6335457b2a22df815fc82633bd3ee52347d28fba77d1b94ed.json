@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO remote_wake_requests(operation_id,target_json,canonical_request,body_json,valid_until_ms) VALUES(?,?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "763de6ca9df8e8f6335457b2a22df815fc82633bd3ee52347d28fba77d1b94ed"
+}

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT epoch AS \"epoch!: i64\" FROM project_feed WHERE position=? LIMIT 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "d3d90b7c961db8df6ac3e0d87999b19ee0ea6fae51447ce55697fcba203e757b"
+}

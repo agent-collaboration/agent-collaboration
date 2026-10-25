@@ -154,6 +154,10 @@ pub enum CliError {
         message: String,
     },
 
+    /// Fleet enrollment or local inspection failed.
+    #[error(transparent)]
+    Fleet(#[from] crate::fleet_command::FleetCommandError),
+
     /// Shared host command failed.
     #[error(transparent)]
     Host(#[from] HostCommandError),

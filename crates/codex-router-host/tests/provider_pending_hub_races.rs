@@ -4,18 +4,18 @@ use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
     ExternalProviderStartup,
 };
-use collaboration_client::CollaborationClient;
+use collaboration_client::{ClientError, CollaborationClient};
 use collaboration_protocol::{
-    BoundedObservationRequest, ChannelDescription, CodexGeneration, ConversationCancelRequest,
-    ConversationCreateRequest, ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, ConversationPromptRequest, EndpointId, EndpointRef,
-    MessageContent, MessageText, NativeSessionScope, NativeSessionSource, NativeSessionView,
-    OperationId, PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy,
-    ProviderSessionListParams, ProviderSessionState, ProviderWorkingDirectory, RouterAccess,
-    SessionId, SessionRef,
+    BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
+    ConversationCancelRequest, ConversationCreateRequest, ConversationOperationSettlement,
+    ConversationOperationWaitOutput, ConversationOperationWaitRequest, ConversationPromptRequest,
+    EndpointAvailability, EndpointId, EndpointRef, MessageContent, MessageText, NativeSessionScope,
+    NativeSessionSource, NativeSessionView, ObservationEventNotification, OperationId,
+    PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy, ProviderSessionListParams,
+    ProviderSessionState, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
 use serde_json::{Value, json};
-use std::{collections::VecDeque, os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
+use std::{os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
@@ -83,6 +83,7 @@ async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))?;
     Ok(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             owner_human_id: None,
             directory: root.to_owned(),
             codex_home: root.to_owned(),
@@ -203,54 +204,62 @@ fn prompt(
     Ok((operation_id, task))
 }
 
-/// Follows one provider Session's hub events through short bounded `events_observe` calls,
-/// each resuming after the last event within the hub's epoch.
+/// Streams one attached observation so retirement cannot invalidate history between reads.
 struct HubEventFollow {
-    client: CollaborationClient,
-    target: SessionRef,
     epoch: Option<u64>,
     after_sequence: Option<u64>,
-    pending: VecDeque<Value>,
+    events: tokio::sync::mpsc::UnboundedReceiver<ObservationEventNotification>,
+    call: tokio::task::JoinHandle<Result<BoundedObservationResult, ClientError>>,
 }
 
 impl HubEventFollow {
     fn new(client: &CollaborationClient, target: &SessionRef) -> Self {
+        let client = client.clone();
+        let target = target.clone();
+        let (observed, events) = tokio::sync::mpsc::unbounded_channel();
+        let call = tokio::spawn(async move {
+            client
+                .observe_provider_session_streaming(
+                    BoundedObservationRequest {
+                        target,
+                        timeout_seconds: 1,
+                        max_events: 64,
+                        max_bytes: 1_048_576,
+                        after_sequence: None,
+                        epoch: None,
+                    },
+                    Some(observed),
+                )
+                .await
+        });
         Self {
-            client: client.clone(),
-            target: target.clone(),
             epoch: None,
             after_sequence: None,
-            pending: VecDeque::new(),
+            events,
+            call,
         }
     }
 
     async fn next_message(&mut self) -> TestResult<Value> {
-        loop {
-            if let Some(event) = self.pending.pop_front() {
-                return Ok(event);
+        if let Some(notification) = self.events.recv().await {
+            if let Some(cursor) = notification.cursor {
+                self.epoch = Some(cursor.epoch);
+                self.after_sequence = Some(cursor.after_sequence);
             }
-            let observed = self
-                .client
-                .observe_provider_session(BoundedObservationRequest {
-                    target: self.target.clone(),
-                    timeout_seconds: 1,
-                    max_events: 64,
-                    max_bytes: 1_048_576,
-                    after_sequence: self.after_sequence,
-                    epoch: self.epoch,
-                })
-                .await?;
-            self.epoch = observed.epoch;
-            for event in &observed.events {
-                if let Some(sequence) = event.get("sequence").and_then(Value::as_u64) {
-                    self.after_sequence = Some(
-                        self.after_sequence
-                            .map_or(sequence, |after| after.max(sequence)),
-                    );
-                }
-            }
-            self.pending.extend(observed.events);
+            return Ok(notification.event);
         }
+        let result = (&mut self.call).await??;
+        Err(format!(
+            "observation ended before the expected event: {:?}",
+            result.end_reason
+        )
+        .into())
+    }
+}
+
+impl Drop for HubEventFollow {
+    fn drop(&mut self) {
+        self.call.abort();
     }
 }
 
@@ -267,7 +276,7 @@ async fn wait_for_pending(
         let event = notification
             .get("event")
             .cloned()
-            .ok_or("missing hub event")?;
+            .ok_or_else(|| format!("missing hub event: {notification:?}; observed: {events:?}"))?;
         let pending = event.get("kind").and_then(Value::as_str) == Some("interactionRequested");
         events.push(event);
         if pending {
@@ -295,7 +304,7 @@ async fn watch_turn(
         let event = notification
             .get("event")
             .cloned()
-            .ok_or("missing hub event")?;
+            .ok_or_else(|| format!("missing hub event: {notification:?}; observed: {events:?}"))?;
         let done = event.get("kind").and_then(Value::as_str) == Some(terminal);
         events.push(event);
         if done {
@@ -358,6 +367,31 @@ async fn listed_state(
     }
 }
 
+async fn wait_for_retired_endpoint(
+    client: &CollaborationClient,
+    target: &SessionRef,
+) -> TestResult {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let inventory = client.list_endpoints().await?;
+            let endpoint = inventory
+                .endpoints
+                .iter()
+                .find(|entry| entry.endpoint == target.endpoint)
+                .ok_or("provider endpoint disappeared after exit")?;
+            if matches!(
+                endpoint.availability,
+                EndpointAvailability::Unavailable { .. }
+            ) {
+                return Ok::<(), Box<dyn std::error::Error>>(());
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .map_err(|_| "provider endpoint did not publish retirement")?
+}
+
 #[tokio::test]
 async fn provider_exit_resolves_pending_approval_before_lost_turn() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -367,11 +401,22 @@ async fn provider_exit_resolves_pending_approval_before_lost_turn() -> TestResul
     let mut observer = HubEventFollow::new(&client, &target);
     let _prompt = prompt(&client, &target, &actor, &approver, &generation)?;
     let (request_id, initial_events) = wait_for_pending(&client, &mut observer).await?;
+    // The streamed pending event proves this call is attached before the exit.
+    if observer.call.is_finished() {
+        return Err("observation ended before provider exit".into());
+    }
     let mut exit = tokio::net::UnixStream::connect(root.path().join("exit.sock")).await?;
     use tokio::io::AsyncWriteExt as _;
     exit.write_all(b"x").await?;
     let events = watch_turn(&mut observer, "turnEnded", initial_events).await?;
     assert_interaction_settles_before_turn_end(&events)?;
+    let turn_ended = events
+        .iter()
+        .find(|event| event.get("kind").and_then(Value::as_str) == Some("turnEnded"))
+        .ok_or("lost turn missing")?;
+    if turn_ended.get("outcome") != Some(&json!({"kind":"lost","reason":"providerRetired"})) {
+        return Err(format!("expected provider-retired lost turn: {turn_ended:?}").into());
+    }
     let settled = client.list_approvals_with_options(false).await?;
     if !settled.approvals.iter().any(|approval| {
         approval.request_id == request_id && approval.reason.as_deref() == Some("providerRetired")
@@ -385,6 +430,51 @@ async fn provider_exit_resolves_pending_approval_before_lost_turn() -> TestResul
     let state = listed_state(&client, &target).await?;
     if state != ProviderSessionState::Unloaded {
         return Err(format!("retired Session remained in {state:?}").into());
+    }
+    drop(observer);
+    runtime.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn observation_resume_after_provider_retirement_is_unavailable() -> TestResult {
+    // Arrange: an attached observer has a cursor at the pending approval.
+    let root = tempfile::tempdir()?;
+    let runtime = start_host(root.path()).await?;
+    let client = CollaborationClient::connect(root.path(), "retired-observer", "1").await?;
+    let (target, actor, approver, generation) = create_session(&client, root.path()).await?;
+    let mut observer = HubEventFollow::new(&client, &target);
+    let _prompt = prompt(&client, &target, &actor, &approver, &generation)?;
+    let _pending = wait_for_pending(&client, &mut observer).await?;
+    let request = BoundedObservationRequest {
+        target: target.clone(),
+        timeout_seconds: 1,
+        max_events: 64,
+        max_bytes: 1_048_576,
+        after_sequence: Some(observer.after_sequence.ok_or("missing pending cursor")?),
+        epoch: Some(observer.epoch.ok_or("missing observation epoch")?),
+    };
+    let mut exit = tokio::net::UnixStream::connect(root.path().join("exit.sock")).await?;
+    use tokio::io::AsyncWriteExt as _;
+
+    // Act: hold the continuation until retirement publication has won the race.
+    exit.write_all(b"x").await?;
+    wait_for_retired_endpoint(&client, &target).await?;
+    drop(observer);
+    let resumed = client.observe_provider_session(request).await;
+
+    // Assert: the existing contract rejects attachment to the retired endpoint.
+    let Err(ClientError::Rejected {
+        code: -32050,
+        data: Some(data),
+    }) = resumed
+    else {
+        return Err(format!("unexpected retired observation response: {resumed:?}").into());
+    };
+    if data.get("kind") != Some(&json!("unavailable"))
+        || data.get("stage") != Some(&json!("inspect"))
+    {
+        return Err(format!("unexpected retired observation rejection: {data:?}").into());
     }
     runtime.shutdown().await?;
     Ok(())
@@ -452,6 +542,7 @@ async fn explicit_cancel_settles_approval_and_keeps_peer_session_usable() -> Tes
         )
         .into());
     }
+    drop(observer);
     runtime.shutdown().await?;
     Ok(())
 }

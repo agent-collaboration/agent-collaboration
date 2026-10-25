@@ -1,10 +1,11 @@
+use collaboration_client::board::{RequestDecision, RequestResult};
 use collaboration_client::{BoardClientError, CollaborationClient};
 use collaboration_protocol::{
-    SubscriptionWaitBatch, ThreadSubscribeRequest, ThreadSubscriptionState,
-    ThreadSubscriptionWaitFilter, ThreadSubscriptionWaitRequest, ThreadSubscriptionsRequest,
+    SubscriptionWaitBatch, ThreadSubscribeRequest, ThreadSubscriptionWaitFilter,
+    ThreadSubscriptionWaitOutcome, ThreadSubscriptionWaitRequest, ThreadSubscriptionsRequest,
     ThreadUnsubscribeRequest,
 };
-use message_board::{Identity, ResourceIdentity, SubscriptionScope};
+use message_board::{Identity, ProtocolVersion, RequestId, ResourceIdentity, SubscriptionTarget};
 use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -29,11 +30,26 @@ fn actor() -> Value {
 }
 
 fn scope() -> Value {
-    json!({"kind":"thread","rootMessageId":"01900000-0000-7000-8000-000000000001"})
+    json!({"kind":"thread","thread":{"thread":"01900000-0000-7000-8000-000000000001"}})
 }
 
+#[allow(clippy::expect_used)] // Static test JSON construction.
+fn mutation(fields: Value) -> Value {
+    let mut value = json!({"requestId":RequestId::generate(),"protocolVersion":1,"actor":actor(),"actingFor":null});
+    value
+        .as_object_mut()
+        .expect("fixture object")
+        .extend(fields.as_object().expect("fixture fields").clone());
+    value
+}
+fn write_reply() -> Value {
+    json!({"result":{"kind":"decided","decision":{"kind":"accepted",
+        "effects":{"entries":[],"totalCount":0,
+            "digest":message_board::DecisionEffectsHeader::from_full(&[]).digest,"next":null},
+        "change":"alreadySo"}},"reader":null})
+}
 fn view() -> Value {
-    json!({"scope":scope(),"policy":{"mode":"poll","whenIdle":"hold",
+    json!({"projectId":"01900000-0000-7000-8000-000000000002","scope":{"kind":"thread","threadId":"01900000-0000-7000-8000-000000000001"},"policy":{"mode":"poll","whenIdle":"hold",
         "timing":{"quietSeconds":120,"capSeconds":600},"lifetime":86400},
         "state":"active","expiresAt":"2026-10-02T00:00:00Z","pendingCount":2,
         "presence":{"kind":"unreachable","reason":"human reader"}})
@@ -45,7 +61,7 @@ async fn subscription_methods_exchange_typed_requests_and_views() -> TestResult 
     let server = tokio::spawn(async move {
         let subscribe = peer.next().await?;
         ensure(
-            subscribe.tool == "board_thread_subscribe",
+            subscribe.tool == "thread_subscribe",
             "wrong subscribe method",
         )?;
         ensure(
@@ -60,90 +76,100 @@ async fn subscription_methods_exchange_typed_requests_and_views() -> TestResult 
             subscribe.arguments["policy"]["quietSeconds"] == 0,
             "policy units changed",
         )?;
-        subscribe.succeed(view());
+        subscribe.succeed(write_reply());
 
         let list = peer.next().await?;
         ensure(
-            list.tool == "board_thread_subscriptions",
+            list.tool == "thread_subscriptions",
             "wrong subscriptions method",
         )?;
         ensure(
             list.arguments == json!({"actor":actor()}),
             "list request changed",
         )?;
-        list.succeed(json!({"subscriptions":[view()]}));
+        list.succeed(json!({"subscriptions":[view()],"unavailable":["01900000-0000-7000-8000-000000000003"]}));
 
         let unsubscribe = peer.next().await?;
         ensure(
-            unsubscribe.tool == "board_thread_unsubscribe",
+            unsubscribe.tool == "thread_unsubscribe",
             "wrong unsubscribe method",
         )?;
         ensure(
-            unsubscribe.arguments == json!({"actor":actor(),"scope":scope()}),
+            unsubscribe.arguments["actor"] == actor() && unsubscribe.arguments["scope"] == scope(),
             "unsubscribe request changed",
         )?;
-        let mut ended = view();
-        ended["state"] = json!("ended");
-        ended["endReason"] = json!({"kind":"cancelled"});
-        unsubscribe.succeed(ended);
+        unsubscribe.succeed(write_reply());
         Ok::<(), TestError>(())
     });
 
     let subscribed = client
-        .board_thread_subscribe(serde_json::from_value::<ThreadSubscribeRequest>(
-            json!({"actor":actor(),"scope":scope(),"policy":{"mode":"poll","quietSeconds":0}}),
-        )?)
+        .thread_subscribe(serde_json::from_value::<ThreadSubscribeRequest>(mutation(
+            json!({"scope":scope(),"policy":{"mode":"poll","quietSeconds":0}}),
+        ))?)
         .await?;
     ensure(
-        subscribed.pending_count == 2,
-        "subscribe view was not decoded",
+        matches!(
+            subscribed.result,
+            RequestResult::Decided(RequestDecision::Accepted { .. })
+        ),
+        "subscribe write reply was not decoded",
     )?;
     let subscriptions = client
-        .board_thread_subscriptions(ThreadSubscriptionsRequest {
+        .thread_subscriptions(ThreadSubscriptionsRequest {
             actor: serde_json::from_value::<Identity>(actor())?,
         })
         .await?;
+    ensure(
+        subscriptions.unavailable.len() == 1,
+        "unavailable project omitted",
+    )?;
     ensure(
         subscriptions.subscriptions.len() == 1,
         "subscription list was not decoded",
     )?;
     let ended = client
-        .board_thread_unsubscribe(serde_json::from_value::<ThreadUnsubscribeRequest>(
-            json!({"actor":actor(),"scope":scope()}),
+        .thread_unsubscribe(serde_json::from_value::<ThreadUnsubscribeRequest>(
+            mutation(json!({"scope":scope()})),
         )?)
         .await?;
     ensure(
-        ended.state == ThreadSubscriptionState::Ended,
-        "unsubscribe did not return ended view",
+        matches!(
+            ended.result,
+            RequestResult::Decided(RequestDecision::Accepted { .. })
+        ),
+        "unsubscribe write reply was not decoded",
     )?;
     server.await??;
     Ok(())
 }
 
 #[tokio::test]
-async fn invalid_mutation_results_preserve_thread_or_topic_inspection_identity() -> TestResult {
+async fn invalid_mutation_results_preserve_thread_or_project_inspection_identity() -> TestResult {
     for subscription_scope in [
         scope(),
-        json!({"kind":"topic","topicId":"01900000-0000-7000-8000-000000000002"}),
+        json!({"kind":"project","projectId":"01900000-0000-7000-8000-000000000002"}),
     ] {
         let (_api, client, mut peer) = connected_client().await?;
         let server = tokio::spawn(async move {
             peer.next().await?.succeed(json!({"invalid":true}));
             Ok::<(), TestError>(())
         });
-        let scope: SubscriptionScope = serde_json::from_value(subscription_scope)?;
+        let scope: SubscriptionTarget = serde_json::from_value(subscription_scope)?;
         let expected_resource = match &scope {
-            SubscriptionScope::Thread { root_message_id } => ResourceIdentity::Thread {
-                root_message_id: root_message_id.clone(),
+            SubscriptionTarget::Thread { thread } => ResourceIdentity::Thread {
+                thread_id: thread.thread.clone(),
             },
-            SubscriptionScope::Topic { topic_id } => ResourceIdentity::Topic {
-                topic_id: topic_id.clone(),
+            SubscriptionTarget::Project { project_id } => ResourceIdentity::Project {
+                project_id: project_id.clone(),
             },
         };
         let outcome = client
-            .board_thread_unsubscribe(ThreadUnsubscribeRequest {
+            .thread_unsubscribe(ThreadUnsubscribeRequest {
                 actor: serde_json::from_value(actor())?,
                 scope,
+                request_id: RequestId::generate(),
+                protocol_version: ProtocolVersion::CURRENT,
+                acting_for: None,
             })
             .await;
         match outcome {
@@ -164,7 +190,7 @@ async fn invalid_mutation_results_preserve_thread_or_topic_inspection_identity()
 async fn subscription_wait_uses_the_rebound_method_and_decodes_notice_ranges() -> TestResult {
     let (_api, client, mut peer) = connected_client().await?;
     let root_id = "01900000-0000-7000-8000-000000000011";
-    let topic_id = "01900000-0000-7000-8000-000000000012";
+    let project_id = "01900000-0000-7000-8000-000000000012";
     let request: ThreadSubscriptionWaitRequest = serde_json::from_value(json!({
         "actor": {
             "kind":"session",
@@ -176,14 +202,14 @@ async fn subscription_wait_uses_the_rebound_method_and_decodes_notice_ranges() -
                 "sessionId":"subscription-client"
             }
         },
-        "filter":{"kind":"roots","rootMessageIds":[root_id]},
-        "maxWaitSeconds":30
+        "filter":{"kind":"roots","threads":[{"thread":root_id}]},
+        "protocolVersion":1,"actingFor":null,"renewals":[],"maxWaitSeconds":30
     }))?;
     let server = tokio::spawn(async move {
         let wait = peer.next().await?;
-        ensure(wait.tool == "board_thread_wait", "wrong wait method")?;
+        ensure(wait.tool == "thread_wait", "wrong wait method")?;
         ensure(
-            wait.arguments["filter"] == json!({"kind":"roots","rootMessageIds":[root_id]}),
+            wait.arguments["filter"] == json!({"kind":"roots","threads":[{"thread":root_id}]}),
             "wait filter changed",
         )?;
         ensure(
@@ -191,35 +217,37 @@ async fn subscription_wait_uses_the_rebound_method_and_decodes_notice_ranges() -
             "wait duration changed",
         )?;
         wait.succeed(json!({
-            "batch":{
+            "renewals":[],"outcome":{"kind":"batch","batch":{
                 "kind":"notice",
                 "pushId":"01900000-0000-7000-8000-000000000013",
                 "line":"thread subscription notice",
                 "held":false,
                 "draining":false,
                 "roots":[{
-                    "rootId":root_id,
-                    "topicId":topic_id,
-                    "fromSequence":1,
-                    "throughSequence":2,
-                    "messageCount":2
+                    "threadId":root_id,
+                    "projectId":project_id,
+                    "from":{"epoch":1,"position":1},
+                    "through":{"epoch":1,"position":2},
+                    "postCount":2
                 }]
-            }
+            }}
         }));
         Ok::<(), TestError>(())
     });
 
-    let result = client
-        .board_thread_wait(request, Duration::from_secs(35))
-        .await?;
-    match result.batch {
-        Some(SubscriptionWaitBatch::Notice { roots, .. }) => {
+    let result = client.thread_wait(request, Duration::from_secs(35)).await?;
+    match result.outcome {
+        ThreadSubscriptionWaitOutcome::Batch {
+            batch: SubscriptionWaitBatch::Notice { roots, .. },
+        } => {
             ensure(roots.len() == 1, "notice roots were not decoded")?;
         }
-        Some(SubscriptionWaitBatch::Ranges { .. }) => {
+        ThreadSubscriptionWaitOutcome::Batch {
+            batch: SubscriptionWaitBatch::Ranges { .. },
+        } => {
             return Err("session notice was decoded as human ranges".into());
         }
-        None => return Err("wait response lost its notice batch".into()),
+        _ => return Err("wait response lost its notice batch".into()),
     }
     server.await??;
     Ok(())
@@ -231,7 +259,7 @@ async fn subscription_wait_timeout_is_unknown_and_never_replayed() -> TestResult
     let request: ThreadSubscriptionWaitRequest = serde_json::from_value(json!({
         "actor":actor(),
         "filter":{"kind":"all"},
-        "maxWaitSeconds":1
+        "protocolVersion":1,"actingFor":null,"renewals":[],"maxWaitSeconds":1
     }))?;
     let expected_actor = request.actor.clone();
     let expected_filter = request.filter.clone();
@@ -254,11 +282,16 @@ async fn subscription_wait_timeout_is_unknown_and_never_replayed() -> TestResult
     });
 
     let timeout = client
-        .board_thread_wait(request.clone(), Duration::from_millis(100))
+        .thread_wait(request.clone(), Duration::from_millis(100))
         .await;
     match timeout {
-        Err(BoardClientError::WaitOutcomeUnknown { actor, filter }) => {
-            ensure(actor == expected_actor, "timeout lost the Reader identity")?;
+        Err(BoardClientError::WaitOutcomeUnknown {
+            actor,
+            filter,
+            renewals,
+        }) => {
+            ensure(renewals.is_empty(), "unexpected uncertain renewal")?;
+            ensure(*actor == expected_actor, "timeout lost the Reader identity")?;
             ensure(filter == expected_filter, "timeout lost the wait filter")?;
         }
         _ => return Err("wait timeout was not preserved".into()),
@@ -280,12 +313,12 @@ async fn subscription_wait_rejects_invalid_request_before_transmission() -> Test
         actor: serde_json::from_value(actor())?,
         filter: ThreadSubscriptionWaitFilter::All {},
         max_wait_seconds: 1501,
+        acting_for: None,
+        protocol_version: ProtocolVersion::CURRENT,
+        renewals: Vec::new(),
     };
 
-    match client
-        .board_thread_wait(request, Duration::from_secs(1))
-        .await
-    {
+    match client.thread_wait(request, Duration::from_secs(1)).await {
         Err(BoardClientError::Connection(collaboration_client::ClientError::InvalidRequest(
             "invalid Thread Wait request",
         ))) => {}
@@ -304,32 +337,34 @@ async fn subscription_wait_malformed_success_preserves_inspection_identity() -> 
     let request: ThreadSubscriptionWaitRequest = serde_json::from_value(json!({
         "actor":actor(),
         "filter":{"kind":"all"},
-        "maxWaitSeconds":1
+        "protocolVersion":1,"actingFor":null,"renewals":[],"maxWaitSeconds":1
     }))?;
     let expected_actor = request.actor.clone();
     let expected_filter = request.filter.clone();
     let server = tokio::spawn(async move {
         let wait = peer.next().await?;
-        ensure(wait.tool == "board_thread_wait", "wrong wait method")?;
+        ensure(wait.tool == "thread_wait", "wrong wait method")?;
         wait.succeed(json!({
-            "batch":{
+            "renewals":[],"outcome":{"kind":"batch","batch":{
                 "kind":"notice",
                 "pushId":"01900000-0000-7000-8000-000000000013",
                 "line":"thread subscription notice",
                 "held":false,
                 "draining":false
-            }
+            }}
         }));
         Ok::<(), TestError>(())
     });
 
-    match client
-        .board_thread_wait(request, Duration::from_secs(5))
-        .await
-    {
-        Err(BoardClientError::WaitOutcomeUnknown { actor, filter }) => {
+    match client.thread_wait(request, Duration::from_secs(5)).await {
+        Err(BoardClientError::WaitOutcomeUnknown {
+            actor,
+            filter,
+            renewals,
+        }) => {
+            ensure(renewals.is_empty(), "unexpected uncertain renewal")?;
             ensure(
-                actor == expected_actor,
+                *actor == expected_actor,
                 "malformed result lost the Reader identity",
             )?;
             ensure(

@@ -1,13 +1,13 @@
 //! SQLite persistence for local automation, independent of the Host executable.
 mod automation_connection;
-pub use automation_connection::{AutomationStore, StorageError};
+pub use automation_connection::{AutomationStore, StorageError, apply_message_drop_migration};
 mod automation_retention;
-pub use collaboration_protocol::{PushDeliveryState, PushRecord, PushRecordDraft};
 mod instruction_repository;
 mod instruction_revision_read;
 mod instruction_updates;
 pub use instruction_revision_read::InstructionRevisionRecord;
-mod push_record_rows;
+mod message_drop_guard;
+mod schema_definition_catalogue;
 mod schema_initialization;
 mod schema_validation;
 pub use instruction_updates::InstructionUpdate;
@@ -17,10 +17,16 @@ mod schedule_repository;
 pub use schedule_repository::ScheduleCreate;
 mod run_inventory;
 mod schedule_evaluation;
+mod wake_limits;
+mod wake_slot_upgrade;
 mod wakeup_repository;
 pub use wakeup_repository::WakeCreate;
 mod local_operation_receipts;
+mod owed_push_operation;
+mod owed_push_operations;
 mod wakeup_evaluation;
+pub use owed_push_operation::{OwedPushOperation, PushOperation, PushOperationId};
+pub use owed_push_operations::MAX_OWED_PUSH_OPERATION_BATCH;
 pub use wakeup_evaluation::WakeEvaluation;
 mod wakeup_mutations;
 pub use wakeup_mutations::{RetainedDelivery, WakeAction, WakeMutation, WakeMutationResult};
@@ -35,11 +41,6 @@ mod wakeup_worker_inventory;
 pub use delivery_preparation::DeliveryPreparation;
 mod delivery_inspection;
 pub use delivery_inspection::DeliveryRecord;
-mod direct_message_recovery;
-mod push_records;
-pub use push_records::{
-    DirectMessageHistoryQuery, MAX_PUSH_LIST_LIMIT, MAX_PUSH_PRUNE_BATCH, PushInboxQuery,
-};
 mod wakeup_observation;
 pub use wakeup_observation::WakeTransition;
 mod wakeup_listing;
@@ -109,3 +110,8 @@ pub use automation_event_history::{
 mod schedule_export;
 mod schedule_import;
 pub use schedule_import::ScheduleImport;
+
+mod remote_wake_requests;
+pub use remote_wake_requests::{
+    RemoteWakeMail, RemoteWakePreparation, WakeListingKey, WakeListingKeys,
+};

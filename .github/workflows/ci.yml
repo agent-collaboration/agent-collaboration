@@ -14,6 +14,11 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_TOOLCHAIN: 1.98.1
+  # CI never needs Rust debug info; it makes the test binaries outgrow the
+  # runner disk.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_TEST_DEBUG: "0"
+  CARGO_INCREMENTAL: "0"
 
 # DAG: four independent jobs, each on its own Linux runner, each running its
 # steps in the background where they don't compete for the same compile. The
@@ -63,20 +68,31 @@ jobs:
         run: python3 -m unittest scripts.tests.test_update_homebrew_formula scripts.tests.test_publish_homebrew_tap_local -v
       - uses: actions/setup-python@v6
         with:
-          python-version: '3.13'
+          python-version: "3.13"
       - name: Prepare verification checks
         run: |
           python3 -m venv "$RUNNER_TEMP/router-verification"
-          "$RUNNER_TEMP/router-verification/bin/python" -m pip install --disable-pip-version-check pydantic==2.14.1 basedpyright==1.40.2 ruff==0.17.0 websockets==17.3
-      - name: Check verification apparatus
+          "$RUNNER_TEMP/router-verification/bin/python" -m pip install --disable-pip-version-check pydantic==2.14.1 basedpyright==1.40.2 ruff==0.17.0 pytest==9.1.1 websockets==17.3
+      - name: Check retained Python verification
         id: verification_observations
         background: true
         run: |
           verification_python="$RUNNER_TEMP/router-verification/bin/python"
+          # Keep main-branch Python and its import closure. The Rust and
+          # TypeScript lanes own board and central journey checks.
+          verification_paths=(
+            scripts/verification
+            scripts/tests/test_verification_observations.py
+            scripts/tests/test_verification_lifecycle.py
+            scripts/tests/test_tailnet_mcp_verification.py
+            scripts/tests/test_tailnet_mcp_https_transport.py
+            scripts/tests/test_acp_metadata_observation.py
+            scripts/tests/verification_controller_fixture.py
+          )
           "$verification_python" -W error::ResourceWarning -m unittest scripts.tests.test_verification_observations scripts.tests.test_verification_lifecycle scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport scripts.tests.test_acp_metadata_observation -v
-          "$verification_python" -m ruff check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
-          "$verification_python" -m ruff format --check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
-          "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_tailnet_mcp_verification.py scripts/tests/test_tailnet_mcp_https_transport.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
+          "$verification_python" -m ruff check "${verification_paths[@]}"
+          "$verification_python" -m ruff format --check "${verification_paths[@]}"
+          "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" "${verification_paths[@]}"
       - name: Enforce dependency policy
         id: dependency_policy
         background: true
@@ -92,6 +108,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: verification/package.json
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: verification/package.json
+      - name: Check TypeScript verification harness
+        run: |
+          pnpm --dir verification install --frozen-lockfile
+          pnpm --dir verification run check
+          pnpm --dir verification run lint
+          pnpm --dir verification run format:check
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -117,10 +145,6 @@ jobs:
         run: |
           scripts/tooling/bootstrap-tools.sh sqlx
           python3 scripts/tooling/prepare-sqlx.py --check
-      - name: Lint the Turso driver with every feature
-        run: cargo clippy --locked -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-targets --all-features -- -D warnings
-      - name: Check the reduced Turso driver feature set
-        run: cargo check --locked -p sqlx-turso --lib --no-default-features --features runtime-tokio
       - name: Check Turso SQLx metadata against native migrations
         run: |
           python3 -m unittest scripts.tests.test_prepare_sqlx_turso -v
@@ -153,6 +177,15 @@ jobs:
     name: Test Rust workspace
     runs-on: ubuntu-latest
     steps:
+      # The steps below build the workspace under several package selections and
+      # feature sets, which together outgrow the runner's free disk. Remove
+      # preinstalled SDKs this job never uses.
+      - name: Free runner disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL /usr/share/swift /usr/local/share/boost /usr/local/share/powershell /usr/local/share/chromium /opt/microsoft /opt/google
+          sudo docker image prune --all --force > /dev/null
+          df -h /
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -176,12 +209,15 @@ jobs:
           scripts/tooling/bootstrap-tools.sh ci
           echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
       # Compile every test binary once, then run the suites in parallel from
-      # the built artifacts so they don't contend for cargo's build lock.
+      # the built artifacts so they don't contend for cargo's build lock. Each
+      # build uses exactly its run step's package selection and features, so
+      # the run reuses these artifacts instead of relinking them.
+      # Real Host, importer and forwarding-timer roots run in board-e2e below.
+      # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros --no-run
-          cargo nextest run --profile ci --locked -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-features --no-run
-          cargo nextest run --profile ci --locked -p sqlx-turso-core --no-run
+          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
+          df -h /
       - name: Test native-capabilities verification apparatus
         run: cargo test --locked -p codex-router-host --example verify-provider-native-capabilities
       - name: Test quota-reset terminal integration
@@ -191,27 +227,153 @@ jobs:
       - name: Test Rust workspace
         id: workspace_tests
         background: true
-        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --exclude sqlx-turso --exclude sqlx-turso-core --exclude sqlx-turso-macros
+        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
         run: cargo test --locked -p codex-router-cli --features keychain-test-support --test default_router_port_cutover -- --ignored --nocapture
-      # The Turso driver runs after the timing-sensitive suites above have finished: its
-      # trybuild test compiles a cold dependency graph that would compete with them.
-      - name: Test the Turso driver with every feature
-        run: cargo nextest run --profile ci --locked -p sqlx-turso -p sqlx-turso-core -p sqlx-turso-macros --all-features
-      # The only run with `chrono` off, which covers the driver's `not(feature = "chrono")` paths.
-      - name: Test the Turso driver core with default features
-        run: cargo nextest run --profile ci --locked -p sqlx-turso-core
+
+  board-e2e:
+    name: Rust local end-to-end
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: "4"
+      TMPDIR: /tmp
+      CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/examples/board-debug-runtime
+      CODEX_ROUTER_E2E_PARENT: /tmp/router-board-e2e-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy,rustfmt,rust-src
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: board-e2e
+          cache-on-failure: true
+      - name: Prepare owned runtime roots and pinned test runner
+        run: |
+          mkdir -m 700 "$CODEX_ROUTER_E2E_PARENT"
+          scripts/tooling/bootstrap-tools.sh ci
+          echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
+      - name: Build the real local entry points
+        run: |
+          cargo build --locked -p agent-collaboration --all-features --bins
+          cargo build --locked -p codex-router-host --features runtime-test-support --example board-debug-runtime
+          cargo build --locked -p board-legacy-upgrade --bin codex-router-board-upgrade
+      - name: Run the deterministic local process journeys
+        run: |
+          set -o pipefail
+          cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
+            echo "End-to-end child lifecycle leak detected" >&2
+            exit 1
+          fi
+      - name: Retain failed process evidence
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-local-e2e-failures
+          path: ${{ env.CODEX_ROUTER_E2E_PARENT }}
+          if-no-files-found: ignore
+
+  central-core:
+    name: Central core boundary and wasm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: central-core
+          cache-on-failure: true
+      - name: Check the shared asynchronous core on native and wasm
+        run: |
+          cargo check --locked -p collaboration-central-core
+          cargo check --locked -p collaboration-central-core --target wasm32-unknown-unknown
+          cargo clippy --locked -p collaboration-central-core --target wasm32-unknown-unknown --lib -- -D warnings
+
+  central-cloudflare:
+    name: Central Worker build and local workerd conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy,rustfmt
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: central-cloudflare
+          workspaces: |
+            . -> target
+          cache-on-failure: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - name: Install pinned local Worker tools
+        run: |
+          cargo install worker-build --version 0.8.7 --locked --root "$RUNNER_TEMP/central-worker-tools"
+          mkdir -p "$RUNNER_TEMP/central-node-tools"
+          pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact miniflare@5.20261012.0-beta
+          echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
+      - name: Check the workspace wasm shell and portable test contract
+        run: |
+          cargo fmt --manifest-path crates/collaboration-central-cloudflare/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path crates/collaboration-central-cloudflare/Cargo.toml --target wasm32-unknown-unknown --all-features -- -D warnings
+          cargo check --locked -p collaboration-central-conformance --no-default-features --target wasm32-unknown-unknown
+      - name: Build the production profile and reject test controls
+        run: |
+          worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
+          python3 scripts/tooling/check-central-worker-bundle.py production
+      # Legacy default/conformance and Fleet feed/notice/outbox launchers retire
+      # under decisions508/513. Their remaining functional obligations, including
+      # normal Worker session/holder equivalence and G18, stay in the removal map.
+      - name: Prove current composed controls, transactions and physical restart
+        run: |
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
+          python3 scripts/tooling/check-central-worker-bundle.py faults
+          for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
+            cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
+          done
+          for example in step_scope_workerd bootstrap_scope_workerd; do
+            cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
+          done
+      - name: Prove bounded normal Access and session cases
+        run: |
+          for scenario in access-sessions access-carryover session-carryover; do
+            cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+          done
+      - name: Prove forwarding and mailbox rules on workerd
+        run: |
+          for scenario in forward-boundary forward-overlap forward-state forward-terminal forward-real-timer mailbox-identity mailbox-capacity mailbox-cancel mailbox-deadline mailbox-held-retention mailbox-report-terminal; do
+            cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+          done
+      - name: Build the deployment candidate without test features
+        run: |
+          worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
+          python3 scripts/tooling/check-central-worker-bundle.py production
 
   validated:
     name: Validate Rust workspace
     if: always()
-    needs: [checks, lint, build, test]
+    needs: [checks, lint, build, test, board-e2e, central-core, central-cloudflare]
     runs-on: ubuntu-latest
     steps:
       - name: Require every validation job
         run: |
-          for result in "${{ needs.checks.result }}" "${{ needs.lint.result }}" "${{ needs.build.result }}" "${{ needs.test.result }}"; do
+          for result in "${{ needs.checks.result }}" "${{ needs.lint.result }}" "${{ needs.build.result }}" "${{ needs.test.result }}" "${{ needs.board-e2e.result }}" "${{ needs.central-core.result }}" "${{ needs.central-cloudflare.result }}"; do
             test "${result}" = "success"
           done

@@ -3,7 +3,7 @@
 //! A client reads the published version 3 manifest for the Router's identity and version,
 //! then calls tools over the owner-only API socket. There is no handshake: each call stands
 //! alone, and nothing is replayed after an uncertain answer.
-use crate::api_connection::{ApiConnection, DEFAULT_CALL_TIMEOUT, ToolAnswer};
+use crate::api_connection::{ApiConnection, DEFAULT_CALL_TIMEOUT};
 use collaboration_protocol::{
     EndpointInventory, MachineLabel, SERVICE_MANIFEST_VERSION, SchemaDigest, ServiceManifest,
     UuidIdentity,
@@ -172,195 +172,6 @@ impl CollaborationClient {
     #[must_use]
     pub fn directory(&self) -> &Path {
         &self.directory
-    }
-
-    /// Agent-originated communication; delivery defaults are carried by the typed request.
-    pub async fn send_agent_message(
-        &self,
-        params: collaboration_protocol::SessionMessageSendParams,
-    ) -> Result<collaboration_protocol::DeliveryReceipt, ClientError> {
-        if !matches!(
-            params.message,
-            collaboration_protocol::MessageContent::Agent { .. }
-        ) {
-            return Err(ClientError::InvalidRequest("agent message required"));
-        }
-        self.submit_message_with_push(params)
-            .await
-            .map(|result| result.receipt)
-    }
-
-    /// Explicit human input; does not manufacture an authenticated human identity.
-    pub async fn send_human_input(
-        &self,
-        params: collaboration_protocol::SessionMessageSendParams,
-    ) -> Result<collaboration_protocol::DeliveryReceipt, ClientError> {
-        if !matches!(
-            params.message,
-            collaboration_protocol::MessageContent::HumanUser { .. }
-        ) {
-            return Err(ClientError::InvalidRequest("human input required"));
-        }
-        self.submit_message_with_push(params)
-            .await
-            .map(|result| result.receipt)
-    }
-
-    /// Replies to one stored direct message using its push id or Router link.
-    pub async fn message_reply(
-        &self,
-        params: collaboration_protocol::SessionMessageReplyParams,
-    ) -> Result<collaboration_protocol::SessionMessageReplyResult, ClientError> {
-        if params.caller.endpoint.service_id != self.identity().service_id {
-            return Err(ClientError::InvalidRequest(
-                "reply caller belongs to another service",
-            ));
-        }
-        let value = self
-            .delivery_receipt("message_reply", json!(params))
-            .await?;
-        serde_json::from_value(value)
-            .map_err(|_| ClientError::Protocol("invalid message reply result; acceptance unknown"))
-    }
-
-    pub(crate) async fn submit_message_with_push(
-        &self,
-        params: collaboration_protocol::SessionMessageSendParams,
-    ) -> Result<collaboration_protocol::PushMessageSendResult, ClientError> {
-        use collaboration_protocol::{
-            DeliveryClientReceipt, DeliveryOutcome, MessageDelivery, MessageInputKind,
-            MessageRepresentation, NativeInputOperation, NativeSendAcceptance, SessionReachability,
-        };
-        let message = crate::PublicMessageContent::try_from(params.message.clone())?;
-        let value = self
-            .delivery_receipt(
-                "message_send",
-                json!({
-                    "target": params.target,
-                    "message": message,
-                    "delivery": params.mode,
-                    "generationGuard": params.generation_guard,
-                }),
-            )
-            .await?;
-        let decoded =
-            serde_json::from_value::<collaboration_protocol::PushMessageSendResult>(value);
-        let Ok(receipt) = decoded else {
-            return Err(ClientError::Protocol(
-                "invalid message receipt; acceptance unknown",
-            ));
-        };
-        // The service turns either caller input kind into a Router-authored
-        // push line. Native delivery renders that line as declared agent text.
-        let kind = MessageInputKind::Agent;
-        let representation = MessageRepresentation::DeclaredAgentText;
-        let delivery_receipt = &receipt.receipt;
-        let expected_link = collaboration_protocol::RouterLink::new(
-            collaboration_protocol::MachineId::from(self.identity.service_id.clone()),
-            receipt.push_id.clone(),
-        )
-        .to_string();
-        let consistent = receipt.target == params.target
-            && receipt.link == expected_link
-            && match (&delivery_receipt.reachability, &delivery_receipt.client) {
-                (None, None) => true,
-                (
-                    Some(SessionReachability::CodexAppServer),
-                    Some(DeliveryClientReceipt::CodexAppServer(native)),
-                ) => {
-                    let acceptance_matches = matches!(
-                        (&params.mode, &delivery_receipt.outcome, &native.acceptance),
-                        (
-                            MessageDelivery::Auto,
-                            DeliveryOutcome::Started,
-                            NativeSendAcceptance::NativeInputAccepted {
-                                operation: NativeInputOperation::TurnStart,
-                                ..
-                            }
-                        ) | (
-                            MessageDelivery::Auto,
-                            DeliveryOutcome::StartedOrSteered,
-                            NativeSendAcceptance::NativeInputAccepted { .. }
-                        ) | (
-                            MessageDelivery::Auto,
-                            DeliveryOutcome::Steered,
-                            NativeSendAcceptance::SteerAccepted { .. }
-                        ) | (
-                            MessageDelivery::Queue,
-                            DeliveryOutcome::Queued,
-                            NativeSendAcceptance::QueueAccepted { .. }
-                        ) | (
-                            MessageDelivery::Steer,
-                            DeliveryOutcome::Steered,
-                            NativeSendAcceptance::SteerAccepted { .. }
-                        )
-                    );
-                    native.target == params.target
-                        && params
-                            .generation_guard
-                            .as_ref()
-                            .is_none_or(|guard| guard == &native.generation)
-                        && native.input_kind == kind
-                        && native.representation == representation
-                        && acceptance_matches
-                        && String::from(native.client_user_message_id.clone())
-                            == receipt.push_id.as_str()
-                }
-                (
-                    Some(SessionReachability::ProviderAcp),
-                    Some(DeliveryClientReceipt::ProviderAcp { .. }),
-                ) => {
-                    matches!(
-                        delivery_receipt.outcome,
-                        DeliveryOutcome::Started
-                            | DeliveryOutcome::Steered
-                            | DeliveryOutcome::Queued
-                    )
-                }
-                (
-                    Some(SessionReachability::ClaudeCodePeer),
-                    Some(DeliveryClientReceipt::ClaudeCodePeer),
-                ) => {
-                    matches!(
-                        delivery_receipt.outcome,
-                        DeliveryOutcome::PeerMessageWritten
-                    )
-                }
-                (Some(_), None) => matches!(
-                    delivery_receipt.outcome,
-                    DeliveryOutcome::NotSubmitted { .. }
-                        | DeliveryOutcome::Rejected(_)
-                        | DeliveryOutcome::Unknown
-                ),
-                _ => false,
-            };
-        if !consistent {
-            return Err(ClientError::Protocol(
-                "inconsistent message receipt; acceptance unknown",
-            ));
-        }
-        Ok(receipt)
-    }
-
-    /// A stored push and its delivery receipt. A delivery the tool reports as an error (not
-    /// submitted, refused or unknown) still carries the stored push, which the caller judges.
-    async fn delivery_receipt(&self, tool: &str, arguments: Value) -> Result<Value, ClientError> {
-        match self.connection.answer(tool, arguments).await? {
-            ToolAnswer::Success(value) => Ok(value),
-            ToolAnswer::Failure(mut failure)
-                if failure.get("pushId").is_some() && failure.get("receipt").is_some() =>
-            {
-                if let Some(fields) = failure.as_object_mut() {
-                    for presentation in ["mcpResult", "kind", "message", "effect"] {
-                        fields.remove(presentation);
-                    }
-                }
-                Ok(failure)
-            }
-            ToolAnswer::Failure(failure) => {
-                Err(crate::api_connection::rejection_from_tool_failure(failure))
-            }
-        }
     }
 
     pub async fn list_sessions(
@@ -720,6 +531,32 @@ impl CollaborationClient {
             return Err(ClientError::Protocol("inconsistent endpoint inventory"));
         }
         Ok(result)
+    }
+
+    pub async fn installation_show(
+        &self,
+    ) -> Result<collaboration_protocol::InstallationIdentity, ClientError> {
+        let value = match self.connection.call("installation_show", json!({})).await {
+            // rmcp reports an absent tool as invalid_params with no data. This
+            // operation has no arguments, so our empty request cannot fail input validation.
+            Err(ClientError::Rejected {
+                code: -32602,
+                data: None,
+            }) => {
+                return Err(ClientError::UnsupportedCapability(
+                    "unknown tool installation_show on the running Router",
+                ));
+            }
+            result => result?,
+        };
+        let identity: collaboration_protocol::InstallationIdentity = serde_json::from_value(value)
+            .map_err(|_| ClientError::Protocol("invalid installation identity"))?;
+        if identity.service_id != self.identity.service_id {
+            return Err(ClientError::Protocol(
+                "installation identity belongs to another Router",
+            ));
+        }
+        Ok(identity)
     }
 }
 

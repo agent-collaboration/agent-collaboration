@@ -60,6 +60,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
         std::fs::create_dir(&invoking_directory)?;
         let runtime = CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
+                board_session: None,
                 directory: root_path.clone(),
                 codex_home: root_path.clone(),
                 backend_socket: root_path.join("unused.sock"),

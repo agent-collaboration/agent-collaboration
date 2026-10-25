@@ -455,13 +455,17 @@ async fn typed_interaction_rejects_self_approver_and_corrupt_stored_rows() {
             .await,
         Err(crate::interaction_broker::InteractionHistoryError::SelfApprover)
     ));
-    let mut observer = <sqlx::SqliteConnection as sqlx::Connection>::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new().filename(directory.join("interaction.sqlite")),
-    )
-    .await
-    .expect("owned history observer");
-    sqlx::query("INSERT INTO typed_interaction_history VALUES ('bad', '{\"requestId\":\"other\"}', '2026-10-01T00:00:00.000000000Z')")
-        .execute(&mut observer).await.expect("corrupt actual SQLite record");
+    let fault =
+        crate::interaction_broker::native_history_fault_fixture::NativeHistoryFaults::new(&broker);
+    fault.execute_all(&["INSERT INTO typed_interaction_history VALUES ('bad', '{\"requestId\":\"other\"}', '2026-10-01T00:00:00.000000000Z')"])
+        .await.expect("corrupt actual native record");
+    assert_eq!(
+        fault
+            .text("SELECT record_json FROM typed_interaction_history WHERE request_id='bad'")
+            .await
+            .expect("native corruption readback"),
+        "{\"requestId\":\"other\"}"
+    );
     let reload = ServiceInteractionBroker::load(
         broker.service_id.clone(),
         broker.backend.clone(),

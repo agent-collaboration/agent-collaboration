@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO board_intent_progress(progress_id,project_id,intent_id,state_epoch,state_position) VALUES (?,?,?,?,?) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "2e5c51de8487b67a18ee8a6c8c5cfbcc70b75e2c8ca27051858546dcb48a4d31"
+}

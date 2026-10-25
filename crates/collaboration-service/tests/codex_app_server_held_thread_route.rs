@@ -21,6 +21,9 @@ use std::{
     time::Duration,
 };
 use tokio_tungstenite::tungstenite::Message;
+#[path = "support/native_mail_owner.rs"]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -594,19 +597,23 @@ async fn exercise_held_empty_thread(
     let steer = route
         .deliver(make_request(MessageDelivery::Steer)?, evidence.as_ref())
         .await?;
-    if !matches!(steer.outcome, DeliveryOutcome::NotSubmitted { .. })
-        || !holder.contains("empty-thread")
+    if !matches!(
+        steer.receipt().outcome.clone(),
+        DeliveryOutcome::NotSubmitted { .. }
+    ) || !holder.contains("empty-thread")
     {
         return Err("steer consumed the unmaterialized binding".into());
     }
     let queued = route
         .deliver(make_request(MessageDelivery::Queue)?, evidence.as_ref())
         .await?;
-    if !matches!(queued.outcome, DeliveryOutcome::Queued) || !holder.contains("empty-thread") {
+    if !matches!(queued.receipt().outcome.clone(), DeliveryOutcome::Queued)
+        || !holder.contains("empty-thread")
+    {
         return Err("queue did not use and retain the held native connection".into());
     }
     assert_eq!(
-        serde_json::to_value(&queued)?.pointer("/client/permissionDifferences"),
+        serde_json::to_value(queued.receipt())?.pointer("/client/permissionDifferences"),
         Some(&json!(["writableRoots"]))
     );
     let routed: Arc<dyn SessionDeliveryRoute> = route;
@@ -618,16 +625,20 @@ async fn exercise_held_empty_thread(
     let automation_store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
+    let machine_identity = collaboration_service::MachineIdentity::new(
+        service_id.clone(),
+        Some("held-thread-route-test"),
+    )?;
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let subscription_delivery = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
-            machine_identity: collaboration_service::MachineIdentity::new(
-                service_id.clone(),
-                Some("held-thread-route-test"),
-            )?,
+            machine_identity: machine_identity.clone(),
             clock: Arc::new(collaboration_service::SystemSubscriptionClock),
         },
     );
@@ -641,11 +652,23 @@ async fn exercise_held_empty_thread(
     .with_endpoints(vec![description])
     .map_err(std::io::Error::other)?
     .with_session_delivery(delivery)
-    .with_subscription_delivery_service(subscription_delivery.clone(), presence);
+    .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: subscription_delivery.clone(),
+            presence,
+            machine: machine_identity,
+            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+        },
+    )?;
     let served = served_api::ServedApi::start(identity).await?;
     let control = served.client("held-thread-message").await?;
     let started = control
         .send_message(collaboration_client::MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             message: collaboration_client::PublicMessageContent::HumanUser {
                 text: "hello".to_owned().try_into()?,
@@ -654,6 +677,9 @@ async fn exercise_held_empty_thread(
             generation_guard: None,
         })
         .await?;
+    let collaboration_protocol::MessageSendResult::Local(started) = started else {
+        return Err("local held connection returned remote custody".into());
+    };
     let first_message_receipt = format!("{:?}", started.receipt);
     if !matches!(started.receipt.outcome, DeliveryOutcome::Started)
         || !matches!(
@@ -677,11 +703,22 @@ async fn exercise_held_empty_thread(
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
     backend.await??;
+    native_mail.close().await?;
     let automation_store = Arc::try_unwrap(automation_store)
         .map_err(|_| std::io::Error::other("service retained automation store"))?
         .into_inner();
     automation_store.close().await?;
     std::fs::remove_file(root.join("automation.sqlite"))?;
+    for name in [
+        "interaction.sqlite",
+        "interaction.sqlite-wal",
+        "interaction.sqlite-shm",
+    ] {
+        let path = root.join(name);
+        if path.exists() {
+            std::fs::remove_file(path)?;
+        }
+    }
     std::fs::remove_file(socket_path)?;
     std::fs::remove_dir(scratch)?;
     std::fs::remove_dir(scratch_parent)?;

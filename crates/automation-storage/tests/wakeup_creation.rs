@@ -33,6 +33,8 @@ async fn wake_creation_survives_reopen_and_replay_preserves_original_timing()
     ));
     let mut store = AutomationStore::open(&path).await?;
     let mut request = WakeCreate {
+        requested_by: collaboration_protocol::WakeCreator::Owner {},
+        replace: false,
         operation_id: OperationId::generate(),
         message: TestMessage {
             target: "B".into(),

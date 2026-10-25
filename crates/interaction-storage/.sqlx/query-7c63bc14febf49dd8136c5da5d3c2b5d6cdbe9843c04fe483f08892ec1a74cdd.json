@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM local_delivery_retries WHERE item_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "7c63bc14febf49dd8136c5da5d3c2b5d6cdbe9843c04fe483f08892ec1a74cdd"
+}

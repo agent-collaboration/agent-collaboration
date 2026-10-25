@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT assignment_id AS \"id!: String\", ended AS \"ended?: String\" FROM role_assignments WHERE workstream_subject=? AND role=? ORDER BY assignment_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "ended?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "a789abae0763e35a0f775a3953ed9bb1deb848d8bcf3916fc16dae02104a8db9"
+}

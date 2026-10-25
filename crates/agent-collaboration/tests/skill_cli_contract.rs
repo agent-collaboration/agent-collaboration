@@ -352,10 +352,10 @@ mod tests {
     #[test]
     fn flag_detection_matches_whole_words_and_rejects_absent_flags() {
         // Arrange: real help for a real path, so the detector is proved against it.
-        let (succeeded, help) = help_text(&["board".to_owned(), "thread".to_owned()]);
+        let (succeeded, help) = help_text(&["thread".to_owned()]);
 
         // Assert
-        assert!(succeeded, "`{CLI_NAME} board thread --help` must succeed");
+        assert!(succeeded, "`{CLI_NAME} thread --help` must succeed");
         assert!(help_documents_flag(&help, "--help"));
         assert!(
             !help_documents_flag(&help, "--not-a-real-flag"),

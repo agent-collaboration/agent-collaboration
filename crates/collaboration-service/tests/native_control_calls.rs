@@ -16,6 +16,9 @@ use std::{
 use tokio_tungstenite::tungstenite::Message;
 #[path = "test_support/interaction_database_cleanup.rs"]
 mod interaction_database_cleanup;
+#[path = "support/native_mail_owner.rs"]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -155,10 +158,10 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: broker.interaction_store(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
-            machine_identity,
+            machine_identity: machine_identity.clone(),
             clock: Arc::new(SystemSubscriptionClock),
         });
     subscription_delivery
@@ -168,10 +171,23 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     broker
         .install_session_delivery(Arc::clone(&delivery))
         .unwrap_or_else(|error| panic!("broker delivery: {error}"));
+    let interactions = broker.interaction_store();
     let identity = identity
         .with_session_delivery(delivery)
-        .with_subscription_delivery_service(subscription_delivery.clone(), presence)
+        .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone())
         .with_approval_broker(broker);
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: subscription_delivery.clone(),
+            presence,
+            machine: machine_identity,
+            clock: Arc::new(SystemSubscriptionClock),
+        },
+    )
+    .unwrap();
     let served = served_api::ServedApi::start(identity.clone())
         .await
         .unwrap_or_else(|error| panic!("serve: {error}"));
@@ -438,6 +454,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     ));
     let message = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {
@@ -448,6 +465,9 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         })
         .await
         .unwrap();
+    let collaboration_protocol::MessageSendResult::Local(message) = message else {
+        panic!("local native input returned remote sender custody");
+    };
     assert!(
         matches!(
             message.receipt.client,
@@ -470,6 +490,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
     );
     let queued = client
         .send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(generation.clone()),
             message: PublicMessageContent::Agent {
@@ -480,6 +501,9 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         })
         .await
         .unwrap();
+    let collaboration_protocol::MessageSendResult::Local(queued) = queued else {
+        panic!("native QueueAccepted was replaced by remote sender custody");
+    };
     assert!(
         matches!(queued.receipt.client, Some(collaboration_protocol::DeliveryClientReceipt::CodexAppServer(collaboration_protocol::NativeSendReceipt { acceptance: collaboration_protocol::NativeSendAcceptance::QueueAccepted { submission_id }, .. })) if String::from(submission_id.clone()) == "queued-item")
     );
@@ -594,6 +618,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .stop()
         .await
         .unwrap_or_else(|error| panic!("second serve: {error}"));
+    native_mail.close().await.unwrap();
     Arc::try_unwrap(automation_store)
         .unwrap_or_else(|_| panic!("service retained automation store"))
         .into_inner()

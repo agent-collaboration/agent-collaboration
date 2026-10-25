@@ -18,8 +18,22 @@ const MAX_USER_FRAME_BYTES: usize = 1024 * 1024;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PeerSocketWriteOutcome {
     Written,
-    NotSubmitted { reason: &'static str },
-    Unknown { reason: &'static str },
+    NotSubmitted {
+        reason: &'static str,
+        cause: PeerSocketUnsentCause,
+    },
+    Unknown {
+        reason: &'static str,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PeerSocketUnsentCause {
+    AuthenticationUnavailable,
+    EncodingFailed,
+    FrameTooLarge,
+    ConnectFailed,
+    WriteNotStarted,
 }
 
 pub struct ClaudeCodePeerSocket {
@@ -40,6 +54,7 @@ impl ClaudeCodePeerSocket {
         let Some(token) = read_published_peer_token(&self.registry_directory, peer) else {
             return PeerSocketWriteOutcome::NotSubmitted {
                 reason: "peer authentication key unavailable",
+                cause: PeerSocketUnsentCause::AuthenticationUnavailable,
             };
         };
         let mut auth_line = match serde_json::to_vec(&json!({"type":"auth","token":token})) {
@@ -47,6 +62,7 @@ impl ClaudeCodePeerSocket {
             Err(_) => {
                 return PeerSocketWriteOutcome::NotSubmitted {
                     reason: "peer auth frame could not be encoded",
+                    cause: PeerSocketUnsentCause::EncodingFailed,
                 };
             }
         };
@@ -58,6 +74,7 @@ impl ClaudeCodePeerSocket {
             _ => {
                 return PeerSocketWriteOutcome::NotSubmitted {
                     reason: "peer message exceeds the frame limit",
+                    cause: PeerSocketUnsentCause::FrameTooLarge,
                 };
             }
         };
@@ -69,6 +86,7 @@ impl ClaudeCodePeerSocket {
             _ => {
                 return PeerSocketWriteOutcome::NotSubmitted {
                     reason: "peer socket could not be connected",
+                    cause: PeerSocketUnsentCause::ConnectFailed,
                 };
             }
         };
@@ -99,6 +117,7 @@ fn write_failure(bytes_written: usize) -> PeerSocketWriteOutcome {
     if bytes_written == 0 {
         PeerSocketWriteOutcome::NotSubmitted {
             reason: "peer socket write failed before any bytes",
+            cause: PeerSocketUnsentCause::WriteNotStarted,
         }
     } else {
         PeerSocketWriteOutcome::Unknown {

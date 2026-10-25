@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO owner_grants(grant_id, actor_id, request_id, epoch, position, router_time, time_basis, grant_kind, project_id, new_holder, reason, provenance_kind, relayed_by) VALUES (?, ?, ?, ?, ?, ?, ?, 'replaceLead', ?, ?, ?, 'relayed', ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "f373d32a6ffce391178865bfa60020d05614b5f1710d76324355d83dcec4f10b"
+}

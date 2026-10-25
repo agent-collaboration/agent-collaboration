@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"push_id!: String\" FROM router_pushes WHERE delivery_state='attempted' AND last_outcome_json IS NULL AND kind IN (?,?) ORDER BY push_id LIMIT 128",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "bc2c6d419ebdded713ad842ee0a349c2dbd6812444bc639c1ff057edb53063ee"
+}

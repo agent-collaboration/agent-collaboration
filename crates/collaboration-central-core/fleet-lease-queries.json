@@ -1,0 +1,188 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_lease.rs",
+  "metadata": "fleet-lease-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_lease_incarnation",
+      "sql": "sql/fleet/read_lease_incarnation.sql",
+      "row": "StoredLeaseIncarnation",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "insert_lease_incarnation",
+      "sql": "sql/fleet/insert_lease_incarnation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "fence_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "incarnation",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "store_lease_incarnation",
+      "sql": "sql/fleet/store_lease_incarnation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "incarnation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "fence_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_directory_lease",
+      "sql": "sql/fleet/read_directory_lease.sql",
+      "row": "StoredDirectoryLease",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "store_directory_lease",
+      "sql": "sql/fleet/store_directory_lease.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "lease_projection",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_claim_reservation",
+      "sql": "sql/fleet/read_claim_reservation.sql",
+      "row": "StoredClaimReservation",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "attempt_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "store_claim_reservation",
+      "sql": "sql/fleet/store_claim_reservation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "attempt_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_claim_settlement_receipt",
+      "sql": "sql/fleet/read_claim_settlement_receipt.sql",
+      "row": "StoredClaimSettlementReceipt",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "operation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "step_name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_claim_settlement_receipt",
+      "sql": "sql/fleet/insert_claim_settlement_receipt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "receipt_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "operation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "step_name",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "attempt_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "result",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "list_project_claim_reservations",
+      "sql": "sql/fleet/list_project_claim_reservations.sql",
+      "row": "StoredProjectClaimReservation",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

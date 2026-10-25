@@ -33,6 +33,7 @@ from scripts.verification.provider_session_control import (
     qualify_retained,
     rpc_call,
 )
+from scripts.verification.readonly_codex_home import register_guard_identifiers
 from scripts.verification.typed_observations import (
     InteractionListing,
     InteractionSnapshot,
@@ -77,6 +78,9 @@ def drive_callbacks(plan: JourneyPlan) -> None:
         raise RuntimeError("actual provider tools unqualified")
     prompt = callback_prompt(plan.tools.model_dump(mode="json"), command)
     operation = operation_id()
+    register_guard_identifiers(
+        plan.evidence.parent, {"operationId": operation, "target": target}
+    )
     save_record(
         plan.evidence / "prompt-intent.json",
         {

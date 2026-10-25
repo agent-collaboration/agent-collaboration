@@ -13,6 +13,7 @@ async fn host_persists_configured_budgets_and_loads_them_on_restart()
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
     for first in [true, false] {
         let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.clone(),
             codex_home: root.clone(),
             backend_socket: root.join("absent.sock"),

@@ -18,20 +18,25 @@ import argparse
 import hashlib
 import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
+from typing import cast
 
 from scripts.update_homebrew_formula import update_formula_file
-
 
 REPOSITORY = "ShravanSunder/codex-router"
 TAP_NAME = "shravansunder/taps"
 FORMULA_NAME = f"{TAP_NAME}/codex-router"
 FORMULA_RELATIVE_PATH = Path("Formula/codex-router.rb")
-INSTALLED_EXECUTABLES = ("codex-router", "agent-collaboration", "agent-sessions")
+INSTALLED_EXECUTABLES = (
+    "codex-router",
+    "agent-collaboration",
+    "agent-sessions",
+    "codex-router-board-upgrade",
+)
 # Released executables carry a fixed Developer ID identity so Keychain approvals
 # survive upgrades; it must match the release workflow's signing step.
 DEVELOPER_ID_TEAM = "974QD84WVC"
@@ -65,10 +70,15 @@ def published_asset_sha256(release: dict[str, object], asset_name: str) -> str:
     assets = release.get("assets")
     if not isinstance(assets, list):
         raise PublishError("release response has no assets")
-    for asset in assets:
-        if isinstance(asset, dict) and asset.get("name") == asset_name:
-            digest = asset.get("digest")
-            match = DIGEST_PATTERN.fullmatch(digest) if isinstance(digest, str) else None
+    for asset in cast(list[object], assets):
+        if not isinstance(asset, dict):
+            continue
+        candidate = cast(dict[object, object], asset)
+        if candidate.get("name") == asset_name:
+            digest = candidate.get("digest")
+            match = (
+                DIGEST_PATTERN.fullmatch(digest) if isinstance(digest, str) else None
+            )
             if match is None:
                 raise PublishError(f"{asset_name} has no sha256 digest")
             return match.group(1)
@@ -78,7 +88,9 @@ def published_asset_sha256(release: dict[str, object], asset_name: str) -> str:
 def run(command: list[str], *, cwd: Path | None = None) -> str:
     """Run one command, echoing it, and return its stdout; fail on a non-zero exit."""
     print(f"$ {' '.join(command)}", flush=True)
-    result = subprocess.run(command, cwd=cwd, check=False, capture_output=True, text=True)
+    result = subprocess.run(
+        command, cwd=cwd, check=False, capture_output=True, text=True
+    )
     if result.returncode != 0:
         raise PublishError(
             f"{' '.join(command)} exited {result.returncode}: {result.stderr.strip()}"
@@ -102,7 +114,10 @@ def verify_tagged_commit(*, repository_root: Path, tag: str) -> str:
 
 def download_verified_asset(*, tag: str, asset_name: str, directory: Path) -> str:
     """Download the release asset and return its sha256 after matching GitHub's digest."""
-    release = json.loads(run(["gh", "api", f"repos/{REPOSITORY}/releases/tags/{tag}"]))
+    release = cast(
+        dict[str, object],
+        json.loads(run(["gh", "api", f"repos/{REPOSITORY}/releases/tags/{tag}"])),
+    )
     expected = published_asset_sha256(release, asset_name)
     _ = run(
         [
@@ -120,7 +135,9 @@ def download_verified_asset(*, tag: str, asset_name: str, directory: Path) -> st
     )
     actual = hashlib.sha256((directory / asset_name).read_bytes()).hexdigest()
     if actual != expected:
-        raise PublishError(f"{asset_name} sha256 {actual} does not match release {expected}")
+        raise PublishError(
+            f"{asset_name} sha256 {actual} does not match release {expected}"
+        )
     return actual
 
 
@@ -171,9 +188,13 @@ def validate_installation(version: str) -> None:
         capture_output=True,
         text=True,
     )
-    action = install_action(installed.stdout.strip() if installed.returncode == 0 else "", version)
+    action = install_action(
+        installed.stdout.strip() if installed.returncode == 0 else "", version
+    )
     print(f"$ brew {action} {FORMULA_NAME}", flush=True)
-    result = subprocess.run(["brew", action, FORMULA_NAME], env=environment, check=False)
+    result = subprocess.run(
+        ["brew", action, FORMULA_NAME], env=environment, check=False
+    )
     if result.returncode != 0:
         raise PublishError(f"brew {action} exited {result.returncode}")
     _ = run(["brew", "test", FORMULA_NAME])
@@ -193,10 +214,14 @@ def validate_installation(version: str) -> None:
         )
         problem = release_signature_problem(details.stderr, executable)
         if problem is not None:
-            raise PublishError(f"Homebrew installed a binary with the wrong signature: {problem}")
+            raise PublishError(
+                f"Homebrew installed a binary with the wrong signature: {problem}"
+            )
         reported = run([str(installed), "--version"])
         if reported != f"{executable} {version}":
-            raise PublishError(f"Homebrew installed {reported!r}, expected {executable} {version}")
+            raise PublishError(
+                f"Homebrew installed {reported!r}, expected {executable} {version}"
+            )
 
 
 def commit_and_push_formula(*, tap_path: Path, version: str, push: bool) -> str:
@@ -219,7 +244,9 @@ def commit_and_push_formula(*, tap_path: Path, version: str, push: bool) -> str:
     # The CI tap job may have pushed the same release first. Its formula content
     # is deterministic, so identical content on origin means it is published.
     _ = run(["git", "fetch", "--quiet", "origin"], cwd=tap_path)
-    published = run(["git", "show", f"origin/main:{FORMULA_RELATIVE_PATH}"], cwd=tap_path)
+    published = run(
+        ["git", "show", f"origin/main:{FORMULA_RELATIVE_PATH}"], cwd=tap_path
+    )
     local = (tap_path / FORMULA_RELATIVE_PATH).read_text(encoding="utf-8").strip()
     if published != local:
         raise PublishError("push rejected and origin/main holds a different formula")
@@ -250,7 +277,9 @@ def parse_arguments() -> PublishArguments:
     parser = argparse.ArgumentParser(
         description="Publish a verified codex-router release to the Homebrew tap from this Mac."
     )
-    _ = parser.add_argument("--version", help="release version; defaults to the workspace version")
+    _ = parser.add_argument(
+        "--version", help="release version; defaults to the workspace version"
+    )
     _ = parser.add_argument(
         "--no-push", dest="push", action="store_false", help="validate and commit only"
     )
@@ -274,7 +303,9 @@ def main() -> int:
         commit = verify_tagged_commit(repository_root=repository_root, tag=tag)
         with tempfile.TemporaryDirectory(prefix="codex-router-release-") as directory:
             sha256 = download_verified_asset(
-                tag=tag, asset_name=release_asset_name(version), directory=Path(directory)
+                tag=tag,
+                asset_name=release_asset_name(version),
+                directory=Path(directory),
             )
         prepare_tap(tap_path)
         formula_written = update_formula_file(
@@ -294,7 +325,9 @@ def main() -> int:
         print(f"publish failed: {error}", file=sys.stderr)
         return 1
     print(f"codex-router {version}: {outcome}; validated install on this Mac.")
-    print("The running production Router is unchanged; restarting it is a separate decision.")
+    print(
+        "The running production Router is unchanged; restarting it is a separate decision."
+    )
     return 0
 
 

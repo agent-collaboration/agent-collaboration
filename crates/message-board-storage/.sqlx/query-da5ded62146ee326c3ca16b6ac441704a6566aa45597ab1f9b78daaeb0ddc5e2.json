@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO mail_handoffs(item_id,handoff_seq,item) VALUES (?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "da5ded62146ee326c3ca16b6ac441704a6566aa45597ab1f9b78daaeb0ddc5e2"
+}

@@ -57,18 +57,15 @@ class PrepareSqlxTests(unittest.TestCase):
             self.assertFalse(check)
             captured_environment = dict(env or {})
             calls.append((command, captured_environment))
-            if command[:4] == ["cargo", "sqlx", "prepare", "--workspace"]:
-                package_index = command.index("--package") + 1
-                package_name = command[package_index]
-                if not check_metadata:
-                    for metadata_path in self.metadata_directory.glob("query-*.json"):
-                        metadata_path.unlink()
-                    metadata_name = (
-                        "query-shared.json"
-                        if conflicting_metadata
-                        else f"query-{package_name}.json"
-                    )
-                    (self.metadata_directory / metadata_name).write_text(package_name)
+            if command[:2] == ["cargo", "check"]:
+                package_name = captured_environment["SQLX_PREPARE_PACKAGE"]
+                staging = Path(captured_environment["SQLX_PREPARE_METADATA_DIR"])
+                metadata_name = (
+                    "query-shared.json"
+                    if conflicting_metadata
+                    else f"query-{package_name}.json"
+                )
+                (staging / metadata_name).write_text(package_name)
                 return subprocess.CompletedProcess(
                     command,
                     7 if package_name == prepare_failure_package else 0,
@@ -94,37 +91,35 @@ class PrepareSqlxTests(unittest.TestCase):
         prepare_calls = [
             (command, environment)
             for command, environment in calls
-            if command[:4] == ["cargo", "sqlx", "prepare", "--workspace"]
+            if command[:2] == ["cargo", "check"]
         ]
         self.assertEqual(
             ["--ignore-missing" in command for command, _ in migration_calls],
-            [False, False, False, False, True, True, True],
+            [False, False, False, True],
         )
         self.assertEqual(
             [command[command.index("--source") + 1] for command, _ in migration_calls],
             [
                 "crates/automation-storage/migrations",
                 "crates/codex-router-state/migrations",
-                "crates/message-board-storage/migrations",
-                "crates/message-board-storage/migrations",
                 "crates/collaboration-service/migrations",
                 "crates/automation-storage/migrations",
-                "crates/collaboration-service/interaction-migrations",
             ],
         )
         self.assertEqual(
-            [command[command.index("--package") + 1] for command, _ in prepare_calls],
-            ["automation-storage", "codex-router-state", "message-board-storage", "collaboration-service"],
+            [environment["SQLX_PREPARE_PACKAGE"] for _, environment in prepare_calls],
+            ["automation-storage", "codex-router-state", "collaboration-service"],
         )
         self.assertEqual(
             [
-                Path(environment["DATABASE_URL"].removeprefix("sqlite://")).name
+                Path(
+                    environment["SQLX_PREPARE_DATABASE_URL"].removeprefix("sqlite://")
+                ).name
                 for _, environment in prepare_calls
             ],
             [
                 "automation-schema.sqlite",
                 "account-schema.sqlite",
-                "message-board-schema.sqlite",
                 "provider-operation-schema.sqlite",
             ],
         )
@@ -142,7 +137,6 @@ class PrepareSqlxTests(unittest.TestCase):
                 "query-automation-storage.json",
                 "query-codex-router-state.json",
                 "query-collaboration-service.json",
-                "query-message-board-storage.json",
             ],
         )
         self.assertEqual(
@@ -154,7 +148,7 @@ class PrepareSqlxTests(unittest.TestCase):
 
         result, _ = self.run_workflow(
             check_metadata=False,
-            prepare_failure_package="message-board-storage",
+            prepare_failure_package="collaboration-service",
         )
 
         self.assertEqual(result, 7)
@@ -183,21 +177,45 @@ class PrepareSqlxTests(unittest.TestCase):
             ["query-original.json"],
         )
 
-    def test_check_validates_all_packages_without_mutating_metadata(self) -> None:
-        existing_metadata = self.metadata_directory / "query-existing.json"
-        existing_metadata.write_text("existing")
-
+    def test_check_validates_all_packages_without_changing_final_metadata(self) -> None:
+        expected = {
+            f"query-{package}.json": package
+            for package in [
+                "automation-storage",
+                "codex-router-state",
+                "collaboration-service",
+            ]
+        }
+        for name, value in expected.items():
+            (self.metadata_directory / name).write_text(value)
         result, calls = self.run_workflow(check_metadata=True)
-
         self.assertEqual(result, 0)
-        prepare_calls = [
-            command
-            for command, _ in calls
-            if command[:4] == ["cargo", "sqlx", "prepare", "--workspace"]
+        descriptions = [
+            (command, environment)
+            for command, environment in calls
+            if command[:2] == ["cargo", "check"]
         ]
-        self.assertEqual(len(prepare_calls), 4)
-        self.assertTrue(all("--check" in command for command in prepare_calls))
-        self.assertEqual(existing_metadata.read_text(), "existing")
+        self.assertEqual(len(descriptions), 3)
+        for command, environment in descriptions:
+            self.assertIn("--all-targets", command)
+            self.assertEqual(environment["SQLX_OFFLINE"], "true")
+            self.assertNotIn("DATABASE_URL", environment)
+            self.assertTrue(Path(environment["RUSTC_WRAPPER"]).is_file())
+        self.assertEqual(
+            PREPARE_SQLX.read_query_metadata(self.metadata_directory),
+            {name: value.encode() for name, value in expected.items()},
+        )
+
+    def test_check_refuses_stale_or_missing_catalog_and_restores_it(self) -> None:
+        original = self.metadata_directory / "query-existing.json"
+        original.write_text("existing")
+        with redirect_stderr(io.StringIO()):
+            result, _ = self.run_workflow(check_metadata=True)
+        self.assertEqual(result, 1)
+        self.assertEqual(
+            PREPARE_SQLX.read_query_metadata(self.metadata_directory),
+            {"query-existing.json": b"existing"},
+        )
 
 
 if __name__ == "__main__":

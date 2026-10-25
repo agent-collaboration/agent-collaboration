@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE wakeup_definitions SET definition_json=?,expires_at_ms=? WHERE wakeup_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": []
+  },
+  "hash": "dadf59b5a6f1990ad46db5580535a80c8c1408d0bf14ad9045b5835b38b9918a"
+}

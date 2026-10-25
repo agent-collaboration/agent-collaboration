@@ -1,0 +1,40 @@
+[package]
+name = "board-central-test-support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+conformance = []
+
+[dependencies]
+codex-router-core.workspace = true
+codex-router-secret-store = { version = "0.1.96", path = "../codex-router-secret-store" }
+collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core", features = ["conformance"] }
+collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
+board-fleet-sync = { version = "0.1.96", path = "../board-fleet-sync" }
+board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
+collaboration-central-tokio = { version = "0.1.96", path = "../collaboration-central-tokio", features = ["conformance"] }
+collaboration-service = { version = "0.1.96", path = "../collaboration-service" }
+message-board = { version = "0.1.96", path = "../message-board" }
+axum = { workspace = true, features = ["ws"] }
+fleet-sync-lease.workspace = true
+fleet-sync-protocol.workspace = true
+fleet-sync-session.workspace = true
+fleet-sync-tokio-runner.workspace = true
+runtime-primitives = { workspace = true, features = ["tokio"] }
+futures-util.workspace = true
+reqwest.workspace = true
+reqwest-websocket = "=0.5.1"
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"

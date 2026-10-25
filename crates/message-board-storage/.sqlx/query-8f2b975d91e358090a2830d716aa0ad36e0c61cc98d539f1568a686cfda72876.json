@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT assignment_id AS \"id!: String\" FROM role_assignments WHERE assignment_id>? ORDER BY assignment_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8f2b975d91e358090a2830d716aa0ad36e0c61cc98d539f1568a686cfda72876"
+}

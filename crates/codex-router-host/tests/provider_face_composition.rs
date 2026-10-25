@@ -57,6 +57,7 @@ sys.stdin.read()
         .expect("provider executable");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             owner_human_id: Some(
                 message_board::HumanId::try_from("acp-owner".to_owned()).expect("owner"),
             ),
@@ -207,6 +208,7 @@ sys.stdin.read()
     let owner = message_board::HumanId::try_from("tui-owner".to_owned()).expect("owner HumanId");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             owner_human_id: Some(owner),
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),

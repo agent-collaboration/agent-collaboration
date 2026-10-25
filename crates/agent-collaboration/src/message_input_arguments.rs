@@ -48,6 +48,9 @@ pub(crate) struct SendArguments {
 
 #[derive(Args)]
 pub(crate) struct MessageSendArguments {
+    /// Stable UUIDv7 for replay. Omission mints and prints one before dispatch.
+    #[arg(long)]
+    pub(crate) item_id: Option<String>,
     #[command(flatten)]
     pub(crate) target: crate::session_target_arguments::SessionTargetArguments,
     /// Test-only sender identity override; normal callers use their harness identity.
@@ -213,7 +216,28 @@ enum PreparedMessageContent {
 }
 impl PreparedMessage {
     pub(crate) fn resolve(self, service_id: &UuidIdentity) -> Result<SavedMessage, String> {
-        let content = match self.content {
+        Ok(SavedMessage {
+            target: self.target.resolve(service_id)?,
+            content: self.content.resolve(service_id)?,
+            delivery: self.delivery,
+            generation_guard: self.generation_guard,
+        })
+    }
+    pub(crate) fn resolve_direct_message(
+        self,
+        service_id: &UuidIdentity,
+    ) -> Result<SavedMessage, String> {
+        Ok(SavedMessage {
+            target: self.target.into_mail_recipient(service_id),
+            content: self.content.resolve(service_id)?,
+            delivery: self.delivery,
+            generation_guard: self.generation_guard,
+        })
+    }
+}
+impl PreparedMessageContent {
+    fn resolve(self, service_id: &UuidIdentity) -> Result<MessageContent, String> {
+        Ok(match self {
             PreparedMessageContent::HumanUser { text } => MessageContent::HumanUser { text },
             PreparedMessageContent::Agent { sender, text } => {
                 let sender = resolve_sender_ref(
@@ -223,12 +247,6 @@ impl PreparedMessage {
                 )?;
                 MessageContent::Agent { sender, text }
             }
-        };
-        Ok(SavedMessage {
-            target: self.target.resolve(service_id)?,
-            content,
-            delivery: self.delivery,
-            generation_guard: self.generation_guard,
         })
     }
 }

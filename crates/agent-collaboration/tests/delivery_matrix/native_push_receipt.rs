@@ -27,6 +27,9 @@ pub(super) async fn record_push_input_correlation(
                     reference: record.push_id.as_str().to_owned(),
                 })
                 .await?;
+            let collaboration_client::protocol::MessageShowResult::Local(current) = current else {
+                return Err("native proof expected a stored local push".into());
+            };
             if current.record.push_id != record.push_id || current.record.target != record.target {
                 return Err(format!("{producer} settled push identity changed").into());
             }

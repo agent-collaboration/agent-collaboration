@@ -1,0 +1,2 @@
+INSERT INTO fleet_request_decisions (request_id, canonical_hash, payload, router_time, time_basis, workspace_id, board_id, origin_installation, origin_machine)
+VALUES (?1, ?2, ?3, ?4, 'router', json_extract(?3, '$.envelope.scope.workspace'), json_extract(?3, '$.envelope.scope.board'), json_extract(?3, '$.envelope.position.position.origin.installation'), json_extract(?3, '$.envelope.position.position.origin.machine'));

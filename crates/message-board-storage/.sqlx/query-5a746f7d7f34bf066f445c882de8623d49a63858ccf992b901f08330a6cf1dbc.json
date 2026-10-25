@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT request_id AS \"request_id!: String\", canonical_hash AS \"canonical_hash!: String\", request AS \"request!: String\", state AS \"state!: String\" FROM fleet_outbox_requests WHERE request_id > ? AND json_extract(state, '$.kind') = 'decided' AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "canonical_hash!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "request!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "state!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "5a746f7d7f34bf066f445c882de8623d49a63858ccf992b901f08330a6cf1dbc"
+}

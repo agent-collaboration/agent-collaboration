@@ -44,13 +44,67 @@ macro_rules! uuid_v7_identity {
 
         impl From<$name> for String { fn from(value: $name) -> Self { value.0 } }
         impl $name {
+            #[cfg(not(target_arch = "wasm32"))]
             #[must_use] pub fn generate() -> Self { Self(Uuid::now_v7().hyphenated().to_string()) }
             #[must_use] pub fn as_str(&self) -> &str { &self.0 }
         }
     )+};
 }
 
-uuid_v7_identity!(ProjectId, BoardId, TopicId, MessageId);
+uuid_v7_identity!(ProjectId, BoardId);
+
+uuid_v7_identity!(
+    WorkspaceId,
+    WorkstreamId,
+    TaskId,
+    TaskLinkEventId,
+    SubtaskId,
+    AdrId,
+    ThreadId,
+    PostId,
+    RoleAssignmentId,
+    OwnerGrantId,
+    MoveId,
+    FactId,
+    NotifyIntentId,
+    RequestId,
+    WorkTrailRowId,
+    TrailRedactionId,
+    RecordId,
+    EpochLineId
+);
+
+uuid_v7_identity!(TransferId);
+
+impl From<PostId> for ThreadId {
+    fn from(root_post: PostId) -> Self {
+        Self(root_post.0)
+    }
+}
+impl From<ThreadId> for PostId {
+    fn from(thread: ThreadId) -> Self {
+        Self(thread.0)
+    }
+}
+
+macro_rules! record_identity {
+    ($($identity:ident => $kind:ident),+ $(,)?) => {$ (
+        impl From<$identity> for RecordId {
+            fn from(identity: $identity) -> Self { Self(identity.0) }
+        }
+        impl From<$identity> for crate::RecordRef {
+            fn from(identity: $identity) -> Self {
+                Self { kind: crate::RecordKind::$kind, id: identity.into() }
+            }
+        }
+    )+};
+}
+record_identity!(WorkspaceId => Workspace, BoardId => Board, ProjectId => Project,
+    WorkstreamId => Workstream, TaskId => Task, TaskLinkEventId => TaskLinkEvent, SubtaskId => Subtask, AdrId => Adr,
+    ThreadId => Thread, PostId => Post, RoleAssignmentId => RoleAssignment,
+    FactId => Fact, NotifyIntentId => NotifyIntent, RequestId => Request,
+    WorkTrailRowId => WorkTrailRow, TrailRedactionId => TrailRedaction,
+    OwnerGrantId => OwnerGrant);
 
 macro_rules! validated_identity_string {
     ($name:ident, $field:literal, $min:expr, $max:expr, $validator:expr, $requirement:literal) => {

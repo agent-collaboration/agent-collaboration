@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT cancel_id AS \"cancel_id!: String\",expansion_seq AS \"expansion_seq!: i64\",group_handoff AS \"group_handoff!: String\",target_item AS \"target_item!: String\",envelope AS \"envelope!: String\" FROM mail_cancel_expansions WHERE expansion_seq>? ORDER BY expansion_seq LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "cancel_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "expansion_seq!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "group_handoff!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "target_item!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "envelope!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "f97951480a0efa375f4289b7d793f09350d477d103a7b4f483baeb23b0b866c2"
+}

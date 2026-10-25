@@ -6,7 +6,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::json;
 use std::{io, net::SocketAddr, time::Duration};
 
-const MAX_RESPONSE_BYTES: usize = 1024 * 1024;
+const MAX_RESPONSE_BYTES: usize = 16 * 1024 * 1024;
 
 #[derive(Deserialize)]
 struct RpcEnvelope<TResult> {
@@ -74,10 +74,7 @@ pub(super) async fn verify(
             .map_err(transport_failure)?;
         let tools: ToolInventory = call(&client, &url, 1, "tools/list", json!({})).await?;
         if !tools.tools.iter().any(|tool| tool.name == "endpoints_list")
-            || !tools
-                .tools
-                .iter()
-                .any(|tool| tool.name == "board_project_list")
+            || !tools.tools.iter().any(|tool| tool.name == "workspace_list")
         {
             return Err(io::Error::other(
                 "loopback MCP endpoint lacks the collaboration MCP inventory",

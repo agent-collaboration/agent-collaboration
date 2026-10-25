@@ -19,6 +19,8 @@ pub fn protocol_type_schemas() -> Result<BTreeMap<String, Value>, serde_json::Er
     add_type::<crate::SessionMessageSendParams>(&mut schemas)?;
     add_type::<crate::SessionMessageReplyParams>(&mut schemas)?;
     add_type::<crate::SessionMessageReplyResult>(&mut schemas)?;
+    add_type::<crate::MessageSendResult>(&mut schemas)?;
+    add_type::<crate::MessageReplyResult>(&mut schemas)?;
     add_type::<crate::DeliveryReceipt>(&mut schemas)?;
     add_type::<crate::NativeSendReceipt>(&mut schemas)?;
     add_type::<crate::FiniteCommandRecord<Value, Value>>(&mut schemas)?;

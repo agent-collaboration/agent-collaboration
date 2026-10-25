@@ -9,7 +9,7 @@ impl ProviderAcpDeliveryRoute {
         sink: &dyn AttemptEvidenceSink,
         binding: &collaboration_protocol::ProviderBindingIdentity,
         operation_id: &OperationId,
-    ) -> Result<DeliveryReceipt, DeliveryContractError> {
+    ) -> Result<NativeDeliveryResult, DeliveryContractError> {
         let record = self
             .store
             .lock()
@@ -21,6 +21,7 @@ impl ProviderAcpDeliveryRoute {
             return Ok(Self::not_submitted(
                 "provider session record is missing",
                 false,
+                UnsentCause::RecipientUnknown,
             ));
         };
         let (input_id, queued_prompt) = match &request.content {
@@ -65,8 +66,8 @@ impl ProviderAcpDeliveryRoute {
             }
         }
         permit.send(queued_prompt);
-        Ok(Self::receipt(
-            DeliveryOutcome::Queued,
+        Ok(Self::observed(
+            NativeObservedOutcome::Queued,
             Some(operation_id.clone()),
         ))
     }

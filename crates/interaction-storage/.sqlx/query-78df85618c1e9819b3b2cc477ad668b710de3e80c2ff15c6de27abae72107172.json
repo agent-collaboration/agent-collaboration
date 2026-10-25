@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT name AS \"name!\", type AS \"object_type!\", sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY name",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "name!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "object_type!",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "sql",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "78df85618c1e9819b3b2cc477ad668b710de3e80c2ff15c6de27abae72107172"
+}

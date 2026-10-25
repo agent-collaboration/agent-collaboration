@@ -22,6 +22,8 @@ async fn sdk_wait_reports_skipped_one_shot_without_a_delivery()
     }))?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: agent_automation::TimingRule::After { seconds: 1 },

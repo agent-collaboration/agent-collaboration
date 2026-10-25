@@ -25,7 +25,7 @@ pub type RetainedDelivery =
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct WakeMutationResult<TMessage> {
     pub observed_at_ms: i64,
-    pub wake: WakeRecord<TMessage>,
+    pub wake: WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
     pub discarded: Vec<DeliveryId>,
     pub retained: Vec<RetainedDelivery>,
 }
@@ -59,7 +59,7 @@ impl AutomationStore {
             transaction.commit().await?;
             return Ok(result);
         }
-        let current: WakeRecord<TMessage> =
+        let current: WakeRecord<TMessage, collaboration_protocol::WakeCreator> =
             crate::wakeup_repository::read_current(&mut transaction, &request.wakeup_id).await?;
         let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(request.now_ms)
             .ok_or(StorageError::InvalidRecord)?;

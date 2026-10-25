@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT post_id AS \"id!: String\" FROM posts WHERE post_id>? ORDER BY post_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "9a1cae97ce50064c69fdd9d196463a7f4433946df44252aff1ae09bec2cc6a21"
+}

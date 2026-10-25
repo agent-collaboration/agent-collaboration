@@ -1,16 +1,19 @@
-use super::board_search_commands::{DiscoverySearchArguments, MessageSearchArguments};
+use super::board_entity_arguments::*;
+use super::board_inbox_arguments::*;
+use super::board_receipt_arguments::RequestEffectsArguments;
+use super::board_request_arguments::RequestMetadataArguments;
+use super::board_search_commands::{DiscoverySearchArguments, PostSearchArguments};
 use super::board_subscription_arguments::{
-    SubscriptionModeKind, ThreadSubscribeArguments, ThreadSubscriptionsArguments,
-    ThreadUnsubscribeArguments, WhenIdleKind,
+    ThreadSubscribeArguments, ThreadSubscriptionsArguments, ThreadUnsubscribeArguments,
 };
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(
-    name = "agent-collaboration board",
-    bin_name = "agent-collaboration board",
-    about = "Coordinate durable project message boards through the selected Router service"
+    name = "agent-collaboration",
+    bin_name = "agent-collaboration",
+    about = "Coordinate durable workspace message boards through the selected Router service"
 )]
 pub(super) struct BoardArguments {
     #[command(subcommand)]
@@ -19,37 +22,39 @@ pub(super) struct BoardArguments {
 
 #[derive(Subcommand)]
 pub(super) enum BoardCommand {
-    /// Search project, board, and topic names/descriptions with strict location filters.
-    Search(DiscoverySearchArguments),
-    /// Create, inspect, update, or list projects.
-    Project {
+    /// Read a request receipt without replaying the write.
+    RequestEffects(RequestEffectsArguments),
+    /// Inspect recorded work, pending duties and session context.
+    View {
         #[command(subcommand)]
-        command: ProjectCommand,
+        command: super::board_view_commands::ViewCommand,
     },
-    /// Attach, detach, or list project repository associations.
+    /// Search workspace, board, and project names/descriptions with strict location filters.
+    Search(DiscoverySearchArguments),
+    /// Create, inspect, update, or list workspaces.
+    Workspace {
+        #[command(subcommand)]
+        command: WorkspaceCommand,
+    },
+    /// Attach, detach, or list workspace repository associations.
     Repository {
         #[command(subcommand)]
         command: RepositoryCommand,
     },
-    /// Create a board in a project. Obtain the project owner's permission before running this command.
-    Create(BoardCreateArguments),
-    /// Replace a board's name and description.
-    Update(BoardUpdateArguments),
-    /// Show one board.
-    Show(BoardShowArguments),
-    /// List boards, excluding archived boards unless requested.
-    List(BoardListArguments),
-    /// Archive a board and make its content read-only.
-    Archive(BoardArchiveArguments),
-    /// Create, update, or list topics.
-    Topic {
+    /// Create, inspect or archive boards.
+    Board {
         #[command(subcommand)]
-        command: TopicCommand,
+        command: BoardMetadataCommand,
+    },
+    /// Create, update, or list projects.
+    Project {
+        #[command(subcommand)]
+        command: ProjectCommand,
     },
     /// Post, show, or list immutable messages.
-    Message {
+    Post {
         #[command(subcommand)]
-        command: MessageCommand,
+        command: PostCommand,
     },
     /// Inspect, change, watch, or list root-message threads.
     Thread {
@@ -61,18 +66,68 @@ pub(super) enum BoardCommand {
         #[command(subcommand)]
         command: InboxCommand,
     },
+    Workstream {
+        #[command(subcommand)]
+        command: WorkstreamCommand,
+    },
+    Task {
+        #[command(subcommand)]
+        command: TaskCommand,
+    },
+    Subtask {
+        #[command(subcommand)]
+        command: SubtaskCommand,
+    },
+    WorkTrail {
+        #[command(subcommand)]
+        command: WorkTrailCommand,
+    },
+    Role {
+        #[command(subcommand)]
+        command: RoleCommand,
+    },
+    Fact {
+        #[command(subcommand)]
+        command: FactCommand,
+    },
+    Feed {
+        #[command(subcommand)]
+        command: FeedCommand,
+    },
+    Adr {
+        #[command(subcommand)]
+        command: AdrCommand,
+    },
 }
 
 #[derive(Subcommand)]
-pub(super) enum ProjectCommand {
-    /// Create a project. Obtain the project owner's permission before running this command.
-    Create(ProjectCreateArguments),
-    /// Replace a project's name and description.
-    Update(ProjectUpdateArguments),
-    /// Show one project.
-    Show(ProjectShowArguments),
-    /// List projects, optionally associated with a repository.
-    List(ProjectListArguments),
+pub(super) enum BoardMetadataCommand {
+    /// Create a board in a workspace. Obtain the workspace owner's permission before running this command.
+    Create(BoardCreateArguments),
+    /// Replace a board's name and description.
+    Update(BoardUpdateArguments),
+    /// Show one board.
+    Show(BoardShowArguments),
+    /// List boards, excluding archived boards unless requested.
+    List(BoardListArguments),
+    /// Archive a board and make its content read-only.
+    Archive(BoardLifecycleArguments),
+    /// Close an initiative board. Area boards stay open.
+    Close(BoardLifecycleArguments),
+}
+
+#[derive(Subcommand)]
+pub(super) enum WorkspaceCommand {
+    /// Create a workspace. Obtain the workspace owner's permission before running this command.
+    Create(WorkspaceCreateArguments),
+    /// Replace a workspace's name and description.
+    Update(WorkspaceUpdateArguments),
+    /// Archive the workspace and all of its boards.
+    Archive(WorkspaceArchiveArguments),
+    /// Show one workspace.
+    Show(WorkspaceShowArguments),
+    /// List workspaces, optionally associated with a repository.
+    List(WorkspaceListArguments),
 }
 
 #[derive(Subcommand)]
@@ -81,30 +136,40 @@ pub(super) enum RepositoryCommand {
     Attach(RepositoryMutationArguments),
     /// Detach the repository discovered from a path or explicit origin.
     Detach(RepositoryMutationArguments),
-    /// List repositories associated with a project.
+    /// List repositories associated with a workspace.
     List(RepositoryListArguments),
 }
 
 #[derive(Subcommand)]
-pub(super) enum TopicCommand {
-    /// Create a topic on an active board.
-    Create(TopicCreateArguments),
-    /// Replace a topic's name and description.
-    Update(TopicUpdateArguments),
-    /// List topics on a board.
-    List(TopicListArguments),
+pub(super) enum ProjectCommand {
+    /// Claim an unheld project and verify its seeded native store before writing.
+    Claim(ProjectClaimArguments),
+    /// Request cancellation of one notification without writing a project record.
+    NotificationCancel(OperationFileArguments),
+    /// Create a project on an active board.
+    Create(ProjectCreateArguments),
+    /// Replace a project's title.
+    Update(ProjectUpdateArguments),
+    /// List projects on a board.
+    List(ProjectListArguments),
+    /// Read the project directory entry and locally available project state.
+    Show(ProjectShowArguments),
+    /// Replace the project description under its expected revision.
+    Describe(OperationFileArguments),
+    PublishPlan(OperationFileArguments),
+    Close(OperationFileArguments),
 }
 
 #[derive(Subcommand)]
-pub(super) enum MessageCommand {
+pub(super) enum PostCommand {
     /// Search message text, including messages in unwatched threads.
-    Search(MessageSearchArguments),
+    Search(PostSearchArguments),
     /// Post an immutable top-level or thread message.
-    Post(MessagePostArguments),
+    Post(ThreadPostArguments),
     /// Show one message.
-    Show(MessageShowArguments),
+    Show(PostShowArguments),
     /// List message history with an explicit scope and selection mode.
-    List(MessageListArguments),
+    List(PostListArguments),
 }
 
 #[derive(Subcommand)]
@@ -113,9 +178,9 @@ pub(super) enum ThreadCommand {
     Create(ThreadCreateArguments),
     /// Join a Thread with an explicit Role; watching is the default.
     Join(ThreadJoinArguments),
-    /// Subscribe to activity in one Thread or Topic with an optional delivery policy.
+    /// Subscribe to activity in one Thread or Project with an optional delivery policy.
     Subscribe(ThreadSubscribeArguments),
-    /// Cancel the subscription for one Thread or Topic.
+    /// Cancel the subscription for one Thread or Project.
     Unsubscribe(ThreadUnsubscribeArguments),
     /// List active and draining subscriptions for one Reader.
     Subscriptions(ThreadSubscriptionsArguments),
@@ -129,16 +194,18 @@ pub(super) enum ThreadCommand {
     /// Show a root-message thread and optional reader watch status.
     Show(ThreadShowArguments),
     /// Mark a thread resolved.
-    Resolve(ThreadMutationArguments),
+    Resolve(ThreadResolveArguments),
+    /// Re-file the thread under an explicit subject as a project role holder.
+    Refile(ThreadRefileArguments),
     /// Mark a thread unresolved so thread messages can be posted again.
     Unresolve(ThreadMutationArguments),
     /// Watch future activity in a thread. Earlier history remains an explicit range.
     Watch(ThreadWatchArguments),
     /// Stop watching a thread. Existing message history remains readable.
     Unwatch(ThreadWatchArguments),
-    /// List project threads and reader watch status.
+    /// List workspace threads and reader watch status.
     #[command(
-        long_about = "List project threads and reader watch status. With neither --project-id nor --repository-path, use the current Git repository when available. Example outside a repository: agent-collaboration board thread list --repository-path '<path-in-repository>' (or --project-id <project-id>). --watched-only requires --project-id."
+        long_about = "List workspace threads and reader watch status. With neither --workspace-id nor --repository-path, use the current Git repository when available. Example outside a repository: agent-collaboration thread list --repository-path '<path-in-repository>' (or --workspace-id <workspace-id>). --watched-only requires --workspace-id."
     )]
     List(ThreadListArguments),
     /// Wait for due poll-mode subscription activity; no scope flag selects all subscriptions.
@@ -155,10 +222,10 @@ pub(super) enum ThreadParticipantCommand {
 pub(super) enum InboxCommand {
     /// Fetch unread activity without acknowledging it.
     Fetch(InboxFetchArguments),
-    /// Acknowledge one topic or thread through an activity sequence.
+    /// Acknowledge one or more scopes with independent request keys and feed cursors.
     Acknowledge(InboxAcknowledgeArguments),
-    /// List projects with personal inbox tracking or watches.
-    Projects(InboxProjectsArguments),
+    /// List workspaces with personal inbox tracking or watches.
+    Workspaces(InboxWorkspacesArguments),
 }
 
 #[derive(Args)]
@@ -173,6 +240,8 @@ pub(super) struct CommonArguments {
 
 #[derive(Args)]
 pub(super) struct MutationIdentityArguments {
+    #[command(flatten)]
+    pub request: RequestMetadataArguments,
     /// Typed actor Identity JSON, for example {"kind":"human","humanId":"alice"}.
     #[arg(long)]
     pub actor: String,
@@ -202,14 +271,14 @@ pub(super) struct RepositorySelectorArguments {
 }
 
 #[derive(Args)]
-pub(super) struct ProjectCreateArguments {
+pub(super) struct WorkspaceCreateArguments {
     /// Caller-chosen UUIDv7; generated and reported when omitted.
     #[arg(long)]
-    pub project_id: Option<String>,
-    /// Project name: 1 to 256 UTF-8 bytes after trimming.
+    pub workspace_id: Option<String>,
+    /// Workspace name: 1 to 256 UTF-8 bytes after trimming.
     #[arg(long)]
     pub name: String,
-    /// Project description: 0 to 16384 UTF-8 bytes.
+    /// Workspace description: 0 to 16384 UTF-8 bytes.
     #[arg(long, default_value = "")]
     pub description: String,
     #[command(flatten)]
@@ -219,13 +288,13 @@ pub(super) struct ProjectCreateArguments {
 }
 
 #[derive(Args)]
-pub(super) struct ProjectUpdateArguments {
+pub(super) struct WorkspaceUpdateArguments {
     #[arg(long)]
-    pub project_id: String,
-    /// Project name: 1 to 256 UTF-8 bytes after trimming.
+    pub workspace_id: String,
+    /// Workspace name: 1 to 256 UTF-8 bytes after trimming.
     #[arg(long)]
     pub name: String,
-    /// Project description: 0 to 16384 UTF-8 bytes.
+    /// Workspace description: 0 to 16384 UTF-8 bytes.
     #[arg(long)]
     pub description: String,
     #[command(flatten)]
@@ -235,15 +304,25 @@ pub(super) struct ProjectUpdateArguments {
 }
 
 #[derive(Args)]
-pub(super) struct ProjectShowArguments {
+pub(super) struct WorkspaceArchiveArguments {
     #[arg(long)]
-    pub project_id: String,
+    pub workspace_id: String,
+    #[command(flatten)]
+    pub identity: MutationIdentityArguments,
     #[command(flatten)]
     pub common: CommonArguments,
 }
 
 #[derive(Args)]
-pub(super) struct ProjectListArguments {
+pub(super) struct WorkspaceShowArguments {
+    #[arg(long)]
+    pub workspace_id: String,
+    #[command(flatten)]
+    pub common: CommonArguments,
+}
+
+#[derive(Args)]
+pub(super) struct WorkspaceListArguments {
     #[command(flatten)]
     pub repository: RepositorySelectorArguments,
     #[command(flatten)]
@@ -255,7 +334,7 @@ pub(super) struct ProjectListArguments {
 #[derive(Args)]
 pub(super) struct RepositoryMutationArguments {
     #[arg(long)]
-    pub project_id: String,
+    pub workspace_id: String,
     #[command(flatten)]
     pub repository: RepositorySelectorArguments,
     #[command(flatten)]
@@ -267,7 +346,7 @@ pub(super) struct RepositoryMutationArguments {
 #[derive(Args)]
 pub(super) struct RepositoryListArguments {
     #[arg(long)]
-    pub project_id: String,
+    pub workspace_id: String,
     #[command(flatten)]
     pub page: PageArguments,
     #[command(flatten)]
@@ -276,11 +355,14 @@ pub(super) struct RepositoryListArguments {
 
 #[derive(Args)]
 pub(super) struct BoardCreateArguments {
+    /// Typed BoardKind JSON: area or initiative with goal and doneWhen.
+    #[arg(long)]
+    pub kind: String,
     /// Caller-chosen UUIDv7; generated and reported when omitted.
     #[arg(long)]
     pub board_id: Option<String>,
     #[arg(long)]
-    pub project_id: String,
+    pub workspace_id: String,
     /// Board name: 1 to 256 UTF-8 bytes after trimming.
     #[arg(long)]
     pub name: String,
@@ -320,7 +402,7 @@ pub(super) struct BoardShowArguments {
 #[derive(Args)]
 pub(super) struct BoardListArguments {
     #[arg(long)]
-    pub project_id: Option<String>,
+    pub workspace_id: Option<String>,
     #[arg(long)]
     pub include_archived: bool,
     #[command(flatten)]
@@ -330,7 +412,7 @@ pub(super) struct BoardListArguments {
 }
 
 #[derive(Args)]
-pub(super) struct BoardArchiveArguments {
+pub(super) struct BoardLifecycleArguments {
     #[arg(long)]
     pub board_id: String,
     #[command(flatten)]
@@ -340,18 +422,18 @@ pub(super) struct BoardArchiveArguments {
 }
 
 #[derive(Args)]
-pub(super) struct TopicCreateArguments {
+pub(super) struct ProjectCreateArguments {
     /// Caller-chosen UUIDv7; generated and reported when omitted.
     #[arg(long)]
-    pub topic_id: Option<String>,
+    pub project_id: Option<String>,
     #[arg(long)]
     pub board_id: String,
-    /// Topic name: 1 to 256 UTF-8 bytes after trimming.
+    /// Project name: 1 to 256 UTF-8 bytes after trimming.
     #[arg(long)]
-    pub name: String,
-    /// Topic description: 0 to 16384 UTF-8 bytes.
-    #[arg(long, default_value = "")]
-    pub description: String,
+    pub title: String,
+    /// Exact project description, at most 16 KiB; empty when omitted.
+    #[arg(long)]
+    pub description: Option<String>,
     #[command(flatten)]
     pub identity: MutationIdentityArguments,
     #[command(flatten)]
@@ -359,15 +441,12 @@ pub(super) struct TopicCreateArguments {
 }
 
 #[derive(Args)]
-pub(super) struct TopicUpdateArguments {
+pub(super) struct ProjectUpdateArguments {
     #[arg(long)]
-    pub topic_id: String,
-    /// Topic name: 1 to 256 UTF-8 bytes after trimming.
+    pub project_id: String,
+    /// Project name: 1 to 256 UTF-8 bytes after trimming.
     #[arg(long)]
-    pub name: String,
-    /// Topic description: 0 to 16384 UTF-8 bytes.
-    #[arg(long)]
-    pub description: String,
+    pub title: String,
     #[command(flatten)]
     pub identity: MutationIdentityArguments,
     #[command(flatten)]
@@ -375,7 +454,7 @@ pub(super) struct TopicUpdateArguments {
 }
 
 #[derive(Args)]
-pub(super) struct TopicListArguments {
+pub(super) struct ProjectListArguments {
     #[arg(long)]
     pub board_id: String,
     #[command(flatten)]
@@ -384,26 +463,30 @@ pub(super) struct TopicListArguments {
     pub common: CommonArguments,
 }
 
+#[derive(Args)]
+pub(super) struct ProjectShowArguments {
+    #[arg(long)]
+    pub project_id: String,
+    #[command(flatten)]
+    pub common: CommonArguments,
+}
+
 #[derive(Clone, Copy, ValueEnum)]
 pub(super) enum PlacementKind {
-    Topic,
     Thread,
 }
 
 #[derive(Args)]
-pub(super) struct MessagePostArguments {
+pub(super) struct ThreadPostArguments {
     /// Caller-chosen UUIDv7; generated and reported when omitted.
     #[arg(long)]
-    pub message_id: Option<String>,
-    /// Whether this is a top-level topic message or a message in a root thread.
-    #[arg(long, value_enum)]
+    pub post_id: Option<String>,
+    /// Existing-thread placement; use thread create --about for a new root.
+    #[arg(long, value_enum, default_value = "thread")]
     pub placement: PlacementKind,
-    /// Topic UUIDv7, required for --placement topic.
-    #[arg(long)]
-    pub topic_id: Option<String>,
     /// Root message UUIDv7, required for --placement thread.
     #[arg(long)]
-    pub root_message_id: Option<String>,
+    pub thread_id: Option<String>,
     /// Message text: 1 to 65536 UTF-8 bytes. Conflicts with --text-file.
     #[arg(
         long,
@@ -421,10 +504,13 @@ pub(super) struct MessagePostArguments {
     pub text_file: Option<PathBuf>,
     /// Reference a message UUIDv7. May be repeated; at most 64 distinct references total.
     #[arg(long)]
-    pub reference_message: Vec<String>,
+    pub reference_post: Vec<String>,
     /// Reference a root thread UUIDv7. May be repeated; at most 64 distinct references total.
     #[arg(long)]
     pub reference_thread: Vec<String>,
+    /// Explicit notification target JSON, repeated for each identity or role.
+    #[arg(long = "addressee")]
+    pub addressees: Vec<String>,
     #[command(flatten)]
     pub identity: MutationIdentityArguments,
     #[command(flatten)]
@@ -432,289 +518,68 @@ pub(super) struct MessagePostArguments {
 }
 
 #[derive(Args)]
-pub(super) struct MessageShowArguments {
+pub(super) struct PostShowArguments {
     #[arg(long)]
-    pub message_id: String,
+    pub post_id: String,
     #[command(flatten)]
     pub common: CommonArguments,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-pub(super) enum MessageScopeKind {
-    Topic,
+pub(super) enum PostScopeKind {
+    Project,
     Thread,
     Board,
-    Project,
-    AllProjects,
+    Workspace,
+    AllWorkspaces,
 }
 
 #[derive(Clone, Copy, ValueEnum)]
-pub(super) enum MessageSelectionKind {
+pub(super) enum PostSelectionKind {
     Latest,
     AfterPosition,
     Range,
 }
 
 #[derive(Args)]
-pub(super) struct MessageListArguments {
+pub(super) struct PostListArguments {
     #[arg(long, value_enum)]
-    pub scope: MessageScopeKind,
+    pub scope: PostScopeKind,
     #[arg(long)]
-    pub topic_id: Option<String>,
+    pub project_id: Option<String>,
     #[arg(long)]
-    pub root_message_id: Option<String>,
+    pub thread_id: Option<String>,
     #[arg(long)]
     pub board_id: Option<String>,
     #[arg(long)]
-    pub project_id: Option<String>,
+    pub workspace_id: Option<String>,
     /// History selection; defaults to newest messages first.
     #[arg(long, value_enum, default_value = "latest")]
-    pub selection: MessageSelectionKind,
+    pub selection: PostSelectionKind,
     /// Exclusive lower activity bound for --selection after-position.
     #[arg(long)]
-    pub after_activity_sequence: Option<u64>,
+    pub after: Option<String>,
     /// Inclusive lower activity bound for --selection range.
     #[arg(long)]
-    pub from_activity_sequence: Option<u64>,
+    pub from: Option<String>,
     /// Inclusive upper activity bound for --selection range.
     #[arg(long)]
-    pub to_activity_sequence: Option<u64>,
-    #[command(flatten)]
-    pub page: PageArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadShowArguments {
-    #[arg(long)]
-    pub root_message_id: String,
-    /// Optional typed reader Identity JSON; when present, includes watch status.
-    #[arg(long)]
-    pub reader: Option<String>,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadMutationArguments {
-    #[arg(long)]
-    pub root_message_id: String,
-    #[command(flatten)]
-    pub identity: MutationIdentityArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadWatchArguments {
-    #[arg(long, conflicts_with = "topic_id")]
-    pub root_message_id: Option<String>,
-    #[arg(long, conflicts_with = "root_message_id")]
-    pub topic_id: Option<String>,
-    #[command(flatten)]
-    pub identity: MutationIdentityArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadCreateArguments {
-    /// Caller-chosen UUIDv7; generated and reported when omitted.
-    #[arg(long)]
-    pub message_id: Option<String>,
-    #[arg(long)]
-    pub topic_id: String,
-    /// Typed actor Identity JSON, or self for the current Codex or Claude Code session.
-    #[arg(long)]
-    pub actor: String,
-    #[arg(long)]
-    pub acting_for: Option<String>,
-    /// Participant Role. Required when the actor is a session.
-    #[arg(long, value_enum)]
-    pub role: Option<ParticipantRoleKind>,
-    /// Create a Watch for this actor.
-    #[arg(long, conflicts_with = "no_watch")]
-    pub watch: bool,
-    /// Do not create a Watch for this actor.
-    #[arg(long, conflicts_with = "watch")]
-    pub no_watch: bool,
-    /// Read root text from this file: 1 to 65536 UTF-8 bytes.
-    #[arg(long, value_name = "PATH")]
-    pub text_file: PathBuf,
-    #[arg(long)]
-    pub reference_message: Vec<String>,
-    #[arg(long)]
-    pub reference_thread: Vec<String>,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadJoinArguments {
-    #[arg(long)]
-    pub root_message_id: String,
-    /// Typed actor Identity JSON, or self for the current Codex or Claude Code session.
-    #[arg(long)]
-    pub actor: String,
-    #[arg(long, value_enum)]
-    pub role: ParticipantRoleKind,
-    /// Watch the Thread after joining; this is the default.
-    #[arg(long, conflicts_with = "no_watch")]
-    pub watch: bool,
-    /// Join without watching the Thread.
-    #[arg(long, conflicts_with = "watch")]
-    pub no_watch: bool,
-    /// Current Orchestrator identity to replace. Only valid with --role orchestrator.
-    #[arg(long)]
-    pub replace: Option<String>,
-    #[arg(long)]
-    pub note: Option<String>,
-    /// Delivery mode for the subscription created or renewed by joining.
-    #[arg(long, value_enum)]
-    pub mode: Option<SubscriptionModeKind>,
-    /// Behaviour when the target session is idle.
-    #[arg(long, value_enum)]
-    pub when_idle: Option<WhenIdleKind>,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-pub(super) enum ParticipantRoleKind {
-    Orchestrator,
-    Implementer,
-    Advisor,
-    Reviewer,
-    Participant,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadLeaveArguments {
-    #[arg(long)]
-    pub root_message_id: String,
-    /// Typed actor Identity JSON, or self for the current Codex or Claude Code session.
-    #[arg(long)]
-    pub actor: String,
-    #[arg(long)]
     pub to: Option<String>,
-    #[arg(long, conflicts_with = "to")]
-    pub resolve: bool,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct ThreadParticipantListArguments {
-    #[arg(long)]
-    pub root_message_id: String,
     #[command(flatten)]
     pub page: PageArguments,
     #[command(flatten)]
     pub common: CommonArguments,
 }
 
-#[derive(Args)]
-pub(super) struct ThreadListArguments {
-    #[arg(long)]
-    pub project_id: Option<String>,
-    /// Explicit repository path; lists matching threads across projects.
-    #[arg(long)]
-    pub repository_path: Option<PathBuf>,
-    /// Optional typed reader Identity JSON or `self`; adds watch status.
-    #[arg(long)]
-    pub reader: Option<String>,
-    #[arg(long)]
-    pub watched_only: bool,
-    #[command(flatten)]
-    pub page: PageArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
+#[path = "board_thread_arguments.rs"]
+mod thread_arguments;
+pub(super) use thread_arguments::*;
 
 #[derive(Args)]
-pub(super) struct ThreadWaitArguments {
-    /// Filter to one or more Thread subscription roots.
-    #[arg(long, conflicts_with = "topic_id")]
-    pub root_message_id: Vec<String>,
-    /// Filter to one Topic subscription.
-    #[arg(long, conflicts_with = "root_message_id")]
-    pub topic_id: Option<String>,
-    /// Maximum wait: integer followed by s, m, h, or d, at most 25 minutes.
-    #[arg(long)]
-    pub max_wait: String,
-    /// Typed Reader Identity JSON, or self for the current session.
-    #[arg(long)]
-    pub actor: String,
+pub(super) struct ProjectClaimArguments {
+    pub project: String,
+    #[command(flatten)]
+    pub request: super::board_request_arguments::RequestMetadataArguments,
     #[command(flatten)]
     pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct InboxFetchArguments {
-    /// Select top-level messages; independently watched threads are always included.
-    #[arg(long, value_enum)]
-    pub scope: InboxScopeKind,
-    #[arg(long)]
-    pub project_id: Option<String>,
-    #[arg(long)]
-    pub board_id: Option<String>,
-    #[arg(long)]
-    pub topic_id: Option<String>,
-    #[arg(long, value_enum, default_value = "unread")]
-    pub read_mode: InboxModeKind,
-    /// Typed reader Identity JSON. Fetching never acknowledges activity.
-    #[arg(long)]
-    pub reader: String,
-    #[command(flatten)]
-    pub page: PageArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-pub(super) enum ReadScopeKind {
-    Topic,
-    Thread,
-}
-
-#[derive(Args)]
-pub(super) struct InboxAcknowledgeArguments {
-    #[arg(long, value_enum)]
-    pub scope: ReadScopeKind,
-    #[arg(long)]
-    pub topic_id: Option<String>,
-    #[arg(long)]
-    pub root_message_id: Option<String>,
-    #[arg(long)]
-    pub through_activity_sequence: u64,
-    #[command(flatten)]
-    pub identity: MutationIdentityArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Args)]
-pub(super) struct InboxProjectsArguments {
-    /// Typed reader Identity JSON.
-    #[arg(long)]
-    pub reader: String,
-    #[arg(long)]
-    pub unread_only: bool,
-    #[command(flatten)]
-    pub page: PageArguments,
-    #[command(flatten)]
-    pub common: CommonArguments,
-}
-
-#[derive(Clone, Copy, ValueEnum)]
-pub(super) enum InboxScopeKind {
-    Project,
-    Board,
-    Topic,
-}
-#[derive(Clone, Copy, ValueEnum)]
-pub(super) enum InboxModeKind {
-    Unread,
-    Latest,
 }

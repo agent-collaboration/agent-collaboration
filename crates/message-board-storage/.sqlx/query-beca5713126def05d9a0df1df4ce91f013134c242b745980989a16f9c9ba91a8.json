@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM fleet_cache_rebuild_records",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "beca5713126def05d9a0df1df4ce91f013134c242b745980989a16f9c9ba91a8"
+}

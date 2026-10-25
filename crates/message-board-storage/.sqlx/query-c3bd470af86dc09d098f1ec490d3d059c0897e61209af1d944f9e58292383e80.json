@@ -1,0 +1,132 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT\n    p.participation_id AS \"participation_id!: String\",\n    p.thread_id AS \"thread_id!: String\",\n    p.actor_id AS \"reader_actor!: String\",\n    a.canonical_identity AS \"reader_identity?: String\",\n    p.joined_epoch AS \"joined_epoch!: i64\",\n    p.joined_position AS \"joined_position!: i64\",\n    p.role AS \"role!: String\",\n    p.note AS \"note?: String\",\n    p.last_seen_epoch AS \"last_seen_epoch!: i64\",\n    p.last_seen_position AS \"last_seen_position!: i64\",\n    p.closed_epoch AS \"closed_epoch?: i64\",\n    p.closed_position AS \"closed_position?: i64\",\n    p.closed_reason AS \"closed_reason?: String\",\n    p.replaced_by AS \"replaced_by?: String\",\n    b.canonical_identity AS \"replacement_identity?: String\"\nFROM json_each(?) k CROSS JOIN thread_participation p ON p.thread_id=CAST(k.value AS TEXT)\nLEFT JOIN actors a ON a.actor_id=p.actor_id\nLEFT JOIN actors b ON b.actor_id=p.replaced_by\nORDER BY p.thread_id,p.joined_position,p.actor_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "participation_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "reader_actor!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "reader_identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "joined_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "joined_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "role!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "note?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_seen_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "last_seen_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "closed_epoch?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "closed_position?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "closed_reason?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "replaced_by?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "replacement_identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c3bd470af86dc09d098f1ec490d3d059c0897e61209af1d944f9e58292383e80"
+}

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM cached_fleet_records",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "bc053c824c177b092e87e2374d7bd2830e08a3d3b77276dc0159175cff4a7f7b"
+}

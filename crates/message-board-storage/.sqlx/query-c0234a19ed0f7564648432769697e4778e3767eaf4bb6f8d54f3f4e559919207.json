@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO cursor_signing_key(key_id, key_bytes) VALUES (?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "c0234a19ed0f7564648432769697e4778e3767eaf4bb6f8d54f3f4e559919207"
+}

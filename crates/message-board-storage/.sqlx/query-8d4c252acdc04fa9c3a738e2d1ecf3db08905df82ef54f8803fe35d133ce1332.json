@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM cached_fleet_records WHERE kind = 'workspace' AND id > ?2 AND EXISTS (SELECT 1 FROM json_each(json_extract(payload, '$.record.repositories')) attached WHERE json_extract(attached.value, '$.kind') = json_extract(?1, '$.kind') AND ((json_extract(?1, '$.kind') = 'origin' AND json_extract(attached.value, '$.normalizedOrigin') = json_extract(?1, '$.normalizedOrigin')) OR (json_extract(?1, '$.kind') = 'local' AND json_extract(attached.value, '$.serviceId') = json_extract(?1, '$.serviceId') AND json_extract(attached.value, '$.commonDirectory') = json_extract(?1, '$.commonDirectory')))) ORDER BY id LIMIT ?3",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8d4c252acdc04fa9c3a738e2d1ecf3db08905df82ef54f8803fe35d133ce1332"
+}

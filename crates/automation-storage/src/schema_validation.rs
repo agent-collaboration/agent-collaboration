@@ -4,107 +4,9 @@
 use crate::StorageError;
 use sqlx::{Row, Sqlite, Transaction};
 
-const CURRENT_TARGET_DEFINITION_SOURCE: &str = concat!(
-    include_str!("../migrations/20260910000000_automation_v1.sql"),
-    "\n",
-    include_str!("../migrations/20260928000000_latest_agent_sender.sql"),
-    "\n",
-    include_str!("../migrations/20260930000000_router_pushes.sql"),
-);
-const ROUTER_PUSH_TABLE: &str = "router_pushes";
-
-struct TableSpec {
-    name: &'static str,
-    columns: &'static str,
-    foreign_keys: &'static str,
-}
-
-const TABLE_SPECS: [TableSpec; 11] = [
-    TableSpec {
-        name: "automation_events",
-        columns: "event_sequence,INTEGER,0,<NULL>,1;event_id,TEXT,1,<NULL>,0;subject_kind,TEXT,1,<NULL>,0;subject_id,TEXT,1,<NULL>,0;event_kind,TEXT,1,<NULL>,0;event_body_json,TEXT,1,<NULL>,0;recorded_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "",
-    },
-    TableSpec {
-        name: "instruction_documents",
-        columns: "instruction_id,TEXT,0,<NULL>,1;current_revision_id,TEXT,1,<NULL>,0;instruction_text,TEXT,1,<NULL>,0;updated_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "0,0,instruction_revisions,instruction_id,instruction_id,NO ACTION,NO ACTION,NONE;0,1,instruction_revisions,current_revision_id,revision_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "instruction_revisions",
-        columns: "revision_id,TEXT,0,<NULL>,1;instruction_id,TEXT,1,<NULL>,0;instruction_text,TEXT,1,<NULL>,0;source_revision_id,TEXT,0,<NULL>,0;recorded_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "0,0,instruction_documents,instruction_id,instruction_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "mailbox_deliveries",
-        columns: "delivery_id,TEXT,0,<NULL>,1;wakeup_id,TEXT,1,<NULL>,0;occurrence_id,TEXT,1,<NULL>,0;due_at_ms,INTEGER,1,<NULL>,0;fired_at_ms,INTEGER,1,<NULL>,0;target_json,TEXT,1,<NULL>,0;message_json,TEXT,1,<NULL>,0;delivery_mode,TEXT,1,<NULL>,0;generation_guard_json,TEXT,0,<NULL>,0;delivery_status,TEXT,1,<NULL>,0;eligible_at_ms,INTEGER,1,<NULL>,0;expires_at_ms,INTEGER,0,<NULL>,0;latest_attempt_json,TEXT,0,<NULL>,0;accepted_receipt_json,TEXT,0,<NULL>,0;created_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "0,0,wakeup_definitions,wakeup_id,wakeup_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "operation_receipts",
-        columns: "operation_id,TEXT,0,<NULL>,1;method_name,TEXT,1,<NULL>,0;canonical_request,BLOB,1,<NULL>,0;resource_id,TEXT,1,<NULL>,0;operation_status,TEXT,1,<NULL>,0;effect_evidence_json,TEXT,1,<NULL>,0;final_result_json,TEXT,0,<NULL>,0;final_error_json,TEXT,0,<NULL>,0;committed_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "",
-    },
-    TableSpec {
-        name: "router_pushes",
-        columns: "push_id,TEXT,1,<NULL>,1;kind,TEXT,1,<NULL>,0;origin_kind,TEXT,1,<NULL>,0;origin_service_id,TEXT,0,<NULL>,0;origin_endpoint_id,TEXT,0,<NULL>,0;origin_session_id,TEXT,0,<NULL>,0;origin_router_ref,TEXT,0,<NULL>,0;target_service_id,TEXT,1,<NULL>,0;target_endpoint_id,TEXT,1,<NULL>,0;target_session_id,TEXT,1,<NULL>,0;dm_delivery_mode,TEXT,0,<NULL>,0;dm_generation_guard_json,TEXT,0,<NULL>,0;reply_to_push_id,TEXT,0,<NULL>,0;header_facts_json,TEXT,1,<NULL>,0;body,TEXT,0,<NULL>,0;ranges_json,TEXT,0,<NULL>,0;delivery_state,TEXT,1,<NULL>,0;last_outcome_json,TEXT,0,<NULL>,0;created_at,TEXT,1,<NULL>,0;settled_at,TEXT,0,<NULL>,0;read_at,TEXT,0,<NULL>,0",
-        foreign_keys: "0,0,router_pushes,reply_to_push_id,push_id,NO ACTION,SET NULL,NONE",
-    },
-    TableSpec {
-        name: "schedule_definitions",
-        columns: "schedule_id,TEXT,0,<NULL>,1;change_id,TEXT,1,<NULL>,0;instruction_id,TEXT,1,<NULL>,0;enabled,INTEGER,1,<NULL>,0;definition_json,TEXT,1,<NULL>,0;imported_continuity_json,TEXT,1,<NULL>,0;created_at_ms,INTEGER,1,<NULL>,0;updated_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "0,0,instruction_documents,instruction_id,instruction_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "schedule_timing_state",
-        columns: "schedule_id,TEXT,0,<NULL>,1;applied_change_id,TEXT,1,<NULL>,0;anchor_at_ms,INTEGER,1,<NULL>,0;evaluated_through_ms,INTEGER,1,<NULL>,0;next_due_at_ms,INTEGER,0,<NULL>,0",
-        foreign_keys: "0,0,schedule_definitions,schedule_id,schedule_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "thread_bindings",
-        columns: "thread_binding_id,TEXT,0,<NULL>,1;schedule_id,TEXT,1,<NULL>,0;service_id,TEXT,1,<NULL>,0;endpoint_id,TEXT,1,<NULL>,0;thread_id,TEXT,1,<NULL>,0;claimed_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "0,0,schedule_definitions,schedule_id,schedule_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "wakeup_definitions",
-        columns: "wakeup_id,TEXT,0,<NULL>,1;change_id,TEXT,1,<NULL>,0;wakeup_status,TEXT,1,<NULL>,0;definition_json,TEXT,1,<NULL>,0;anchor_at_ms,INTEGER,1,<NULL>,0;evaluated_through_ms,INTEGER,1,<NULL>,0;next_due_at_ms,INTEGER,0,<NULL>,0;expires_at_ms,INTEGER,0,<NULL>,0;first_fire_json,TEXT,0,<NULL>,0;pending_delivery_id,TEXT,0,<NULL>,0;created_at_ms,INTEGER,1,<NULL>,0;updated_at_ms,INTEGER,1,<NULL>,0",
-        foreign_keys: "0,0,mailbox_deliveries,wakeup_id,wakeup_id,NO ACTION,NO ACTION,NONE;0,1,mailbox_deliveries,pending_delivery_id,delivery_id,NO ACTION,NO ACTION,NONE",
-    },
-    TableSpec {
-        name: "workflow_runs",
-        columns: "run_id,TEXT,0,<NULL>,1;schedule_id,TEXT,1,<NULL>,0;due_at_ms,INTEGER,1,<NULL>,0;run_status,TEXT,1,<NULL>,0;captured_inputs_json,TEXT,0,<NULL>,0;thread_binding_id,TEXT,0,<NULL>,0;native_turn_id,TEXT,0,<NULL>,0;execution_started_at_ms,INTEGER,0,<NULL>,0;execution_deadline_at_ms,INTEGER,0,<NULL>,0;effective_timeout_seconds,INTEGER,0,<NULL>,0;execution_evidence_json,TEXT,1,<NULL>,0;worker_outcome_json,TEXT,0,<NULL>,0;summary_attempt_json,TEXT,0,<NULL>,0;summary_text,TEXT,0,<NULL>,0;summary_source_json,TEXT,0,<NULL>,0;completed_at_ms,INTEGER,0,<NULL>,0",
-        foreign_keys: "0,0,thread_bindings,schedule_id,schedule_id,NO ACTION,NO ACTION,NONE;0,1,thread_bindings,thread_binding_id,thread_binding_id,NO ACTION,NO ACTION,NONE;1,0,schedule_definitions,schedule_id,schedule_id,NO ACTION,NO ACTION,NONE",
-    },
-];
-
-const INDEX_SPECS: [&str; 26] = [
-    "automation_events,event_cleanup,0,c,0,recorded_at_ms:0:BINARY:1,event_sequence:0:BINARY:1",
-    "automation_events,event_history,0,c,0,subject_kind:0:BINARY:1,subject_id:0:BINARY:1,event_sequence:0:BINARY:1",
-    "automation_events,_,1,u,0,event_id:0:BINARY:1",
-    "instruction_documents,_,1,pk,0,instruction_id:0:BINARY:1",
-    "instruction_revisions,_,1,u,0,instruction_id:0:BINARY:1,revision_id:0:BINARY:1",
-    "instruction_revisions,_,1,pk,0,revision_id:0:BINARY:1",
-    "mailbox_deliveries,delivery_eligibility,0,c,0,delivery_status:0:BINARY:1,eligible_at_ms:0:BINARY:1",
-    "mailbox_deliveries,_,1,u,0,wakeup_id:0:BINARY:1,delivery_id:0:BINARY:1",
-    "mailbox_deliveries,_,1,u,0,occurrence_id:0:BINARY:1",
-    "mailbox_deliveries,_,1,pk,0,delivery_id:0:BINARY:1",
-    "operation_receipts,_,1,pk,0,operation_id:0:BINARY:1",
-    "router_pushes,router_pushes_created,0,c,0,created_at:0:BINARY:1",
-    "router_pushes,router_pushes_origin_ref,1,c,0,origin_kind:0:BINARY:1,origin_router_ref:0:BINARY:1",
-    "router_pushes,router_pushes_target_state,0,c,0,target_service_id:0:BINARY:1,target_endpoint_id:0:BINARY:1,target_session_id:0:BINARY:1,delivery_state:0:BINARY:1,created_at:0:BINARY:1",
-    "router_pushes,_,1,pk,0,push_id:0:BINARY:1",
-    "schedule_definitions,_,1,pk,0,schedule_id:0:BINARY:1",
-    "schedule_timing_state,_,1,pk,0,schedule_id:0:BINARY:1",
-    "thread_bindings,_,1,u,0,schedule_id:0:BINARY:1,thread_binding_id:0:BINARY:1",
-    "thread_bindings,_,1,u,0,service_id:0:BINARY:1,endpoint_id:0:BINARY:1,thread_id:0:BINARY:1",
-    "thread_bindings,_,1,pk,0,thread_binding_id:0:BINARY:1",
-    "wakeup_definitions,_,1,u,0,pending_delivery_id:0:BINARY:1",
-    "wakeup_definitions,_,1,pk,0,wakeup_id:0:BINARY:1",
-    "workflow_runs,run_history,0,c,0,schedule_id:0:BINARY:1,due_at_ms:0:BINARY:1,run_id:0:BINARY:1",
-    "workflow_runs,run_admission_lookup,0,c,0,schedule_id:0:BINARY:1,run_status:0:BINARY:1",
-    "workflow_runs,_,1,u,0,schedule_id:0:BINARY:1,run_id:0:BINARY:1",
-    "workflow_runs,_,1,pk,0,run_id:0:BINARY:1",
-];
+use crate::schema_definition_catalogue::{
+    CURRENT_TARGET_DEFINITION_SOURCE, INDEX_SPECS, TABLE_SPECS, TableSpec,
+};
 
 pub(crate) async fn has_domain_objects(
     transaction: &mut Transaction<'_, Sqlite>,
@@ -134,10 +36,9 @@ async fn validate_schema(
     legacy: bool,
 ) -> Result<(), StorageError> {
     validate_object_inventory(transaction, legacy).await?;
-    for table in TABLE_SPECS
-        .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
-    {
+    for table in TABLE_SPECS.iter().filter(|table| {
+        !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+    }) {
         validate_columns(transaction, table, legacy).await?;
         validate_foreign_keys(transaction, table).await?;
     }
@@ -168,7 +69,9 @@ async fn validate_object_inventory(
     }
     let expected_tables: Vec<&str> = TABLE_SPECS
         .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
+        .filter(|table| {
+            !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+        })
         .map(|table| table.name)
         .collect();
     let expected_indexes = if legacy {
@@ -184,11 +87,10 @@ async fn validate_object_inventory(
             "delivery_eligibility",
             "event_cleanup",
             "event_history",
-            "router_pushes_created",
-            "router_pushes_origin_ref",
-            "router_pushes_target_state",
+            "owed_push_operations_order",
             "run_admission_lookup",
             "run_history",
+            "wakeup_occupying_target",
         ]
     };
     if actual_tables != expected_tables || actual_named_indexes != expected_indexes {
@@ -273,10 +175,9 @@ async fn validate_indexes(
     legacy: bool,
 ) -> Result<(), StorageError> {
     let mut actual = Vec::new();
-    for table in TABLE_SPECS
-        .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
-    {
+    for table in TABLE_SPECS.iter().filter(|table| {
+        !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+    }) {
         let indexes = sqlx::query(
             "SELECT name,\"unique\",origin,partial FROM pragma_index_list(?1) ORDER BY seq",
         )
@@ -296,7 +197,9 @@ async fn validate_indexes(
             .map(|column| {
                 format!(
                     "{}:{}:{}:{}",
-                    column.get::<String, _>("name"),
+                    column
+                        .get::<Option<String>, _>("name")
+                        .unwrap_or_else(|| "<EXPRESSION>".into()),
                     column.get::<i64, _>("desc"),
                     column.get::<String, _>("coll"),
                     column.get::<i64, _>("key")
@@ -317,7 +220,12 @@ async fn validate_indexes(
     actual.sort();
     let mut expected = INDEX_SPECS
         .iter()
-        .filter(|index| !legacy || !index.starts_with("router_pushes,"))
+        .filter(|index| {
+            !legacy
+                || (!index.starts_with("remote_wake_requests,")
+                    && !index.starts_with("owed_push_operations,")
+                    && !index.starts_with("wakeup_definitions,wakeup_occupying_target,"))
+        })
         .copied()
         .collect::<Vec<_>>();
     expected.sort();
@@ -331,10 +239,9 @@ async fn validate_known_definitions(
     transaction: &mut Transaction<'_, Sqlite>,
     legacy: bool,
 ) -> Result<(), StorageError> {
-    for table in TABLE_SPECS
-        .iter()
-        .filter(|table| !legacy || table.name != ROUTER_PUSH_TABLE)
-    {
+    for table in TABLE_SPECS.iter().filter(|table| {
+        !legacy || !matches!(table.name, "owed_push_operations" | "remote_wake_requests")
+    }) {
         let sql: String =
             sqlx::query_scalar("SELECT sql FROM sqlite_master WHERE type='table' AND name=?1")
                 .bind(table.name)
@@ -348,7 +255,12 @@ async fn validate_known_definitions(
     }
     for index in INDEX_SPECS
         .iter()
-        .filter(|index| !legacy || !index.starts_with("router_pushes,"))
+        .filter(|index| {
+            !legacy
+                || (!index.starts_with("remote_wake_requests,")
+                    && !index.starts_with("owed_push_operations,")
+                    && !index.starts_with("wakeup_definitions,wakeup_occupying_target,"))
+        })
         .filter_map(|index| {
             let mut fields = index.split(',');
             fields.next();
@@ -385,13 +297,14 @@ fn expected_definition_tokens(
     } else {
         false
     };
-    tokens
+    let definition = tokens
         .split(|token| token == ";")
         .find(|statement| {
             definition_prefix_matches(statement, object_type, object_name, index_is_unique)
         })
         .map(<[String]>::to_vec)
-        .ok_or(StorageError::InvalidSchema)
+        .ok_or(StorageError::InvalidSchema)?;
+    Ok(definition)
 }
 
 fn index_is_declared_unique(index_name: &str) -> Result<bool, StorageError> {
@@ -550,26 +463,26 @@ mod tests {
     #[test]
     fn non_unique_same_name_index_does_not_match_unique_index_spec() {
         let is_unique =
-            index_is_declared_unique("router_pushes_origin_ref").expect("declared index");
+            index_is_declared_unique("wakeup_occupying_target").expect("declared index");
         assert!(is_unique);
         let non_unique_definition = tokenize_schema_definition(
-            "CREATE INDEX router_pushes_origin_ref ON router_pushes(origin_kind, origin_router_ref)",
+            "CREATE INDEX wakeup_occupying_target ON wakeup_definitions(enabled)",
         )
         .expect("non-unique index definition should tokenize");
         assert!(!definition_prefix_matches(
             &non_unique_definition,
             "index",
-            "router_pushes_origin_ref",
+            "wakeup_occupying_target",
             is_unique,
         ));
         let unique_definition = tokenize_schema_definition(
-            "CREATE UNIQUE INDEX router_pushes_origin_ref ON router_pushes(origin_kind, origin_router_ref)",
+            "CREATE UNIQUE INDEX wakeup_occupying_target ON wakeup_definitions(enabled)",
         )
         .expect("unique index definition should tokenize");
         assert!(definition_prefix_matches(
             &unique_definition,
             "index",
-            "router_pushes_origin_ref",
+            "wakeup_occupying_target",
             is_unique,
         ));
     }

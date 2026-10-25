@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT MAX(version) AS \"version?: i64\" FROM _sqlx_migrations",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "version?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "114a137fbb5d7455f3ebbc86e3cc131c03a9583cf644cfdb961ed78716d0cd2e"
+}

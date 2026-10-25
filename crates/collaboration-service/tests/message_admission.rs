@@ -5,6 +5,9 @@ use collaboration_service::{
 };
 use serde_json::json;
 use std::sync::Arc;
+#[path = "support/native_mail_owner.rs"]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
 mod served_api;
 
@@ -22,13 +25,18 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();
     let presence: Arc<dyn TargetPresenceProbe> = delivery_router;
     let machine_identity = MachineIdentity::new(id.to_owned().try_into().unwrap(), None).unwrap();
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .unwrap(),
+    );
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: interactions.clone(),
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
-            machine_identity,
+            machine_identity: machine_identity.clone(),
             clock: Arc::new(SystemSubscriptionClock),
         });
     subscription_delivery.start().await.unwrap();
@@ -36,7 +44,20 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
         .unwrap()
         .with_automation_store(Arc::clone(&automation_store))
         .with_session_delivery(delivery)
-        .with_subscription_delivery_service(subscription_delivery.clone(), presence);
+        .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
+
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: subscription_delivery.clone(),
+            presence,
+            machine: machine_identity,
+            clock: Arc::new(SystemSubscriptionClock),
+        },
+    )
+    .unwrap();
     let served = served_api::ServedApi::start(identity).await.unwrap();
     let target =
         json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"thread"});
@@ -51,6 +72,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
     served.stop().await.unwrap();
     subscription_delivery.shutdown().await;
     drop(subscription_delivery);
+    native_mail.close().await.unwrap();
     Arc::try_unwrap(automation_store)
         .unwrap_or_else(|_| panic!("service retained automation store"))
         .into_inner()

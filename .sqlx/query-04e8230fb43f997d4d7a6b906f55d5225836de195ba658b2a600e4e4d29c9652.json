@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT operation_id FROM remote_wake_requests WHERE operation_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "operation_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "operation_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "04e8230fb43f997d4d7a6b906f55d5225836de195ba658b2a600e4e4d29c9652"
+}

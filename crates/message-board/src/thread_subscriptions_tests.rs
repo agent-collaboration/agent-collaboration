@@ -1,9 +1,9 @@
 use crate::{
-    ActivitySequence, BatchTiming, EndpointId, HumanId, Identity, MessageId, PendingRootNotice,
-    ServiceId, SessionEndpointRef, SessionId, SessionRef, SubscriptionGeneration,
-    SubscriptionLifetime, SubscriptionMode, SubscriptionPolicy, SubscriptionPolicyPatch,
-    SubscriptionRootRecord, SubscriptionRootRecordProps, SubscriptionState,
-    ThreadSubscriptionRecord, ThreadSubscriptionRecordProps, TopicId, WhenIdle,
+    BatchTiming, EndpointId, HumanId, Identity, PendingRootNotice, ProjectId, ServiceId,
+    SessionEndpointRef, SessionId, SessionRef, SubscriptionGeneration, SubscriptionLifetime,
+    SubscriptionMode, SubscriptionPolicy, SubscriptionPolicyPatch, SubscriptionRootRecord,
+    SubscriptionRootRecordProps, SubscriptionState, ThreadId, ThreadSubscriptionRecord,
+    ThreadSubscriptionRecordProps, WhenIdle,
 };
 
 fn session_reader() -> Identity {
@@ -132,11 +132,17 @@ fn subscription_lifetime_above_seven_days_reports_its_allowed_range() {
 
 #[test]
 fn pending_root_notice_contains_only_neutral_activity_locators() {
-    let from_sequence = ActivitySequence::try_from(4_u64).unwrap();
-    let through_sequence = ActivitySequence::try_from(7_u64).unwrap();
+    let from_sequence = crate::FeedCursor {
+        epoch: crate::EpochNumber::try_from(1).unwrap(),
+        position: crate::FeedPosition::try_from(4).unwrap(),
+    };
+    let through_sequence = crate::FeedCursor {
+        position: crate::FeedPosition::try_from(7).unwrap(),
+        ..from_sequence
+    };
     let notice = PendingRootNotice::new(
-        MessageId::generate(),
-        TopicId::generate(),
+        ThreadId::generate(),
+        ProjectId::generate(),
         from_sequence,
         through_sequence,
         3,
@@ -145,37 +151,37 @@ fn pending_root_notice_contains_only_neutral_activity_locators() {
     let encoded_notice = serde_json::to_value(notice).unwrap();
     let notice_fields = encoded_notice.as_object().unwrap();
     assert_eq!(notice_fields.len(), 5);
-    assert!(notice_fields.contains_key("rootId"));
-    assert!(notice_fields.contains_key("topicId"));
-    assert!(notice_fields.contains_key("fromSequence"));
-    assert!(notice_fields.contains_key("throughSequence"));
-    assert!(notice_fields.contains_key("messageCount"));
+    assert!(notice_fields.contains_key("threadId"));
+    assert!(notice_fields.contains_key("projectId"));
+    assert!(notice_fields.contains_key("from"));
+    assert!(notice_fields.contains_key("through"));
+    assert!(notice_fields.contains_key("postCount"));
     assert!(!notice_fields.contains_key("authors"));
     assert!(!notice_fields.contains_key("rootTitleExcerpt"));
 
     assert_eq!(
         PendingRootNotice::new(
-            MessageId::generate(),
-            TopicId::generate(),
+            ThreadId::generate(),
+            ProjectId::generate(),
             through_sequence,
             from_sequence,
             3,
         )
         .unwrap_err()
         .field,
-        "fromSequence"
+        "from"
     );
     assert_eq!(
         PendingRootNotice::new(
-            MessageId::generate(),
-            TopicId::generate(),
+            ThreadId::generate(),
+            ProjectId::generate(),
             from_sequence,
             through_sequence,
             0,
         )
         .unwrap_err()
         .field,
-        "messageCount"
+        "postCount"
     );
 }
 
@@ -201,9 +207,9 @@ fn subscription_value_deserialization_uses_validated_constructors() {
     );
 
     let now = chrono::Utc::now();
-    let root_id = MessageId::generate();
+    let root_id = ThreadId::generate();
     let root_record = SubscriptionRootRecord::new(SubscriptionRootRecordProps {
-        root_message_id: root_id.clone(),
+        thread_id: root_id.clone(),
         opened_at: now,
         last_arrival_at: now,
         pending_count: 1,
@@ -234,7 +240,7 @@ fn subscription_value_deserialization_uses_validated_constructors() {
 
     let mut encoded_root = serde_json::to_value(
         SubscriptionRootRecord::new(SubscriptionRootRecordProps {
-            root_message_id: MessageId::generate(),
+            thread_id: ThreadId::generate(),
             opened_at: now,
             last_arrival_at: now,
             pending_count: 1,

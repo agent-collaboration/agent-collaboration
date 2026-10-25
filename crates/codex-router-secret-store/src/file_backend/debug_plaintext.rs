@@ -3,9 +3,12 @@
 use super::*;
 #[cfg(debug_assertions)]
 use crate::credential_key::AccountCredentialKey;
+#[cfg(debug_assertions)]
+use crate::credential_key::require_encrypted_secret_key;
 use crate::credential_store_lock::CredentialStoreLock;
 #[cfg(debug_assertions)]
 use crate::credential_store_lock::CredentialStoreLockMode;
+use crate::fleet_secret_key::FleetSecretKey;
 
 const DECLARATION_FILE: &str = "debug-plaintext.marker";
 const DECLARATION_VALUE: &[u8] = b"debug-plaintext-v1\n";
@@ -66,16 +69,12 @@ impl FileSecretStore {
         &self,
         key: &SecretKey,
     ) -> Result<Option<CredentialStoreLock>, SecretStoreError> {
-        if !has_credential_bundle_marker(key) {
+        if FleetSecretKey::parse(key)?.is_none() && !has_credential_bundle_marker(key) {
             return Ok(None);
         }
         #[cfg(debug_assertions)]
         if self.credential_policy == FileCredentialPolicy::DebugPlaintextPooled {
-            AccountCredentialKey::parse(key)?.ok_or_else(|| {
-                SecretStoreError::InvalidCredentialKey {
-                    key: key.as_str().to_owned(),
-                }
-            })?;
+            require_encrypted_secret_key(key)?;
             let lock = CredentialStoreLock::acquire(self.root(), CredentialStoreLockMode::Shared)?;
             validate_debug_root(self.root())?;
             validate_plaintext_layout(self.root(), false)?;
@@ -94,11 +93,7 @@ impl FileSecretStore {
     ) -> Result<(), SecretStoreError> {
         #[cfg(debug_assertions)]
         if self.credential_policy == FileCredentialPolicy::DebugPlaintextPooled {
-            AccountCredentialKey::parse(key)?.ok_or_else(|| {
-                SecretStoreError::InvalidCredentialKey {
-                    key: key.as_str().to_owned(),
-                }
-            })?;
+            require_encrypted_secret_key(key)?;
             let _lock = self.authorize_plaintext_credential_operation(key)?;
             let path = self.secret_path(key);
             reject_symlink_path(&path)?;
@@ -197,8 +192,9 @@ fn validate_plaintext_layout(
         let name = name.to_string_lossy();
         let encrypted_metadata_temp =
             name.starts_with(".store-id.tmp.") || name.starts_with(".format-v2.marker.tmp.");
-        let pooled_temp =
-            name.starts_with('.') && name.contains("_credential_bundle.") && name.contains(".tmp.");
+        let pooled_temp = name.starts_with('.')
+            && (name.contains("_credential_bundle.") || name.starts_with(".fleet_"))
+            && name.contains(".tmp.");
         // Initialization/reopening holds the exclusive store lock, so any
         // remaining pooled temp has unknown prior ownership. Active plaintext
         // writes share the lock and may legitimately have each other's temps.
@@ -212,12 +208,8 @@ fn validate_plaintext_layout(
         }
         if let Some(key_name) = name.strip_suffix(".secret") {
             let key = SecretKey::new(key_name)?;
-            if has_credential_bundle_marker(&key) {
-                AccountCredentialKey::parse(&key)?.ok_or_else(|| {
-                    SecretStoreError::InvalidCredentialKey {
-                        key: key_name.to_owned(),
-                    }
-                })?;
+            if FleetSecretKey::parse(&key)?.is_some() || has_credential_bundle_marker(&key) {
+                require_encrypted_secret_key(&key)?;
                 reject_symlink_path(&path)?;
                 if !entry
                     .file_type()

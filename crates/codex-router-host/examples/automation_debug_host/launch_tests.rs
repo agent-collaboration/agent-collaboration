@@ -61,6 +61,37 @@ fn luna_profile_validates_saved_route_before_in_memory_retargeting() {
     }
 }
 
+#[test]
+fn luna_profile_keeps_its_model_override_after_endpoint_projection() {
+    let source = debug_profile("http://127.0.0.1:18787/v1");
+    let profile = luna_profile_from_text(&source, 28787).unwrap();
+    let paths = CodexPaths::from_codex_home("/unused-native-home".into());
+    let command = AppServerCommandSpec::new(
+        &paths,
+        &CodexRouterProfile::new(28787),
+        Path::new("/tmp/debug-proof/backend.sock"),
+    )
+    .with_debug_profile(&profile);
+    let arguments = command.arguments();
+    let overrides: Vec<_> = arguments
+        .windows(2)
+        .filter(|pair| pair[0] == "-c")
+        .map(|pair| pair[1].to_str().unwrap())
+        .collect();
+    assert!(overrides.contains(&"model=\"gpt-5.6-luna\""));
+    assert!(overrides.contains(&"model_reasoning_effort=\"high\""));
+    let provider = overrides
+        .iter()
+        .find(|value| value.starts_with("model_providers="))
+        .unwrap()
+        .parse::<toml::Table>()
+        .unwrap();
+    assert_eq!(
+        provider["model_providers"]["codex-router-debug"]["base_url"].as_str(),
+        Some("http://127.0.0.1:28787/v1")
+    );
+}
+
 static NEXT_TEST_DIRECTORY: AtomicU64 = AtomicU64::new(1);
 
 struct TestRunDirectory(PathBuf);

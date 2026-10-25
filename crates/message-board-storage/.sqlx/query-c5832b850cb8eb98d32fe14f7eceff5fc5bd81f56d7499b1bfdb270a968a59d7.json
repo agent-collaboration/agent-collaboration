@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT l.from_task AS \"from_task!: String\", l.link_kind AS \"kind!: String\", l.to_task AS \"to_task!: String\" FROM json_each(?) k CROSS JOIN task_links l ON l.from_task = CAST(k.value AS TEXT) ORDER BY l.from_task, l.link_kind, l.to_task",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "from_task!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "to_task!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c5832b850cb8eb98d32fe14f7eceff5fc5bd81f56d7499b1bfdb270a968a59d7"
+}

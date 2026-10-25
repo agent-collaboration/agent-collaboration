@@ -78,7 +78,8 @@ async fn provider_process_transport_failure_remains_retryable() {
             &RecordedEvidence(tokio::sync::Mutex::new(Vec::new())),
         )
         .await
-        .expect("transport failure receipt");
+        .expect("transport failure receipt")
+        .into_receipt();
 
     assert!(
         matches!(
@@ -157,7 +158,8 @@ async fn live_peer_recheck_prevents_provider_load() {
     let receipt = route
         .deliver(request(target, "hello"), &evidence)
         .await
-        .expect("live peer veto");
+        .expect("live peer veto")
+        .into_receipt();
 
     assert!(matches!(
         receipt.outcome,

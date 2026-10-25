@@ -3,6 +3,17 @@ use super::*;
 
 #[tool_router(router = session_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
+    #[tool(name = "installation_show", description = "Shows this Router's stable installation peer for admin enrollment. Read-only; does not enroll or change the installation.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<InstallationIdentity>>())]
+    pub(super) async fn installation_show(
+        &self,
+        Parameters(EmptyToolInput {}): Parameters<EmptyToolInput>,
+    ) -> CallToolResult {
+        application_result(
+            self.application.sessions().installation_show(),
+            OperationEffect::None,
+        )
+    }
+
     #[tool(name = "endpoints_list", description = "Lists collaboration endpoints. Read-only; successful discovery is not evidence that an agent assignment completed.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<EndpointInventory>>())]
     pub(super) async fn endpoints_list(
         &self,

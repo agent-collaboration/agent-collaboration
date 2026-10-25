@@ -1,0 +1,44 @@
+[package]
+name = "collaboration-central-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+conformance = []
+
+[dependencies]
+collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
+axum = { workspace = true, features = ["json", "query"] }
+http.workspace = true
+board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
+collaboration-mail-protocol = { version = "0.1.93", path = "../collaboration-mail-protocol" }
+durable-steps.workspace = true
+runtime-primitives.workspace = true
+fleet-sync-protocol.workspace = true
+fleet-sync-lease.workspace = true
+fleet-sync-receiver.workspace = true
+fleet-sync-delivery.workspace = true
+fleet-sync-session.workspace = true
+futures-channel = "0.3.34"
+sqlx-core.workspace = true
+fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
+message-board = { version = "0.1.93", path = "../message-board" }
+chrono = { version = "0.4.45", default-features = false, features = ["serde", "alloc"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+base64 = "0.22.1"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+uuid = { version = "=1.26.0", features = ["v7", "js"] }
+
+[build-dependencies]
+fleet-sync-query-gen.workspace = true
+
+[dev-dependencies]

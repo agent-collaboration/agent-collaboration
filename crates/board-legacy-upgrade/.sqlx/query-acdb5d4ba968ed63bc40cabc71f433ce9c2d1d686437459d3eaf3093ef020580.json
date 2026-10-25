@@ -1,0 +1,180 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT push_id AS \"push_id!: String\",kind AS \"kind!: String\",origin_kind AS \"origin_kind!: String\",origin_service_id AS \"origin_service_id?: String\",origin_endpoint_id AS \"origin_endpoint_id?: String\",origin_session_id AS \"origin_session_id?: String\",origin_router_ref AS \"origin_router_ref?: String\",target_service_id AS \"target_service_id!: String\",target_endpoint_id AS \"target_endpoint_id!: String\",target_session_id AS \"target_session_id!: String\",dm_delivery_mode AS \"dm_delivery_mode?: String\",dm_generation_guard_json AS \"dm_generation_guard_json?: String\",reply_to_push_id AS \"reply_to_push_id?: String\",header_facts_json AS \"header_facts_json!: String\",body AS \"body?: String\",ranges_json AS \"ranges_json?: String\",delivery_state AS \"delivery_state!: String\",last_outcome_json AS \"last_outcome_json?: String\",created_at AS \"created_at!: String\",settled_at AS \"settled_at?: String\",read_at AS \"read_at?: String\" FROM router_pushes ORDER BY push_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "push_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "origin_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "origin_service_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "origin_endpoint_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "origin_session_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "origin_router_ref?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "target_service_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "target_endpoint_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "target_session_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "dm_delivery_mode?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "dm_generation_guard_json?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "reply_to_push_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "header_facts_json!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "body?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "ranges_json?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "delivery_state!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "last_outcome_json?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "created_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "settled_at?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "read_at?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "acdb5d4ba968ed63bc40cabc71f433ce9c2d1d686437459d3eaf3093ef020580"
+}

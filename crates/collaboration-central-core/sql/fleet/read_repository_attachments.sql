@@ -1,0 +1,1 @@
+SELECT attachment_id, workspace_id, repository_reference, router_time, time_basis, origin_installation, origin_machine, import_digest FROM repository_attachments WHERE workspace_id = ? ORDER BY repository_reference;

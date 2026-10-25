@@ -1,6 +1,6 @@
 //! Provider schedule outcomes and retry identity, including push retention expiry.
 use super::route_tests::{
-    FakeSettlementPlan, FakeSubmissionPlan, TestResult, provider_worker_fixture,
+    FakeSettlementPlan, FakeSubmissionPlan, TestResult, apply_push_handoff, provider_worker_fixture,
 };
 use agent_automation::{RouteEffectEvidence, RunPhase};
 use automation_storage::StorageError;
@@ -55,7 +55,9 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         let (root, store, worker, run_id, observed_push_ids) =
             provider_worker_fixture(submission, settlement).await?;
         worker.step(run_id.clone()).await?;
+        apply_push_handoff(&worker).await?;
         worker.step(run_id.clone()).await?;
+        apply_push_handoff(&worker).await?;
         let busy = store
             .lock()
             .await
@@ -65,6 +67,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
             return Err("not-started-busy consumed a dispatch budget".into());
         }
         worker.step(run_id.clone()).await?;
+        apply_push_handoff(&worker).await?;
         if matches!(submission, FakeSubmissionPlan::Accept) {
             let observed = worker.step(run_id.clone()).await;
             if expected_error {
@@ -73,6 +76,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
                 }
             } else {
                 observed?;
+                apply_push_handoff(&worker).await?;
             }
         }
         let settled = store
@@ -96,9 +100,8 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         {
             return Err("schedule retry did not reuse the same push id".into());
         }
-        let push = store
-            .lock()
-            .await
+        let push = worker
+            .interactions
             .get_push_record(&observed_push_ids_snapshot[0])
             .await?
             .ok_or("scheduled push record missing")?;
@@ -136,6 +139,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         }
         if matches!(submission, FakeSubmissionPlan::Unknown) {
             worker.step(run_id.clone()).await?;
+            apply_push_handoff(&worker).await?;
             let observed_push_ids_after_observation = observed_push_ids
                 .lock()
                 .map_err(|_| "scheduled push id observation lock poisoned")?
@@ -156,9 +160,8 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
             if uncertain_run.phase != RunPhase::Uncertain {
                 return Err("unknown provider submission left the uncertain phase".into());
             }
-            let uncertain_push = store
-                .lock()
-                .await
+            let uncertain_push = worker
+                .interactions
                 .get_push_record(&observed_push_ids_after_observation[0])
                 .await?
                 .ok_or("unknown schedule push missing")?;
@@ -207,7 +210,12 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
             }
             _ => {}
         }
+        let interactions = Arc::clone(&worker.interactions);
         drop(worker);
+        Arc::try_unwrap(interactions)
+            .map_err(|_| "schedule fixture interaction owner remained shared")?
+            .close()
+            .await?;
         let store = Arc::try_unwrap(store).map_err(|_| "store still referenced")?;
         store.into_inner().close().await?;
         for entry in std::fs::read_dir(&root)? {
@@ -227,7 +235,9 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
     )
     .await?;
     worker.step(run_id.clone()).await?;
+    apply_push_handoff(&worker).await?;
     worker.step(run_id.clone()).await?;
+    apply_push_handoff(&worker).await?;
     if !matches!(
         worker.step(run_id.clone()).await,
         Err(StorageError::InvalidRecord)
@@ -242,9 +252,8 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
     if push_ids.len() != 2 || push_ids[0] != push_ids[1] {
         return Err("interrupted run did not retain one schedule push identity".into());
     }
-    let interrupted_push = store
-        .lock()
-        .await
+    let interrupted_push = worker
+        .interactions
         .get_push_record(&push_ids[0])
         .await?
         .ok_or("interrupted schedule push missing")?;
@@ -265,17 +274,15 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         return Err("fixture did not retain attempted push and dispatch evidence".into());
     }
 
-    let settled_by_shared_restore = store
-        .lock()
-        .await
+    let settled_by_shared_restore = worker
+        .interactions
         .settle_interrupted_pushes(chrono::Utc::now())
         .await?;
     if settled_by_shared_restore != 0 {
         return Err("shared restore settled a ScheduleRun-owned attempt".into());
     }
-    let still_attempted = store
-        .lock()
-        .await
+    let still_attempted = worker
+        .interactions
         .get_push_record(&push_ids[0])
         .await?
         .ok_or("schedule push missing after shared restore")?;
@@ -284,6 +291,8 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
     }
 
     worker.step(run_id.clone()).await?;
+
+    apply_push_handoff(&worker).await?;
     let recovered_run = store
         .lock()
         .await
@@ -294,9 +303,8 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
             crate::stored_run_receipt::StoredRunReceipt,
         >(&run_id)
         .await?;
-    let recovered_push = store
-        .lock()
-        .await
+    let recovered_push = worker
+        .interactions
         .get_push_record(&push_ids[0])
         .await?
         .ok_or("schedule push missing after owner recovery")?;
@@ -319,7 +327,14 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         return Err("schedule worker replayed the interrupted start".into());
     }
 
+    let interactions = Arc::clone(&worker.interactions);
+
     drop(worker);
+
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "schedule fixture interaction owner remained shared")?
+        .close()
+        .await?;
     let unique_store = Arc::try_unwrap(store).map_err(|_| "store still referenced")?;
     unique_store.into_inner().close().await?;
     for entry in std::fs::read_dir(&root)? {
@@ -338,8 +353,11 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     )
     .await?;
     worker.step(run_id.clone()).await?;
+    apply_push_handoff(&worker).await?;
     worker.step(run_id.clone()).await?;
+    apply_push_handoff(&worker).await?;
     worker.step(run_id.clone()).await?;
+    apply_push_handoff(&worker).await?;
 
     let first_attempt_ids = observed_push_ids
         .lock()
@@ -348,9 +366,8 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     if first_attempt_ids.len() != 2 || first_attempt_ids[0] != first_attempt_ids[1] {
         return Err("known rejection did not retain its original schedule push id".into());
     }
-    let rejected_push = store
-        .lock()
-        .await
+    let rejected_push = worker
+        .interactions
         .get_push_record(&first_attempt_ids[0])
         .await?
         .ok_or("rejected schedule push missing")?;
@@ -368,6 +385,8 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     }
 
     worker.step(run_id.clone()).await?;
+
+    apply_push_handoff(&worker).await?;
     let accepted_run = store
         .lock()
         .await
@@ -387,9 +406,8 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     {
         return Err("schedule retry created or dispatched a second push id".into());
     }
-    let delivered_push = store
-        .lock()
-        .await
+    let delivered_push = worker
+        .interactions
         .get_push_record(&first_attempt_ids[0])
         .await?
         .ok_or("delivered schedule push missing")?;
@@ -404,7 +422,12 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     {
         return Err("schedule push did not settle delivered after its retry".into());
     }
+    let interactions = Arc::clone(&worker.interactions);
     drop(worker);
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "schedule fixture interaction owner remained shared")?
+        .close()
+        .await?;
     let store = Arc::try_unwrap(store).map_err(|_| "store still referenced")?;
     store.into_inner().close().await?;
     for entry in std::fs::read_dir(&root)? {
@@ -414,190 +437,5 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     Ok(())
 }
 
-#[tokio::test]
-async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_old_link_expires()
--> TestResult<()> {
-    let (root, store, worker, run_id, observed_push_ids) = provider_worker_fixture(
-        FakeSubmissionPlan::RejectOnceThenAccept,
-        FakeSettlementPlan::Pending,
-    )
-    .await?;
-    worker
-        .step(run_id.clone())
-        .await
-        .map_err(|error| format!("initial target preparation failed: {error:?}"))?;
-    worker
-        .step(run_id.clone())
-        .await
-        .map_err(|error| format!("initial busy submission failed: {error:?}"))?;
-    worker
-        .step(run_id.clone())
-        .await
-        .map_err(|error| format!("known rejection persistence failed: {error:?}"))?;
-
-    let rejected_ids = observed_push_ids
-        .lock()
-        .map_err(|_| "scheduled push id observation lock poisoned")?
-        .clone();
-    if rejected_ids.len() != 2 || rejected_ids[0] != rejected_ids[1] {
-        return Err("pre-expiry rejection did not reuse the original schedule PushId".into());
-    }
-    let old_push = store
-        .lock()
-        .await
-        .get_push_record(&rejected_ids[0])
-        .await?
-        .ok_or("pending schedule push missing before retention")?;
-    if old_push.delivery_state != PushDeliveryState::Pending
-        || !matches!(
-            old_push
-                .last_outcome
-                .as_ref()
-                .map(|receipt| &receipt.outcome),
-            Some(DeliveryOutcome::Rejected(_))
-        )
-    {
-        return Err("test did not reach a pending rejected schedule push".into());
-    }
-    let pruned_count = store
-        .lock()
-        .await
-        .prune_push_records(old_push.created_at + chrono::Duration::days(31), 500)
-        .await?;
-    if pruned_count != 1
-        || store
-            .lock()
-            .await
-            .get_push_record(&old_push.push_id)
-            .await?
-            .is_some()
-    {
-        return Err("31-day retention did not prune the pending schedule push".into());
-    }
-
-    let service_id = String::from(old_push.target.endpoint.service_id.clone());
-    let identity = crate::ServiceIdentity::new(&service_id, &service_id)
-        .map_err(std::io::Error::other)?
-        .with_automation_store(Arc::clone(&store));
-    let old_link = crate::push_record_resolver::link_for(&old_push, &identity);
-    let old_link_result = match crate::CollaborationApplication::new(identity.clone())
-        .messages()
-        .push_show(collaboration_protocol::PushRecordShowParams {
-            caller: old_push.target.clone(),
-            reference: old_link.clone(),
-        })
-        .await
-    {
-        Ok(result) => json!({ "result": result }),
-        Err(failure) => json!({
-            "error": crate::collaboration_application::CollaborationRejection::published_rejection(&failure)
-        }),
-    };
-    if old_link_result
-        .pointer("/error/data/kind")
-        .and_then(serde_json::Value::as_str)
-        != Some("notFound")
-        || !old_link_result
-            .pointer("/error/data/message")
-            .and_then(serde_json::Value::as_str)
-            .is_some_and(|message| message.contains("expired after 30 days"))
-    {
-        return Err("old schedule link did not report its expired record".into());
-    }
-    drop(identity);
-
-    if let Err(error) = worker.step(run_id.clone()).await {
-        let failed_run = store
-            .lock()
-            .await
-            .read_run::<
-                SessionRef,
-                EndpointRef,
-                CodexGeneration,
-                crate::stored_run_receipt::StoredRunReceipt,
-            >(&run_id)
-            .await?;
-        let observed_ids = observed_push_ids
-            .lock()
-            .map_err(|_| "scheduled push id observation lock poisoned")?
-            .clone();
-        let retained_origin_record = store
-            .lock()
-            .await
-            .get_push_record_by_router_ref(
-                old_push
-                    .origin_router_ref
-                    .as_deref()
-                    .ok_or("old ScheduleRun push had no origin reference")?,
-            )
-            .await?;
-        return Err(format!(
-            "post-retention run retry failed: {error:?}; phase={:?}; observed_push_ids={observed_ids:?}; retained_origin_record_state={:?}",
-            failed_run.phase,
-            retained_origin_record.map(|record| record.delivery_state),
-        )
-        .into());
-    }
-    let run = store
-        .lock()
-        .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
-        .await?;
-    if run.phase != RunPhase::Executing {
-        return Err("run retry did not proceed after its old push expired".into());
-    }
-    let all_push_ids = observed_push_ids
-        .lock()
-        .map_err(|_| "scheduled push id observation lock poisoned")?
-        .clone();
-    if all_push_ids.len() != 3
-        || all_push_ids[0] != all_push_ids[1]
-        || all_push_ids[2] == old_push.push_id
-    {
-        return Err("post-expiry retry did not create one fresh ScheduleRun PushId".into());
-    }
-    let fresh_push = store
-        .lock()
-        .await
-        .get_push_record(&all_push_ids[2])
-        .await?
-        .ok_or("fresh schedule push missing after retry")?;
-    let header_facts_match = match (&old_push.header_facts, &fresh_push.header_facts) {
-        (
-            PushHeaderFacts::ScheduleRun {
-                schedule_id: old_schedule_id,
-                run_id: old_run_id,
-            },
-            PushHeaderFacts::ScheduleRun {
-                schedule_id: fresh_schedule_id,
-                run_id: fresh_run_id,
-            },
-        ) => old_schedule_id == fresh_schedule_id && old_run_id == fresh_run_id,
-        _ => false,
-    };
-    if fresh_push.kind != PushKind::ScheduleRun
-        || fresh_push.target != old_push.target
-        || fresh_push.origin_router_ref != old_push.origin_router_ref
-        || fresh_push.body != old_push.body
-        || !header_facts_match
-        || fresh_push.delivery_state != PushDeliveryState::Delivered
-        || !matches!(
-            fresh_push
-                .last_outcome
-                .as_ref()
-                .map(|receipt| &receipt.outcome),
-            Some(DeliveryOutcome::Started)
-        )
-    {
-        return Err("fresh schedule push was not delivered after retention".into());
-    }
-
-    drop(worker);
-    let store = Arc::try_unwrap(store).map_err(|_| "store still referenced")?;
-    store.into_inner().close().await?;
-    for entry in std::fs::read_dir(&root)? {
-        std::fs::remove_file(entry?.path())?;
-    }
-    std::fs::remove_dir(root)?;
-    Ok(())
-}
+#[path = "scheduled_push_retention_tests.rs"]
+mod retention_tests;

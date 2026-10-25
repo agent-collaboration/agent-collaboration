@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT grant_id AS \"id!: String\" FROM owner_grants WHERE grant_id>? ORDER BY grant_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "1c6db3b03c9dd113239964e339513909aa20324356d2bb2e094fd050c23154bf"
+}

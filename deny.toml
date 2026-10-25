@@ -26,5 +26,9 @@ wildcards = "deny"
 highlight = "all"
 
 [sources]
+allow-git = [
+    "https://github.com/cloudflare/workers-rs",
+    "https://github.com/agent-collaboration/agent-fleet-sync",
+]
 unknown-registry = "deny"
 unknown-git = "deny"

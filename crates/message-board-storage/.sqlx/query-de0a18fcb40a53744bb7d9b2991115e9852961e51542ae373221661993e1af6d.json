@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE threads SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, about=?, imported=?, state=? WHERE thread_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "de0a18fcb40a53744bb7d9b2991115e9852961e51542ae373221661993e1af6d"
+}

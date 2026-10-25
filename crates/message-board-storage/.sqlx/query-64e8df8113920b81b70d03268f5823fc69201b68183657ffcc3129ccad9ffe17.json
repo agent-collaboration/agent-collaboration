@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT task_id AS \"id!: String\" FROM tasks WHERE task_id>? ORDER BY task_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "64e8df8113920b81b70d03268f5823fc69201b68183657ffcc3129ccad9ffe17"
+}

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET delivery_state='pending',last_outcome_json=NULL,settled_at=NULL WHERE push_id=? AND retention='mailTerminalAge' AND delivery_state='held' AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=router_pushes.push_id AND r.scheduled_retry_at IS NOT NULL)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "0e67791317ab3d471d2f8d24b1b24c0117cf80c479a78d3923f24fd91bfbdd26"
+}

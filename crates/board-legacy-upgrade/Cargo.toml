@@ -1,0 +1,56 @@
+[package]
+name = "board-legacy-upgrade"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "codex-router-board-upgrade"
+path = "src/main.rs"
+
+[dependencies]
+board-fleet-sync = { version = "0.1.100", path = "../board-fleet-sync" }
+board-sync-protocol = { version = "0.1.100", path = "../board-sync-protocol" }
+collaboration-central-core = { version = "0.1.100", path = "../collaboration-central-core" }
+collaboration-central-admin-protocol = { version = "0.1.100", path = "../collaboration-central-admin-protocol" }
+message-board = { version = "0.1.100", path = "../message-board" }
+message-board-storage = { version = "0.1.100", path = "../message-board-storage" }
+fleet-admission = { version = "0.1.100", path = "../fleet-admission" }
+collaboration-service = { version = "0.1.100", path = "../collaboration-service" }
+collaboration-client = { version = "0.1.100", path = "../collaboration-client" }
+codex-router-host = { version = "0.1.100", path = "../codex-router-host" }
+automation-storage = { version = "0.1.100", path = "../automation-storage" }
+interaction-storage = { version = "0.1.100", path = "../interaction-storage" }
+collaboration-protocol = { version = "0.1.100", path = "../collaboration-protocol" }
+durable-steps = { workspace = true, features = ["turso"] }
+sqlx = { workspace = true, features = ["sqlite", "migrate"] }
+sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false, features = ["macros", "runtime-tokio"] }
+fleet-sync-writer.workspace = true
+fleet-sync-lease.workspace = true
+fleet-sync-protocol.workspace = true
+runtime-primitives.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+nix.workspace = true
+chrono.workspace = true
+clap.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+tempfile = "3.27.0"
+
+[dev-dependencies]
+codex-router-test-support = { version = "0.1.102", path = "../codex-router-test-support" }
+futures-util.workspace = true
+reqwest-websocket = "=0.5.1"
+collaboration-central-tokio = { version = "0.1.100", path = "../collaboration-central-tokio", features = ["conformance"] }
+collaboration-central-conformance = { version = "0.1.100", path = "../collaboration-central-conformance" }

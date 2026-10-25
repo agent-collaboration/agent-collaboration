@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT service_id AS \"service_id!: String\",peer_id AS \"peer_id!: String\" FROM installation_peer_directory WHERE service_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "service_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "peer_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "d035e870605cf6ae527ed9f1facfc427ee92fe511509a534363e38002bd08f57"
+}

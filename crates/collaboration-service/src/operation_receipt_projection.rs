@@ -122,7 +122,10 @@ fn success(
             })
         }
         Method::WakeSend => {
-            let record: agent_automation::WakeRecord<SavedMessage> = decode(result)?;
+            let record: agent_automation::WakeRecord<
+                SavedMessage,
+                collaboration_protocol::WakeCreator,
+            > = decode(result)?;
             let observed = record.definition.created_at_ms;
             Ok(OperationSuccess::WakeCreated {
                 method: decode(method_value)?,

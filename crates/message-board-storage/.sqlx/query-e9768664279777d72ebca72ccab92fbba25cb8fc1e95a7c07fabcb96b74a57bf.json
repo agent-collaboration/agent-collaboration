@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO post_references(reference_id, source_post, place, target) VALUES (?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e9768664279777d72ebca72ccab92fbba25cb8fc1e95a7c07fabcb96b74a57bf"
+}

@@ -5,8 +5,34 @@ use std::num::NonZeroU64;
 use codex_router_core::ids::AccountId;
 use codex_router_core::provider::Provider;
 
+use crate::fleet_secret_key::FleetSecretKey;
 use crate::model::SecretKey;
 use crate::model::SecretStoreError;
+
+pub(crate) enum SecretStorageClass {
+    GeneralSecret,
+    AccountCredential,
+    FleetCredential,
+}
+
+pub(crate) fn classify_secret_key(key: &SecretKey) -> Result<SecretStorageClass, SecretStoreError> {
+    if FleetSecretKey::parse(key)?.is_some() {
+        return Ok(SecretStorageClass::FleetCredential);
+    }
+    Ok(match AccountCredentialKey::parse(key)? {
+        Some(_) => SecretStorageClass::AccountCredential,
+        None => SecretStorageClass::GeneralSecret,
+    })
+}
+
+pub(crate) fn require_encrypted_secret_key(key: &SecretKey) -> Result<(), SecretStoreError> {
+    match classify_secret_key(key)? {
+        SecretStorageClass::AccountCredential | SecretStorageClass::FleetCredential => Ok(()),
+        SecretStorageClass::GeneralSecret => Err(SecretStoreError::InvalidCredentialKey {
+            key: key.as_str().to_owned(),
+        }),
+    }
+}
 
 /// Provider, account, and generation that own one encrypted credential bundle.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]

@@ -73,6 +73,9 @@ pub(crate) async fn prompt_and_approve_from_peer_provider(
         })
         .await
         .expect("Host-composed stored approval push");
+    let collaboration_protocol::MessageShowResult::Local(stored_notice) = stored_notice else {
+        panic!("native proof expected a stored local push");
+    };
     assert_eq!(&stored_notice.record.push_id, locator.push_id());
     assert_eq!(stored_notice.link, notice_link);
     assert_eq!(
@@ -186,5 +189,5 @@ pub(crate) async fn prompt_and_approve_from_peer_provider(
     })
     .await
     .expect("approver Session idle before later board activity");
-    stored_notice
+    *stored_notice
 }

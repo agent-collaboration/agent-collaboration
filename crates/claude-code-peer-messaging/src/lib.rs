@@ -7,8 +7,10 @@ pub use native_claude_job_reader::{
     NativeClaudeJobReader,
 };
 
-pub use claude_code_peer_socket::{ClaudeCodePeerSocket, PeerSocketWriteOutcome};
+pub use claude_code_peer_socket::{
+    ClaudeCodePeerSocket, PeerSocketUnsentCause, PeerSocketWriteOutcome,
+};
 pub use claude_code_session_registry::{
-    ClaudeCodeSessionRegistry, PeerClaim, PeerSessionInventory, PeerSessionLookup,
-    PeerSessionRecord, PeerSessionStatus, PeerSessionSummary,
+    ClaudeCodeSessionRegistry, PeerClaim, PeerRegistryError, PeerSessionInventory,
+    PeerSessionLookup, PeerSessionRecord, PeerSessionStatus, PeerSessionSummary,
 };

@@ -6,10 +6,10 @@ use super::board_subscription_arguments::{
     SubscriptionModeKind, ThreadSubscribeArguments, ThreadSubscriptionScopeArguments,
     ThreadSubscriptionsArguments, ThreadUnsubscribeArguments, WhenIdleKind,
 };
-use super::board_value_parsing::{command_context, parse_uuid_v7};
+use super::board_value_parsing::{command_context, parse_thread_ref, parse_uuid_v7};
 use collaboration_client::board::{
     BatchTiming, MAX_SUBSCRIPTION_CAP_SECONDS, MAX_SUBSCRIPTION_QUIET_SECONDS,
-    SubscriptionLifetime, SubscriptionMode, SubscriptionPolicyPatch, SubscriptionScope,
+    SubscriptionLifetime, SubscriptionMode, SubscriptionPolicyPatch, SubscriptionTarget,
     SubscriptionTimingPatch, WhenIdle,
 };
 use collaboration_client::protocol::{
@@ -61,6 +61,9 @@ pub(super) fn prepare_subscribe(
         })?;
     }
     let request = ThreadSubscribeRequest {
+        request_id: arguments.request.request_id()?,
+        protocol_version: collaboration_client::board::ProtocolVersion::CURRENT,
+        acting_for: None,
         actor: placeholder_actor(&actor)?,
         scope,
         policy: SubscriptionPolicyPatch {
@@ -85,6 +88,9 @@ pub(super) fn prepare_unsubscribe(
     require_json(arguments.common.json, "Thread Unsubscribe")?;
     let actor = board_preparation::parse_actor_input(&arguments.actor)?;
     let request = ThreadUnsubscribeRequest {
+        request_id: arguments.request.request_id()?,
+        protocol_version: collaboration_client::board::ProtocolVersion::CURRENT,
+        acting_for: None,
         actor: placeholder_actor(&actor)?,
         scope: subscription_scope(arguments.scope)?,
     };
@@ -126,17 +132,15 @@ pub(super) fn when_idle(value: WhenIdleKind) -> WhenIdle {
 
 fn subscription_scope(
     arguments: ThreadSubscriptionScopeArguments,
-) -> Result<SubscriptionScope, String> {
-    match (arguments.root_message_id, arguments.topic_id) {
-        (Some(root_message_id), None) => Ok(SubscriptionScope::thread(parse_uuid_v7(
-            root_message_id,
-            "--root-message-id",
-        )?)),
-        (None, Some(topic_id)) => Ok(SubscriptionScope::topic(parse_uuid_v7(
-            topic_id,
-            "--topic-id",
-        )?)),
-        _ => Err("Choose exactly one subscription scope: --root-message-id or --topic-id".into()),
+) -> Result<SubscriptionTarget, String> {
+    match (arguments.thread_id, arguments.project_id) {
+        (Some(thread_id), None) => Ok(SubscriptionTarget::Thread {
+            thread: parse_thread_ref(thread_id)?,
+        }),
+        (None, Some(project_id)) => Ok(SubscriptionTarget::Project {
+            project_id: parse_uuid_v7(project_id, "--project-id")?,
+        }),
+        _ => Err("Choose exactly one subscription scope: --thread-id or --project-id".into()),
     }
 }
 

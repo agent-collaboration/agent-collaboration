@@ -16,12 +16,26 @@ import tempfile
 import typing as t
 from pathlib import Path
 
-
 TursoPreparationTarget = tuple[str, tuple[str, ...]]
 TURSO_PREPARATION_TARGETS: t.Final[tuple[TursoPreparationTarget, ...]] = (
-    ("sqlx-turso", ("crates/sqlx-turso/tests/migrations",)),
+    ("board-legacy-upgrade", ("crates/interaction-storage/migrations",)),
+    ("interaction-storage", ("crates/interaction-storage/migrations",)),
+    (
+        "message-board-storage",
+        (
+            "crates/message-board-storage/project_migrations",
+            "crates/message-board-storage/project_bookkeeping_migrations",
+            "crates/message-board-storage/fleet_cache_migrations",
+            "crates/message-board-storage/fleet_outbox_migrations",
+            "crates/message-board-storage/cursor_migrations",
+        ),
+    ),
 )
+SCHEMA_SEED_PACKAGE: t.Final[str] = "interaction-storage"
 SCHEMA_SEED_EXAMPLE: t.Final[str] = "seed_native_schema"
+RUSTC_SCHEMA_WRAPPER: t.Final[Path] = (
+    Path(__file__).with_name("sqlx-package-rustc-wrapper.py").resolve()
+)
 
 
 class ProcessRunner(t.Protocol):
@@ -52,14 +66,18 @@ def replace_query_metadata(
     for metadata_path in metadata_directory.glob("query-*.json"):
         metadata_path.unlink()
     for metadata_name, metadata_content in sorted(query_metadata.items()):
-        (metadata_directory / metadata_name).write_bytes(metadata_content)
+        _ = (metadata_directory / metadata_name).write_bytes(metadata_content)
 
 
 def describe_metadata_differences(
     committed: dict[str, bytes], prepared: dict[str, bytes]
 ) -> list[str]:
-    differences = [f"missing {name}" for name in sorted(prepared.keys() - committed.keys())]
-    differences += [f"stale {name}" for name in sorted(committed.keys() - prepared.keys())]
+    differences = [
+        f"missing {name}" for name in sorted(prepared.keys() - committed.keys())
+    ]
+    differences += [
+        f"stale {name}" for name in sorted(committed.keys() - prepared.keys())
+    ]
     differences += [
         f"changed {name}"
         for name in sorted(committed.keys() & prepared.keys())
@@ -77,16 +95,24 @@ def offline_environment() -> dict[str, str]:
 
 def preparation_commands(
     *,
+    repository_root: Path,
     package_name: str,
     migration_sources: tuple[str, ...],
     schema_database: Path,
     staging_directory: Path,
 ) -> list[tuple[list[str], dict[str, str]]]:
+    package_directory = (repository_root / "crates" / package_name).resolve()
+    package_spec = f"path+{package_directory.as_uri()}"
+    seed_spec = (
+        f"path+{(repository_root / 'crates' / SCHEMA_SEED_PACKAGE).resolve().as_uri()}"
+    )
     offline = offline_environment()
     describing = offline | {
-        "SQLX_OFFLINE": "false",
-        "DATABASE_URL": f"turso:{schema_database}",
-        "SQLX_OFFLINE_DIR": str(staging_directory),
+        "RUSTC_WRAPPER": str(RUSTC_SCHEMA_WRAPPER),
+        "SQLX_PREPARE_PACKAGE": package_name,
+        "SQLX_PREPARE_MANIFEST_DIR": str(package_directory),
+        "SQLX_PREPARE_DATABASE_URL": f"turso:{schema_database}",
+        "SQLX_PREPARE_METADATA_DIR": str(staging_directory),
     }
     return [
         (
@@ -95,7 +121,7 @@ def preparation_commands(
                 "run",
                 "--locked",
                 "--package",
-                package_name,
+                seed_spec,
                 "--example",
                 SCHEMA_SEED_EXAMPLE,
                 "--",
@@ -106,7 +132,7 @@ def preparation_commands(
         ),
         # Proc macros re-run only when their crate recompiles, and Cargo does not track the
         # macros' environment, so the package's own artifacts are cleaned first.
-        (["cargo", "clean", "--package", package_name], offline),
+        (["cargo", "clean", "--package", package_spec], offline),
         # One rustc at a time: Turso locks the schema file per process.
         (
             [
@@ -116,7 +142,7 @@ def preparation_commands(
                 "--jobs",
                 "1",
                 "--package",
-                package_name,
+                package_spec,
                 "--all-targets",
                 "--all-features",
             ],
@@ -144,6 +170,7 @@ def prepare_turso_metadata(
                 staging_directory = Path(directory) / "metadata"
                 staging_directory.mkdir()
                 for command, environment in preparation_commands(
+                    repository_root=repository_root,
                     package_name=package_name,
                     migration_sources=migration_sources,
                     schema_database=schema_database,
@@ -166,8 +193,7 @@ def prepare_turso_metadata(
                 differences = describe_metadata_differences(committed, prepared)
                 if differences:
                     print(
-                        f"{package_name}: Turso SQLx metadata is out of date; run "
-                        "python3 scripts/tooling/prepare-sqlx-turso.py",
+                        f"{package_name}: Turso SQLx metadata is out of date; run python3 scripts/tooling/prepare-sqlx-turso.py",
                         file=sys.stderr,
                     )
                     for difference in differences:

@@ -10,16 +10,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadSubscribeRequest {
+    pub request_id: message_board::RequestId,
+    pub protocol_version: message_board::ProtocolVersion,
+    pub acting_for: Option<message_board::ActingForIdentity>,
     pub actor: Identity,
-    pub scope: SubscriptionScope,
+    pub scope: message_board::SubscriptionTarget,
     pub policy: SubscriptionPolicyPatch,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadUnsubscribeRequest {
+    pub request_id: message_board::RequestId,
+    pub protocol_version: message_board::ProtocolVersion,
+    pub acting_for: Option<message_board::ActingForIdentity>,
     pub actor: Identity,
-    pub scope: SubscriptionScope,
+    pub scope: message_board::SubscriptionTarget,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -32,6 +38,7 @@ pub struct ThreadSubscriptionsRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadSubscriptionsResult {
     pub subscriptions: Vec<ThreadSubscriptionView>,
+    pub unavailable: Vec<message_board::ProjectId>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -58,6 +65,7 @@ pub enum ThreadSubscriptionPresence {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ThreadSubscriptionView {
+    pub project_id: message_board::ProjectId,
     pub scope: SubscriptionScope,
     pub policy: SubscriptionPolicy,
     pub state: ThreadSubscriptionState,
@@ -69,6 +77,7 @@ pub struct ThreadSubscriptionView {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub held_since: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    /// The scheduled retry time after a failed delivery.
     pub next_retry_at: Option<DateTime<Utc>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_outcome: Option<SubscriptionDeliveryOutcome>,

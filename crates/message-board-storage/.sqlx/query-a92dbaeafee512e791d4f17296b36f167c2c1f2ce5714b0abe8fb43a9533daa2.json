@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO threads(thread_id, actor_id, request_id, epoch, position, router_time, time_basis, about, imported, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "a92dbaeafee512e791d4f17296b36f167c2c1f2ce5714b0abe8fb43a9533daa2"
+}

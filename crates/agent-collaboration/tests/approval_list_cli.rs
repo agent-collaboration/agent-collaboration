@@ -9,12 +9,20 @@ impl collaboration_service::SessionMessageDelivery for AcceptedNoticeDelivery {
         &'a self,
         _: collaboration_service::layer_zero::DeliveryRequest,
         _: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+    ) -> collaboration_service::DeliveryFuture<'a, collaboration_service::NativeDeliveryResult>
+    {
         Box::pin(async {
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: collaboration_protocol::DeliveryOutcome::Started,
-                reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-                client: None,
+            Ok({
+                let receipt = collaboration_protocol::DeliveryReceipt {
+                    outcome: collaboration_protocol::DeliveryOutcome::Started,
+                    reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
+                    client: None,
+                };
+                collaboration_service::NativeDeliveryResult::observed(
+                    collaboration_service::NativeObservedOutcome::Started,
+                    receipt.reachability,
+                    receipt.client,
+                )
             })
         })
     }

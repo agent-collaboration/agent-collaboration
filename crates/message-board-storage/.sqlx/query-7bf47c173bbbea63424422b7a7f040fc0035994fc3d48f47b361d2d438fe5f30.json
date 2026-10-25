@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT subtask_id AS \"subtask_id!: String\" FROM subtasks WHERE removed=0 ORDER BY subtask_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "subtask_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7bf47c173bbbea63424422b7a7f040fc0035994fc3d48f47b361d2d438fe5f30"
+}

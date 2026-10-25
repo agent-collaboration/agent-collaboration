@@ -17,7 +17,7 @@ mod delivery_matrix_support;
 #[path = "delivery_matrix/peer_fixture.rs"]
 mod peer_fixture;
 use delivery_matrix_support::{
-    ConfigHashGuard, PeerFixture, mcp_send, prepare_acp_target_fixture, prepare_provider_fixture,
+    ConfigHashGuard, mcp_send, prepare_acp_target_fixture, prepare_provider_fixture,
 };
 #[path = "delivery_matrix/acp_target.rs"]
 mod delivery_matrix_acp_target;
@@ -84,7 +84,7 @@ async fn sequential_approval_notices_reach_codex_and_claude_recipients() -> Proo
     let config_guard = ConfigHashGuard::capture()?;
     let result = async {
         let mut proof = ProofContext::connect().await?;
-        let mut peer = PeerFixture::start(&proof).await?;
+        let mut peer = peer_fixture::start(&proof).await?;
         let sender = proof.start_thread("Sequential approval sender").await?;
         let codex = create_empty_conversation(&proof, &sender).await?;
         delivery_matrix_approval::deliver_approval_notice(
@@ -135,7 +135,7 @@ async fn delivery_matrix_reaches_scripted_acp_target() -> ProofResult<()> {
 
 async fn exercise_delivery_matrix(config_guard: &ConfigHashGuard) -> ProofResult<()> {
     let mut proof = ProofContext::connect().await?;
-    let mut peer = PeerFixture::start(&proof).await?;
+    let mut peer = peer_fixture::start(&proof).await?;
     let sender = proof.start_thread("Delivery matrix sender").await?;
     let mut records = Vec::new();
 

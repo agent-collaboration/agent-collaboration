@@ -216,12 +216,12 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
             .expect("queue delivery");
 
         assert!(
-            matches!(receipt.outcome, DeliveryOutcome::Queued),
+            matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Queued),
             "{endpoint_id}"
         );
         assert!(
-            matches!(receipt.client,
-            Some(DeliveryClientReceipt::ProviderAcp { operation_id })
+            matches!(receipt.receipt().client,
+            Some(DeliveryClientReceipt::ProviderAcp { ref operation_id })
             if operation_id.as_str() == attempt.as_str()),
             "{endpoint_id}"
         );

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT assignment_id AS \"id!: String\" FROM role_assignments WHERE project_subject=? AND role='lead' ORDER BY position DESC, assignment_id DESC LIMIT 1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "7ca104067d51982ae3611c541ce219c4eb9b3afe03f441e80b6c427942f87fa3"
+}

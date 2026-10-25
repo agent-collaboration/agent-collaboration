@@ -182,6 +182,9 @@ dependencies = [
  "agent-automation",
  "automation-storage",
  "axum",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
  "chrono",
  "clap",
  "claude-code-peer-messaging",
@@ -189,13 +192,23 @@ dependencies = [
  "codex-router-host",
  "codex-router-test-support",
  "codex-router-tui",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
  "collaboration-client",
  "collaboration-mcp",
  "collaboration-protocol",
  "collaboration-service",
  "comfy-table",
  "crossterm",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-protocol",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
  "futures-util",
+ "interaction-storage",
  "iocraft",
  "jsonc-parser",
  "jsonschema",
@@ -204,11 +217,13 @@ dependencies = [
  "message-board-storage",
  "reqwest 0.12.28",
  "rmcp",
+ "runtime-primitives",
  "rustls",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "sqlx-turso",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -529,6 +544,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-tungstenite"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee88b4c88ac8c9ea446ad43498955750a4bbe64c4392f21ccfe5d952865e318f"
+dependencies = [
+ "atomic-waker",
+ "futures-core",
+ "futures-io",
+ "futures-task",
+ "futures-util",
+ "log",
+ "pin-project-lite",
+ "tungstenite 0.27.0",
+]
+
+[[package]]
 name = "atoi"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -555,11 +586,13 @@ version = "0.1.103"
 dependencies = [
  "agent-automation",
  "chrono",
+ "collaboration-mail-protocol",
  "collaboration-protocol",
  "message-board",
  "serde",
  "serde_json",
  "sqlx",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -568,12 +601,14 @@ dependencies = [
 
 [[package]]
 name = "axum"
-version = "0.8.8"
+version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b52af3cb4058c895d37317bb27508dccc8e5f2d39454016b297bf4a400597b8"
+checksum = "31b698c5f9a010f6573133b09e0de5408834d0c82f8d7475a89fc1867a71cd90"
 dependencies = [
  "axum-core",
+ "base64 0.22.1",
  "bytes",
+ "form_urlencoded",
  "futures-util",
  "http",
  "http-body",
@@ -581,7 +616,7 @@ dependencies = [
  "hyper",
  "hyper-util",
  "itoa",
- "matchit",
+ "matchit 0.8.4",
  "memchr",
  "mime",
  "percent-encoding",
@@ -589,11 +624,15 @@ dependencies = [
  "serde_core",
  "serde_json",
  "serde_path_to_error",
+ "serde_urlencoded",
+ "sha1 0.10.6",
  "sync_wrapper",
  "tokio",
+ "tokio-tungstenite",
  "tower",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -612,6 +651,7 @@ dependencies = [
  "sync_wrapper",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -733,6 +773,125 @@ dependencies = [
  "futures-io",
  "futures-lite",
  "piper",
+]
+
+[[package]]
+name = "board-central-test-support"
+version = "0.1.103"
+dependencies = [
+ "axum",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "codex-router-core",
+ "codex-router-secret-store",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-service",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "futures-util",
+ "message-board",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "runtime-primitives",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "board-fleet-sync"
+version = "0.1.103"
+dependencies = [
+ "axum",
+ "board-sync-protocol",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-service",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
+ "futures-util",
+ "message-board",
+ "message-board-storage",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "board-legacy-upgrade"
+version = "0.1.103"
+dependencies = [
+ "automation-storage",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "chrono",
+ "clap",
+ "codex-router-host",
+ "codex-router-test-support",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-client",
+ "collaboration-protocol",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-writer",
+ "futures-util",
+ "interaction-storage",
+ "message-board",
+ "message-board-storage",
+ "nix",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "runtime-primitives",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
+name = "board-sync-protocol"
+version = "0.1.103"
+dependencies = [
+ "chrono",
+ "collaboration-mail-protocol",
+ "fleet-sync-protocol",
+ "message-board",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1066,6 +1225,7 @@ version = "0.1.103"
 dependencies = [
  "agent-collaboration",
  "base64 0.22.1",
+ "board-central-test-support",
  "chrono",
  "clap",
  "codex-native-integration",
@@ -1076,9 +1236,12 @@ dependencies = [
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
+ "codex-router-test-support",
  "codex-router-tui",
+ "collaboration-central-core",
  "collaboration-client",
  "collaboration-protocol",
+ "collaboration-service",
  "comfy-table",
  "crossterm",
  "futures-util",
@@ -1129,30 +1292,51 @@ dependencies = [
  "agent-automation",
  "agent-client-protocol",
  "automation-storage",
+ "axum",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-legacy-upgrade",
+ "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",
  "codex-native-integration",
  "codex-router-core",
  "codex-router-secret-store",
  "codex-router-test-support",
+ "collaboration-central-conformance",
  "collaboration-client",
+ "collaboration-mail-protocol",
  "collaboration-mcp",
  "collaboration-protocol",
  "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-service",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
  "futures-util",
  "httparse",
+ "interaction-storage",
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
  "opentelemetry",
  "portable-pty",
  "reqwest 0.12.28",
+ "reqwest-websocket",
+ "runtime-primitives",
  "rustix 1.1.4",
  "serde",
  "serde_json",
  "session-event-model",
  "sha2 0.10.9",
  "sqlx",
+ "sqlx-turso",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -1282,10 +1466,12 @@ dependencies = [
  "codex-router-proxy",
  "codex-router-secret-store",
  "codex-router-state",
+ "collaboration-client",
  "futures-util",
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "tempfile",
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
@@ -1309,20 +1495,173 @@ dependencies = [
 ]
 
 [[package]]
+name = "collaboration-central-admin-protocol"
+version = "0.1.103"
+dependencies = [
+ "board-sync-protocol",
+ "chrono",
+ "fleet-admission",
+ "fleet-sync-protocol",
+ "message-board",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "collaboration-central-cloudflare"
+version = "0.1.103"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "chrono",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "durable-steps",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-session",
+ "futures-channel",
+ "futures-util",
+ "http",
+ "js-sys",
+ "message-board",
+ "runtime-primitives",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx-core",
+ "sqlx-durable-object",
+ "thiserror 2.0.18",
+ "tower-service",
+ "uuid",
+ "web-sys",
+ "worker",
+ "worker-macros",
+ "worker-sys",
+]
+
+[[package]]
+name = "collaboration-central-conformance"
+version = "0.1.103"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "board-sync-protocol",
+ "chrono",
+ "collaboration-central-core",
+ "collaboration-client",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-protocol",
+ "futures-util",
+ "message-board",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "ring",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "collaboration-central-core"
+version = "0.1.103"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "board-sync-protocol",
+ "chrono",
+ "collaboration-central-admin-protocol",
+ "collaboration-mail-protocol",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "futures-channel",
+ "http",
+ "message-board",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx-core",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "collaboration-central-tokio"
+version = "0.1.103"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "chrono",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
+ "futures-util",
+ "message-board",
+ "message-board-storage",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "ring",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx-core",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "collaboration-client"
 version = "0.1.103"
 dependencies = [
  "automation-storage",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
+ "collaboration-central-admin-protocol",
  "collaboration-mcp",
  "collaboration-protocol",
  "collaboration-service",
+ "fleet-admission",
+ "fleet-sync-protocol",
+ "fleet-sync-writer",
  "futures-util",
  "http",
  "message-board",
  "message-board-storage",
+ "reqwest 0.12.28",
  "rmcp",
+ "runtime-primitives",
  "schemars 1.2.2",
  "serde",
  "serde_json",
@@ -1336,25 +1675,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "collaboration-mail-protocol"
+version = "0.1.103"
+dependencies = [
+ "chrono",
+ "message-board",
+ "schemars 1.2.2",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "collaboration-mcp"
 version = "0.1.103"
 dependencies = [
  "agent-collaboration",
  "automation-storage",
  "axum",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
  "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-host",
  "collaboration-client",
  "collaboration-protocol",
  "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-protocol",
+ "fleet-sync-writer",
  "futures-util",
  "http",
+ "interaction-storage",
  "jsonschema",
  "message-board",
  "message-board-storage",
  "reqwest 0.12.28",
  "rmcp",
+ "runtime-primitives",
  "schemars 1.2.2",
  "serde",
  "serde_json",
@@ -1365,6 +1726,7 @@ dependencies = [
  "tokio-util",
  "tracing",
  "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]
@@ -1373,6 +1735,7 @@ version = "0.1.103"
 dependencies = [
  "agent-automation",
  "chrono",
+ "collaboration-mail-protocol",
  "jsonschema",
  "message-board",
  "proptest",
@@ -1393,30 +1756,50 @@ dependencies = [
  "agent-automation",
  "automation-storage",
  "base64 0.22.1",
+ "board-central-test-support",
+ "board-fleet-sync",
+ "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",
  "codex-acp-adapter",
  "codex-native-integration",
  "collaboration-client",
+ "collaboration-mail-protocol",
  "collaboration-mcp",
  "collaboration-protocol",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
  "futures-util",
  "getrandom 0.3.4",
+ "interaction-storage",
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
  "nix",
+ "petgraph",
+ "proptest",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "session-event-model",
  "sha2 0.10.9",
  "sqlx",
+ "sqlx-turso",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
+ "turso_parser",
  "uuid",
 ]
 
@@ -1946,6 +2329,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "durable-steps"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "futures-util",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "sqlx-core",
+ "sqlx-durable-object",
+ "sqlx-turso",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+ "worker",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2136,6 +2539,201 @@ dependencies = [
  "crc32fast",
  "miniz_oxide",
  "zlib-rs",
+]
+
+[[package]]
+name = "fleet-admission"
+version = "0.1.103"
+dependencies = [
+ "chrono",
+ "fleet-sync-protocol",
+ "message-board",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fleet-sync-delivery"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "durable-steps",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "sqlx-core",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fleet-sync-lease"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "durable-steps",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-sync-protocol"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "turso_parser",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-sync-query-gen"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "fleet-sync-receiver"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "durable-steps",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror 2.0.18",
+ "turso_parser",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-sync-service"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "axum",
+ "durable-steps",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-transport-websocket",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "sqlx-turso",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "fleet-sync-session"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "bytes",
+ "durable-steps",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror 2.0.18",
+ "url",
+]
+
+[[package]]
+name = "fleet-sync-tokio-runner"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "durable-steps",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "fleet-sync-receiver",
+ "fleet-sync-session",
+ "fleet-sync-writer",
+ "futures-util",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "sqlx-turso",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "turso",
+]
+
+[[package]]
+name = "fleet-sync-transport-websocket"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "axum",
+ "fleet-sync-protocol",
+ "fleet-sync-session",
+ "futures-util",
+ "serde_json",
+ "tokio",
+ "tokio-tungstenite",
+]
+
+[[package]]
+name = "fleet-sync-writer"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "durable-steps",
+ "either",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-query-gen",
+ "fleet-sync-receiver",
+ "futures-core",
+ "futures-util",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "sqlx-turso",
+ "thiserror 2.0.18",
+ "tokio",
+ "turso",
+ "turso_parser",
 ]
 
 [[package]]
@@ -2969,6 +3567,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "interaction-storage"
+version = "0.1.103"
+dependencies = [
+ "agent-automation",
+ "automation-storage",
+ "board-sync-protocol",
+ "chrono",
+ "collaboration-mail-protocol",
+ "collaboration-protocol",
+ "durable-steps",
+ "fleet-sync-delivery",
+ "fleet-sync-protocol",
+ "message-board",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "session-event-model",
+ "sqlx",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "intrusive-collections"
 version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3108,9 +3733,9 @@ dependencies = [
 
 [[package]]
 name = "js-sys"
-version = "0.3.103"
+version = "0.3.106"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "53b44bfcdb3f8d5837a46dae1ca9660a837176eee74a28b229bc626816589102"
+checksum = "7883d941dae510fb2d978fc3fe018c71c9e2892fd38854de3e8b92c2e5ad9cc5"
 dependencies = [
  "cfg-if",
  "futures-util",
@@ -3341,6 +3966,12 @@ dependencies = [
 
 [[package]]
 name = "matchit"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e7465ac9959cc2b1404e8e2367b43684a6d13790fe23056cc8c6c5a6b7bcb94"
+
+[[package]]
+name = "matchit"
 version = "0.8.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47e1ffaa40ddd1f3ed91f717a33c8c0ee23fff369e3aa8772b9605cc1d22f4c3"
@@ -3375,10 +4006,14 @@ name = "message-board"
 version = "0.1.103"
 dependencies = [
  "chrono",
+ "petgraph",
+ "proptest",
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "thiserror 2.0.18",
+ "url",
  "uuid",
 ]
 
@@ -3387,16 +4022,29 @@ name = "message-board-storage"
 version = "0.1.103"
 dependencies = [
  "base64 0.22.1",
+ "board-fleet-sync",
+ "board-sync-protocol",
  "chrono",
+ "collaboration-mail-protocol",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-receiver",
+ "fleet-sync-writer",
  "hmac 0.12.1",
  "message-board",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
+ "sqlx-turso",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "turso_parser",
  "uuid",
 ]
 
@@ -3754,6 +4402,17 @@ name = "percent-encoding"
 version = "2.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+
+[[package]]
+name = "petgraph"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
+dependencies = [
+ "fixedbitset",
+ "hashbrown 0.15.5",
+ "indexmap 2.14.0",
+]
 
 [[package]]
 name = "phf"
@@ -4333,7 +4992,25 @@ dependencies = [
  "url",
  "wasm-bindgen",
  "wasm-bindgen-futures",
- "wasm-streams",
+ "wasm-streams 0.5.0",
+ "web-sys",
+]
+
+[[package]]
+name = "reqwest-websocket"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cd5f79b25f7f17a62cc9337108974431a66ae5a723ac0d9fe78ac1cce2027720"
+dependencies = [
+ "async-tungstenite",
+ "bytes",
+ "futures-util",
+ "reqwest 0.12.28",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tungstenite 0.27.0",
  "web-sys",
 ]
 
@@ -4407,6 +5084,20 @@ checksum = "1dedc5658c6ecb3bdb5ef5f3295bb9253f42dcf3fd1402c03f6b1f7659c3c4a9"
 dependencies = [
  "bytemuck",
  "byteorder",
+]
+
+[[package]]
+name = "runtime-primitives"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "chrono",
+ "futures-util",
+ "serde",
+ "thiserror 2.0.18",
+ "tokio",
+ "uuid",
+ "worker",
 ]
 
 [[package]]
@@ -4667,6 +5358,17 @@ dependencies = [
  "num-traits",
  "serde_core",
  "smallvec",
+]
+
+[[package]]
+name = "serde-wasm-bindgen"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8302e169f0eddcc139c70f139d19d6467353af16f9fce27e8c30158036a1e16b"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -5086,6 +5788,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "sqlx-durable-object"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "futures-core",
+ "futures-util",
+ "js-sys",
+ "log",
+ "sqlx-core",
+ "sqlx-durable-object-core",
+ "wasm-bindgen",
+ "worker",
+]
+
+[[package]]
+name = "sqlx-durable-object-core"
+version = "0.2.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
+dependencies = [
+ "js-sys",
+ "sqlx-core",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "sqlx-macros"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5209,22 +5936,18 @@ dependencies = [
 
 [[package]]
 name = "sqlx-turso"
-version = "0.1.103"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
 dependencies = [
- "chrono",
- "serde",
- "serde_json",
  "sqlx",
  "sqlx-turso-core",
  "sqlx-turso-macros",
- "tempfile",
- "tokio",
- "trybuild",
 ]
 
 [[package]]
 name = "sqlx-turso-core"
-version = "0.1.103"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
 dependencies = [
  "chrono",
  "either",
@@ -5233,21 +5956,19 @@ dependencies = [
  "log",
  "percent-encoding",
  "serde",
- "serde_json",
  "sqlx-core",
  "sqlx-macros-core",
- "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tracing",
- "tracing-subscriber",
  "turso",
+ "turso_parser",
  "url",
 ]
 
 [[package]]
 name = "sqlx-turso-macros"
-version = "0.1.103"
+version = "0.3.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -5431,12 +6152,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
-name = "target-triple"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "591ef38edfb78ca4771ee32cf494cb8771944bee237a9b91fc9c1424ac4b777b"
-
-[[package]]
 name = "tempfile"
 version = "3.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5447,15 +6162,6 @@ dependencies = [
  "once_cell",
  "rustix 1.1.4",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "termcolor"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06794f8f6c5c898b3275aebefa6b8a1cb24cd2c6c79397ab15774837a0bc5755"
-dependencies = [
- "winapi-util",
 ]
 
 [[package]]
@@ -5789,6 +6495,7 @@ dependencies = [
  "tokio",
  "tower-layer",
  "tower-service",
+ "tracing",
 ]
 
 [[package]]
@@ -5932,18 +6639,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
-name = "trybuild"
-version = "1.0.116"
+name = "tungstenite"
+version = "0.27.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47c635f0191bd3a2941013e5062667100969f8c4e9cd787c14f977265d73616e"
+checksum = "eadc29d668c91fcc564941132e17b28a7ceb2f3ebf0b9dae3e03fd7a6748eb0d"
 dependencies = [
- "glob",
- "serde",
- "serde_derive",
- "serde_json",
- "target-triple",
- "termcolor",
- "toml 1.1.2+spec-1.1.0",
+ "bytes",
+ "data-encoding",
+ "http",
+ "httparse",
+ "log",
+ "rand 0.9.4",
+ "sha1 0.10.6",
+ "thiserror 2.0.18",
+ "utf-8",
 ]
 
 [[package]]
@@ -6099,6 +6808,7 @@ dependencies = [
  "bitflags 2.13.0",
  "memchr",
  "miette",
+ "serde",
  "strum 0.26.3",
  "strum_macros 0.26.4",
  "thiserror 2.0.18",
@@ -6338,6 +7048,7 @@ checksum = "b5772d71c9be8a8a6ac2117d949c5b224c1b72241bb611d9a3012edcf8af7812"
 dependencies = [
  "getrandom 0.4.3",
  "js-sys",
+ "serde_core",
  "sha1_smol",
  "wasm-bindgen",
 ]
@@ -6411,9 +7122,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen"
-version = "0.2.126"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4b067c0c11094aef6b7a801c1e34a26affafdf3d051dba08456b868789aaf9a4"
+checksum = "9bb54f33acc68fd454578d9820b0bde1a1a3d17aa17bb7b6595806d02886d409"
 dependencies = [
  "cfg-if",
  "once_cell",
@@ -6424,19 +7135,20 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-futures"
-version = "0.4.76"
+version = "0.4.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c62df1340f32221cb9c54d6a27b030e3dba64361d4a95bed55f9aacb44da291d"
+checksum = "3cbab34de2d982e9b48e18d216d04c4a6f641066ff19ffb699980f591ee3610e"
 dependencies = [
  "js-sys",
+ "tokio",
  "wasm-bindgen",
 ]
 
 [[package]]
 name = "wasm-bindgen-macro"
-version = "0.2.126"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "167ce5e579f6bcf889c4f7175a8a5a585de84e8ff93976ce393efa5f2837aab1"
+checksum = "2e29d0c35b16e224a7eeb5cd2d25e3e1968fbd65604117b44d3b789d00ee8535"
 dependencies = [
  "quote",
  "wasm-bindgen-macro-support",
@@ -6444,22 +7156,22 @@ dependencies = [
 
 [[package]]
 name = "wasm-bindgen-macro-support"
-version = "0.2.126"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3997c7839262f4ef12cf90b818d6340c18e80f263f1a94bf157d0ec4420380e"
+checksum = "6f501a8bc3719dba86ef8ae4728879c08001bea749eb1333ac5b91e040e2a6b7"
 dependencies = [
  "bumpalo",
  "proc-macro2",
  "quote",
- "syn 2.0.118",
+ "syn 3.0.5",
  "wasm-bindgen-shared",
 ]
 
 [[package]]
 name = "wasm-bindgen-shared"
-version = "0.2.126"
+version = "0.2.129"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc1b4cb0cc549fcf58d7dfc081778139b3d283a081644e833e84682ad71cea24"
+checksum = "23f0c9c52aa7cd7d77769a4cfe2a9adb1b331f489a41d912ce14513d5ab995c6"
 dependencies = [
  "unicode-ident",
 ]
@@ -6478,10 +7190,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "web-sys"
-version = "0.3.103"
+name = "wasm-streams"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8622dcb61c0bcc9fffa6938bed81210af2da9a7e4a1a834b2e37a59b6dfb6141"
+checksum = "94ce9bdac782bbca70d6ac48a3ba18b873c848a706d6dc3bd9a03c1b96f04693"
+dependencies = [
+ "futures-util",
+ "js-sys",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
+name = "web-sys"
+version = "0.3.106"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "88261b9deccee56594c11a3460c462c41f58d148598fe70ad77070126a68aba4"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -6548,15 +7273,6 @@ name = "winapi-i686-pc-windows-gnu"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac3b87c63620426dd9b991e5ce0329eff545bccbbb34f3be09ff6fb6ab51b7b6"
-
-[[package]]
-name = "winapi-util"
-version = "0.1.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c2a7b1c03c876122aa43f3020e6c3c3ee5c05081c9a00739faf7503aeba10d22"
-dependencies = [
- "windows-sys 0.61.2",
-]
 
 [[package]]
 name = "winapi-x86_64-pc-windows-gnu"
@@ -6811,6 +7527,63 @@ name = "wit-bindgen"
 version = "0.57.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
+
+[[package]]
+name = "worker"
+version = "0.8.7"
+source = "git+https://github.com/cloudflare/workers-rs?rev=b171cb4bdd6fa943bb81f429df0a6b0df37e14b3#b171cb4bdd6fa943bb81f429df0a6b0df37e14b3"
+dependencies = [
+ "async-trait",
+ "axum",
+ "bytes",
+ "chrono",
+ "futures-channel",
+ "futures-util",
+ "http",
+ "http-body",
+ "js-sys",
+ "matchit 0.7.3",
+ "pin-project",
+ "serde",
+ "serde-wasm-bindgen",
+ "serde_json",
+ "serde_urlencoded",
+ "strum 0.28.0",
+ "tokio",
+ "url",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "wasm-streams 0.7.0",
+ "web-sys",
+ "worker-macros",
+ "worker-sys",
+]
+
+[[package]]
+name = "worker-macros"
+version = "0.8.7"
+source = "git+https://github.com/cloudflare/workers-rs?rev=b171cb4bdd6fa943bb81f429df0a6b0df37e14b3#b171cb4bdd6fa943bb81f429df0a6b0df37e14b3"
+dependencies = [
+ "async-trait",
+ "proc-macro2",
+ "quote",
+ "strum 0.28.0",
+ "syn 3.0.5",
+ "wasm-bindgen",
+ "wasm-bindgen-macro-support",
+ "worker-sys",
+]
+
+[[package]]
+name = "worker-sys"
+version = "0.8.7"
+source = "git+https://github.com/cloudflare/workers-rs?rev=b171cb4bdd6fa943bb81f429df0a6b0df37e14b3#b171cb4bdd6fa943bb81f429df0a6b0df37e14b3"
+dependencies = [
+ "cfg-if",
+ "js-sys",
+ "wasm-bindgen",
+ "web-sys",
+]
 
 [[package]]
 name = "write16"

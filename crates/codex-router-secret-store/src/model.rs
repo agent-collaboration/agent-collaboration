@@ -29,6 +29,10 @@ impl SecretKey {
 /// Secret-store operation error.
 #[derive(Debug, Error)]
 pub enum SecretStoreError {
+    #[error("invalid Fleet secret key: expected purpose, canonical installation and generation")]
+    InvalidFleetSecretKey,
+    #[error("Fleet secrets require encrypted storage or an explicitly declared debug root")]
+    FleetSecretRequiresEncryption,
     /// Plaintext pooled credentials require an explicit isolated debug declaration.
     #[error("debug plaintext credential storage is unavailable or undeclared")]
     DebugPlaintextUnavailable,

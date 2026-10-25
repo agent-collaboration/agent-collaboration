@@ -41,7 +41,13 @@ mod external_provider_supervisor;
 pub use external_provider_supervisor::{
     ExternalProviderBinding, ExternalProviderSupervisor, ProviderPromptContentsRequest,
 };
+mod fleet_enrollment_file;
 mod global_claude_executable;
+pub use fleet_enrollment_file::{
+    FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
+    FleetEnrollmentPublishError, load_fleet_enrollment, open_fleet_enrollment_store,
+    persist_fleet_enrollment, read_fleet_enrollment_document,
+};
 mod host_configuration;
 mod host_replacement_activation;
 mod host_singleton_authority;
@@ -99,7 +105,10 @@ pub use host_configuration::HostCoordinationPaths;
 pub use host_configuration::HostDeadlineError;
 pub use host_configuration::HostDeadlineInputs;
 pub use host_configuration::HostDeadlines;
+pub use host_configuration::router_collaboration_directory;
+pub use host_configuration::router_fleet_enrollment_file;
 pub use host_singleton_authority::HostInstance;
+pub use host_singleton_authority::HostInstanceLock;
 pub use host_singleton_authority::InstanceAcquireError;
 pub use host_singleton_authority::inherited_lock_environment;
 pub use host_singleton_authority::inherited_lock_marker;

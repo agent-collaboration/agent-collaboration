@@ -59,19 +59,22 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
         "delivery":"auto",
         "generationGuard":null
     }))?;
+    let anchor_ms = chrono::Utc::now().timestamp_millis() - 5_000;
     let wake = automation
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: collaboration_protocol::OperationId::generate(),
             message: saved_message,
             timing: TimingRule::After { seconds: 1 },
             expiry: ExpiryRule::None,
-            now_ms: 1000,
+            now_ms: anchor_ms,
         })
         .await?;
     let fire = match automation
         .evaluate_wakeup::<collaboration_protocol::SavedMessage>(
             &wake.definition.wakeup_id,
-            5000,
+            anchor_ms + 5000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?
@@ -83,7 +86,19 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id,
     };
-    let stored_push = automation
+    let automation = Arc::new(tokio::sync::Mutex::new(automation));
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
+    );
+    let mut handoff = collaboration_service::PushHandoffWorker::new(
+        Arc::clone(&automation),
+        Arc::clone(&interactions),
+    );
+    if handoff.apply_pending().await? != 1 {
+        return Err("wake firing did not hand off exactly one owed push".into());
+    }
+    drop(handoff);
+    let stored_push = interactions
         .get_push_record_by_origin_reference(&origin)
         .await?
         .ok_or("fired wake did not persist its push record")?;
@@ -247,7 +262,8 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
             },
             observed_evidence.as_ref(),
         )
-        .await?;
+        .await?
+        .into_receipt();
     if receipt.outcome != DeliveryOutcome::StartedOrSteered
         || receipt.reachability != Some(collaboration_protocol::SessionReachability::CodexAppServer)
         || !matches!(
@@ -283,6 +299,14 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
         }
     }
     server.await??;
-    automation.close().await?;
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "wake interaction owner remained shared after delivery")?
+        .close()
+        .await?;
+    Arc::try_unwrap(automation)
+        .map_err(|_| "wake automation owner remained shared after delivery")?
+        .into_inner()
+        .close()
+        .await?;
     Ok(())
 }

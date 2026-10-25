@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO cached_fleet_records(kind,id,payload) SELECT kind,id,payload FROM fleet_cache_rebuild_records",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "1f2caf21060f4bd866ede0a182cfd485db244b3373e95ab30111c4e0dd81d7d2"
+}

@@ -1,5 +1,6 @@
 use agent_automation::{DurableMessage, FirstFire, WakeRecord};
-use automation_storage::{PushRecordDraft, StorageError};
+use automation_storage::StorageError;
+use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
     EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, RouterOriginRef,
     SessionId, SessionRef, UuidIdentity,
@@ -7,7 +8,7 @@ use collaboration_protocol::{
 use serde_json::Value;
 
 pub(super) fn build_test_wake_push_draft<TMessage: DurableMessage>(
-    wake: &WakeRecord<TMessage>,
+    wake: &WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {

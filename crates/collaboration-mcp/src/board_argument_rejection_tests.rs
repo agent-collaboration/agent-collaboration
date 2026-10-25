@@ -31,21 +31,21 @@ async fn malformed_board_arguments_are_typed_rejections_without_echo() {
     let cases = [
         // The wait tool decodes its own arguments; it classifies them like the others.
         (
-            "board_thread_wait",
+            "thread_wait",
             json!({"filter":{"kind":"all"},"maxWaitSeconds":5}),
             "invalidIdentity",
             "actor",
             "4096",
         ),
         (
-            "board_thread_wait",
+            "thread_wait",
             json!({"actor":{"kind":"futureSecret","private":PRIVATE_VALUE},"filter":{"kind":"all"},"maxWaitSeconds":5}),
             "invalidIdentity",
             "actor",
             "4096",
         ),
         (
-            "board_project_show",
+            "project_show",
             json!({"projectId":"018f1f12-3456-7abc-8def-0123456789ab","privateField":PRIVATE_VALUE}),
             "invalidField",
             "request",

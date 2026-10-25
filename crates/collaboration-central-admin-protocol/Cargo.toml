@@ -1,0 +1,20 @@
+[package]
+name = "collaboration-central-admin-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+fleet-sync-protocol.workspace = true
+message-board = { version = "0.1.96", path = "../message-board" }
+fleet-admission = { version = "0.1.96", path = "../fleet-admission" }
+board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
+chrono = { version = "=0.4.45", default-features = false, features = ["std", "serde"] }
+
+[dev-dependencies]
+serde_json.workspace = true

@@ -55,6 +55,8 @@ async fn unknown_resume_effect_is_retained_even_when_input_was_not_dispatched()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),

@@ -1,0 +1,38 @@
+[package]
+name = "interaction-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+runtime-test-support = []
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono.workspace = true
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.96" }
+durable-steps = { workspace = true, features = ["turso"] }
+fleet-sync-delivery.workspace = true
+fleet-sync-protocol.workspace = true
+message-board = { path = "../message-board", version = "0.1.96" }
+serde.workspace = true
+serde_json.workspace = true
+session-event-model = { path = "../session-event-model", version = "0.1.96" }
+sqlx = { workspace = true, features = ["macros", "migrate"] }
+sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0" }
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+automation-storage = { path = "../automation-storage", version = "0.1.96" }
+agent-automation = { path = "../agent-automation", version = "0.1.96" }
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+runtime-primitives.workspace = true
+tempfile = "3.27.0"
+sqlx = { workspace = true, features = ["sqlite"] }

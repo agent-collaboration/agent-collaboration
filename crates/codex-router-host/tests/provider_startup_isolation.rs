@@ -11,6 +11,7 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path};
 
 fn runtime_inputs(directory: &Path) -> CollaborationRuntimeInputs {
     CollaborationRuntimeInputs {
+        board_session: None,
         directory: directory.to_owned(),
         codex_home: directory.to_owned(),
         backend_socket: directory.join("backend.sock"),

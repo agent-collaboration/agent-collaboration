@@ -17,10 +17,8 @@ use tokio::net::UnixListener;
 
 use crate::HostCoordinationPaths;
 
-/// Exclusive host instance and its private operator listener.
-pub struct HostInstance {
-    listener: UnixListener,
-    socket_path: PathBuf,
+/// Holds Host singleton authority without removing or binding its operator socket.
+pub struct HostInstanceLock {
     lock_file: File,
 }
 
@@ -43,9 +41,11 @@ impl HostInstance {
         }
         Ok(())
     }
+}
 
-    /// Acquires singleton authority before removing or binding the socket.
-    pub fn acquire(paths: HostCoordinationPaths) -> Result<Self, InstanceAcquireError> {
+impl HostInstanceLock {
+    /// Acquires the same nonblocking lock used by the running Host.
+    pub fn acquire(paths: &HostCoordinationPaths) -> Result<Self, InstanceAcquireError> {
         let lock_file = OpenOptions::new()
             .create(true)
             .read(true)
@@ -65,7 +65,22 @@ impl HostInstance {
             .set_permissions(Permissions::from_mode(0o600))
             .map_err(InstanceAcquireError::SetLockPermissions)?;
 
-        Self::bind_with_lock(paths, lock_file)
+        Ok(Self { lock_file })
+    }
+}
+
+/// Exclusive host instance and its private operator listener.
+pub struct HostInstance {
+    listener: UnixListener,
+    socket_path: PathBuf,
+    lock_file: File,
+}
+
+impl HostInstance {
+    /// Acquires singleton authority before removing or binding the socket.
+    pub fn acquire(paths: HostCoordinationPaths) -> Result<Self, InstanceAcquireError> {
+        let authority = HostInstanceLock::acquire(&paths)?;
+        Self::bind_with_lock(paths, authority.lock_file)
     }
 
     /// Consumes the continuously held descriptor inherited through stdin.

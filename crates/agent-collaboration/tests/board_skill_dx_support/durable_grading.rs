@@ -6,14 +6,14 @@ use crate::proof_context::{ProofContext, ProofResult};
 use collaboration_client::board::*;
 
 pub(super) struct NamedResources {
-    pub primary_project: Project,
+    pub primary_workspace: Workspace,
     pub primary_board: Board,
-    pub primary_topic: Topic,
+    pub primary_project: ProjectDirectoryEntry,
 }
 
 pub(super) struct DiscussionResources {
-    pub primary_root: MessageId,
-    pub cross_project_reply: MessageId,
+    pub primary_root: PostId,
+    pub cross_project_reply: PostId,
 }
 
 pub(super) async fn discover_named_resources(
@@ -21,7 +21,7 @@ pub(super) async fn discover_named_resources(
 ) -> ProofResult<NamedResources> {
     let projects = proof
         .client
-        .board_project_list(ProjectListRequest {
+        .workspace_list(WorkspaceListRequest {
             repository: Some(RepositoryRef::Origin {
                 normalized_origin: NormalizedOrigin::try_from(REPOSITORY_ORIGIN.to_owned())?,
             }),
@@ -30,14 +30,14 @@ pub(super) async fn discover_named_resources(
         .await?
         .page
         .records;
-    let primary_project = projects
+    let primary_workspace = projects
         .into_iter()
         .find(|project| project.name.as_str() == PRIMARY_PROJECT)
         .ok_or("setup operator did not create/discover the authorized primary project")?;
     let boards = proof
         .client
         .board_list(BoardListRequest {
-            project_id: Some(primary_project.project_id.clone()),
+            workspace_id: Some(primary_workspace.workspace_id.clone()),
             include_archived: true,
             page: PageRequest::default(),
         })
@@ -50,21 +50,21 @@ pub(super) async fn discover_named_resources(
         .ok_or("setup operator did not create the authorized primary board")?;
     let topics = proof
         .client
-        .board_topic_list(TopicListRequest {
+        .project_list(ProjectListRequest {
             board_id: primary_board.board_id.clone(),
             page: PageRequest::default(),
         })
         .await?
         .page
         .records;
-    let primary_topic = topics
+    let primary_project = topics
         .into_iter()
-        .find(|topic| topic.name.as_str() == PRIMARY_TOPIC)
+        .find(|topic| topic.title.as_str() == PRIMARY_TOPIC)
         .ok_or("setup operator did not create the authorized primary topic")?;
     Ok(NamedResources {
-        primary_project,
+        primary_workspace,
         primary_board,
-        primary_topic,
+        primary_project,
     })
 }
 
@@ -75,11 +75,11 @@ pub(super) async fn grade_discussion(
 ) -> ProofResult<DiscussionResources> {
     let primary_messages = proof
         .client
-        .board_message_list(MessageListRequest {
-            scope: MessageListScope::Topic {
-                topic_id: resources.primary_topic.topic_id.clone(),
+        .post_list(PostListRequest {
+            scope: PostListScope::Project {
+                project_id: resources.primary_project.id.clone(),
             },
-            selection: MessageSelection::Latest,
+            selection: PostSelection::Latest,
             page: PageRequest::default(),
         })
         .await?
@@ -94,7 +94,7 @@ pub(super) async fn grade_discussion(
         .ok_or("discussion operator did not create the primary Migration readiness root")?;
     let projects = proof
         .client
-        .board_project_list(ProjectListRequest {
+        .workspace_list(WorkspaceListRequest {
             repository: None,
             page: PageRequest {
                 limit: PageLimit::try_from(100)?,
@@ -111,7 +111,7 @@ pub(super) async fn grade_discussion(
     let secondary_board = proof
         .client
         .board_list(BoardListRequest {
-            project_id: Some(secondary.project_id),
+            workspace_id: Some(secondary.workspace_id),
             include_archived: true,
             page: PageRequest::default(),
         })
@@ -123,11 +123,11 @@ pub(super) async fn grade_discussion(
         .ok_or("secondary project has no board")?;
     let secondary_messages = proof
         .client
-        .board_message_list(MessageListRequest {
-            scope: MessageListScope::Board {
+        .post_list(PostListRequest {
+            scope: PostListScope::Board {
                 board_id: secondary_board.board_id,
             },
-            selection: MessageSelection::Latest,
+            selection: PostSelection::Latest,
             page: PageRequest {
                 limit: PageLimit::try_from(100)?,
                 cursor: None,
@@ -144,14 +144,17 @@ pub(super) async fn grade_discussion(
             && message.acting_for == Some(owner.clone())
             && matches!(message.placement, Placement::Thread { .. })
             && message.text.as_str().contains("42")
-            && message.references.iter().any(|reference| reference == &ReferenceTarget::Message { message_id: primary_root.message_id.clone() })
-            && message.references.iter().any(|reference| reference == &ReferenceTarget::Thread { root_message_id: primary_root.message_id.clone() })
+            && message.references.iter().any(|reference| reference == &ReferenceTarget::Post { post_id: primary_root.post_id.clone() })
+            && message.references.iter().any(|reference| reference == &ReferenceTarget::Thread { thread_id: primary_root.post_id.clone().into() })
     }).ok_or("cross-project reply had wrong actor, acting-for, placement, references, or fixture result")?;
     let watch = proof
         .client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: reply.placement.clone().thread_root()?,
-            reader: Some(discussion_identity.clone()),
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: (reply.placement.clone().thread_root()?).into(),
+            reader: ReadActor::Identified {
+                reader: discussion_identity.clone(),
+            },
         })
         .await?;
     if watch.watch_status.is_none_or(|status| !status.watching) {
@@ -160,8 +163,8 @@ pub(super) async fn grade_discussion(
         );
     }
     Ok(DiscussionResources {
-        primary_root: primary_root.message_id,
-        cross_project_reply: reply.message_id,
+        primary_root: primary_root.post_id,
+        cross_project_reply: reply.post_id,
     })
 }
 
@@ -173,9 +176,12 @@ pub(super) async fn grade_inbox(
 ) -> ProofResult<()> {
     let watch = proof
         .client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: discussions.primary_root.clone(),
-            reader: Some(inbox_identity.clone()),
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
+            reader: ReadActor::Identified {
+                reader: inbox_identity.clone(),
+            },
         })
         .await?;
     if watch.watch_status.is_none_or(|status| !status.watching) {
@@ -183,14 +189,17 @@ pub(super) async fn grade_inbox(
     }
     let inbox = proof
         .client
-        .board_inbox_fetch(InboxFetchRequest {
-            scope: InboxScope::Project {
-                project_id: resources.primary_project.project_id.clone(),
+        .inbox_fetch(InboxFetchRequest::new(InboxFetchRequestProps {
+            protocol_version: ProtocolVersion::CURRENT,
+            acting_for: None,
+            initializations: Vec::new(),
+            scope: InboxScope::Workspace {
+                workspace_id: resources.primary_workspace.workspace_id.clone(),
             },
             read_mode: InboxReadMode::Unread,
             reader: inbox_identity.clone(),
             page: PageRequest::default(),
-        })
+        })?)
         .await?;
     if !inbox.page.records.is_empty() {
         return Err("inbox operator left seeded watched-thread activity unacknowledged".into());
@@ -206,8 +215,8 @@ pub(super) async fn grade_participant_process(
 ) -> ProofResult<()> {
     let participants = proof
         .client
-        .board_thread_participant_list(ThreadParticipantListRequest {
-            root_message_id: discussions.primary_root.clone(),
+        .thread_participant_list(ThreadParticipantListRequest {
+            thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
             page: PageRequest::default(),
         })
         .await?;
@@ -217,7 +226,8 @@ pub(super) async fn grade_participant_process(
         .iter()
         .find(|participant| participant.identity == *creator_identity)
         .ok_or("Thread creator was not recorded as a Participant")?;
-    if creator.role != ParticipantRole::Orchestrator
+    if creator.role
+        != message_board::RecordedParticipantRole::Recorded(ParticipantRole::Orchestrator)
         || creator.closed_reason != Some(ParticipantClosedReason::Replaced)
         || creator.replaced_by.as_ref() != Some(successor_identity)
     {
@@ -229,7 +239,10 @@ pub(super) async fn grade_participant_process(
         .iter()
         .find(|participant| participant.identity == *successor_identity)
         .ok_or("corrected Join did not create the successor Participant")?;
-    if successor.role != ParticipantRole::Orchestrator || !successor.is_open() {
+    if successor.role
+        != message_board::RecordedParticipantRole::Recorded(ParticipantRole::Orchestrator)
+        || !successor.is_open()
+    {
         return Err(
             "handover did not promote the corrected Join participant to open Orchestrator".into(),
         );
@@ -246,9 +259,12 @@ pub(super) async fn grade_participant_process(
     }
     let thread = proof
         .client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: discussions.primary_root.clone(),
-            reader: Some(successor_identity.clone()),
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
+            reader: ReadActor::Identified {
+                reader: successor_identity.clone(),
+            },
         })
         .await?;
     if thread
@@ -267,11 +283,11 @@ pub(super) async fn grade_participant_process(
     }
     let messages = proof
         .client
-        .board_message_list(MessageListRequest {
-            scope: MessageListScope::Thread {
-                root_message_id: discussions.primary_root.clone(),
+        .post_list(PostListRequest {
+            scope: PostListScope::Thread {
+                thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
             },
-            selection: MessageSelection::Latest,
+            selection: PostSelection::Latest,
             page: PageRequest::default(),
         })
         .await?
@@ -302,8 +318,8 @@ pub(super) async fn grade_lifecycle(
     }
     let repositories = proof
         .client
-        .board_repository_list(RepositoryListRequest {
-            project_id: resources.primary_project.project_id.clone(),
+        .repository_list(RepositoryListRequest {
+            workspace_id: resources.primary_workspace.workspace_id.clone(),
             page: PageRequest::default(),
         })
         .await?
@@ -314,35 +330,36 @@ pub(super) async fn grade_lifecycle(
     }
     let thread = proof
         .client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: discussions.primary_root.clone(),
-            reader: None,
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
+            reader: ReadActor::Anonymous {},
         })
         .await?
         .thread;
-    if thread.state != ThreadState::Unresolved {
+    if thread.state != ThreadState::Open {
         return Err(
             "lifecycle operator did not restore the thread to unresolved before archive".into(),
         );
     }
     proof
         .client
-        .board_message_show(MessageShowRequest {
-            message_id: discussions.primary_root.clone(),
+        .post_show(PostShowRequest {
+            post_id: discussions.primary_root.clone(),
         })
         .await?;
     Ok(())
 }
 
 trait PlacementThreadRoot {
-    fn thread_root(self) -> ProofResult<MessageId>;
+    fn thread_root(self) -> ProofResult<ThreadId>;
 }
 
 impl PlacementThreadRoot for Placement {
-    fn thread_root(self) -> ProofResult<MessageId> {
+    fn thread_root(self) -> ProofResult<ThreadId> {
         match self {
-            Placement::Thread { root_message_id } => Ok(root_message_id),
-            Placement::Topic { .. } => Err("expected thread placement".into()),
+            Placement::Thread { thread_id } => Ok(thread_id),
+            Placement::Project { .. } => Err("expected thread placement".into()),
         }
     }
 }

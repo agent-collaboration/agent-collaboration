@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "WITH selection AS (SELECT ? AS subject), selected AS (\n SELECT json_extract(subject,'$.kind') AS kind,json_extract(subject,'$.subject') AS id,\n CASE json_extract(subject,'$.kind') WHEN 'workstream' THEN json_extract(subject,'$.subject') WHEN 'task' THEN (SELECT workstream_id FROM tasks WHERE task_id=json_extract(subject,'$.subject')) END AS workstream FROM selection)\nSELECT i.intent_id AS \"id!: String\" FROM notify_intents i CROSS JOIN selected s\nLEFT JOIN role_assignments cause_role ON cause_role.assignment_id=i.cause_id\nLEFT JOIN work_trail_rows cause_trail ON cause_trail.row_id=i.cause_id\nLEFT JOIN posts cause_post ON cause_post.post_id=i.cause_id\nLEFT JOIN threads thread ON thread.thread_id=cause_post.thread_id\nLEFT JOIN work_trail_rows about_trail ON about_trail.row_id=CAST(json_extract(thread.about,'$.subject') AS TEXT)\nWHERE i.intent_id>? AND (\n s.kind='project' OR i.cause_kind=s.kind AND i.cause_id=s.id\n OR (json_extract(CASE json_extract(i.recipient,'$.kind') WHEN 'resolved' THEN json_extract(i.recipient,'$.recipient.viaRole.subject') ELSE json_extract(i.recipient,'$.recipient.subject') END,'$.kind')='workstream' AND json_extract(CASE json_extract(i.recipient,'$.kind') WHEN 'resolved' THEN json_extract(i.recipient,'$.recipient.viaRole.subject') ELSE json_extract(i.recipient,'$.recipient.subject') END,'$.subject')=s.workstream)\n OR i.cause_kind='roleAssignment' AND cause_role.workstream_subject=s.workstream\n OR i.cause_kind='workTrailRow' AND (json_extract(cause_trail.subject,'$.kind')=s.kind AND json_extract(cause_trail.subject,'$.subject')=s.id OR s.kind='workstream' AND json_extract(cause_trail.subject,'$.kind')='task' AND EXISTS(SELECT 1 FROM tasks task WHERE task.task_id=json_extract(cause_trail.subject,'$.subject') AND task.workstream_id=s.id))\n OR i.cause_kind='post' AND ((json_extract(thread.about,'$.kind')=s.kind AND json_extract(thread.about,'$.subject')=s.id\n OR s.kind='workstream' AND json_extract(thread.about,'$.kind')='task' AND EXISTS(SELECT 1 FROM tasks task WHERE task.task_id=json_extract(thread.about,'$.subject') AND task.workstream_id=s.id))\n OR json_extract(thread.about,'$.kind')='workTrailRow' AND (json_extract(about_trail.subject,'$.kind')=s.kind AND json_extract(about_trail.subject,'$.subject')=s.id OR s.kind='workstream' AND json_extract(about_trail.subject,'$.kind')='task' AND EXISTS(SELECT 1 FROM tasks task WHERE task.task_id=json_extract(about_trail.subject,'$.subject') AND task.workstream_id=s.id))))\nORDER BY i.intent_id LIMIT 101\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "cc547faf10ac9a8912b0f528864c006a3172b05f899582c591c0294654a24570"
+}

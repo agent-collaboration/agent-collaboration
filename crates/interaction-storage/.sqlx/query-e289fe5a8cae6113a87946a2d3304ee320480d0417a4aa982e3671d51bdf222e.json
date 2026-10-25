@@ -1,0 +1,60 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT request_id AS \"request_id!: String\", record_json AS \"record_json!: String\", created_at AS \"created_at!: String\", typeof(request_id) AS \"request_storage!: String\", typeof(record_json) AS \"record_storage!: String\", typeof(created_at) AS \"timestamp_storage!: String\" FROM typed_interaction_history ORDER BY request_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "record_json!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "created_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "request_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "record_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "timestamp_storage!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e289fe5a8cae6113a87946a2d3304ee320480d0417a4aa982e3671d51bdf222e"
+}

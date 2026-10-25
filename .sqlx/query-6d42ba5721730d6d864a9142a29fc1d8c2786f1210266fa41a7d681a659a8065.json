@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT target_json,snapshot_json as \"snapshot_json!\" FROM remote_wake_requests WHERE wakeup_id=?",
+  "describe": {
+    "columns": [
+      {
+        "name": "target_json",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "target_json"
+          }
+        }
+      },
+      {
+        "name": "snapshot_json!",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "remote_wake_requests",
+            "name": "snapshot_json"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "6d42ba5721730d6d864a9142a29fc1d8c2786f1210266fa41a7d681a659a8065"
+}

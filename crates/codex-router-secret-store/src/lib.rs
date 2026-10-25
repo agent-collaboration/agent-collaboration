@@ -9,6 +9,7 @@ pub mod credential_migration;
 pub mod credential_store_lock;
 pub mod encrypted_credential_store;
 pub mod file_backend;
+pub mod fleet_secret_key;
 pub mod keychain_data_key;
 pub mod local_router_token;
 pub mod model;
@@ -20,6 +21,9 @@ pub mod test_support;
 
 #[cfg(test)]
 mod encrypted_credential_store_tests;
+
+#[cfg(test)]
+mod fleet_secret_tests;
 
 #[cfg(test)]
 mod credential_migration_tests;

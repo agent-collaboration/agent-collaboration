@@ -1,0 +1,84 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT p.delivery_state AS \"state!: String\",p.header_facts_json AS \"header!: String\",p.target_service_id AS \"service!: String\",p.target_endpoint_id AS \"endpoint!: String\",p.target_session_id AS \"session!: String\",p.last_outcome_json,p.last_outcome_at,p.last_route_evidence_json,r.scheduled_retry_at FROM router_pushes p LEFT JOIN local_delivery_retries r ON r.item_id=p.push_id WHERE p.push_id=? AND p.retention='mailTerminalAge'",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "state!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "header!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "service!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "endpoint!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "session!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "last_outcome_json",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "last_outcome_at",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_route_evidence_json",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "scheduled_retry_at",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "29f37106401fc4e313e7b66290a82310d9170813035ef4784648489b769ecef7"
+}
