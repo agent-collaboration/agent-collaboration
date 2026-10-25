@@ -42,6 +42,7 @@ async fn scoped_read_cost_excludes_real_concurrent_sql_and_separates_observation
         "negative control did not execute real unrelated SQL"
     );
     assert_eq!(first.cost().statements, 2);
+    assert_eq!(first.statement_kinds().len(), 2);
     assert!(first.statements().iter().all(|sql| !sql.contains("991")));
     let second = ReadCostObservation::default();
     second.observe(measured.execute("SELECT 3")).await?;

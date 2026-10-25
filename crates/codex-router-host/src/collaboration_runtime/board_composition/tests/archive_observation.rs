@@ -10,7 +10,10 @@ async fn observed_fact(
     store: &collaboration_service::NativeProjectStore,
     board: &BoardId,
 ) -> ArchiveResult<Fact> {
-    timeout(BOUND, async {
+    // FL-6 permits a missed/coalesced hint. Allow PD3's connected Fleet repair
+    // interval plus the ordinary operation bound without prompting the producer.
+    let observation_bound = super::super::machine_session::FLEET_REFRESH_PERIOD + BOUND;
+    timeout(observation_bound, async {
         loop {
             let mut read = store.snapshot().await?;
             let facts = read.records(RecordKind::Fact).await?;
@@ -105,7 +108,8 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
             message_board::public_replies::RequestDecision::Accepted { .. }
         )
     ));
-    // Only the real hint path may produce this first fact; a test call cannot conceal missing wiring.
+    // Only the real hint or periodic repair may produce this fact; a test call
+    // cannot conceal missing automated producer wiring.
     let fact = observed_fact(&store, &board).await?;
     assert_eq!(
         serde_json::to_value(&fact.envelope.actor)?,

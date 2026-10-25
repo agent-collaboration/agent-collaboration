@@ -8,6 +8,71 @@ use turso_parser::{ast::Cmd, parser::Parser};
 pub struct StatementTables(BTreeSet<String>);
 
 impl StatementTables {
+    /// Diagnostics expose only fixed operation and schema labels, never SQL values or names.
+    pub fn diagnostic_kind(statement: &str) -> String {
+        use turso_parser::ast::Stmt;
+        let mut parser = Parser::new(statement.as_bytes());
+        let Ok(Some(command)) = parser.next_cmd() else {
+            return "unparsed".to_owned();
+        };
+        let (Cmd::Stmt(statement)
+        | Cmd::Explain(statement)
+        | Cmd::ExplainQueryPlan {
+            stmt: statement, ..
+        }) = command;
+        let operation = match &statement {
+            Stmt::Select(_) => "select",
+            Stmt::Insert { .. } => "insert",
+            Stmt::Update(_) => "update",
+            Stmt::Delete { .. } => "delete",
+            Stmt::Begin { .. } => "begin",
+            Stmt::Commit { .. } => "commit",
+            Stmt::Rollback { .. } => "rollback",
+            _ => "other",
+        };
+        let mut tables = Self::default();
+        if let Ok(node) = serde_json::to_value(statement) {
+            tables.collect(&node);
+        }
+        let known = [
+            "actors",
+            "board_intent_progress",
+            "board_intent_scan_cursors",
+            "cached_fleet_records",
+            "epoch_lines",
+            "facts",
+            "fleet_cache_checkpoint",
+            "fleet_records",
+            "handoff_frontier",
+            "mail_cancel_expansions",
+            "mail_handoffs",
+            "notify_intents",
+            "posts",
+            "project_feed",
+            "project_state",
+            "request_decisions",
+            "router_pushes",
+            "sqlite_master",
+            "sqlite_schema",
+            "subscription_delivery_progress",
+            "subscription_memberships",
+            "thread_watches",
+            "workstreams",
+        ];
+        let labels: Vec<_> = tables
+            .0
+            .iter()
+            .map(|table| {
+                known
+                    .iter()
+                    .copied()
+                    .find(|known| table == known)
+                    .unwrap_or("other-table")
+            })
+            .collect();
+        format!("{operation} {labels:?}")
+    }
+
     pub fn parse(statement: &str) -> Option<Self> {
         let mut parser = Parser::new(statement.as_bytes());
         let mut tables = Self::default();

@@ -4,6 +4,32 @@ mod sql_cost_classification;
 use sql_cost_classification::StatementTables;
 
 #[test]
+fn diagnostic_kinds_never_expose_values_or_unrecognized_identifiers() {
+    assert_eq!(
+        StatementTables::diagnostic_kind("SELECT 'private-value' FROM posts"),
+        "select [\"posts\"]"
+    );
+    assert_eq!(
+        StatementTables::diagnostic_kind(
+            "SELECT ? FROM subscription_memberships WHERE reader_actor='private-reader'"
+        ),
+        "select [\"subscription_memberships\"]"
+    );
+    assert_eq!(
+        StatementTables::diagnostic_kind("BEGIN TRANSACTION private_name"),
+        "begin []"
+    );
+    assert_eq!(
+        StatementTables::diagnostic_kind("SELECT 'private-value' FROM private_table"),
+        "select [\"other-table\"]"
+    );
+    assert_eq!(
+        StatementTables::diagnostic_kind("private invalid SQL"),
+        "unparsed"
+    );
+}
+
+#[test]
 fn only_library_tables_are_excluded_despite_quoting_literals_and_comments() {
     for statement in [
         "SELECT COUNT(*) FROM _fleet_sync_steps",

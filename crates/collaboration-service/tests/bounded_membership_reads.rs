@@ -15,6 +15,7 @@ struct MembershipScopeCost {
     unrelated_write_statements: u64,
     written_project_statements: u64,
     unrelated_reader_probes: Vec<u64>,
+    statement_kinds: Vec<String>,
 }
 async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestError> {
     let fixture = BoardFixture::start().await?;
@@ -79,6 +80,7 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
         })
         .await?;
     let write_cost = observation.cost();
+    let statement_kinds = observation.statement_kinds();
     let unrelated_write_statements = others
         .iter()
         .map(|project| observation.project_statements(project.as_str()))
@@ -125,6 +127,7 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
         unrelated_write_statements,
         written_project_statements,
         unrelated_reader_probes,
+        statement_kinds,
     })
 }
 #[tokio::test]
@@ -135,6 +138,13 @@ async fn writes_reconcile_only_their_project_and_reader_wide_reads_probe_once()
     let small = scope_cost(1).await?;
     let large = scope_cost(8).await?;
     eprintln!("membership scope costs: small={small:?}, large={large:?}");
+    if small.write_cost != large.write_cost {
+        for (scope, cost) in [("small", &small), ("large", &large)] {
+            for (index, kind) in cost.statement_kinds.iter().enumerate() {
+                eprintln!("{scope} statement {index}: {kind}");
+            }
+        }
+    }
     assert_eq!(
         small.write_cost, large.write_cost,
         "other projects changed the write cost"

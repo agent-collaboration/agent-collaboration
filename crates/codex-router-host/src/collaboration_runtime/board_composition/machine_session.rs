@@ -35,6 +35,7 @@ const SESSION_CALL_TIMEOUT: Duration = Duration::from_secs(30);
 const SESSION_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 const MAIL_RECEIVE_INTERVAL: Duration = Duration::from_secs(5 * 60);
 const MAIL_STATUS_INTERVAL: Duration = Duration::from_secs(10 * 60);
+pub(super) const FLEET_REFRESH_PERIOD: Duration = Duration::from_secs(60);
 
 fn mail_status_interval() -> Duration {
     #[cfg(feature = "runtime-test-support")]
@@ -271,9 +272,10 @@ async fn run_events(
     mut stopped: watch::Receiver<bool>,
 ) -> io::Result<()> {
     let mut handlers = JoinSet::new();
-    let refresh_period = Duration::from_secs(60);
-    let mut refresh =
-        tokio::time::interval_at(tokio::time::Instant::now() + refresh_period, refresh_period);
+    let mut refresh = tokio::time::interval_at(
+        tokio::time::Instant::now() + FLEET_REFRESH_PERIOD,
+        FLEET_REFRESH_PERIOD,
+    );
     refresh.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut deferred_notices = Vec::new();
     let mut receipts = NoticeReceipts::default();

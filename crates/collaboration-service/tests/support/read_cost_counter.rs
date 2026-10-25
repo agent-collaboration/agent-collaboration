@@ -95,19 +95,6 @@ fn only_library_bookkeeping(statement: &str) -> bool {
 pub fn observed_statements() -> Vec<String> {
     counter().lock().unwrap().statements.clone()
 }
-struct StatementField(String);
-impl Visit for StatementField {
-    fn record_str(&mut self, field: &Field, value: &str) {
-        if field.name() == "db.statement" {
-            self.0 = value.to_owned();
-        }
-    }
-    fn record_debug(&mut self, field: &Field, value: &dyn std::fmt::Debug) {
-        if field.name() == "db.statement" {
-            self.0 = format!("{value:?}");
-        }
-    }
-}
 struct DecodeKind(String);
 impl Visit for DecodeKind {
     fn record_str(&mut self, field: &Field, value: &str) {
@@ -179,6 +166,12 @@ impl ReadCostObservation {
     pub fn statements(&self) -> Vec<String> {
         self.0.lock().unwrap().statements.clone()
     }
+    pub fn statement_kinds(&self) -> Vec<String> {
+        self.statements()
+            .iter()
+            .map(|statement| StatementTables::diagnostic_kind(statement))
+            .collect()
+    }
     pub async fn observe<F: std::future::Future>(&self, operation: F) -> F::Output {
         let subscriber = tracing_subscriber::registry().with(ReadCostLayer(Some(self.clone())));
         operation.with_subscriber(subscriber).await
@@ -243,11 +236,7 @@ where
                     state.cost.core_feed_input_bodies += query.rows_returned;
                 }
                 state.cost.statements += 1;
-                let mut statement = StatementField(String::new());
-                event.record(&mut statement);
-                if !statement.0.is_empty() {
-                    state.statements.push(statement.0);
-                }
+                state.statements.push(statement.to_owned());
                 if let Some(project) = context.event_scope(event).and_then(|mut scope| {
                     scope.find_map(|span| {
                         span.extensions()
