@@ -322,13 +322,13 @@ fn acp_adapter_binding_is_the_install_the_host_actually_runs() {
     )
     .unwrap();
     assert_eq!(
-        process_running_from(&npx_root, &host_closure, &arguments),
+        process_running_from(&npx_root, 10, &host_closure, &arguments),
         Some(12)
     );
     // A same-version copy elsewhere is not what the Host runs.
     let pnpm_root = adapter_install_root(pnpm).unwrap();
     assert_eq!(
-        process_running_from(&pnpm_root, &host_closure, &arguments),
+        process_running_from(&pnpm_root, 10, &host_closure, &arguments),
         None
     );
     // A matching process outside the Host's descendants (PID 20) never binds it.
@@ -337,7 +337,7 @@ fn acp_adapter_binding_is_the_install_the_host_actually_runs() {
     )
     .unwrap();
     assert_eq!(
-        process_running_from(&npx_root, &host_closure, &only_outside),
+        process_running_from(&npx_root, 10, &host_closure, &only_outside),
         None
     );
     // A different cache entry sharing a name prefix does not match.
@@ -346,10 +346,45 @@ fn acp_adapter_binding_is_the_install_the_host_actually_runs() {
     )
     .unwrap();
     assert_eq!(
-        process_running_from(&npx_root, &host_closure, &prefix),
+        process_running_from(&npx_root, 10, &host_closure, &prefix),
         None
     );
     assert!(parse_process_arguments("node without pid\n").is_err());
+}
+
+#[test]
+fn the_host_root_naming_its_configured_adapter_is_never_the_adapter_descendant() {
+    let npx_root = adapter_install_root(Path::new(
+        "/home/u/.npm/_npx/698eb38f/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js",
+    ))
+    .unwrap();
+    let row = |pid: u32, parent: u32| {
+        format!("{pid} {parent} 501 {pid} Sat Oct 24 10:00:00 2026 /usr/local/bin/node")
+    };
+    let table = parse_process_table(&[row(10, 1), row(11, 10), row(12, 11)].join("\n")).unwrap();
+    // The closure includes its root, the Host itself, for cleanup.
+    let host_closure = owned_closure(10, 501, &BTreeMap::new(), &table).unwrap();
+    assert!(host_closure.contains_key(&10));
+    // The Host's own argument line names the configured adapter entry it will launch.
+    let host_line = "   10 /candidate/codex-router host --claude-acp-arguments /home/u/.npm/_npx/698eb38f/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js\n";
+    let with_child = parse_process_arguments(&format!(
+        "{host_line}   11 npm exec @agentclientprotocol/claude-agent-acp@0.81.2\n   12 node /home/u/.npm/_npx/698eb38f/node_modules/.bin/claude-agent-acp\n"
+    ))
+    .unwrap();
+    assert_eq!(
+        process_running_from(&npx_root, 10, &host_closure, &with_child),
+        Some(12),
+        "the actual running adapter child binds, never the Host root"
+    );
+    // With no adapter child running, the Host's configuration alone binds nothing.
+    let root_only = parse_process_arguments(&format!(
+        "{host_line}   11 npm exec @agentclientprotocol/claude-agent-acp@0.81.2\n"
+    ))
+    .unwrap();
+    assert_eq!(
+        process_running_from(&npx_root, 10, &host_closure, &root_only),
+        None
+    );
 }
 
 /// A private Router root under `/tmp` with its sessions directory. Sockets are bound

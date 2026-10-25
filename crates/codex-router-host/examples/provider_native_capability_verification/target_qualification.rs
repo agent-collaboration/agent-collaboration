@@ -214,9 +214,12 @@ pub(crate) fn adapter_install_root(entry: &Path) -> Option<PathBuf> {
         .map(Path::to_owned)
 }
 
-/// The live Host descendant whose argument line runs from `install_root`, if any.
+/// The live Host descendant whose argument line runs from `install_root`, if any. The
+/// closure includes the Host itself, whose own argument line names the adapter it is
+/// configured to launch, so the Host PID is never a candidate.
 pub(crate) fn process_running_from(
     install_root: &Path,
+    host_pid: u32,
     host_closure: &BTreeMap<u32, ProcessIdentity>,
     arguments: &BTreeMap<u32, String>,
 ) -> Option<u32> {
@@ -224,6 +227,7 @@ pub(crate) fn process_running_from(
     host_closure
         .keys()
         .copied()
+        .filter(|pid| *pid != host_pid)
         .find(|pid| arguments.get(pid).is_some_and(|line| line.contains(&root)))
 }
 
@@ -247,8 +251,13 @@ pub(crate) fn require_adapter_binding(
     let install_root = adapter_install_root(&adapter.path)
         .ok_or("ACP adapter entry is not inside a node_modules package")?;
     let host_closure = owned_closure(plan.host_process.pid, owner, &BTreeMap::new(), table)?;
-    let pid = process_running_from(&install_root, &host_closure, &observe_process_arguments()?)
-        .ok_or("no live Host descendant runs the declared ACP adapter; binding unobserved")?;
+    let pid = process_running_from(
+        &install_root,
+        plan.host_process.pid,
+        &host_closure,
+        &observe_process_arguments()?,
+    )
+    .ok_or("no live Host descendant runs the declared ACP adapter; binding unobserved")?;
     Ok(json!({
         "entry": adapter.path,
         "sha256": adapter.sha256,
