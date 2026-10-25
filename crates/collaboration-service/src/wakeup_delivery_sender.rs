@@ -5,9 +5,9 @@ use crate::{
 };
 use agent_automation::{DeliveryId, FirstFire, RouteEffectEvidence, WakeRecord};
 use automation_storage::{
-    AutomationStore, DeliveryCompletion, DeliveryPreparation, DeliveryResult, PushRecordDraft,
-    StorageError,
+    AutomationStore, DeliveryCompletion, DeliveryPreparation, DeliveryResult, StorageError,
 };
+use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MachineId, MessageContent,
     MessageDelivery, MessageText, PushDeliveryState, PushHeaderFacts, PushId, PushKind,
@@ -27,15 +27,21 @@ mod crash_tests;
 #[path = "wakeup_delivery_sender_tests.rs"]
 mod tests;
 
+#[cfg(test)]
+pub(crate) fn wake_handoff_checkpoint(stage: &str) {
+    crash_tests::checkpoint(stage);
+}
+
 #[derive(Clone)]
 pub(crate) struct WakeDeliverySender {
+    pub interactions: Arc<interaction_storage::InteractionStore>,
     pub delivery: Arc<dyn SessionMessageDelivery>,
     pub configuration: crate::AutomationConfigurationHandle,
     pub machine_identity: crate::MachineIdentity,
 }
 
 pub(crate) fn build_wake_push_draft(
-    wake: &WakeRecord<SavedMessage>,
+    wake: &WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
     fire: &FirstFire,
 ) -> Result<PushRecordDraft, StorageError> {
     if fire.wakeup_id != wake.definition.wakeup_id {
@@ -82,6 +88,24 @@ impl WakeDeliverySender {
         if configuration_lease.configuration().is_none() {
             return Ok(());
         }
+        let delivery_record = store
+            .lock()
+            .await
+            .read_delivery::<SessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
+            .await?;
+        let origin = RouterOriginRef::Wake {
+            wakeup_id: delivery_record.wakeup_id.clone(),
+            occurrence_id: delivery_record.occurrence_id,
+        };
+        let Some(push) = self
+            .interactions
+            .get_push_record_by_origin_reference(&origin)
+            .await
+            .map_err(crate::map_interaction_storage_error)?
+        else {
+            // The handoff worker has not admitted this committed obligation yet.
+            return Ok(());
+        };
         let claim = store
             .lock()
             .await
@@ -94,24 +118,9 @@ impl WakeDeliverySender {
         let Some(claim) = claim else {
             return Ok(());
         };
-        let delivery_record = store
-            .lock()
-            .await
-            .read_delivery::<SessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
-            .await?;
         if delivery_record.wakeup_id != claim.wakeup_id {
             return Err(StorageError::InvalidRecord);
         }
-        let origin = RouterOriginRef::Wake {
-            wakeup_id: claim.wakeup_id.clone(),
-            occurrence_id: delivery_record.occurrence_id,
-        };
-        let push = store
-            .lock()
-            .await
-            .get_push_record_by_origin_reference(&origin)
-            .await?
-            .ok_or(StorageError::PushNotFound)?;
         if push.kind != PushKind::Wake
             || push.origin != PushOrigin::Router(PushKind::Wake)
             || push.target != claim.target
@@ -122,15 +131,19 @@ impl WakeDeliverySender {
         let prepared_push = prepared_wake_push(&push, &self.machine_identity)?;
         let push_id = push.push_id.clone();
         {
-            let mut storage = store.lock().await;
+            let storage = &self.interactions;
             if push.delivery_state == PushDeliveryState::Attempted {
                 storage
-                    .restore_push_pending_after_not_started(&push_id)
-                    .await?;
+                    .restore_wake_push_pending(&push_id)
+                    .await
+                    .map_err(crate::map_interaction_storage_error)?;
             } else if push.delivery_state != PushDeliveryState::Pending {
                 return Err(StorageError::InvalidRecord);
             }
-            storage.mark_push_attempted(&push_id).await?;
+            storage
+                .mark_wake_push_attempted(&push_id)
+                .await
+                .map_err(crate::map_interaction_storage_error)?;
         }
         let mode = match claim.mode.as_str() {
             "auto" => MessageDelivery::Auto,
@@ -161,7 +174,8 @@ impl WakeDeliverySender {
             .delivery
             .deliver(request, &sink)
             .await
-            .map_err(|_| StorageError::InvalidRecord)?;
+            .map_err(|_| StorageError::InvalidRecord)?
+            .into_receipt();
         #[cfg(test)]
         if matches!(
             receipt.outcome,
@@ -180,18 +194,18 @@ impl WakeDeliverySender {
                 ..
             }
         ) {
-            store
-                .lock()
+            self.interactions
+                .restore_wake_push_pending(&push_id)
                 .await
-                .restore_push_pending_after_not_started(&push_id)
-                .await?;
+                .map_err(crate::map_interaction_storage_error)?;
         } else {
-            store
-                .lock()
+            self.interactions
+                .settle_wake_push(&push_id, receipt.clone(), chrono::Utc::now())
                 .await
-                .settle_push_record(&push_id, receipt.clone(), chrono::Utc::now())
-                .await?;
+                .map_err(crate::map_interaction_storage_error)?;
         }
+        #[cfg(test)]
+        crash_tests::checkpoint("push-settled");
         let accepted_effect =
             crate::delivery_acceptance_effect::accepted_delivery_effect(&receipt.outcome);
         let result = match &receipt.outcome {

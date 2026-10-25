@@ -7,9 +7,10 @@ use agent_automation::{
     ExecutionDestination, PreparationEffect, RouteEffectEvidence, RunId, RunPhase, ScheduleId,
 };
 use automation_storage::{
-    AutomationStore, PushRecordDraft, RunSubmissionOutcome, RunSubmissionResult, RunUncertainty,
+    AutomationStore, RunSubmissionOutcome, RunSubmissionResult, RunUncertainty,
     ScheduleRunPushUpdate, StorageError,
 };
+use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
     DeliveryRejectionReason, DestinationPreparation, EndpointRef, MachineId, PushDeliveryState,
@@ -22,6 +23,9 @@ use tokio::sync::Mutex;
 #[cfg(test)]
 #[path = "scheduled_input_validation_tests.rs"]
 mod input_validation_tests;
+#[cfg(test)]
+#[path = "scheduled_push_handoff_tests.rs"]
+mod push_handoff_tests;
 #[cfg(test)]
 #[path = "scheduled_run_retry_tests.rs"]
 mod retry_tests;
@@ -44,6 +48,9 @@ type StoredRun = agent_automation::RunRecord<
     crate::stored_run_receipt::StoredRunReceipt,
 >;
 
+#[path = "scheduled_submission_outcome.rs"]
+mod submission_outcome;
+
 type SchedulePushReceipt = (PushDeliveryState, DeliveryReceipt);
 type SchedulePushSettlementContext = Option<(PushId, RouterOriginRef, Option<SchedulePushReceipt>)>;
 
@@ -58,6 +65,7 @@ enum SchedulePushPreparation {
 #[derive(Clone)]
 pub(crate) struct ScheduledRunWorker {
     pub store: Arc<Mutex<AutomationStore>>,
+    pub interactions: Arc<interaction_storage::InteractionStore>,
     pub execution: Arc<dyn ScheduledRunExecution>,
     pub backend: Option<NativeControlBackend>,
     pub configuration: crate::AutomationConfigurationHandle,
@@ -72,6 +80,24 @@ impl ScheduledRunWorker {
             .await
             .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
             .await?;
+        if record.phase == RunPhase::Preparing {
+            let origin = schedule_run_origin_reference(&record.schedule_id, &record.run_id);
+            if let Some(push) = self
+                .interactions
+                .get_push_record_by_origin_reference(&origin)
+                .await
+                .map_err(crate::map_interaction_storage_error)?
+                && self
+                    .store
+                    .lock()
+                    .await
+                    .has_owed_push_operations(&push.push_id)
+                    .await?
+            {
+                // A lost acknowledgement must be replayed before another attempt can clear its outcome.
+                return Ok(());
+            }
+        }
         if matches!(
             record.phase,
             RunPhase::SummaryRequired | RunPhase::SummaryRunning | RunPhase::SummaryBlocked
@@ -281,11 +307,10 @@ impl ScheduledRunWorker {
                         prepared,
                         origin_router_ref,
                     } => {
-                        self.store
-                            .lock()
+                        self.interactions
+                            .mark_schedule_push_attempted(&prepared.push_id)
                             .await
-                            .mark_push_attempted(&prepared.push_id)
-                            .await?;
+                            .map_err(crate::map_interaction_storage_error)?;
                         schedule_push_identity =
                             Some((prepared.push_id.clone(), origin_router_ref, None));
                         crate::scheduled_run_contract::ScheduledRunPayload::Existing { prepared }
@@ -341,21 +366,19 @@ impl ScheduledRunWorker {
         let origin_router_ref =
             schedule_run_origin_reference(&run_record.schedule_id, &run_record.run_id);
         let mut push_record = self
-            .store
-            .lock()
-            .await
+            .interactions
             .get_push_record_by_origin_reference(&origin_router_ref)
-            .await?;
+            .await
+            .map_err(crate::map_interaction_storage_error)?;
         let Some(mut push_record) = push_record.take() else {
             return Ok(false);
         };
         if push_record.delivery_state == PushDeliveryState::Pending {
             push_record = self
-                .store
-                .lock()
+                .interactions
+                .mark_schedule_push_attempted(&push_record.push_id)
                 .await
-                .mark_push_attempted(&push_record.push_id)
-                .await?;
+                .map_err(crate::map_interaction_storage_error)?;
         }
         if push_record.delivery_state == PushDeliveryState::Attempted {
             self.recover_schedule_push_attempt(run_record, push_record)
@@ -376,11 +399,10 @@ impl ScheduledRunWorker {
             .canonical_string()
             .map_err(|_| StorageError::InvalidRecord)?;
         if let Some(existing) = self
-            .store
-            .lock()
-            .await
+            .interactions
             .get_push_record_by_origin_reference(&origin_router_ref)
-            .await?
+            .await
+            .map_err(crate::map_interaction_storage_error)?
         {
             if existing.kind != PushKind::ScheduleRun
                 || existing.target != *target
@@ -425,7 +447,11 @@ impl ScheduledRunWorker {
             activity: None,
             created_at: chrono::Utc::now(),
         };
-        let record = self.store.lock().await.insert_push_record(draft).await?;
+        let record = self
+            .interactions
+            .insert_push_record(draft)
+            .await
+            .map_err(crate::map_interaction_storage_error)?;
         let prepared = self.prepared_schedule_push(&record)?;
         Ok(SchedulePushPreparation::Ready {
             prepared,
@@ -599,127 +625,6 @@ impl ScheduledRunWorker {
                 Ok(())
             }
             Err(_) => Err(StorageError::InvalidRecord),
-        }
-    }
-
-    async fn persist_submission(
-        &self,
-        id: RunId,
-        effects: RouteEffectEvidence<SessionRef, CodexGeneration>,
-        submission: RunSubmission,
-        schedule_push: SchedulePushSettlementContext,
-    ) -> Result<(), StorageError> {
-        let (outcome, push_receipt, push_state) = match submission {
-            RunSubmission::NotStartedBusy => {
-                if let Some((push_id, _, _)) = schedule_push {
-                    self.store
-                        .lock()
-                        .await
-                        .restore_push_pending_after_not_started(&push_id)
-                        .await?;
-                }
-                return Ok(());
-            }
-            RunSubmission::Started(acceptance) => {
-                let run_receipt = crate::stored_run_receipt::StoredRunReceipt::Current(
-                    acceptance.receipt.clone(),
-                );
-                let push_receipt = acceptance.receipt;
-                let outcome = match acceptance.execution {
-                    RunExecution::CodexAppServer(native) => RunSubmissionOutcome::Accepted {
-                        turn_id: native.turn_id,
-                        receipt: run_receipt,
-                    },
-                    RunExecution::ProviderAcp { .. } => RunSubmissionOutcome::ProviderAdmitted {
-                        receipt: run_receipt,
-                    },
-                    RunExecution::ClaudeCodePeer { written_at, .. } => {
-                        let timestamp =
-                            chrono::DateTime::parse_from_rfc3339(&String::from(written_at))
-                                .map_err(|_| StorageError::InvalidRecord)?
-                                .timestamp_millis();
-                        RunSubmissionOutcome::PeerWritten {
-                            written_at_ms: timestamp,
-                            receipt: run_receipt,
-                        }
-                    }
-                };
-                (outcome, push_receipt, PushDeliveryState::Delivered)
-            }
-            RunSubmission::Rejected(rejection) => {
-                let receipt = DeliveryReceipt {
-                    outcome: DeliveryOutcome::Rejected(rejection.clone()),
-                    reachability: None,
-                    client: None,
-                };
-                (
-                    RunSubmissionOutcome::Rejected {
-                        explanation: rejection
-                            .detail
-                            .unwrap_or_else(|| format!("{:?}", rejection.reason)),
-                    },
-                    receipt,
-                    PushDeliveryState::Pending,
-                )
-            }
-            RunSubmission::Unknown => (
-                RunSubmissionOutcome::Unknown {
-                    explanation: "Scheduled start outcome unknown; no automatic resend.".into(),
-                },
-                DeliveryReceipt {
-                    outcome: DeliveryOutcome::Unknown,
-                    reachability: None,
-                    client: None,
-                },
-                PushDeliveryState::OutcomeUnknown,
-            ),
-        };
-        let result = RunSubmissionResult {
-            run_id: id,
-            effects,
-            outcome,
-        };
-        let push_update = schedule_push.map(|(push_id, origin_router_ref, recovered_outcome)| {
-            ScheduleRunPushUpdate {
-                push_id,
-                origin_router_ref,
-                delivery_state: recovered_outcome
-                    .as_ref()
-                    .map_or(push_state, |(state, _)| *state),
-                receipt: recovered_outcome.map_or(push_receipt, |(_, receipt)| receipt),
-                settled_at: chrono::Utc::now(),
-            }
-        });
-        let mut delay = std::time::Duration::from_millis(25);
-        loop {
-            let write = {
-                let mut store = self.store.lock().await;
-                match &push_update {
-                    Some(push_update) => {
-                        store
-                            .record_run_submission_with_push::<_, EndpointRef, _, _>(
-                                result.clone(),
-                                push_update.clone(),
-                            )
-                            .await
-                    }
-                    None => {
-                        store
-                            .record_run_submission::<_, EndpointRef, _, _>(result.clone())
-                            .await
-                    }
-                }
-            };
-            match write {
-                Ok(()) => return Ok(()),
-                Err(StorageError::Database(_)) if push_update.is_some() => {
-                    tokio::time::sleep(delay).await;
-                    delay = delay
-                        .saturating_mul(2)
-                        .min(std::time::Duration::from_secs(1));
-                }
-                Err(error) => return Err(error),
-            }
         }
     }
 }

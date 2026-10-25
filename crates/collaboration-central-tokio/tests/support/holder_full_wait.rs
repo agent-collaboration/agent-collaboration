@@ -1,0 +1,96 @@
+//! The full configured attempt expires before the caller's original drive lease.
+
+use super::holder_writer_retry::{
+    pending_reply, read_status, received, received_within, send, start,
+};
+use collaboration_central_conformance::{
+    ConformanceClient, ConformanceResult, enroll_admitted_peer,
+};
+use fleet_sync_protocol::{
+    FrameId, ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer,
+};
+use serde_json::{Value, json};
+use std::{
+    future::Future,
+    time::{Duration, Instant},
+};
+use tokio::task::JoinSet;
+
+pub const SERVICE: &str = "550e8400-e29b-41d4-a716-4466554400d4";
+
+pub async fn run<Observe, Observed>(base: &str, mut observe: Observe) -> ConformanceResult<()>
+where
+    Observe: FnMut() -> Observed,
+    Observed: Future<Output = ConformanceResult<Vec<FrameId>>>,
+{
+    let client = ConformanceClient::new(base)?;
+    let mut peer = enroll_admitted_peer(
+        &client,
+        SERVICE,
+        "019f0000-0000-7000-8000-000000001022",
+        "holder-full-wait",
+        "019f0000-0000-7000-8000-000000000801",
+    )
+    .await?;
+    let http = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(35))
+        .build()?;
+    let mut tasks = JoinSet::new();
+    let started = Instant::now();
+    start(
+        &http,
+        base,
+        &mut tasks,
+        json!({"attempt":"019f0000-0000-7000-8000-000000000802","holder":peer.peer,"request":{"kind":"release","value":{"database":"019f0000-0000-7000-8000-000000000803","epoch":1,"transfer":"019f0000-0000-7000-8000-000000000804"}}}),
+    );
+    let result = async {
+        let (original_frame, first) = received(&mut peer.socket).await?;
+        // The drive was claimed before this frame was emitted. Crossing this
+        // later clock boundary therefore crosses the original lease's expiry.
+        let past_original_drive = tokio::time::Instant::now() + Duration::from_secs(31);
+        let ServerCall::Release { call: original_call, request: original_request } = first else { return Err("full-wait caller did not send Release".into()); };
+        if observe().await? != vec![original_frame] { return Err("full-wait first call did not own exactly one waiter".into()); }
+        // No answer is sent. The real wake owner must end the entire configured
+        // 20-second attempt before a replacement drive is needed at 30 seconds.
+        let (retry_frame, retry) = received_within(&mut peer.socket, Duration::from_secs(30)).await?;
+        let elapsed = started.elapsed();
+        if elapsed < Duration::from_millis(19_999) || elapsed >= Duration::from_secs(30) {
+            return Err(format!("full configured wait did not finish inside the original 30-second drive lease: {elapsed:?}").into());
+        }
+        let ServerCall::Release { call, request } = retry else { return Err("full-wait retry did not send Release".into()); };
+        if call != original_call || request != original_request || retry_frame == original_frame { return Err("full-wait retry changed its durable call or reused a frame".into()); }
+        let frames = observe().await?;
+        if frames != vec![retry_frame] { return Err(format!("full-wait retry retained an obsolete/overlapping waiter: {frames:?}").into()); }
+        pending_reply(&mut tasks).await?;
+        // This is a clock-delimited interleaving, not a readiness delay: the
+        // replacement call deliberately remains unanswered past the old lease.
+        tokio::time::sleep_until(past_original_drive).await;
+        if observe().await? != vec![retry_frame] {
+            return Err("crossing the original drive expiry lost or duplicated the replacement waiter".into());
+        }
+        let answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(request.epoch, fleet_sync_protocol::CommitSequence::new(0)) };
+        send(&mut peer.socket, retry_frame, ServerCallAnswer::Release(answer.clone())).await?;
+        let expected = json!({"kind":"completed","value":{"kind":"release","value":answer}});
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                let state = read_status(&http, base, original_call.operation).await?;
+                if state == expected { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
+                if state.get("kind").and_then(Value::as_str) != Some("pending") { return Err(format!("full-wait retry did not complete: {state}").into()); }
+                tokio::time::sleep(Duration::from_millis(20)).await;
+            }
+        }).await??;
+        if !observe().await?.is_empty() { return Err("completed full-wait call leaked its waiter".into()); }
+        println!("HOLDER_FULL_WAIT_CASE configured_20s_attempt_inside_30s_drive calls=2 observed_live_waiters=1 obsolete_waiters=0 original_drive_expiry_crossed=true first_attempt_ms={} passed", elapsed.as_millis());
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
+    }.await;
+    tasks.abort_all();
+    while tasks.join_next().await.is_some() {}
+    let closed = peer
+        .socket
+        .close(reqwest_websocket::CloseCode::Normal, None)
+        .await;
+    result?;
+    closed?;
+    Ok(())
+}

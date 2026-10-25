@@ -1,6 +1,6 @@
 //! Private ownership metadata for one matrix run; no service calls or cleanup execution.
 use collaboration_client::{
-    board::{Identity, MessageId},
+    board::{Identity, ThreadId},
     protocol::{InstructionId, OperationId, ScheduleId, WakeupId},
 };
 use std::fmt;
@@ -82,7 +82,7 @@ pub(super) enum ScheduleCreation {
 #[derive(Debug, Eq, PartialEq)]
 pub(super) struct OwnedActorRoot {
     pub(super) actor: Identity,
-    pub(super) root_message_id: MessageId,
+    pub(super) root_message_id: ThreadId,
 }
 
 #[derive(Debug, Default)]
@@ -99,11 +99,11 @@ pub(super) enum CleanupIntent {
     DisableSchedule(ScheduleId),
     Unsubscribe {
         actor: Identity,
-        root_message_id: MessageId,
+        root_message_id: ThreadId,
     },
     Unwatch {
         actor: Identity,
-        root_message_id: MessageId,
+        root_message_id: ThreadId,
     },
 }
 
@@ -252,7 +252,7 @@ impl OwnedMatrixResources {
     pub(super) fn register_actor_root(
         &mut self,
         actor: Identity,
-        root_message_id: MessageId,
+        root_message_id: ThreadId,
     ) -> Result<(), OwnershipError> {
         let pair = OwnedActorRoot {
             actor,

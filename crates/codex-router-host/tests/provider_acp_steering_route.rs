@@ -354,9 +354,12 @@ async fn no_steering_auto_queues_without_second_concurrent_prompt() {
         .deliver(request(target, MessageDelivery::Auto), &second_evidence)
         .await
         .expect("second delivery");
-    assert!(matches!(first.outcome, DeliveryOutcome::Started));
+    assert!(matches!(
+        first.receipt().outcome.clone(),
+        DeliveryOutcome::Started
+    ));
     assert!(
-        matches!(second.outcome, DeliveryOutcome::Queued),
+        matches!(second.receipt().outcome.clone(), DeliveryOutcome::Queued),
         "{second:?}"
     );
     first_event
@@ -391,7 +394,7 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
         .expect("steer refusal");
     assert!(
         matches!(
-            receipt.outcome,
+            receipt.receipt().outcome.clone(),
             DeliveryOutcome::Rejected(ref rejection)
                 if rejection.reason == collaboration_protocol::DeliveryRejectionReason::SteerUnsupported
         ),
@@ -465,9 +468,12 @@ async fn running_claude_auto_and_steer_name_the_running_operation() {
             .await
             .expect("steer delivery");
 
-        assert!(matches!(receipt.outcome, DeliveryOutcome::Steered));
-        assert!(matches!(receipt.client,
-            Some(DeliveryClientReceipt::ProviderAcp { operation_id }) if operation_id == running_operation));
+        assert!(matches!(
+            receipt.receipt().outcome.clone(),
+            DeliveryOutcome::Steered
+        ));
+        assert!(matches!(receipt.receipt().client,
+            Some(DeliveryClientReceipt::ProviderAcp { ref operation_id }) if operation_id.as_str() == running_operation.as_str()));
         assert!(matches!(evidence.0.lock().await.as_slice(),
             [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
             if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::Accepted));
@@ -507,7 +513,7 @@ async fn idle_claude_steer_is_known_not_submitted() {
         .expect("idle steer");
 
     assert!(
-        matches!(receipt.outcome, DeliveryOutcome::NotSubmitted { retryable: false, reason }
+        matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::NotSubmitted { retryable: false, reason }
         if reason == "no running turn")
     );
     assert!(matches!(evidence.0.lock().await.as_slice(),
@@ -532,9 +538,12 @@ async fn idle_claude_auto_starts_after_prompt_required() {
         .await
         .expect("idle auto");
 
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Started));
     assert!(matches!(
-        receipt.client,
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Started
+    ));
+    assert!(matches!(
+        receipt.receipt().client,
         Some(DeliveryClientReceipt::ProviderAcp { .. })
     ));
     assert!(matches!(evidence.0.lock().await.as_slice(),
@@ -560,11 +569,11 @@ async fn started_new_turn_steer_outcome_is_reported_as_started() {
         .await
         .expect("steer outcome");
     assert!(
-        matches!(receipt.outcome, DeliveryOutcome::Started),
+        matches!(receipt.receipt().outcome.clone(), DeliveryOutcome::Started),
         "{receipt:?}"
     );
     assert!(
-        receipt.client.is_none(),
+        receipt.receipt().client.is_none(),
         "agent-owned turn has no Router operation ID"
     );
     route.shutdown_queue().await;
@@ -587,7 +596,7 @@ async fn failed_steer_outcome_is_not_submitted_without_agent_text() {
         .expect("steer outcome");
     assert!(
         matches!(
-            receipt.outcome,
+            receipt.receipt().outcome.clone(),
             DeliveryOutcome::NotSubmitted { ref reason, .. } if reason == "steerFailed"
         ),
         "{receipt:?}"
@@ -613,7 +622,10 @@ async fn dropped_steering_reply_remains_unknown() {
         .await
         .expect("dropped steering reply");
 
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Unknown));
+    assert!(matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Unknown
+    ));
     assert!(matches!(evidence.0.lock().await.as_slice(),
         [RouteEffectEvidence::ProviderAcp(before), RouteEffectEvidence::ProviderAcp(after)]
         if before.submission == SubmissionEffect::Dispatching && after.submission == SubmissionEffect::Unknown));

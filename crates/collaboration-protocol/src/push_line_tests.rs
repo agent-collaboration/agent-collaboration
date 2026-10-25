@@ -510,6 +510,7 @@ proptest::proptest! {
             PushKind::Question,
             PushKind::SubscriptionActivity,
             PushKind::SubscriptionExpiry,
+            PushKind::BoardNotification,
         ] {
             let request = match kind {
                 PushKind::DirectMessage => line_input(
@@ -568,6 +569,17 @@ proptest::proptest! {
                     PushOrigin::Router(PushKind::SubscriptionExpiry),
                     PushHeaderFacts::SubscriptionExpiry {
                         scope: scope.clone(),
+                    },
+                    None,
+                    &machine_label,
+                ),
+                PushKind::BoardNotification => line_input(
+                    PushOrigin::Router(PushKind::BoardNotification),
+                    PushHeaderFacts::BoardNotification {
+                        project: message_board::ProjectId::generate(),
+                        intent: message_board::NotifyIntentId::generate(),
+                        cause: message_board::RoleAssignmentId::generate().into(),
+                        summary: crate::MessageText::try_from(format!("Board notification {}", crate::escape_push_line_field(&body))).expect("valid board summary"),
                     },
                     None,
                     &machine_label,

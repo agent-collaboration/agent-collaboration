@@ -16,6 +16,7 @@ use tokio::sync::Mutex;
 
 pub(crate) async fn reconcile(
     store: &Arc<Mutex<AutomationStore>>,
+    interactions: &interaction_storage::InteractionStore,
     delivery: &dyn SessionMessageDelivery,
     record: DeliveryRecord<SessionRef, CodexGeneration, StoredDeliveryReceipt>,
 ) -> Result<(), StorageError> {
@@ -34,17 +35,15 @@ pub(crate) async fn reconcile(
         "steer" => MessageDelivery::Steer,
         _ => return Err(StorageError::InvalidRecord),
     };
-    let push = {
-        let mut storage = store.lock().await;
-        let origin = RouterOriginRef::Wake {
-            wakeup_id: record.wakeup_id.clone(),
-            occurrence_id: record.occurrence_id.clone(),
-        };
-        storage
-            .get_push_record_by_origin_reference(&origin)
-            .await?
-            .ok_or(StorageError::PushNotFound)?
+    let origin = RouterOriginRef::Wake {
+        wakeup_id: record.wakeup_id.clone(),
+        occurrence_id: record.occurrence_id.clone(),
     };
+    let push = interactions
+        .get_push_record_by_origin_reference(&origin)
+        .await
+        .map_err(crate::map_interaction_storage_error)?
+        .ok_or(StorageError::PushNotFound)?;
     if push.kind != PushKind::Wake
         || push.origin != PushOrigin::Router(PushKind::Wake)
         || push.target != record.target

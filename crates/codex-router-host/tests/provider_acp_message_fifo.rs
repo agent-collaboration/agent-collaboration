@@ -270,7 +270,10 @@ async fn cursor_queue_drains_after_control_prompt_settles() {
         .deliver(queued_request, &evidence)
         .await
         .expect("queued delivery");
-    assert!(matches!(queued.outcome, DeliveryOutcome::Queued));
+    assert!(matches!(
+        queued.receipt().outcome.clone(),
+        DeliveryOutcome::Queued
+    ));
     let queued_snapshot = collaboration_service::ProviderConversationBackend::show(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationShowRequest {
@@ -467,7 +470,9 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             .deliver(first_request, &evidence)
             .await
             .expect("first queue")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
     assert!(matches!(
@@ -475,7 +480,9 @@ async fn permanent_queued_load_failure_is_inspectable_and_does_not_stop_fifo() {
             .deliver(second_request, &evidence)
             .await
             .expect("second queue")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
 
@@ -622,7 +629,9 @@ async fn failed_queued_prompt_advances_to_the_next_accepted_item() {
                 .deliver(queued_request, &evidence)
                 .await
                 .expect("queued delivery")
-                .outcome,
+                .receipt()
+                .outcome
+                .clone(),
             DeliveryOutcome::Queued
         ));
     }
@@ -805,7 +814,9 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
             .deliver(queued_request, &evidence)
             .await
             .expect("queued delivery")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
     let second_queued_request = request(target, "also drop on retirement");
@@ -818,7 +829,9 @@ async fn provider_retirement_marks_queued_items_not_submitted() {
             .deliver(second_queued_request, &evidence)
             .await
             .expect("second queued delivery")
-            .outcome,
+            .receipt()
+            .outcome
+            .clone(),
         DeliveryOutcome::Queued
     ));
 

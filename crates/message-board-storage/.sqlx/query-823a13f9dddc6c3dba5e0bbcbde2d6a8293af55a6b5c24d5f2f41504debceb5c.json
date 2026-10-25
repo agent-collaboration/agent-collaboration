@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"count!: i64\", COALESCE(MAX(position), 0) AS \"last!: i64\" FROM project_feed INDEXED BY feed_by_request_position WHERE request_id=? AND record_kind <> 'request' AND position <= ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "last!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "823a13f9dddc6c3dba5e0bbcbde2d6a8293af55a6b5c24d5f2f41504debceb5c"
+}

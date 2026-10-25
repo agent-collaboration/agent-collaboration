@@ -1,0 +1,108 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT p.thread_id AS \"thread_id!: String\", p.participation_id AS \"participation_id!: String\", p.actor_id AS \"reader_actor!: String\", a.canonical_identity AS \"reader_identity?: String\", p.role AS \"role!: String\", p.joined_epoch AS \"joined_epoch!: i64\", p.joined_position AS \"joined_position!: i64\", p.last_seen_epoch AS \"last_seen_epoch!: i64\", p.last_seen_position AS \"last_seen_position!: i64\", p.closed_position AS \"closed_position?: i64\", p.closed_reason AS \"closed_reason?: String\", p.replaced_by AS \"replaced_by?: String\" FROM thread_participation p LEFT JOIN actors a ON a.actor_id=p.actor_id WHERE p.thread_id IN (SELECT value FROM json_each(?)) AND p.closed_epoch IS NULL AND p.role IN ('orchestrator', 'implementer') ORDER BY p.thread_id, p.role, p.participation_id",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "participation_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "reader_actor!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "reader_identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "role!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "joined_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "joined_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "last_seen_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "last_seen_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "closed_position?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "closed_reason?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "replaced_by?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "a724dc7a144ac8579bc2262487022ad8a552677e1a5a34406daf6ec7c32008d5"
+}

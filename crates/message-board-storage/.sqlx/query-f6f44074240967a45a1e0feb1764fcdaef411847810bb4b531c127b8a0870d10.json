@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT participation_id AS \"id!: String\" FROM thread_participation WHERE actor_id=? AND thread_id=? AND joined_epoch=? AND joined_position=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "f6f44074240967a45a1e0feb1764fcdaef411847810bb4b531c127b8a0870d10"
+}

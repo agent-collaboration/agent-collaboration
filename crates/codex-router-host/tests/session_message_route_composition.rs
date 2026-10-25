@@ -1,5 +1,7 @@
 #![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! The Host's real router selects provider and peer clients through the collaboration API.
+#[path = "support/registered_route_project.rs"]
+mod registered_route_project;
 #[path = "support/session_message_route_fixture.rs"]
 mod route_fixture;
 use codex_router_host::{
@@ -12,6 +14,7 @@ use collaboration_protocol::{
     ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
 use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use registered_route_project::route_project_requests;
 use route_fixture::{
     create_provider_target, load_provider_target, message, post_thread_activity_for_sessions,
     prompt_and_approve_from_peer_provider, provider_fixture, publish_peer, send_and_wait_wake,
@@ -26,6 +29,29 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     let root = tempfile::tempdir().expect("Host root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
+    let route_project = route_project_requests();
+    let identity = collaboration_service::MachineIdentity::new(
+        collaboration_service::load_service_identity(root.path()).expect("Host service identity"),
+        None,
+    )
+    .expect("Host machine label");
+    let central = board_central_test_support::TestCentral::start_with_peer(
+        &root.path().join("test-central"),
+        &message_board::ActorOrigin {
+            installation: String::from(identity.service_id().clone())
+                .try_into()
+                .expect("origin service"),
+            machine: identity
+                .machine_label()
+                .as_str()
+                .to_owned()
+                .try_into()
+                .expect("origin label"),
+        },
+        collaboration_service::load_installation_peer(root.path()).expect("installation peer"),
+    )
+    .await
+    .expect("real route central enrollment");
     let registry = root.path().join("peer-registry");
     std::fs::create_dir(&registry).expect("peer registry");
     let executable = root.path().join("provider.py");
@@ -36,6 +62,11 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     let cursor_prompts = root.path().join("cursor-prompts.log");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: Some(
+                central
+                    .session_inputs()
+                    .expect("real enrolled board session"),
+            ),
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -127,6 +158,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         .send_message(message(unloaded.clone()))
         .await
         .expect("unsupported peer receipt");
+    let collaboration_protocol::MessageSendResult::Local(unsupported) = unsupported else {
+        panic!("local route returned remote sender custody");
+    };
     assert!(matches!(unsupported.receipt.outcome,
         DeliveryOutcome::Rejected(rejection) if rejection.reason == DeliveryRejectionReason::LiveElsewhere));
     assert!(
@@ -151,6 +185,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         .send_message(message(unloaded))
         .await
         .expect("peer receipt");
+    let collaboration_protocol::MessageSendResult::Local(peer) = peer else {
+        panic!("local route returned remote sender custody");
+    };
     assert_eq!(peer.receipt.outcome, DeliveryOutcome::PeerMessageWritten);
     assert_eq!(
         peer.receipt.reachability,
@@ -187,6 +224,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         }))
         .await
         .expect("loaded provider delivery receipt");
+    let collaboration_protocol::MessageSendResult::Local(loaded) = loaded else {
+        panic!("local route returned remote sender custody");
+    };
     assert_eq!(loaded.receipt.outcome, DeliveryOutcome::Started);
     assert_eq!(
         loaded.receipt.reachability,
@@ -210,6 +250,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         .send_message(message(held_claude.clone()))
         .await
         .expect("held Claude receipt");
+    let collaboration_protocol::MessageSendResult::Local(claude) = claude else {
+        panic!("local route returned remote sender custody");
+    };
     assert_eq!(claude.receipt.outcome, DeliveryOutcome::Started);
     assert_eq!(
         claude.receipt.reachability,
@@ -219,6 +262,9 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
         .send_message(message(held_cursor.clone()))
         .await
         .expect("held Cursor receipt");
+    let collaboration_protocol::MessageSendResult::Local(cursor) = cursor else {
+        panic!("local route returned remote sender custody");
+    };
     assert_eq!(cursor.receipt.outcome, DeliveryOutcome::Started);
     assert_eq!(
         cursor.receipt.reachability,
@@ -249,13 +295,14 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     .await;
     std::fs::write(&claude_prompts, "").expect("clear Claude prompt log before subscription proof");
     std::fs::write(&cursor_prompts, "").expect("clear Cursor prompt log before subscription proof");
-    post_thread_activity_for_sessions(&client, [held_claude, held_cursor]).await;
+    post_thread_activity_for_sessions(&client, [held_claude, held_cursor], route_project).await;
     wait_for_prompt_text(&claude_prompts, "🧵 Router: new thread activity").await;
     wait_for_prompt_text(&cursor_prompts, "🧵 Router: new thread activity").await;
     wait_for_completed_provider_prompts(&claude_prompts, 1).await;
     wait_for_completed_provider_prompts(&cursor_prompts, 1).await;
 
     runtime.shutdown().await.expect("Host shutdown");
+    central.shutdown().await.expect("route central shutdown");
 }
 
 #[tokio::test]
@@ -269,6 +316,7 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
     let approver_prompts = root.path().join("approver-prompts.log");
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),

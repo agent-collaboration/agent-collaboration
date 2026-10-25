@@ -23,9 +23,9 @@ impl SessionMessageDelivery for ProviderSessionNotFound {
         &'a self,
         _request: crate::layer_zero::DeliveryRequest,
         _evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
         Box::pin(async {
-            Ok(DeliveryReceipt {
+            Ok(crate::native_delivery_result::scripted_delivery_result(DeliveryReceipt {
                 outcome: DeliveryOutcome::Rejected(DeliveryRejection {
                     reason: DeliveryRejectionReason::ProviderSessionNotFound,
                     next_action: DeliveryNextAction::CorrectRequest,
@@ -37,7 +37,7 @@ impl SessionMessageDelivery for ProviderSessionNotFound {
                     }),
                 reachability: Some(SessionReachability::ProviderAcp),
                 client: None,
-            })
+            }))
         })
     }
 
@@ -57,6 +57,11 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
             .await
             .expect("automation store"),
     ));
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
+            .await
+            .expect("interaction store"),
+    );
     let now_ms = chrono::Utc::now().timestamp_millis() - 10_000;
     let message: SavedMessage = serde_json::from_value(json!({
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"empty-session"},
@@ -68,6 +73,8 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::After { seconds: 1 },
@@ -97,7 +104,12 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
             _ => panic!("eligible wake did not fire"),
         }
     };
+    crate::PushHandoffWorker::new(Arc::clone(&store), Arc::clone(&interactions))
+        .apply_pending()
+        .await
+        .expect("wake push handoff");
     let sender = WakeDeliverySender {
+        interactions,
         delivery: Arc::new(ProviderSessionNotFound),
         configuration: AutomationConfigurationHandle::default(),
         machine_identity: crate::MachineIdentity::new(

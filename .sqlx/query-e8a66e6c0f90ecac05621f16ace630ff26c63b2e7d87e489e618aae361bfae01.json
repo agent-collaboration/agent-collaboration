@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO owed_push_operations(operation_id,push_id,operation,owed_at) VALUES (?,?,?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": []
+  },
+  "hash": "e8a66e6c0f90ecac05621f16ace630ff26c63b2e7d87e489e618aae361bfae01"
+}

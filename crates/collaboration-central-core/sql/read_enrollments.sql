@@ -1,0 +1,1 @@
+SELECT peer_id, service_id, machine_label, access_client_id, credential_hash, state, expires_at, last_seen, last_revocation_operation, last_enrollment_operation FROM machine_enrollments WHERE service_id = ? OR access_client_id = ? OR credential_hash = ? OR peer_id = ?;

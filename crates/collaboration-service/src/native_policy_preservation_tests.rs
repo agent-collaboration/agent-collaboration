@@ -119,11 +119,11 @@ async fn policy_loaded_expired_broker_refuses_each_mode_before_resume_or_input()
             panic!("expired authority was accepted");
         };
         assert_eq!(
-            failure.pointer("/error/data/effects/resume"),
+            failure.response.pointer("/error/data/effects/resume"),
             Some(&json!("notRequested"))
         );
         assert_eq!(
-            failure.pointer("/error/data/effects/submission"),
+            failure.response.pointer("/error/data/effects/submission"),
             Some(&json!("notDispatched"))
         );
         assert!(requests[1].iter().all(|request| !matches!(

@@ -24,8 +24,8 @@ use collaboration_protocol::{
 use collaboration_service::{
     AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
     DeliveryPrecondition, EndpointDirectory, LoadPolicy, NOT_LOADED_REASON,
-    ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord, RouteClaim,
-    RoutePresence, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
+    ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord, RoutePresence,
+    SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
     layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
 };
 use serde_json::Value;
@@ -73,8 +73,8 @@ impl SessionDeliveryRoute for StaleRunningClaimRoute {
         collaboration_protocol::SessionReachability::ProviderAcp
     }
 
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, RouteClaim> {
-        Box::pin(async { Ok(RouteClaim::Holds) })
+    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
+        Box::pin(async { Ok(collaboration_service::NativeRouteClaim::holds()) })
     }
 
     fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
@@ -85,7 +85,7 @@ impl SessionDeliveryRoute for StaleRunningClaimRoute {
         &'a self,
         request: PreparedDeliveryRequest,
         evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
         self.0.deliver(request, evidence)
     }
 
@@ -352,7 +352,8 @@ async fn cursor_steer_rejects_before_evidence_or_client_io() {
     let receipt = route
         .deliver(request, &evidence)
         .await
-        .expect("delivery refusal");
+        .expect("delivery refusal")
+        .into_receipt();
 
     assert!(
         matches!(receipt.outcome, DeliveryOutcome::Rejected(rejection)
@@ -435,7 +436,8 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     let stale = router
         .deliver(stale_request, &stale_evidence)
         .await
-        .expect("stale guard");
+        .expect("stale guard")
+        .into_receipt();
     assert!(matches!(stale.outcome, DeliveryOutcome::Rejected(rejection)
         if rejection.reason == DeliveryRejectionReason::StaleGeneration));
     assert!(stale_evidence.0.lock().await.is_empty());
@@ -443,7 +445,8 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
     let first = router
         .deliver(request(target.clone(), "first"), &first_evidence)
         .await
-        .expect("first delivery");
+        .expect("first delivery")
+        .into_receipt();
     let (mut first_event, _) = tokio::time::timeout(Duration::from_secs(2), listener.accept())
         .await
         .expect("first event deadline")
@@ -481,7 +484,8 @@ async fn cursor_auto_queues_a_prepared_push_with_exact_line_and_push_id() {
             &second_evidence,
         )
         .await
-        .expect("second delivery");
+        .expect("second delivery")
+        .into_receipt();
 
     assert!(matches!(first.outcome, DeliveryOutcome::Started));
     assert!(matches!(second.outcome, DeliveryOutcome::Queued));
@@ -709,7 +713,8 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     let loaded_only_receipt = stale_router
         .deliver(loaded_only_request, &loaded_only_evidence)
         .await
-        .expect("loaded-only stale-claim refusal");
+        .expect("loaded-only stale-claim refusal")
+        .into_receipt();
     assert!(matches!(
         loaded_only_receipt.outcome,
         DeliveryOutcome::NotSubmitted {
@@ -730,7 +735,8 @@ async fn provider_load_auth_rejection_is_typed_without_session_new() {
     let receipt = route
         .deliver(request(target.clone(), "hello"), &evidence)
         .await
-        .expect("load refusal");
+        .expect("load refusal")
+        .into_receipt();
 
     let outcome = serde_json::to_value(&receipt.outcome).expect("receipt encoding");
     assert_eq!(outcome["kind"], "rejected");
@@ -808,6 +814,15 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
     .await
     .expect("delivery cannot wait on unsupported load")
     .expect("delivery receipt");
+    assert_eq!(
+        receipt.unsent_cause(),
+        Some(collaboration_service::UnsentCause::Refused(
+            collaboration_service::NativeRefusalCode::Rejection(
+                DeliveryRejectionReason::UnsupportedCapability
+            )
+        ))
+    );
+    let receipt = receipt.into_receipt();
     assert!(
         matches!(
             receipt.outcome,
@@ -918,7 +933,8 @@ async fn coded_provider_load_errors_keep_correlations_and_do_not_expose_acp_text
         let receipt = route
             .deliver(request(target, "empty restart session"), &evidence)
             .await
-            .expect("load refusal");
+            .expect("load refusal")
+            .into_receipt();
         let outcome = serde_json::to_value(&receipt.outcome).expect("receipt encoding");
 
         assert_eq!(outcome["kind"], expected_kind);

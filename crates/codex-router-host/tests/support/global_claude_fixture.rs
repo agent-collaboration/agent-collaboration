@@ -177,6 +177,7 @@ print('{version}', flush=True)
         binding.launch.environment.extend(additional_environment);
         let runtime = CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
+                board_session: None,
                 directory: self.runtime_directory.clone(),
                 codex_home: self.runtime_directory.clone(),
                 backend_socket: self.runtime_directory.join("backend.sock"),

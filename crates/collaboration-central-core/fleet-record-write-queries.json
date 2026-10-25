@@ -1,0 +1,178 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_record_writes.rs",
+  "metadata": "fleet-record-write-query-metadata.json",
+  "queries": [
+    {
+      "name": "put_workspace",
+      "sql": "sql/fleet/put_workspace.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_digest",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "put_board",
+      "sql": "sql/fleet/put_board.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_digest",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "put_project",
+      "sql": "sql/fleet/put_project.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_digest",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "put_adr",
+      "sql": "sql/fleet/put_adr.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "origin_machine",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "import_digest",
+          "kind": "text",
+          "nullable": true
+        }
+      ]
+    },
+    {
+      "name": "store_directory_summary",
+      "sql": "sql/fleet/store_directory_summary.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT r.kind AS \"kind!: String\", r.id AS \"id!: String\",\n       json_extract(r.payload, '$.record.envelope.scope.workspace') AS \"workspace!: String\",\n       json_extract(r.payload, '$.record.envelope.scope.board') AS \"board: String\"\nFROM cached_fleet_records r INDEXED BY sqlite_autoindex_cached_fleet_records_1\nCROSS JOIN cached_fleet_records w INDEXED BY sqlite_autoindex_cached_fleet_records_1\n  ON w.kind = 'workspace' AND w.id = json_extract(r.payload, '$.record.envelope.scope.workspace')\nLEFT JOIN cached_fleet_records b INDEXED BY sqlite_autoindex_cached_fleet_records_1\n  ON b.kind = 'board' AND b.id = json_extract(r.payload, '$.record.envelope.scope.board')\nWHERE r.kind = ?1 AND r.id > ?2\n  AND (instr(lower(COALESCE(json_extract(r.payload, '$.record.name'), json_extract(r.payload, '$.record.title'), '')), ?3) > 0\n       OR (r.kind <> 'project' AND instr(lower(COALESCE(json_extract(r.payload, '$.record.description'), '')), ?3) > 0))\n  AND (r.kind <> 'project' OR b.id IS NOT NULL)\n  AND (?4 OR (json_extract(w.payload, '$.record.state') = 'active'\n       AND (r.kind = 'workspace' OR json_extract(b.payload, '$.record.state') IN ('open', 'closed'))))\nORDER BY r.id LIMIT ?5\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "workspace!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "board: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "686494220cc1954981dd3cb565a02f102d5618a8ad65eb5148c05b8ee835d7b6"
+}

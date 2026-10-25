@@ -22,17 +22,10 @@ SQLX_PREPARATION_TARGETS: t.Final[tuple[SqlxPreparationTarget, ...]] = (
         "account-schema.sqlite",
     ),
     (
-        "message-board-storage",
-        ("crates/message-board-storage/migrations",),
-        "message-board-schema.sqlite",
-    ),
-    (
         "collaboration-service",
         (
-            "crates/message-board-storage/migrations",
             "crates/collaboration-service/migrations",
             "crates/automation-storage/migrations",
-            "crates/collaboration-service/interaction-migrations",
         ),
         "provider-operation-schema.sqlite",
     ),
@@ -97,7 +90,8 @@ def prepare_sqlx_metadata(
     temporary_root.mkdir(exist_ok=True)
     original_metadata = read_query_metadata(metadata_directory)
     combined_metadata: dict[str, bytes] = {}
-    preparation_completed = check_metadata
+    preparation_completed = False
+    wrapper = Path(__file__).with_name("sqlx-package-rustc-wrapper.py").resolve()
 
     try:
         with tempfile.TemporaryDirectory(
@@ -109,18 +103,23 @@ def prepare_sqlx_metadata(
                 database_filename,
             ) in SQLX_PREPARATION_TARGETS:
                 database_path = Path(directory) / database_filename
-                environment = os.environ | {
-                    "DATABASE_URL": f"sqlite://{database_path}",
-                    "SQLX_OFFLINE": "false",
-                    "PATH": f"{tool_root}:{os.environ.get('PATH', '')}",
+                database_url = f"sqlite://{database_path}"
+                staging_directory = Path(directory) / f"{package_name}-metadata"
+                staging_directory.mkdir()
+                package_directory = (
+                    repository_root / "crates" / package_name
+                ).resolve()
+                schema_environment = os.environ | {"DATABASE_URL": database_url}
+                describing = os.environ | {
+                    "SQLX_OFFLINE": "true",
+                    "RUSTC_WRAPPER": str(wrapper),
+                    "SQLX_PREPARE_PACKAGE": package_name,
+                    "SQLX_PREPARE_MANIFEST_DIR": str(package_directory),
+                    "SQLX_PREPARE_DATABASE_URL": database_url,
+                    "SQLX_PREPARE_METADATA_DIR": str(staging_directory),
                 }
-                _ = environment.pop("SQLX_OFFLINE_DIR", None)
-                prepare_command = ["cargo", "sqlx", "prepare", "--workspace"]
-                if check_metadata:
-                    prepare_command.append("--check")
-                prepare_command.extend(
-                    ["--", "--locked", "--package", package_name, "--all-targets"]
-                )
+                _ = describing.pop("DATABASE_URL", None)
+                _ = describing.pop("SQLX_OFFLINE_DIR", None)
                 commands = [[str(sqlx), "database", "create"]]
                 commands.extend(
                     [
@@ -131,27 +130,61 @@ def prepare_sqlx_metadata(
                         "--source",
                         migration_source,
                     ]
-                    for migration_index, migration_source in enumerate(migration_sources)
+                    for migration_index, migration_source in enumerate(
+                        migration_sources
+                    )
                 )
-                commands.append(prepare_command)
                 for command in commands:
                     result = run_process(
                         command,
                         cwd=repository_root,
-                        env=environment,
+                        env=schema_environment,
                         check=False,
                     )
                     if result.returncode:
                         return result.returncode
-                if not check_metadata:
-                    merge_query_metadata(
-                        combined_metadata,
-                        read_query_metadata(metadata_directory),
-                        package_name=package_name,
+                for command in [
+                    [
+                        "cargo",
+                        "clean",
+                        "--package",
+                        f"path+{package_directory.as_uri()}",
+                    ],
+                    [
+                        "cargo",
+                        "check",
+                        "--locked",
+                        "--package",
+                        f"path+{package_directory.as_uri()}",
+                        "--all-targets",
+                    ],
+                ]:
+                    result = run_process(
+                        command, cwd=repository_root, env=describing, check=False
                     )
-        if not check_metadata:
-            replace_query_metadata(metadata_directory, combined_metadata)
-            preparation_completed = True
+                    if result.returncode:
+                        return result.returncode
+                prepared = read_query_metadata(staging_directory)
+                if not prepared:
+                    raise ValueError(
+                        f"{package_name}: no checked queries were described"
+                    )
+                merge_query_metadata(
+                    combined_metadata, prepared, package_name=package_name
+                )
+                # Dependencies must see both their previous and newly described catalogs.
+                # The final write removes obsolete entries only after every owner succeeds.
+                replace_query_metadata(
+                    metadata_directory, original_metadata | combined_metadata
+                )
+        if check_metadata and original_metadata != combined_metadata:
+            print(
+                "SQLite SQLx metadata is out of date; run python3 scripts/tooling/prepare-sqlx.py",
+                file=sys.stderr,
+            )
+            return 1
+        replace_query_metadata(metadata_directory, combined_metadata)
+        preparation_completed = True
     except (OSError, ValueError) as error:
         print(f"SQLx metadata preparation failed: {error}", file=sys.stderr)
         return 1

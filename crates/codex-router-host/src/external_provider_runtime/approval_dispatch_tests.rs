@@ -36,17 +36,24 @@ impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
         &'a self,
         request: collaboration_service::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
         Box::pin(async move {
             self.push_fixture
                 .captured_approval(request.payload.line.as_str(), &request.target)
                 .await
                 .map_err(|_| collaboration_service::DeliveryContractError::InvalidEvidence)?;
             self.notice_delivered.notify_one();
-            Ok(DeliveryReceipt {
-                outcome: DeliveryOutcome::Started,
-                reachability: Some(SessionReachability::ProviderAcp),
-                client: None,
+            Ok({
+                let receipt = DeliveryReceipt {
+                    outcome: DeliveryOutcome::Started,
+                    reachability: Some(SessionReachability::ProviderAcp),
+                    client: None,
+                };
+                collaboration_service::NativeDeliveryResult::observed(
+                    collaboration_service::NativeObservedOutcome::Started,
+                    receipt.reachability,
+                    receipt.client,
+                )
             })
         })
     }

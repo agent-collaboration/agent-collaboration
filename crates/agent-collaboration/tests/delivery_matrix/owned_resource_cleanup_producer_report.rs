@@ -7,7 +7,6 @@ use crate::{
     owned_resources::MatrixCreationHistory,
     proof_context::ProofResult,
 };
-use collaboration_client::{board::EndReason, protocol::ThreadSubscriptionState};
 
 #[derive(Clone, Copy, Debug)]
 pub(super) enum ActualHelperPrefix {
@@ -139,9 +138,7 @@ pub(super) fn check_actual_helper_report(
                 matches!(
                     &attempt.outcome,
                     CleanupOutcome::Returned(CleanupObservation::Subscription {
-                        state: ThreadSubscriptionState::Ended,
-                        end_reason: Some(EndReason::Cancelled),
-                        pending_count: 0,
+                        delivery_eligible: false,
                     })
                 )
             } else {

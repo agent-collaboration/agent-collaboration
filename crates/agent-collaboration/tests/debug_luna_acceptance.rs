@@ -79,6 +79,7 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
     let receipt = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {
@@ -90,6 +91,10 @@ async fn fresh_native_history_becomes_readable_without_resubmission() -> ProofRe
             mode: MessageDelivery::Auto,
         })
         .await?;
+    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
+        return Err("Local history probe returned remote sender custody".into());
+    };
+    let receipt = receipt.receipt;
     let turn_id = match &receipt.client {
         Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
             acceptance:
@@ -228,6 +233,7 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     let initial = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: alpha.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {
@@ -237,6 +243,10 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
             mode: MessageDelivery::Auto,
         })
         .await?;
+    let collaboration_client::protocol::MessageSendResult::Local(initial) = initial else {
+        return Err("Local input returned remote sender custody".into());
+    };
+    let initial = initial.receipt;
     proof.record("alphaInputAccepted", json!(initial))?;
     let initial_turn = match &initial.client {
         Some(DeliveryClientReceipt::CodexAppServer(NativeSendReceipt {
@@ -296,6 +306,10 @@ async fn luna_agents_arrange_wake_and_reply_through_the_real_cli() -> ProofResul
     let stored_reply = reply_history
         .records
         .iter()
+        .filter_map(|entry| match entry {
+            collaboration_client::protocol::MessageHistoryEntry::Local(record) => Some(record),
+            collaboration_client::protocol::MessageHistoryEntry::Remote { .. } => None,
+        })
         .find(|record| record.push_id == explicit_reply.push_id)
         .ok_or("explicit reply push is absent from the participant history")?;
     if stored_reply.target != alpha

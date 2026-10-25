@@ -10,10 +10,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
     for (arguments, field, constraint) in [
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -26,10 +25,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -42,10 +40,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -58,10 +55,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -74,10 +70,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -90,10 +85,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -106,10 +100,9 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "subscribe",
-                "--root-message-id",
+                "--thread-id",
                 ROOT_MESSAGE_ID,
                 "--actor",
                 HUMAN_ACTOR,
@@ -122,7 +115,6 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "wait",
                 "--actor",
@@ -136,7 +128,6 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
         ),
         (
             vec![
-                "board",
                 "thread",
                 "wait",
                 "--actor",

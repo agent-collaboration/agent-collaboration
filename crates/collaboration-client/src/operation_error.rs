@@ -158,7 +158,8 @@ pub fn operation_failure_from_client_error(
         // An overloaded request was not run.
         ClientError::Overloaded { .. } => OperationEffect::None,
         ClientError::Rejected { data, .. }
-            if native_control_rejection_has_no_effect(data.as_ref()) =>
+            if native_control_rejection_has_no_effect(data.as_ref())
+                || decided_mail_or_wake_refusal_has_no_effect(data.as_ref()) =>
         {
             OperationEffect::None
         }
@@ -190,6 +191,32 @@ pub fn operation_failure_from_client_error(
     }
 }
 
+fn decided_mail_or_wake_refusal_has_no_effect(data: Option<&Value>) -> bool {
+    let Some(data) = data else {
+        return false;
+    };
+    // These are pre-custody decisions. Do not generalize this to unavailable:
+    // a post-admission failure may have followed a committed external effect.
+    if data.get("stage").and_then(Value::as_str) == Some("discovery")
+        && matches!(
+            data.get("kind").and_then(Value::as_str),
+            Some("itemConflict" | "invalidShape" | "mailboxFull")
+        )
+    {
+        return true;
+    }
+    matches!(
+        serde_json::from_value::<collaboration_protocol::WakeFailure>(data.clone()),
+        Ok(collaboration_protocol::WakeFailure {
+            reason: collaboration_protocol::WakeFailureReason::Refused(_),
+            effects: collaboration_protocol::LocalMutationEvidence::Local {
+                mutation: collaboration_protocol::LocalMutationState::None
+            },
+            ..
+        })
+    )
+}
+
 fn native_control_rejection_has_no_effect(data: Option<&Value>) -> bool {
     let Some(data) = data else {
         return false;
@@ -217,6 +244,67 @@ mod tests {
     use crate::ClientError;
     use collaboration_protocol::{OperationEffect, OperationFailureKind};
     use serde_json::json;
+
+    #[test]
+    fn decided_mail_refusals_have_no_effect_after_submission() {
+        for kind in ["itemConflict", "invalidShape", "mailboxFull"] {
+            let failure = operation_failure_from_client_error(
+                ClientError::Rejected {
+                    code: -32602,
+                    data: Some(
+                        json!({"kind":kind,"stage":"discovery","message":"Decided refusal"}),
+                    ),
+                },
+                OperationEffect::Unknown,
+            );
+            assert_eq!(failure.effect, OperationEffect::None, "{kind}");
+        }
+    }
+
+    #[test]
+    fn every_decided_wake_refusal_has_no_effect_after_submission() {
+        for reason in [
+            json!({"kind":"wakeExists","wakeup":"019f0000-0000-7000-8000-000000000101","creator":{"kind":"owner"}}),
+            json!({"kind":"tooFarAhead","max":86400}),
+            json!({"kind":"intervalTooShort","min":300}),
+            json!({"kind":"lifetimeTooLong","max":86400}),
+            json!({"kind":"expiryRequired"}),
+        ] {
+            let mut data = reason.clone();
+            let fields = data.as_object_mut().expect("literal object");
+            fields.extend(json!({"stage":"admission","message":"Decided refusal","operationId":null,"wakeupId":null,"effects":{"kind":"local","mutation":"none"},"nextAction":"correctRequest"}).as_object().expect("literal object").clone());
+            let failure = operation_failure_from_client_error(
+                ClientError::Rejected {
+                    code: -32050,
+                    data: Some(data),
+                },
+                OperationEffect::Unknown,
+            );
+            assert_eq!(failure.effect, OperationEffect::None, "{reason}");
+        }
+    }
+
+    #[test]
+    fn uncertain_transport_and_unrecognized_refusals_keep_unknown_effect() {
+        for source in [
+            ClientError::Timeout,
+            ClientError::Transport(std::io::Error::other("answer lost")),
+            ClientError::Protocol("invalid mutation receipt"),
+            ClientError::Rejected {
+                code: -32050,
+                data: Some(json!({"kind":"unavailable","stage":"store"})),
+            },
+            ClientError::Rejected {
+                code: -32602,
+                data: Some(json!({"kind":"futureRefusal","stage":"discovery"})),
+            },
+        ] {
+            assert_eq!(
+                operation_failure_from_client_error(source, OperationEffect::Unknown).effect,
+                OperationEffect::Unknown
+            );
+        }
+    }
 
     #[test]
     fn preserves_service_kind_stage_code_and_data() {

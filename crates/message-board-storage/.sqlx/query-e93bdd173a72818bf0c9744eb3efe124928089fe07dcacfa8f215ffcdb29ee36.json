@@ -1,0 +1,76 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT f.position AS \"position!: i64\", f.epoch AS \"epoch!: i64\", f.record_id AS \"record_id!: String\", f.router_time AS \"time?: String\", f.time_basis AS \"time_basis!: String\", p.thread_id AS \"thread_id!: String\", json_quote(json_extract(f.content, '$.record.record.placement')) AS \"placement!: String\", json_quote(json_extract(f.content, '$.record.record.actor')) AS \"actor!: String\" FROM project_feed f INDEXED BY feed_by_kind_position LEFT JOIN posts p ON p.post_id = f.record_id WHERE f.record_kind = 'post' AND f.position > ? AND f.position <= ? AND (? IS NULL OR p.thread_id = ? OR p.post_id IS NULL) ORDER BY f.position LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "time_basis!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "placement!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "actor!: String",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "e93bdd173a72818bf0c9744eb3efe124928089fe07dcacfa8f215ffcdb29ee36"
+}

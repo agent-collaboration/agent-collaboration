@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE handoff_frontier SET settled_through=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e0e65bbd9421fbdd73168b6a77687f4b0db1435c4246c09cbefb8d8cfa67a879"
+}

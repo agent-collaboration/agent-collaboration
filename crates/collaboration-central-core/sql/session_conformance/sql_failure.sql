@@ -1,0 +1,1 @@
+SELECT CAST(abs(CAST(? AS INTEGER)) AS TEXT) AS value;

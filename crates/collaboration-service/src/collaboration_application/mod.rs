@@ -30,7 +30,7 @@ mod message_operations;
 mod provider_observation_operations;
 mod schedule_operations;
 mod session_operations;
-mod wake_operations;
+pub(crate) mod wake_operations;
 
 pub use automation_operations::AutomationOperations;
 pub use board_operations::{BoardOperations, ThreadWaitBudgetError, thread_wait_root_notice_limit};
@@ -49,8 +49,9 @@ pub use provider_observation_operations::{
 pub use schedule_operations::ScheduleOperationFailure;
 pub(crate) use session_operations::INVALID_INVENTORY_PARAMETERS;
 pub use session_operations::{
-    EndpointDirectoryUnavailable, NativeSessionFailure, NativeSessionFailureKind,
-    NativeSessionStage, ProviderInventoryFailure, ProviderInventoryFailureKind, SessionOperations,
+    EndpointDirectoryUnavailable, InstallationIdentityUnavailable, NativeSessionFailure,
+    NativeSessionFailureKind, NativeSessionStage, ProviderInventoryFailure,
+    ProviderInventoryFailureKind, SessionOperations,
 };
 #[cfg(test)]
 pub(crate) use session_operations::{
@@ -76,6 +77,11 @@ impl CollaborationApplication {
     #[must_use]
     pub fn service_id(&self) -> &collaboration_protocol::UuidIdentity {
         &self.identity.service_id
+    }
+
+    #[must_use]
+    pub fn installation_peer(&self) -> Option<fleet_sync_protocol::PeerId> {
+        self.identity.installation_peer()
     }
 
     /// This run of the Router; a restart starts a new epoch.
@@ -131,6 +137,7 @@ impl CollaborationApplication {
     pub fn wakes(&self) -> WakeOperations<'_> {
         WakeOperations::new(&self.identity.service_id, self.identity.automation.as_ref())
             .with_wait_capacity(&self.identity.wake_wait_permits)
+            .with_remote(self.identity.mail_delivery.as_ref())
     }
 
     /// Approvals and questions held by the interaction broker.

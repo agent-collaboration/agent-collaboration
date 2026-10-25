@@ -1,0 +1,212 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT\n    r.acknowledgement_id AS \"record_id!: String\",\n    p.workspace_id AS \"workspace_id!: String\",\n    p.board_id AS \"board_id!: String\",\n    p.project_id AS \"project_id!: String\",\n    r.actor_id AS \"actor_id!: String\",\n    a.canonical_identity AS \"actor_identity?: String\",\n    r.request_id AS \"request_id?: String\",\n    r.epoch AS \"epoch!: i64\",\n    r.position AS \"position!: i64\",\n    r.router_time AS \"router_time?: String\",\n    r.time_basis AS \"time_basis!: String\",\n    f.entry_id AS \"feed_entry_id?: String\",\n    f.record_id AS \"feed_record_id?: String\",\n    f.record_kind AS \"feed_record_kind?: String\",\n    f.actor_id AS \"feed_actor_id?: String\",\n    f.request_id AS \"feed_request_id?: String\",\n    f.epoch AS \"feed_epoch?: i64\",\n    f.position AS \"feed_position?: i64\",\n    f.router_time AS \"feed_router_time?: String\",\n    f.time_basis AS \"feed_time_basis?: String\",\n    f.origin_installation AS \"origin_installation?: String\",\n    f.origin_machine AS \"origin_machine?: String\",\n    r.assignment_id AS \"assignment_id!: String\",\n    r.through_epoch AS \"through_epoch!: i64\",\n    r.through_position AS \"through_position!: i64\"\nFROM json_each(?2) k CROSS JOIN stand_down_acknowledgements r ON r.acknowledgement_id=CAST(k.value AS TEXT)\nCROSS JOIN project_state p\nLEFT JOIN actors a ON a.actor_id=r.actor_id\nLEFT JOIN project_feed f ON f.epoch=r.epoch AND f.position=r.position\nWHERE p.project_id=?1\nORDER BY r.acknowledgement_id\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "workspace_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "board_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "project_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "actor_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "actor_identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "request_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "router_time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "time_basis!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 11,
+        "name": "feed_entry_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 12,
+        "name": "feed_record_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 13,
+        "name": "feed_record_kind?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 14,
+        "name": "feed_actor_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 15,
+        "name": "feed_request_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 16,
+        "name": "feed_epoch?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "feed_position?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 18,
+        "name": "feed_router_time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 19,
+        "name": "feed_time_basis?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 20,
+        "name": "origin_installation?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 21,
+        "name": "origin_machine?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 22,
+        "name": "assignment_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 23,
+        "name": "through_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 24,
+        "name": "through_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "012b7bf66d29bde8248c8403e437295ce1cd220e716f446afe9bfb2760b81010"
+}

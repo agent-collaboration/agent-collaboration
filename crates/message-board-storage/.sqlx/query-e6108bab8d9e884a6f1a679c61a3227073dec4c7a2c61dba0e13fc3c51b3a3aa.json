@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE tasks SET workstream_id=?, actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, title=?, body=?, status=?, revision=? WHERE task_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e6108bab8d9e884a6f1a679c61a3227073dec4c7a2c61dba0e13fc3c51b3a3aa"
+}

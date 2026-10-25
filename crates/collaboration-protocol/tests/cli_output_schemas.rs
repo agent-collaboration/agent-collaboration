@@ -73,13 +73,13 @@ fn published_envelopes_carry_pages_records_and_effects_without_wrapper_keys() {
     let schemas = collaboration_protocol::protocol_type_schemas().unwrap();
     let envelope = jsonschema::validator_for(schemas.get("FiniteCommandRecord").unwrap()).unwrap();
     let message = serde_json::json!({
-        "messageId":"01a0a9aa-0393-7a30-aeca-c7c77d679774",
+        "postId":"01a0a9aa-0393-7a30-aeca-c7c77d679774",
         "boardId":"01a0a9aa-0393-7a30-aeca-c7c77d679775",
-        "topicId":"01a0a9aa-0393-7a30-aeca-c7c77d679776",
+        "projectId":"01a0a9aa-0393-7a30-aeca-c7c77d679776",
         "text":"a finding"
     });
     let thread = serde_json::json!({
-        "rootMessageId":"01a0a9aa-0393-7a30-aeca-c7c77d679774",
+        "threadId":"01a0a9aa-0393-7a30-aeca-c7c77d679774",
         "state":"open",
         "watchStatus":{"watching":true}
     });
@@ -88,12 +88,15 @@ fn published_envelopes_carry_pages_records_and_effects_without_wrapper_keys() {
             "list",
             serde_json::json!({"page":{"records":[&message],"nextCursor":null}}),
         ),
-        ("messageShow", serde_json::json!({"record":message})),
+        ("postShow", serde_json::json!({"record":message})),
         ("threadShow", serde_json::json!({"record":thread})),
-        ("threadWait", serde_json::json!({"batch":null})),
+        (
+            "threadWait",
+            serde_json::json!({"record":{"renewals":[],"outcome":{"kind":"timedOut"}}}),
+        ),
         (
             "mutation",
-            serde_json::json!({"record":{"rootMessageId":"01a0a9aa-0393-7a30-aeca-c7c77d679774"},
+            serde_json::json!({"record":{"threadId":"01a0a9aa-0393-7a30-aeca-c7c77d679774"},
                 "effects":{"outcome":"joined"}}),
         ),
         // Mutations whose wire type carries no effect field still publish effects.
@@ -115,7 +118,7 @@ fn published_envelopes_carry_pages_records_and_effects_without_wrapper_keys() {
 
         // Assert: the envelope validates and names no entity wrapper.
         assert!(envelope.is_valid(&published), "{kind} envelope");
-        for wrapper in ["message", "thread", "sessions"] {
+        for wrapper in ["post", "thread", "sessions"] {
             assert!(
                 published.pointer(&format!("/result/{wrapper}")).is_none(),
                 "{kind}: result must not wrap its entity in {wrapper}"
@@ -133,8 +136,8 @@ fn published_envelopes_carry_pages_records_and_effects_without_wrapper_keys() {
     // wrapper property standing between the record and its fields.
     for (result, wrapper) in [
         (
-            serde_json::to_value(schemars::schema_for!(message_board::MessageShowResult)).unwrap(),
-            "message",
+            serde_json::to_value(schemars::schema_for!(message_board::PostShowResult)).unwrap(),
+            "post",
         ),
         (
             serde_json::to_value(schemars::schema_for!(message_board::ThreadShowResult)).unwrap(),

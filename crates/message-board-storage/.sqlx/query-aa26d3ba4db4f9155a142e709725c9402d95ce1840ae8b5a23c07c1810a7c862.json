@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE role_assignments SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, project_subject=?, workstream_subject=?, role=?, holder=?, granted_by=?, model=?, lineage=?, ended=?, owner_grant=? WHERE assignment_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "aa26d3ba4db4f9155a142e709725c9402d95ce1840ae8b5a23c07c1810a7c862"
+}

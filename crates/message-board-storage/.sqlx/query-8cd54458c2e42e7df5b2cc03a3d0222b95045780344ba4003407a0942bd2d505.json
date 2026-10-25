@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO plan_revisions(revision_id, actor_id, request_id, epoch, position, router_time, time_basis, content_hash, document, superseded_by, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "8cd54458c2e42e7df5b2cc03a3d0222b95045780344ba4003407a0942bd2d505"
+}

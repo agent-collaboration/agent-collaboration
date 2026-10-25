@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE router_pushes SET delivery_state='outcome_unknown',last_outcome_json=?,settled_at=? WHERE retention='creationAge' AND push_id=? AND delivery_state='attempted' AND last_outcome_json IS NULL",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "fb9884af4ae144f143ec4e7d376f34d2f5be62452e376eef0c203422ae11b45e"
+}

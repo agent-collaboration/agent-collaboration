@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO request_decisions(request_id, actor_id, epoch, position, router_time, time_basis, canonical_hash, accepted_in, decision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "9df194326cb6d6dd23fe5a7f1ed09d2d912ee5a65a64242fe4650a5b93fd2603"
+}

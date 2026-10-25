@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT record_id AS \"id!: String\" FROM project_feed WHERE record_id>? AND record_kind='trailRedaction' ORDER BY record_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "fe6cbad5a815f1d2b0eb69406d920d1feefefe55d8a4b3b1d26d69033f43d043"
+}

@@ -50,6 +50,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
     std::fs::set_permissions(&provider_path, std::fs::Permissions::from_mode(0o700))?;
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("unused-backend.sock"),

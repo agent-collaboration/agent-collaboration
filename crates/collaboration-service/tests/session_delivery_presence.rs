@@ -294,7 +294,7 @@ async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
         .await?;
     server.await??;
     assert!(matches!(
-        receipt.outcome,
+        receipt.receipt().outcome.clone(),
         DeliveryOutcome::NotSubmitted {
             retryable: true,
             ref reason,
@@ -375,6 +375,9 @@ async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
         )
         .await?;
     server.await??;
-    assert!(matches!(receipt.outcome, DeliveryOutcome::StartedOrSteered));
+    assert!(matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::StartedOrSteered
+    ));
     Ok(())
 }

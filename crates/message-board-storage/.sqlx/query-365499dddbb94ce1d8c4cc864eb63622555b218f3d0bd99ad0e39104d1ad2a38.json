@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT id AS \"id!: String\" FROM cached_fleet_records WHERE kind = 'workspace' AND id > ? ORDER BY id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "365499dddbb94ce1d8c4cc864eb63622555b218f3d0bd99ad0e39104d1ad2a38"
+}

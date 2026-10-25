@@ -17,6 +17,9 @@ use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_tungstenite::tungstenite::Message;
+#[path = "../support/native_mail_owner.rs"]
+mod native_mail_owner;
+use collaboration_service as mail_service;
 #[path = "../support/served_api.rs"]
 mod served_api;
 
@@ -299,26 +302,47 @@ async fn exercise_message(
     } else {
         collaboration_service::TargetPresence::Running
     }));
+    let machine_identity = collaboration_service::MachineIdentity::new(
+        service_id.to_owned().try_into()?,
+        Some("message-backend-fixture"),
+    )?;
+    let clock: Arc<dyn collaboration_service::SubscriptionClock> =
+        Arc::new(collaboration_service::SystemSubscriptionClock);
+    let interactions = match &broker {
+        Some(broker) => broker.interaction_store(),
+        None => Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        ),
+    };
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
-            push_store: Arc::clone(&automation_store),
+            push_store: interactions.clone(),
             delivery: delivery.clone(),
             presence: presence.clone(),
-            machine_identity: collaboration_service::MachineIdentity::new(
-                service_id.to_owned().try_into()?,
-                Some("message-backend-fixture"),
-            )?,
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            machine_identity: machine_identity.clone(),
+            clock: clock.clone(),
         },
     );
     owner.start().await?;
     let identity = identity
         .with_session_delivery(delivery)
-        .with_subscription_delivery_service(owner.clone(), presence);
+        .with_subscription_delivery_service(owner.clone(), presence.clone());
+
+    let (identity, native_mail) = native_mail_owner::NativeMailOwner::start(
+        identity,
+        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        collaboration_service::MailPushDeliveryProps {
+            interactions,
+            actors: owner.clone(),
+            presence,
+            machine: machine_identity,
+            clock,
+        },
+    )?;
     let served = served_api::ServedApi::start(identity).await?;
     let backend = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await?;
+        let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await??;
         let mut socket = tokio_tungstenite::accept_async(stream).await?;
         let init: Value = serde_json::from_str(
             socket
@@ -404,6 +428,7 @@ async fn exercise_message(
     let result = tokio::time::timeout(
         Duration::from_secs(3),
         client.send_message(MessageSendRequest {
+            item_id: None,
             target: target.clone(),
             generation_guard: (!unloaded).then(|| generation.clone()),
             message: PublicMessageContent::Agent {
@@ -414,10 +439,17 @@ async fn exercise_message(
         }),
     )
     .await?;
-    let push_id = automation_store
-        .lock()
-        .await
-        .list_direct_message_inbox(&automation_storage::PushInboxQuery {
+    let result: Result<Result<PushMessageSendResult, MessageSendError>, FixtureError> = match result
+    {
+        Ok(collaboration_protocol::MessageSendResult::Local(push)) => Ok(Ok(push)),
+        Ok(collaboration_protocol::MessageSendResult::Queued { .. }) => {
+            Err("local native fixture returned remote custody".into())
+        }
+        Err(error) => Ok(Err(error)),
+    };
+    let push_id = native_mail
+        .interactions
+        .list_direct_message_inbox(&interaction_storage::PushInboxQuery {
             target: target.clone(),
             limit: 1,
         })
@@ -439,25 +471,20 @@ async fn exercise_message(
     served.stop().await?;
     owner.shutdown().await;
     drop(owner);
-    let requests = backend.await?;
+    let requests = tokio::time::timeout(Duration::from_secs(5), backend).await??;
     let stored = match push_id {
-        Some(push_id) => {
-            automation_store
-                .lock()
-                .await
-                .get_push_record(&push_id)
-                .await
-        }
+        Some(push_id) => native_mail.interactions.get_push_record(&push_id).await,
         None => Ok(None),
     };
     drop(broker);
+    native_mail.close().await?;
     let automation_store = Arc::try_unwrap(automation_store)
         .map_err(|_| std::io::Error::other("service retained automation store"))?
         .into_inner();
     automation_store.close().await?;
     drop(directory);
     Ok(RecordedMessageObservation {
-        result,
+        result: result?,
         requests: requests?,
         stored: stored?,
         target,

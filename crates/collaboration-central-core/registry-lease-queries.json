@@ -1,0 +1,101 @@
+{
+  "migrations": [
+    "registry_migrations"
+  ],
+  "output": "src/generated_registry_lease.rs",
+  "metadata": "registry-lease-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_registry_incarnation",
+      "sql": "sql/read_registry_incarnation.sql",
+      "row": "StoredRegistryIncarnation",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "store_registry_incarnation",
+      "sql": "sql/store_registry_incarnation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "incarnation",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_registry_lease_ack",
+      "sql": "sql/read_registry_lease_ack.sql",
+      "row": "StoredLeaseAcknowledgement",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "store_registry_lease_ack",
+      "sql": "sql/store_registry_lease_ack.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "row_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "project_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "version",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_registry_notice_mark",
+      "sql": "sql/read_registry_notice_mark.sql",
+      "row": "StoredRegistryNoticeMark",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "database_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "store_registry_notice_mark",
+      "sql": "sql/store_registry_notice_mark.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "database_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "mark",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT request_id AS \"request_id!: String\", canonical_hash AS \"canonical_hash!: String\", request AS \"request!: String\", state AS \"state!: String\" FROM fleet_outbox_requests WHERE request_id = ? AND state = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "request_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "canonical_hash!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "request!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "state!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "62c8ff5b1b0739fe89755137e176f8fcedf1262e43fed2ed98af515ad4d5ed44"
+}

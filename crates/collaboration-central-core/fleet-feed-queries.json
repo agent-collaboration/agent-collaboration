@@ -1,0 +1,162 @@
+{
+  "migrations": [
+    "core_migrations"
+  ],
+  "output": "src/generated_fleet_feed.rs",
+  "metadata": "fleet-feed-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_fleet_feed_state",
+      "sql": "sql/fleet/read_fleet_feed_state.sql",
+      "row": "StoredFleetFeedState",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "initialize_fleet_feed_state",
+      "sql": "sql/fleet/initialize_fleet_feed_state.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "state_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "advance_fleet_feed_head",
+      "sql": "sql/fleet/advance_fleet_feed_head.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "position",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "advance_fleet_feed_floor",
+      "sql": "sql/fleet/advance_fleet_feed_floor.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "position",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "append_fleet_feed",
+      "sql": "sql/fleet/append_fleet_feed.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "entry_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "router_time",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "time_basis",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "as_of",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_fleet_feed_page",
+      "sql": "sql/fleet/read_fleet_feed_page.sql",
+      "row": "StoredFleetFeedEntry",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "after",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_expired_fleet_feed",
+      "sql": "sql/fleet/read_expired_fleet_feed.sql",
+      "row": "StoredFleetFeedEntry",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "through_time",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "prune_fleet_feed",
+      "sql": "sql/fleet/prune_fleet_feed.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "through_time",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_feed_readers",
+      "sql": "sql/fleet/read_feed_readers.sql",
+      "row": "StoredFleetFeedReader",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "store_feed_reader",
+      "sql": "sql/fleet/store_feed_reader.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "reader_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "position",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

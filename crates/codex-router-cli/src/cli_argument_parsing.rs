@@ -8,8 +8,8 @@ pub(super) use serve_command::ServeCommand;
 mod debug_plaintext_tests;
 
 use super::{
-    AccountCommand, CliError, DEFAULT_ROUTER_PORT, HostCommand, LiveCommand, QuotaCommand, Shell,
-    router_secret_root_or_default,
+    AccountCommand, CliError, DEFAULT_ROUTER_PORT, FleetCommand, HostCommand, LiveCommand,
+    QuotaCommand, Shell, router_secret_root_or_default,
 };
 use std::ffi::OsString;
 use std::num::NonZeroU64;
@@ -24,6 +24,7 @@ pub(super) enum CliCommand {
     Quota(QuotaCommand),
     Live(LiveCommand),
     Host(HostCommand),
+    Fleet(FleetCommand),
     Version,
     Help(&'static str),
 }
@@ -65,6 +66,9 @@ impl CliCommand {
             "account" => Ok(Self::Account(AccountCommand::parse(parser)?)),
             "quota" => Ok(Self::Quota(QuotaCommand::parse(parser)?)),
             "live" => Ok(Self::Live(LiveCommand::parse(parser)?)),
+            "fleet" => Ok(Self::Fleet(FleetCommand::parse(
+                parser.remaining_arguments(),
+            )?)),
             "host" => Ok(Self::Host(
                 HostCommand::parse(parser.remaining_arguments())
                     .map_err(|message| CliError::HostParse { message })?,

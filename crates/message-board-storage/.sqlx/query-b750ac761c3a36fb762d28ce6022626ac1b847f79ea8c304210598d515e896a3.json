@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "DELETE FROM task_links WHERE link_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "b750ac761c3a36fb762d28ce6022626ac1b847f79ea8c304210598d515e896a3"
+}

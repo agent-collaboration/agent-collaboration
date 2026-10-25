@@ -67,8 +67,11 @@ async fn message_result_preserves_native_rejection_reason_action_and_code() {
     }))
     .unwrap();
     let receipt = client.send_human_input(request).await.unwrap();
+    let collaboration_client::protocol::MessageSendResult::Local(receipt) = receipt else {
+        panic!("local rejection returned remote sender custody");
+    };
     assert!(
-        matches!(receipt.outcome, DeliveryOutcome::Rejected(rejection)
+        matches!(receipt.receipt.outcome, DeliveryOutcome::Rejected(rejection)
         if rejection.reason == DeliveryRejectionReason::ChildThread
             && rejection.next_action == DeliveryNextAction::InspectTarget
             && rejection.client_code == Some(-32000))

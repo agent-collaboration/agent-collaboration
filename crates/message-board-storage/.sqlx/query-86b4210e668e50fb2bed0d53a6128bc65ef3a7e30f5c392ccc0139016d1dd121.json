@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT snapshot_identity AS \"identity?: String\",settled_through AS \"frontier?: i64\" FROM capture_feed_marks WHERE epoch=? AND captured_position=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "identity?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "frontier?: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "86b4210e668e50fb2bed0d53a6128bc65ef3a7e30f5c392ccc0139016d1dd121"
+}

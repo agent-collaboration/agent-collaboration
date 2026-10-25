@@ -411,7 +411,10 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
         )
         .await
         .expect("queued delivery receipt");
-    assert!(matches!(receipt.outcome, DeliveryOutcome::Queued));
+    assert!(matches!(
+        receipt.receipt().outcome.clone(),
+        DeliveryOutcome::Queued
+    ));
     assert!(close_marker.exists(), "session close precedes FIFO enqueue");
 
     let queue_state = tokio::time::timeout(

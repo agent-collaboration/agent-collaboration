@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE message_send_answers SET result=? WHERE item_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "a40c66abba52e8bfbe74c079cb5c11a4846c790d3eef4df21f5797b91763b630"
+}

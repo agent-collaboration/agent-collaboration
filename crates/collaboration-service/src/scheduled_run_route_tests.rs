@@ -52,7 +52,7 @@ pub(super) enum FakeSettlementPlan {
 struct FakeScheduledExecution {
     kind: FakeRouteKind,
     target: SessionRef,
-    store: Arc<Mutex<AutomationStore>>,
+    interactions: Arc<interaction_storage::InteractionStore>,
     observed_push_ids: Arc<std::sync::Mutex<Vec<PushId>>>,
     generation: CodexGeneration,
     attempt_id: AttemptId,
@@ -224,9 +224,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
                 return Err(DeliveryContractError::InvalidEvidence);
             }
             let stored_schedule_push = self
-                .store
-                .lock()
-                .await
+                .interactions
                 .get_push_record(&prepared.push_id)
                 .await
                 .map_err(|_| DeliveryContractError::EvidencePersistence)?
@@ -249,9 +247,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
             if let Some(previous_push_id) = previous_push_id
                 && previous_push_id != prepared.push_id
                 && self
-                    .store
-                    .lock()
-                    .await
+                    .interactions
                     .get_push_record(&previous_push_id)
                     .await
                     .map_err(|_| DeliveryContractError::EvidencePersistence)?
@@ -400,96 +396,11 @@ impl ScheduledRunExecution for FakeScheduledExecution {
     }
 }
 
-pub(super) async fn provider_worker_fixture(
-    submission_plan: FakeSubmissionPlan,
-    settlement_plan: FakeSettlementPlan,
-) -> TestResult<(
-    std::path::PathBuf,
-    Arc<Mutex<AutomationStore>>,
-    ScheduledRunWorker,
-    RunId,
-    Arc<std::sync::Mutex<Vec<PushId>>>,
-)> {
-    let root = std::env::temp_dir().join(format!(
-        "provider-worker-{}",
-        OperationId::generate().as_str()
-    ));
-    std::fs::create_dir(&root)?;
-    let store = Arc::new(Mutex::new(
-        AutomationStore::open(&root.join("automation.sqlite")).await?,
-    ));
-    let service = "00000000-0000-4000-8000-000000000001";
-    let target: SessionRef = serde_json::from_value(json!({
-        "endpoint":{"serviceId":service,"endpointId":"claude-local"},
-        "sessionId":"provider-worker"
-    }))?;
-    let generation: CodexGeneration =
-        serde_json::from_value(json!({"serviceEpoch":service,"generation":1}))?;
-    let observed_push_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
-    let fake: Arc<dyn ScheduledRunExecution> = Arc::new(FakeScheduledExecution {
-        kind: FakeRouteKind::Provider,
-        target: target.clone(),
-        store: Arc::clone(&store),
-        observed_push_ids: Arc::clone(&observed_push_ids),
-        generation,
-        attempt_id: AttemptId::generate(),
-        submissions: AtomicUsize::new(0),
-        submission_plan,
-        settlement_plan,
-    });
-    let instruction = store
-        .lock()
-        .await
-        .create_instruction(
-            &OperationId::generate(),
-            &InstructionText::try_from("Check job".to_owned())?,
-            0,
-        )
-        .await?;
-    let schedule = store
-        .lock()
-        .await
-        .create_schedule(&ScheduleCreate::<SessionRef, EndpointRef> {
-            operation_id: OperationId::generate(),
-            definition: ScheduleDefinition {
-                instruction_id: instruction.instruction_id,
-                timing: TimingRule::Interval { seconds: 60 },
-                enabled: true,
-                destination: ExecutionDestination::OwnedThread {
-                    target,
-                    cwd: root.to_string_lossy().into_owned(),
-                },
-                execution_timeout_seconds: Some(120),
-                model: Some("fixture-model".into()),
-                effort: Some("medium".into()),
-            },
-            imported_continuity: ContinuityInput::None,
-            now_ms: 0,
-        })
-        .await?;
-    let run_id = store
-        .lock()
-        .await
-        .enqueue_due_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
-        .await?
-        .ok_or("run missing")?;
-    store
-        .lock()
-        .await
-        .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60000)
-        .await?;
-    let worker = ScheduledRunWorker {
-        store: Arc::clone(&store),
-        execution: fake,
-        backend: None,
-        configuration: crate::AutomationConfigurationHandle::default(),
-        machine_identity: crate::MachineIdentity::new(
-            service.to_owned().try_into()?,
-            Some("Schedule Fixture"),
-        )?,
-    };
-    Ok((root, store, worker, run_id, observed_push_ids))
-}
+#[path = "scheduled_run_route_fixture.rs"]
+mod fixture;
+pub(super) use fixture::{apply_push_handoff, provider_worker_fixture};
+#[path = "scheduled_history_retention_tests.rs"]
+mod history_retention_tests;
 
 #[tokio::test]
 async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestResult<()> {
@@ -507,6 +418,9 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             AutomationStore::open(&root.join("automation.sqlite")).await?,
         ));
         let service = "00000000-0000-4000-8000-000000000001";
+        let interactions = Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        );
         let target: SessionRef = serde_json::from_value(json!({
             "endpoint":{"serviceId":service,"endpointId":"claude-local"},
             "sessionId":match kind { FakeRouteKind::Provider => "provider-worker", FakeRouteKind::Peer => "peer-worker" }
@@ -516,7 +430,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         let fake: Arc<dyn ScheduledRunExecution> = Arc::new(FakeScheduledExecution {
             kind,
             target: target.clone(),
-            store: Arc::clone(&store),
+            interactions: Arc::clone(&interactions),
             observed_push_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
             generation,
             attempt_id: AttemptId::generate(),
@@ -567,6 +481,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             .await?;
         let worker = ScheduledRunWorker {
             store: Arc::clone(&store),
+            interactions: Arc::clone(&interactions),
             execution: Arc::clone(&fake),
             backend: None,
             configuration: crate::AutomationConfigurationHandle::default(),
@@ -588,6 +503,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
                 )
                 .into());
             }
+            apply_push_handoff(&worker).await?;
         }
         if matches!(kind, FakeRouteKind::Provider) {
             worker
@@ -597,6 +513,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
         }
         let identity = crate::ServiceIdentity::new(service, service)?
             .with_automation_store(Arc::clone(&store))
+            .with_interaction_store(interactions)
             .with_scheduled_run_execution(fake);
         let application = crate::CollaborationApplication::new(identity);
         let shown = application
@@ -651,12 +568,15 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
         "endpoint":{"serviceId":service,"endpointId":"claude-local"},
         "sessionId":"prepared-provider"
     }))?;
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+    );
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service,"generation":1}))?;
     let fake: Arc<dyn ScheduledRunExecution> = Arc::new(FakeScheduledExecution {
         kind: FakeRouteKind::Provider,
         target: target.clone(),
-        store: Arc::clone(&store),
+        interactions,
         observed_push_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
         generation,
         attempt_id: AttemptId::generate(),

@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE read_marks SET request_id=?, router_time=?, time_basis=?, through_epoch=?, through_position=? WHERE mark_id=? AND reader_actor=? AND scope_kind=? AND scope_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "89e8370837f3e1ca2592dced0ed0f3ef1eef42a6c6f249c148124325666df720"
+}

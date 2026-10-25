@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT progress_id AS \"progress_id!: String\" FROM subscription_delivery_progress UNION ALL SELECT progress_id AS \"progress_id!: String\" FROM board_intent_progress",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "progress_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "598e7606aeb3b48d4511fe154f5f440d519b1081303d8c234d2e8351fb7f0fc0"
+}

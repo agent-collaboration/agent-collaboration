@@ -1,0 +1,36 @@
+{
+  "db_name": "Turso",
+  "query": "\nWITH subject AS (SELECT 'task' AS kind, ? AS id)\nSELECT record_kind AS \"record_kind!: String\", record_id AS \"record_id!: String\", COUNT(*) OVER () AS \"unread_count!: i64\" FROM project_feed, subject\nWHERE position > ? AND position <= ? AND (\n(record_kind = subject.kind AND record_id = subject.id)\nOR (record_kind = 'subtask' AND json_extract(content, '$.record.record.taskId') = subject.id)\nOR (record_kind = 'taskLinkEvent' AND json_extract(content, '$.record.record.change.link.from') = subject.id)\nOR (record_kind = 'workTrailRow' AND json_extract(content, '$.record.record.subject.kind') = 'task' AND json_extract(content, '$.record.record.subject.subject') = subject.id)\nOR (record_kind = 'fact' AND (\n EXISTS (SELECT 1 FROM json_each(json_extract(content, '$.record.record.links')) AS link WHERE json_extract(link.value, '$.kind') = subject.kind AND json_extract(link.value, '$.id') = subject.id)\n OR (json_extract(content, '$.record.record.kind.kind') = 'evaluatorResult' AND json_extract(content, '$.record.record.kind.fact.subject.kind') = subject.kind AND json_extract(content, '$.record.record.kind.fact.subject.id') = subject.id)\n OR (json_extract(content, '$.record.record.kind.kind') = 'lifecycle' AND json_extract(content, '$.record.record.kind.fact.kind') = 'dropped' AND json_extract(content, '$.record.record.kind.fact.task') = subject.id)))\nOR (record_kind = 'notifyIntent' AND EXISTS (SELECT 1 FROM notify_intents AS intent WHERE intent.intent_id = project_feed.record_id AND intent.cause_kind = subject.kind AND intent.cause_id = subject.id))\nOR (record_kind = 'request' AND json_extract(content, '$.record.record.decision.kind') = 'accepted' AND EXISTS (SELECT 1 FROM project_feed AS effect INDEXED BY feed_by_request_position WHERE effect.request_id = project_feed.request_id AND effect.record_kind = subject.kind AND effect.record_id = subject.id AND effect.record_kind <> 'request'))\n) ORDER BY position DESC LIMIT 50\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "record_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "unread_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0838ca239cd5a71b30bfe9ac6b645051d1488941878d8202676c0950fe9d0d60"
+}

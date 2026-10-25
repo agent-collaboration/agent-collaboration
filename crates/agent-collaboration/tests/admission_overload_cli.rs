@@ -2,11 +2,14 @@
 //! `overloaded` failure to retry later: a board command in the board's typed refusal, and an
 //! untyped command as the retryable overload, never as a connection failure or protocol
 //! violation.
+#[path = "../../collaboration-service/tests/support/native_registry.rs"]
+#[allow(dead_code)]
+mod native_registry;
 use automation_storage::AutomationStore;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_protocol::OperationId;
 use collaboration_service::{CollaborationApplication, ServiceIdentity};
-use message_board_storage::BoardStore;
+use collaboration_service::{MachineIdentity, ProjectAdmission, ProjectAdmissionProps};
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -36,15 +39,38 @@ async fn shed_commands_report_an_overload_to_retry() {
         .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir_in("/tmp")
         .expect("private directory");
-    let board = BoardStore::open(&directory.path().join("board.sqlite"))
-        .await
-        .expect("board store");
+    let origin = message_board::ActorOrigin {
+        installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
+            .expect("fixture service"),
+        machine: message_board::MachineLabel::try_from("overload proof".to_owned())
+            .expect("fixture machine"),
+    };
+    let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
+        directory.path(),
+        Arc::new(native_registry::PendingRegistration),
+        &origin,
+    )
+    .await
+    .expect("real central fixture");
+    let admission = Arc::new(
+        ProjectAdmission::new(ProjectAdmissionProps {
+            registry: native_registry::new_registry(directory.path()).expect("native registry"),
+            fleet: Arc::new(fleet),
+            identity: MachineIdentity::new(
+                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
+                    .expect("service fixture"),
+                Some("overload proof"),
+            )
+            .expect("identity fixture"),
+        })
+        .expect("admission fixture"),
+    );
     let automation = AutomationStore::open(&directory.path().join("automation.sqlite"))
         .await
         .expect("automation store");
     let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
         .expect("service identity")
-        .with_board_store(Arc::new(Mutex::new(board)))
+        .with_project_admission(admission)
         .with_automation_store(Arc::new(Mutex::new(automation)));
     let served = Arc::new(
         ServedCollaborationApi::start_with(
@@ -73,7 +99,7 @@ async fn shed_commands_report_an_overload_to_retry() {
                     "generationGuard": null
                 },
                 "timing": {"kind": "after", "seconds": 600},
-                "expiry": {"kind": "none"}
+                "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
             }),
         )
         .await
@@ -111,9 +137,17 @@ async fn shed_commands_report_an_overload_to_retry() {
     .expect("the wake wait holds the only request slot");
 
     // Act
-    let (board_exit, board) = run_cli(directory.path(), &["board", "project", "list"])
-        .await
-        .expect("board command output");
+    let (board_exit, board) = run_cli(
+        directory.path(),
+        &[
+            "project",
+            "list",
+            "--board-id",
+            message_board::BoardId::generate().as_str(),
+        ],
+    )
+    .await
+    .expect("board command output");
     let (endpoints_exit, endpoints) = run_cli(directory.path(), &["endpoints", "list"])
         .await
         .expect("endpoints command output");
@@ -154,4 +188,8 @@ async fn shed_commands_report_an_overload_to_retry() {
     if let Ok(served) = Arc::try_unwrap(served) {
         served.stop().await.expect("API stops");
     }
+    fleet_runtime
+        .shutdown()
+        .await
+        .expect("stop real central fixture");
 }

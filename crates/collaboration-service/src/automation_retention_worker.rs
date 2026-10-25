@@ -7,13 +7,23 @@ use tokio_util::sync::CancellationToken;
 pub struct AutomationRetentionWorker {
     store: Arc<Mutex<AutomationStore>>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
+    native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
 }
 impl AutomationRetentionWorker {
     pub(crate) fn new(store: Arc<Mutex<AutomationStore>>) -> Self {
         Self {
             store,
             interaction_broker: None,
+            native_push_store: None,
         }
+    }
+
+    pub(crate) fn with_native_push_store(
+        mut self,
+        store: Arc<interaction_storage::InteractionStore>,
+    ) -> Self {
+        self.native_push_store = Some(store);
+        self
     }
 
     pub(crate) fn with_interaction_broker(
@@ -36,7 +46,6 @@ impl AutomationRetentionWorker {
                     "automation events",
                     store.prune_automation_events(now_ms, 1000).await,
                 ),
-                ("push records", store.prune_push_records(now, 500).await),
                 (
                     "settled mailbox deliveries",
                     store.prune_settled_mailbox_deliveries(now_ms, 500).await,
@@ -59,6 +68,14 @@ impl AutomationRetentionWorker {
                 Ok(count) => add_pruned_total(&mut pruned_total, count)?,
                 Err(error) => {
                     tracing::warn!(error = %error, "interaction-history retention prune failed; the next pass will retry")
+                }
+            }
+        }
+        if let Some(store) = self.native_push_store.as_ref() {
+            match store.prune_push_records(now, 500).await {
+                Ok(count) => add_pruned_total(&mut pruned_total, count)?,
+                Err(error) => {
+                    tracing::warn!(error = %error, "native push retention prune failed; the next pass will retry")
                 }
             }
         }
@@ -100,13 +117,17 @@ fn add_pruned_total(total: &mut u64, count: u64) -> Result<(), StorageError> {
 mod interaction_history_retention_tests;
 
 #[cfg(test)]
+use crate::native_worker_faults as native_retention_faults;
+
+#[cfg(test)]
 mod tests {
     use agent_automation::{EventId, InstructionText, OperationId};
     use sqlx::Connection;
     use tokio::sync::Mutex;
 
-    use super::AutomationRetentionWorker;
-    use automation_storage::{AutomationStore, PushRecordDraft};
+    use super::{AutomationRetentionWorker, native_retention_faults};
+    use automation_storage::AutomationStore;
+    use collaboration_protocol::PushRecordDraft;
     use collaboration_protocol::{
         EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, SessionId,
         SessionRef, UuidIdentity,
@@ -237,60 +258,72 @@ mod tests {
 
     #[tokio::test]
     async fn retention_worker_prunes_expired_push_records() {
-        let path = std::env::temp_dir().join(format!(
-            "automation-retention-push-{}.sqlite",
-            OperationId::generate().as_str()
-        ));
-        let mut store = AutomationStore::open(&path)
+        let directory = tempfile::tempdir().expect("retention fixture");
+        let path = directory.path().join("automation.sqlite");
+        let store = AutomationStore::open(&path)
             .await
-            .expect("automation store should open");
+            .expect("automation store");
+        let interactions = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("native push owner"),
+        );
         let now_ms = chrono::Utc::now().timestamp_millis();
         let draft = expired_push(now_ms);
         let push_id = draft.push_id.clone();
-        store
+        interactions
             .insert_push_record(draft)
             .await
             .expect("insert expired push");
         let shared_store = Arc::new(Mutex::new(store));
-
         assert_eq!(
-            AutomationRetentionWorker::new(Arc::clone(&shared_store))
+            AutomationRetentionWorker::new(shared_store.clone())
+                .with_native_push_store(interactions.clone())
                 .prune_batch(now_ms)
                 .await
-                .expect("run bounded retention pass"),
+                .expect("bounded retention"),
             1
         );
         assert!(
-            shared_store
-                .lock()
-                .await
+            interactions
                 .get_push_record(&push_id)
                 .await
                 .expect("read pruned push")
                 .is_none()
         );
         Arc::try_unwrap(shared_store)
-            .unwrap_or_else(|_| panic!("store should be released"))
+            .unwrap_or_else(|_| panic!("retained automation owner"))
             .into_inner()
             .close()
             .await
-            .expect("close automation store");
-        std::fs::remove_file(path).expect("remove isolated database");
+            .expect("close automation");
+        Arc::try_unwrap(interactions)
+            .unwrap_or_else(|_| panic!("retained native owner"))
+            .close()
+            .await
+            .expect("close native owner");
     }
 
     #[tokio::test]
     async fn failed_push_prune_does_not_stop_expired_event_pruning() {
-        let path = std::env::temp_dir().join(format!(
-            "automation-retention-independent-prunes-{}.sqlite",
-            OperationId::generate().as_str()
-        ));
-        let mut store = AutomationStore::open(&path)
+        let directory = tempfile::tempdir().expect("retention fixture");
+        let path = directory.path().join("automation.sqlite");
+        let store = AutomationStore::open(&path)
             .await
-            .expect("automation store should open");
+            .expect("automation store");
+        let interactions = Arc::new(
+            interaction_storage::InteractionStore::open(
+                directory.path().join("interaction.sqlite"),
+            )
+            .await
+            .expect("native push owner"),
+        );
         let now_ms = chrono::Utc::now().timestamp_millis();
         let draft = expired_push(now_ms);
         let push_id = draft.push_id.clone();
-        store
+        interactions
             .insert_push_record(draft)
             .await
             .expect("insert expired push");
@@ -298,36 +331,23 @@ mod tests {
             &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
         )
         .await
-        .expect("observer connection");
-        sqlx::query(
-            "INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'run','fixture','fixture','{}',?)",
-        )
-        .bind(EventId::generate().as_str())
-        .bind(now_ms - 90_i64 * 24 * 60 * 60 * 1000)
-        .execute(&mut observer)
-        .await
-        .expect("insert expired event");
-        sqlx::query(
-            "CREATE TRIGGER fail_push_prune BEFORE DELETE ON router_pushes BEGIN SELECT RAISE(FAIL, 'push prune failure'); END",
-        )
-        .execute(&mut observer)
-        .await
-        .expect("install push prune failure trigger");
+        .expect("automation observer");
+        sqlx::query("INSERT INTO automation_events(event_id,subject_kind,subject_id,event_kind,event_body_json,recorded_at_ms) VALUES (?,'run','fixture','fixture','{}',?)")
+            .bind(EventId::generate().as_str()).bind(now_ms - 90_i64 * 24 * 60 * 60 * 1000).execute(&mut observer).await.expect("expired event");
         observer.close().await.expect("close observer");
-
+        native_retention_faults::execute(interactions.clone(), "CREATE TRIGGER fail_push_prune BEFORE DELETE ON router_pushes BEGIN SELECT RAISE(FAIL, 'push prune failure'); END", None).await.expect("native push fault");
         let shared_store = Arc::new(Mutex::new(store));
-        let removed = AutomationRetentionWorker::new(Arc::clone(&shared_store))
+        let removed = AutomationRetentionWorker::new(shared_store.clone())
+            .with_native_push_store(interactions.clone())
             .prune_batch(now_ms)
             .await
-            .expect("independent event prune succeeds");
+            .expect("independent prune succeeds");
         assert_eq!(removed, 1);
         assert!(
-            shared_store
-                .lock()
-                .await
+            interactions
                 .get_push_record(&push_id)
                 .await
-                .expect("push still exists after its failed prune")
+                .expect("read retained push")
                 .is_some()
         );
         let mut observer = sqlx::SqliteConnection::connect_with(
@@ -335,18 +355,22 @@ mod tests {
         )
         .await
         .expect("event observer");
-        let event_count: i64 = sqlx::query_scalar("SELECT count(*) FROM automation_events")
+        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM automation_events")
             .fetch_one(&mut observer)
             .await
-            .expect("read event count");
-        assert_eq!(event_count, 0);
-        observer.close().await.expect("close event observer");
+            .expect("event count");
+        assert_eq!(count, 0);
+        observer.close().await.expect("close observer");
         Arc::try_unwrap(shared_store)
-            .unwrap_or_else(|_| panic!("store should be released"))
+            .unwrap_or_else(|_| panic!("retained automation owner"))
             .into_inner()
             .close()
             .await
-            .expect("close automation store");
-        std::fs::remove_file(path).expect("remove isolated database");
+            .expect("close automation");
+        Arc::try_unwrap(interactions)
+            .unwrap_or_else(|_| panic!("retained native owner"))
+            .close()
+            .await
+            .expect("close native owner");
     }
 }

@@ -1,14 +1,15 @@
 //! Real two-agent board collaboration through the public CLI and SDK.
+use message_board::ReadActor;
 mod board_cli_runner;
 mod expanded_cli_journey;
 mod filtered_search_journey;
 mod persistence_verification;
 use crate::proof_context::{ProofContext, ProofResult, shell_quote};
 use collaboration_client::board::{
-    ActingForIdentity, BoardCreateRequest, BoardId, Description, HumanId, Identity,
-    MessageListRequest, MessageListScope, MessageReferences, MessageSelection, MessageShowRequest,
-    PageRequest, Placement, ProjectCreateRequest, ProjectId, ReferenceTarget, ResourceName,
-    SessionRef as BoardSessionRef, ThreadShowRequest, TopicCreateRequest, TopicId,
+    ActingForIdentity, BoardCreateRequest, BoardId, Description, HumanId, Identity, PageRequest,
+    Placement, PostListRequest, PostListScope, PostReferences, PostSelection, PostShowRequest,
+    ProjectCreateRequest, ProjectId, ReferenceTarget, ResourceName, SessionRef as BoardSessionRef,
+    ThreadShowRequest, WorkspaceCreateRequest, WorkspaceId,
 };
 use collaboration_client::protocol::{
     MessageContent, MessageDelivery, SessionMessageSendParams, SessionRef,
@@ -25,12 +26,12 @@ pub async fn exercise() -> ProofResult<()> {
         human_id: HumanId::try_from("board-debug-acceptance-owner".to_owned())?,
     };
 
-    let project_id = ProjectId::generate();
+    let workspace_id = WorkspaceId::generate();
     let board_id = BoardId::generate();
-    let topic_id = TopicId::generate();
-    let root_message_id = collaboration_client::board::MessageId::generate();
-    let contribution_message_id = collaboration_client::board::MessageId::generate();
-    let marker_id = root_message_id.as_str().replace('-', "");
+    let project_id = ProjectId::generate();
+    let thread_id = collaboration_client::board::PostId::generate();
+    let contribution_message_id = collaboration_client::board::PostId::generate();
+    let marker_id = thread_id.as_str().replace('-', "");
     let finding_marker = format!("BOARD_FINDING_{marker_id}");
     let result_marker = format!("BOARD_RESULT_{marker_id}");
     let alpha_posted_marker = format!("ALPHA_POSTED_{marker_id}");
@@ -39,8 +40,10 @@ pub async fn exercise() -> ProofResult<()> {
 
     let project = proof
         .client
-        .board_project_create(ProjectCreateRequest {
-            project_id: project_id.clone(),
+        .workspace_create(WorkspaceCreateRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            workspace_id: workspace_id.clone(),
             name: ResourceName::try_from(format!("Debug project {marker_id}"))?,
             description: Description::try_from("Disposable live board acceptance".to_owned())?,
             actor: alpha_identity.clone(),
@@ -50,8 +53,11 @@ pub async fn exercise() -> ProofResult<()> {
     let board = proof
         .client
         .board_create(BoardCreateRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            kind: message_board::BoardKind::Area {},
             board_id: board_id.clone(),
-            project_id: project_id.clone(),
+            workspace_id: workspace_id.clone(),
             name: ResourceName::try_from(format!("Debug board {marker_id}"))?,
             description: Description::try_from("Two-agent CLI collaboration".to_owned())?,
             actor: alpha_identity.clone(),
@@ -60,20 +66,23 @@ pub async fn exercise() -> ProofResult<()> {
         .await?;
     let topic = proof
         .client
-        .board_topic_create(TopicCreateRequest {
-            topic_id: topic_id.clone(),
+        .project_create(ProjectCreateRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            project_id: project_id.clone(),
             board_id: board_id.clone(),
-            name: ResourceName::try_from("Verification".to_owned())?,
-            description: Description::try_from("Findings checked by another agent".to_owned())?,
+            title: ResourceName::try_from("Verification".to_owned())?,
+            description: None,
             actor: alpha_identity.clone(),
             acting_for: Some(owner),
         })
         .await?;
     proof.record(
         "boardResourcesCreated",
-        json!({"project":project,"board":board,"topic":topic}),
+        json!({"workspace":project,"board":board,"project":topic}),
     )?;
 
+    let discussion_stream = arrange_discussion_subject(&mut proof, &project_id).await?;
     let cli = shell_quote(env!("CARGO_BIN_EXE_agent-collaboration"));
     let service_directory = shell_quote(&proof.service_directory.to_string_lossy());
     let alpha_actor = shell_quote(&serde_json::to_string(&alpha_identity)?);
@@ -84,9 +93,10 @@ pub async fn exercise() -> ProofResult<()> {
     let finding_file = proof.workspace.join("board-finding.txt");
     std::fs::write(&finding_file, &finding_text)?;
     let alpha_post_command = format!(
-        "{cli} board message post --message-id {} --placement topic --topic-id {} --text-file {} --actor {alpha_actor} --service-directory {service_directory} --json",
-        root_message_id.as_str(),
-        topic_id.as_str(),
+        "{cli} thread create --post-id {} --project-id {} --about workstream:{} --role orchestrator --no-watch --text-file {} --actor {alpha_actor} --service-directory {service_directory} --json",
+        thread_id.as_str(),
+        project_id.as_str(),
+        discussion_stream.as_str(),
         shell_quote(&finding_file.to_string_lossy()),
     );
     send_task(
@@ -99,17 +109,17 @@ pub async fn exercise() -> ProofResult<()> {
     )
     .await?;
     let alpha_post_turns = proof.wait_for_text(&alpha, &alpha_posted_marker).await?;
-    require_successful_cli_output(&alpha_post_turns, &finding_marker)?;
+    require_successful_cli_output(&alpha_post_turns, thread_id.as_str())?;
 
     let beta_read_command = format!(
-        "{cli} board message show --message-id {} --service-directory {service_directory} --json",
-        root_message_id.as_str(),
+        "{cli} post show --post-id {} --service-directory {service_directory} --json",
+        thread_id.as_str(),
     );
     let beta_post_prefix = format!(
-        "{cli} board message post --message-id {} --placement thread --root-message-id {} --reference-message {} --actor {beta_actor} --service-directory {service_directory} --json --text",
+        "{cli} post post --post-id {} --placement thread --thread-id {} --reference-post {} --actor {beta_actor} --service-directory {service_directory} --json --text",
         contribution_message_id.as_str(),
-        root_message_id.as_str(),
-        root_message_id.as_str(),
+        thread_id.as_str(),
+        thread_id.as_str(),
     );
     send_task(
         &mut proof,
@@ -122,11 +132,11 @@ pub async fn exercise() -> ProofResult<()> {
     .await?;
     let beta_turns = proof.wait_for_text(&beta, &beta_posted_marker).await?;
     require_successful_cli_output(&beta_turns, &finding_marker)?;
-    require_successful_cli_output(&beta_turns, &format!("{result_marker}: 116"))?;
+    require_successful_cli_output(&beta_turns, contribution_message_id.as_str())?;
 
     let alpha_read_command = format!(
-        "{cli} board message list --scope thread --root-message-id {} --selection latest --service-directory {service_directory} --json",
-        root_message_id.as_str(),
+        "{cli} post list --scope thread --thread-id {} --selection latest --service-directory {service_directory} --json",
+        thread_id.as_str(),
     );
     send_task(
         &mut proof,
@@ -142,38 +152,44 @@ pub async fn exercise() -> ProofResult<()> {
 
     let root = proof
         .client
-        .board_message_show(MessageShowRequest {
-            message_id: root_message_id.clone(),
+        .post_show(PostShowRequest {
+            post_id: thread_id.clone(),
         })
         .await?;
     let contribution = proof
         .client
-        .board_message_show(MessageShowRequest {
-            message_id: contribution_message_id.clone(),
+        .post_show(PostShowRequest {
+            post_id: contribution_message_id.clone(),
         })
         .await?;
     let thread_history = proof
         .client
-        .board_message_list(MessageListRequest {
-            scope: MessageListScope::Thread {
-                root_message_id: root_message_id.clone(),
+        .post_list(PostListRequest {
+            scope: PostListScope::Thread {
+                thread: message_board::ThreadId::from(thread_id.clone()).into(),
             },
-            selection: MessageSelection::Latest,
+            selection: PostSelection::Latest,
             page: PageRequest::default(),
         })
         .await?;
     let alpha_thread = proof
         .client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: root_message_id.clone(),
-            reader: Some(alpha_identity.clone()),
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: message_board::ThreadId::from(thread_id.clone()).into(),
+            reader: ReadActor::Identified {
+                reader: alpha_identity.clone(),
+            },
         })
         .await?;
     let beta_thread = proof
         .client
-        .board_thread_show(ThreadShowRequest {
-            root_message_id: root_message_id.clone(),
-            reader: Some(beta_identity.clone()),
+        .thread_show(ThreadShowRequest {
+            include_redacted: false,
+            thread: message_board::ThreadId::from(thread_id.clone()).into(),
+            reader: ReadActor::Identified {
+                reader: beta_identity.clone(),
+            },
         })
         .await?;
 
@@ -185,7 +201,7 @@ pub async fn exercise() -> ProofResult<()> {
         &beta_identity,
         &finding_text,
         &format!("{result_marker}: 116"),
-        &root_message_id,
+        &thread_id,
     )?;
     if alpha_thread
         .watch_status
@@ -203,9 +219,10 @@ pub async fn exercise() -> ProofResult<()> {
         expanded_cli_journey::AgentExchange {
             alpha_identity: &alpha_identity,
             beta_identity: &beta_identity,
-            first_project_id: project_id.as_str(),
+            first_workspace_id: workspace_id.as_str(),
             first_board_id: board_id.as_str(),
-            first_topic_id: topic_id.as_str(),
+            first_project_id: project_id.as_str(),
+            first_subject: &format!("workstream:{}", discussion_stream.as_str()),
             root_message: &root.0,
             contribution_message: &contribution.0,
         },
@@ -237,6 +254,7 @@ async fn send_task(
     let receipt = proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {
@@ -275,14 +293,14 @@ fn require_successful_cli_output(turns: &[Value], marker: &str) -> ProofResult<(
 
 #[allow(clippy::too_many_arguments)]
 fn verify_sdk_observations(
-    root: &collaboration_client::board::Message,
-    contribution: &collaboration_client::board::Message,
-    thread_records: &[collaboration_client::board::Message],
+    root: &collaboration_client::board::Post,
+    contribution: &collaboration_client::board::Post,
+    thread_records: &[collaboration_client::board::Post],
     alpha_identity: &Identity,
     beta_identity: &Identity,
     finding_text: &str,
     result_text: &str,
-    root_message_id: &collaboration_client::board::MessageId,
+    thread_id: &collaboration_client::board::PostId,
 ) -> ProofResult<()> {
     if root.actor != *alpha_identity
         || root.text.as_str() != finding_text
@@ -290,11 +308,11 @@ fn verify_sdk_observations(
         || contribution.text.as_str() != result_text
         || contribution.placement
             != (Placement::Thread {
-                root_message_id: root_message_id.clone(),
+                thread_id: thread_id.clone().into(),
             })
         || contribution.references
-            != MessageReferences::try_from(vec![ReferenceTarget::Message {
-                message_id: root_message_id.clone(),
+            != PostReferences::try_from(vec![ReferenceTarget::Post {
+                post_id: thread_id.clone(),
             }])?
         || thread_records.len() != 1
         || thread_records.first() != Some(contribution)
@@ -304,4 +322,22 @@ fn verify_sdk_observations(
         );
     }
     Ok(())
+}
+
+// Explicit human authority setup belongs to this ignored, isolated live fixture.
+async fn arrange_discussion_subject(
+    proof: &mut ProofContext,
+    project_id: &ProjectId,
+) -> ProofResult<message_board::WorkstreamId> {
+    let discussion_stream = message_board::WorkstreamId::generate();
+    let fixture_owner = json!({"kind":"human","humanId":"board-debug-acceptance-owner"});
+    let owner_request = |operation: Value| json!({"requestId":message_board::RequestId::generate(),"protocolVersion":1,"actor":fixture_owner,"actingFor":null,"projectId":project_id,"operation":operation});
+    let role = proof.client.role_grant(serde_json::from_value(owner_request(json!({"kind":"roleGrant","subject":{"kind":"project","subject":project_id},"role":"lead","holder":fixture_owner,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null})))?).await?;
+    let stream = proof.client.workstream_create(serde_json::from_value(owner_request(json!({"kind":"workstreamCreate","workstreamId":discussion_stream,"name":"Live collaboration discussion","goal":"Explicit non-project conversation subject"})))?).await?;
+    proof.record(
+        &format!("explicitDiscussionSubject-{}", project_id.as_str()),
+        json!({"role":role,"workstream":stream}),
+    )?;
+
+    Ok(discussion_stream)
 }

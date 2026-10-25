@@ -228,7 +228,8 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         Arc::new(Mutex::new(store)),
         &root,
         WorkerEndpoint { socket, number: 1 },
-    )?;
+    )
+    .await?;
     worker.step(run_id).await?;
     Err("worker did not reach crash checkpoint".into())
 }
@@ -326,7 +327,7 @@ async fn recover(root: &Path) -> TestResult<()> {
         }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     });
-    let worker = fixture_worker(store.clone(), root, WorkerEndpoint { socket, number: 2 })?;
+    let worker = fixture_worker(store.clone(), root, WorkerEndpoint { socket, number: 2 }).await?;
     for stopped in [false, true] {
         worker.step(run_id.clone()).await?;
         let record = store
@@ -393,7 +394,7 @@ struct WorkerEndpoint {
     socket: PathBuf,
     number: u64,
 }
-fn fixture_worker(
+async fn fixture_worker(
     store: Arc<Mutex<AutomationStore>>,
     root: &Path,
     endpoint: WorkerEndpoint,
@@ -436,6 +437,9 @@ fn fixture_worker(
         crate::MachineIdentity::new(backend.endpoint.service_id.clone(), Some("Timeout Fixture"))?;
     Ok(ScheduledRunWorker {
         store,
+        interactions: Arc::new(
+            interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
+        ),
         execution: Arc::new(crate::CodexAppServerScheduledRuns::new(
             backend.clone(),
             Arc::new(crate::UnmaterializedThreadHolder::new()),

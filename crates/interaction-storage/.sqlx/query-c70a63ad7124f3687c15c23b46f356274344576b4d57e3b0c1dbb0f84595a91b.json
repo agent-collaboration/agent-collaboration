@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT p.progress_id AS \"progress_id!: String\", p.intent_id AS \"intent_id!: String\", p.state_epoch AS \"state_epoch!: i64\", p.state_position AS \"state_position!: i64\" FROM json_each(?) k CROSS JOIN board_intent_progress p ON p.project_id = ? AND p.intent_id = CAST(json_extract(k.value, '$[0]') AS TEXT) AND p.state_epoch = CAST(json_extract(k.value, '$[1].epoch') AS INTEGER) AND p.state_position = CAST(json_extract(k.value, '$[1].position') AS INTEGER) ORDER BY p.intent_id, p.state_epoch, p.state_position",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "progress_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "intent_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "state_epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "state_position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "c70a63ad7124f3687c15c23b46f356274344576b4d57e3b0c1dbb0f84595a91b"
+}

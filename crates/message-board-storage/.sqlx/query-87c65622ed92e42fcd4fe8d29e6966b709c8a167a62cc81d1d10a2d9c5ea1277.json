@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT EXISTS(SELECT 1 FROM subscription_memberships m JOIN actors a ON a.actor_id=m.reader_actor WHERE ? IS NULL OR a.canonical_identity=?) AS \"present!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "87c65622ed92e42fcd4fe8d29e6966b709c8a167a62cc81d1d10a2d9c5ea1277"
+}

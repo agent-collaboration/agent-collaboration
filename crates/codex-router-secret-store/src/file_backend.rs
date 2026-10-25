@@ -439,6 +439,9 @@ impl SecretStore for FileSecretStore {
 }
 
 fn reject_pooled_credential_key(key: &SecretKey) -> Result<(), SecretStoreError> {
+    if crate::fleet_secret_key::FleetSecretKey::parse(key)?.is_some() {
+        return Err(SecretStoreError::FleetSecretRequiresEncryption);
+    }
     if has_credential_bundle_marker(key) {
         return Err(SecretStoreError::PooledCredentialRequiresEncryption {
             key: key.as_str().to_owned(),

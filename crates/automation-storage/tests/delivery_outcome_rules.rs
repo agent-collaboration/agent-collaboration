@@ -63,6 +63,7 @@ async fn prepare_dispatching(
     Ok(())
 }
 
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn cancellation_retains_latest_acceptance_and_current_uncertainty()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -73,20 +74,22 @@ async fn cancellation_retains_latest_acceptance_and_current_uncertainty()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
                 text: "Check".into(),
             },
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::None,
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 7200 },
             now_ms: 0,
         })
         .await?;
     let mut deliveries = Vec::new();
     // Two accepted occurrences followed by an unresolved third occurrence.
     for occurrence in 1..=3 {
-        let now_ms = occurrence * 60000;
+        let now_ms = occurrence * 300000;
         let id = match store
             .evaluate_wakeup::<Message>(
                 &wake.definition.wakeup_id,
@@ -137,7 +140,7 @@ async fn cancellation_retains_latest_acceptance_and_current_uncertainty()
         operation_id: OperationId::generate(),
         wakeup_id: wake.definition.wakeup_id,
         action: automation_storage::WakeAction::Cancel,
-        now_ms: 181000,
+        now_ms: 905000,
     };
     let cancelled = store.mutate_wakeup::<Message>(&request).await?;
     let retained: Vec<_> = cancelled
@@ -175,6 +178,8 @@ async fn known_nonsubmission_retries_but_uncertainty_never_does()
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
@@ -341,6 +346,7 @@ async fn known_nonsubmission_retries_but_uncertainty_never_does()
     Ok(())
 }
 
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -353,20 +359,22 @@ async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message
     let mut store = AutomationStore::open(&path).await?;
     let wake = store
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message: Message {
                 target: "B".into(),
                 text: "Check".into(),
             },
-            timing: TimingRule::Interval { seconds: 60 },
-            expiry: ExpiryRule::None,
+            timing: TimingRule::Interval { seconds: 300 },
+            expiry: ExpiryRule::After { seconds: 7200 },
             now_ms: 0,
         })
         .await?;
     let id = match store
         .evaluate_wakeup::<Message>(
             &wake.definition.wakeup_id,
-            60000,
+            300000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?
@@ -375,7 +383,7 @@ async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message
         _ => return Err("missing fire".into()),
     };
     let claim = store
-        .claim_delivery::<String, String, String>(&id, 60000)
+        .claim_delivery::<String, String, String>(&id, 300000)
         .await?
         .ok_or("missing claim")?;
     prepare_dispatching(&mut store, &id, &claim.attempt_id).await?;
@@ -384,7 +392,7 @@ async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message
             operation_id: OperationId::generate(),
             wakeup_id: wake.definition.wakeup_id.clone(),
             action: WakeAction::Pause,
-            now_ms: 61000,
+            now_ms: 305000,
         })
         .await?;
     store
@@ -392,7 +400,7 @@ async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message
             operation_id: OperationId::generate(),
             wakeup_id: wake.definition.wakeup_id,
             action: WakeAction::Resume,
-            now_ms: 62000,
+            now_ms: 310000,
         })
         .await?;
     // Act: the old dispatch finally reports that no input was submitted.
@@ -406,12 +414,12 @@ async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message
                 retryable: true,
                 receipt: None,
             },
-            now_ms: 63000,
+            now_ms: 315000,
         })
         .await?;
     // Assert: resume enables future ticks, not retry of the message cancelled by pause.
     if store
-        .claim_delivery::<String, String, String>(&id, 100000)
+        .claim_delivery::<String, String, String>(&id, 500000)
         .await?
         .is_some()
     {
@@ -422,6 +430,7 @@ async fn pause_during_dispatch_prevents_late_rejection_from_resurrecting_message
     Ok(())
 }
 
+// U66 / MS-10: valid bounded timing; original interleavings and assertions remain.
 #[tokio::test]
 async fn pause_preserves_late_acceptance_and_unknown_effects()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -435,20 +444,22 @@ async fn pause_preserves_late_acceptance_and_unknown_effects()
         let mut store = AutomationStore::open(&path).await?;
         let wake = store
             .create_wakeup(&WakeCreate {
+                requested_by: collaboration_protocol::WakeCreator::Owner {},
+                replace: false,
                 operation_id: OperationId::generate(),
                 message: Message {
                     target: "B".into(),
                     text: "Check".into(),
                 },
-                timing: TimingRule::Interval { seconds: 60 },
-                expiry: ExpiryRule::None,
+                timing: TimingRule::Interval { seconds: 300 },
+                expiry: ExpiryRule::After { seconds: 7200 },
                 now_ms: 0,
             })
             .await?;
         let id = match store
             .evaluate_wakeup::<Message>(
                 &wake.definition.wakeup_id,
-                60000,
+                300000,
                 wake_push_test_support::build_test_wake_push_draft,
             )
             .await?
@@ -457,7 +468,7 @@ async fn pause_preserves_late_acceptance_and_unknown_effects()
             _ => return Err("missing fire".into()),
         };
         let claim = store
-            .claim_delivery::<String, String, String>(&id, 60000)
+            .claim_delivery::<String, String, String>(&id, 300000)
             .await?
             .ok_or("missing claim")?;
         prepare_dispatching(&mut store, &id, &claim.attempt_id).await?;
@@ -466,7 +477,7 @@ async fn pause_preserves_late_acceptance_and_unknown_effects()
                 operation_id: OperationId::generate(),
                 wakeup_id: wake.definition.wakeup_id.clone(),
                 action: WakeAction::Pause,
-                now_ms: 61000,
+                now_ms: 305000,
             })
             .await?;
         // Resolve after reopening so pause intent cannot depend on memory or retained events.
@@ -495,14 +506,14 @@ async fn pause_preserves_late_acceptance_and_unknown_effects()
                 attempt_id: claim.attempt_id,
                 effects: Some(effects(effect).into()),
                 result,
-                now_ms: 62000,
+                now_ms: 310000,
             })
             .await?
         {
             return Err("late evidence was not recorded".into());
         }
         if store
-            .claim_delivery::<String, String, String>(&id, 999999)
+            .claim_delivery::<String, String, String>(&id, 4999995)
             .await?
             .is_some()
         {
@@ -519,7 +530,7 @@ async fn pause_preserves_late_acceptance_and_unknown_effects()
                 operation_id: OperationId::generate(),
                 wakeup_id: wake.definition.wakeup_id.clone(),
                 action: WakeAction::Cancel,
-                now_ms: 1000000,
+                now_ms: 5000000,
             })
             .await?;
         if cancellation.retained.len() != 1 {

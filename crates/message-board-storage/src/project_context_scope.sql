@@ -1,0 +1,1 @@
+SELECT fact_id AS "id!: String" FROM facts INDEXED BY context_scope_facts WHERE json_extract(fact, '$.kind') = 'scopeAcknowledgement' AND json_array(json_extract(fact, '$.fact.session.endpoint.serviceId'), json_extract(fact, '$.fact.session.endpoint.endpointId'), json_extract(fact, '$.fact.session.sessionId')) = json_array(?, ?, ?) AND fact_id > ? ORDER BY fact_id LIMIT ?

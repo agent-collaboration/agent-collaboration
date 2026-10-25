@@ -1,7 +1,6 @@
 use super::*;
 #[path = "auto_direct_message_tests/uncertainty_push_tests.rs"]
 mod uncertainty_push_tests;
-use automation_storage::AutomationStore;
 use collaboration_protocol::{
     PushDeliveryState, PushHeaderFacts, PushKind, PushOrigin, PushRecordDraft,
 };
@@ -9,6 +8,7 @@ use collaboration_service::{
     BoardAvailability, MachineIdentity, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
 };
+use interaction_storage::InteractionStore;
 
 fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalProviderLaunch {
     let script = format!(
@@ -41,14 +41,12 @@ for line in sys.stdin:
 }
 
 async fn save_direct_message(
-    store: &tokio::sync::Mutex<AutomationStore>,
+    store: &InteractionStore,
     target: &SessionRef,
     mode: MessageDelivery,
 ) -> PushId {
     let push_id = PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push");
     store
-        .lock()
-        .await
         .insert_push_record(PushRecordDraft {
             push_id: push_id.clone(),
             kind: PushKind::DirectMessage,
@@ -132,11 +130,11 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
         RoutePresence::Wakeable
     );
     let router = Arc::new(SessionDeliveryRouter::new(vec![route.clone()]));
-    let pushes = Arc::new(tokio::sync::Mutex::new(
-        AutomationStore::open(&root.path().join("automation.sqlite"))
+    let pushes = Arc::new(
+        InteractionStore::open(&root.path().join("interaction.sqlite"))
             .await
             .expect("push store"),
-    ));
+    );
     let owner = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
         board_availability: BoardAvailability::Unavailable,
         push_store: pushes.clone(),
@@ -194,8 +192,14 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
     .expect("terminal readback");
     assert_eq!(readback.delivery_state, PushDeliveryState::Delivered);
     owner.shutdown().await;
+    drop(owner);
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("provider shutdown");
+    Arc::try_unwrap(pushes)
+        .unwrap_or_else(|_| panic!("push owner retained"))
+        .close()
+        .await
+        .expect("push owner closed");
 
     let requests = std::fs::read_to_string(capture)
         .expect("actual ACP requests")

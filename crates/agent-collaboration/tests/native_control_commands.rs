@@ -133,6 +133,7 @@ async fn message_cli_retains_target_after_response_loss_and_keeps_refusal_distin
         let epoch = "00000000-0000-4000-8000-000000000002";
         let mut fixture = FakeCollaborationApi::new(service_id, epoch)
             .unwrap_or_else(|error| panic!("fixture: {error}"));
+        let item_id = "019f0000-0000-7000-8000-000000000101";
         let reply = match rejection_kind {
             None => FakeReply::Disconnect,
             Some(kind) => {
@@ -167,6 +168,8 @@ async fn message_cli_retains_target_after_response_loss_and_keeps_refusal_distin
                     "message",
                     "send",
                     "--human-user",
+                    "--item-id",
+                    item_id,
                     "--to",
                     &target,
                     "--text",
@@ -235,6 +238,10 @@ async fn message_cli_retains_target_after_response_loss_and_keeps_refusal_distin
             assert_eq!(result["target"]["sessionId"], "proof-thread", "{label}");
             assert_eq!(result["error"]["effect"], "unknown", "{label}");
         }
-        assert!(output.stderr.is_empty(), "{label}");
+        assert_eq!(
+            String::from_utf8(output.stderr).expect("stderr"),
+            format!("itemId: {item_id}\n"),
+            "{label}"
+        );
     }
 }

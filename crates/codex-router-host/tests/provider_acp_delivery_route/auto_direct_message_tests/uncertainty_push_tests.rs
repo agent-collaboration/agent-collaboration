@@ -79,11 +79,11 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
         Arc::new(NoLivePeer),
     ));
     let router = Arc::new(SessionDeliveryRouter::new(vec![route.clone()]));
-    let pushes = Arc::new(tokio::sync::Mutex::new(
-        AutomationStore::open(&root.path().join("automation.sqlite"))
+    let pushes = Arc::new(
+        InteractionStore::open(&root.path().join("interaction.sqlite"))
             .await
             .expect("push store"),
-    ));
+    );
     let owner = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
         board_availability: BoardAvailability::Unavailable,
         push_store: pushes.clone(),
@@ -109,8 +109,14 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
     .expect("push outcome");
     let after = store.lock().await.inspect(&blocker).await.expect("after");
     owner.shutdown().await;
+    drop(owner);
     route.shutdown_queue().await;
     supervisor.shutdown().await.expect("shutdown");
+    Arc::try_unwrap(pushes)
+        .unwrap_or_else(|_| panic!("push owner retained"))
+        .close()
+        .await
+        .expect("push owner closed");
 
     // Assert: the public held receipt preserves the actual admission failure ID.
     assert_eq!(held.delivery_state, PushDeliveryState::Held);

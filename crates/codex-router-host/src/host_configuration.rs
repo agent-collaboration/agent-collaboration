@@ -19,6 +19,12 @@ pub struct HostCoordinationPaths {
 }
 
 impl HostCoordinationPaths {
+    /// Resolves the Host's coordination artifacts from its owning Router root.
+    #[must_use]
+    pub fn for_router_root(root: &Path) -> Self {
+        Self::new(root.join("host.sock"), root.join("host.lock"))
+    }
+
     /// Creates coordination paths previously resolved by the CLI.
     #[must_use]
     pub const fn new(operator_socket: PathBuf, instance_lock: PathBuf) -> Self {
@@ -40,13 +46,30 @@ impl HostCoordinationPaths {
         &self.instance_lock
     }
 
+    /// Returns the Router root that owns these coordination artifacts.
+    #[must_use]
+    pub fn router_root(&self) -> Option<&Path> {
+        self.instance_lock.parent()
+    }
+
     /// Returns the pooled credential directory under the same router root.
     #[must_use]
     pub fn router_secret_root(&self) -> Option<PathBuf> {
-        self.instance_lock
-            .parent()
+        self.router_root()
             .map(|router_root| router_root.join("secrets"))
     }
+}
+
+/// Returns the collaboration service directory owned by this Router root.
+#[must_use]
+pub fn router_collaboration_directory(root: &Path) -> PathBuf {
+    root.join("agent-communication")
+}
+
+/// Returns the enrollment file read when this Router's Host starts.
+#[must_use]
+pub fn router_fleet_enrollment_file(root: &Path) -> PathBuf {
+    root.join("fleet/enrollment.json")
 }
 
 /// Validated host inputs with router-owned and Codex-owned paths kept separate.

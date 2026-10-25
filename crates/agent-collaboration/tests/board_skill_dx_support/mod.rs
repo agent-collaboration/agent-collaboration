@@ -43,23 +43,43 @@ pub async fn exercise() -> ProofResult<()> {
         &setup,
     )?;
     let setup_task = format!(
-        "Use the communication skill and factual environment context at {}. You are explicitly authorized to create disposable test resources for this task. Create the {PRIMARY_PROJECT} project, associate it with repository origin {REPOSITORY_ORIGIN}, and prove both repository-to-project and project-to-repository discovery. Exercise project inspection, listing, and a description update while retaining its assigned name. Within it create {PRIMARY_BOARD}, inspect/list it, and update its description while retaining its assigned name. Create {PRIMARY_TOPIC}, inspect it through topic listing, and update its description while retaining its assigned name. Preserve all returned identities for later operators in a private workspace note. Do not create anything outside these named disposable resources. Finish with DX_SETUP_COMPLETE.",
+        "Use the communication skill and factual environment context at {}. You are explicitly authorized to create disposable test resources for this task. Create the {PRIMARY_PROJECT} project, associate it with repository origin {REPOSITORY_ORIGIN}, and prove both repository-to-project and project-to-repository discovery. Exercise project inspection, listing, and a description update while retaining its assigned name. Within it create {PRIMARY_BOARD}, inspect/list it, and update its description while retaining its assigned name. Create {PRIMARY_TOPIC}, inspect it through topic listing, and update its description while retaining its assigned name. Assign yourself the lead of the new project and explicitly create one workstream named DX discussion subjects for these conversations. Preserve all returned identities for later operators in a private workspace note. Do not create anything outside these named disposable resources. Finish with DX_SETUP_COMPLETE.",
         setup_context.display()
     );
     let setup_turns = run_operator(&mut proof, &setup, &setup_task, "DX_SETUP_COMPLETE").await?;
     traces.push(OperatorTrace::new("setup", setup.clone(), setup_turns));
     write_session_trace(&proof.root, &traces, &observed_coverage(&traces))?;
     let resources = durable_grading::discover_named_resources(&mut proof).await?;
+    let subject = proof
+        .client
+        .workstream_list(ProjectRecordListRequest {
+            project_id: resources.primary_project.id.clone(),
+            page: PageRequest::default(),
+        })
+        .await?
+        .records
+        .into_iter()
+        .find_map(|record| match record {
+            Record::Workstream(stream) if stream.name.as_str() == "DX discussion subjects" => {
+                Some(stream.workstream_id)
+            }
+            _ => None,
+        })
+        .ok_or("setup did not create the explicit discussion subject")?;
     proof
         .client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Topic {
-                topic_id: resources.primary_topic.topic_id.clone(),
-            },
+        .thread_create(ThreadCreateRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            addressees: Vec::new(),
+            post_id: PostId::generate(),
+            project_id: resources.primary_project.id.clone(),
+            about: ThreadSubject::Workstream(subject),
+            role: None,
+            watch: false,
             actor: human_identity("dx-pagination-seed")?,
             acting_for: None,
-            text: MessageText::try_from(
+            text: PostText::try_from(
                 "Earlier migration context retained for pagination.".to_owned(),
             )?,
             references: Vec::new().try_into()?,
@@ -103,24 +123,29 @@ pub async fn exercise() -> ProofResult<()> {
     let inbox_identity = board_identity(&inbox)?;
     proof
         .client
-        .board_thread_watch(ThreadWatchRequest {
-            root_message_id: discussions.primary_root.clone(),
+        .thread_watch(ThreadWatchRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
             actor: inbox_identity.clone(),
             acting_for: None,
         })
         .await?;
     proof
         .client
-        .board_message_post(MessagePostRequest {
-            message_id: MessageId::generate(),
-            placement: Placement::Thread {
-                root_message_id: discussions.primary_root.clone(),
+        .thread_post(ThreadPostRequest {
+            request_id: message_board::RequestId::generate(),
+            protocol_version: message_board::ProtocolVersion::CURRENT,
+            addressees: Vec::new(),
+            post_id: PostId::generate(),
+            placement: message_board::PostTarget::Thread {
+                thread: message_board::ThreadId::from(discussions.primary_root.clone()).into(),
             },
             actor: human_identity("dx-seed-reviewer")?,
             acting_for: None,
-            text: MessageText::try_from("Seed reviewer activity for inbox catch-up.".to_owned())?,
-            references: vec![ReferenceTarget::Message {
-                message_id: discussions.cross_project_reply.clone(),
+            text: PostText::try_from("Seed reviewer activity for inbox catch-up.".to_owned())?,
+            references: vec![ReferenceTarget::Post {
+                post_id: discussions.cross_project_reply.clone(),
             }]
             .try_into()?,
         })
@@ -221,6 +246,7 @@ async fn run_operator(
     proof
         .client
         .send_agent_message(SessionMessageSendParams {
+            item_id: None,
             target: target.clone(),
             generation_guard: Some(proof.generation.clone()),
             message: MessageContent::Agent {

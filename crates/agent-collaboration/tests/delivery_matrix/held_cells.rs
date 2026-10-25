@@ -4,7 +4,7 @@ use super::{
     matrix_marker,
 };
 use codex_native_integration::NativeOperation;
-use collaboration_client::board::{Identity, MessageId, SubscriptionScope};
+use collaboration_client::board::{Identity, SubscriptionScope, ThreadId};
 use collaboration_client::protocol::{
     PushRecordShowParams, RouterAccess, SessionRef, ThreadSubscriptionPresence,
     ThreadSubscriptionsRequest,
@@ -206,6 +206,9 @@ pub(super) async fn cover_held_dm_cell(
             reference: held.link.clone(),
         })
         .await?;
+    let collaboration_client::protocol::MessageShowResult::Local(delivered) = delivered else {
+        return Err("native proof expected a stored local push".into());
+    };
     let delivered_line = super::expected_push_line(&delivered, &super::machine_label(proof)?)?;
     if delivered.record.delivery_state != PushDeliveryState::Delivered
         || delivered.record.push_id.as_str() != push_id
@@ -305,7 +308,7 @@ async fn load_codex_target(
 async fn wait_for_held_subscription_roots(
     proof: &mut ProofContext,
     target: &SessionRef,
-    roots: &[MessageId],
+    roots: &[ThreadId],
 ) -> ProofResult<()> {
     if roots.len() != 2 || roots.first() == roots.last() {
         return Err("S5 requires two distinct subscription roots".into());
@@ -317,7 +320,7 @@ async fn wait_for_held_subscription_roots(
         observation.tick().await;
         let page = proof
             .client
-            .board_thread_subscriptions(ThreadSubscriptionsRequest {
+            .thread_subscriptions(ThreadSubscriptionsRequest {
                 actor: reader.clone(),
             })
             .await?;
@@ -389,7 +392,7 @@ fn assert_held_two_root_batch(
     let has_marker = |marker: &str| {
         show.activity_ranges.iter().any(|range| {
             range
-                .messages
+                .posts
                 .iter()
                 .any(|message| message.text.as_str() == marker)
         })

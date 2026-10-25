@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT thread_id AS \"thread_id!: String\" FROM threads WHERE thread_id>? ORDER BY thread_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "thread_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "485f15bd71b126ac6e959f1b7ed26ffda4eb87484e97d6c6815158dc7855b1b3"
+}

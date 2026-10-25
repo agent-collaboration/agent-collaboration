@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO handoff_frontier(frontier_id,settled_through) VALUES(?,?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "74cb2b1e9b5dd0756382d983f175f128ad821b80fa6ce4a0e8e2ff0bc040972e"
+}

@@ -50,7 +50,6 @@ struct ApprovalFixture {
 struct ApprovalDeliveryCapture {
     requester: SessionRef,
     approver: SessionRef,
-    automation_store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     broker: Arc<ServiceInteractionBroker>,
     machine_identity: MachineIdentity,
 }
@@ -62,13 +61,14 @@ impl collaboration_service::SessionMessageDelivery for AcceptedTypedNoticeDelive
         &'a self,
         _: collaboration_service::layer_zero::DeliveryRequest,
         _: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_protocol::DeliveryReceipt> {
+    ) -> collaboration_service::DeliveryFuture<'a, collaboration_service::NativeDeliveryResult>
+    {
         Box::pin(async {
-            Ok(collaboration_protocol::DeliveryReceipt {
-                outcome: collaboration_protocol::DeliveryOutcome::Started,
-                reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
-                client: None,
-            })
+            Ok(collaboration_service::NativeDeliveryResult::observed(
+                collaboration_service::NativeObservedOutcome::Started,
+                Some(collaboration_protocol::SessionReachability::CodexAppServer),
+                None,
+            ))
         })
     }
 
@@ -200,7 +200,6 @@ impl ApprovalFixture {
             ApprovalDeliveryCapture {
                 requester: requester.clone(),
                 approver: approver.clone(),
-                automation_store: Arc::clone(&automation_store),
                 broker: Arc::clone(&broker),
                 machine_identity: machine_identity.clone(),
             },
@@ -429,9 +428,8 @@ async fn serve_approval_deliveries(
                     assert!(!text.contains("Intended recipient:"));
 
                     let push = capture
-                        .automation_store
-                        .lock()
-                        .await
+                        .broker
+                        .interaction_store()
                         .get_push_record(link.push_id())
                         .await
                         .expect("read delivered push")

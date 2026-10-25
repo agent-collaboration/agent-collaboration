@@ -7,7 +7,7 @@ use collaboration_protocol::{
 use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
-use sqlx::Connection;
+use sqlx::{ConnectOptions as _, Connection as _};
 use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
 #[path = "support/served_api.rs"]
@@ -95,6 +95,9 @@ async fn exercise_scheduled_run(
     let store = Arc::new(tokio::sync::Mutex::new(
         AutomationStore::open(&database).await?,
     ));
+    let interaction_database = root.join("interaction.sqlite");
+    let interactions =
+        Arc::new(interaction_storage::InteractionStore::open(&interaction_database).await?);
     let path = root.join("native.sock");
     let listener = tokio::net::UnixListener::bind(&path)?;
     let service_id = "00000000-0000-4000-8000-000000000001";
@@ -138,6 +141,7 @@ async fn exercise_scheduled_run(
     let identity = ServiceIdentity::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
+        .with_interaction_store(interactions.clone())
         .with_scheduled_run_execution(Arc::new(
             collaboration_service::CodexAppServerScheduledRuns::new(
                 native_backend.clone(),
@@ -500,7 +504,15 @@ async fn exercise_scheduled_run(
         worker.await?;
         served.stop().await?;
         backend.await??;
-        drop(store);
+        Arc::try_unwrap(interactions)
+            .map_err(|_| "schedule interaction owner remained shared after shutdown")?
+            .close()
+            .await?;
+        Arc::try_unwrap(store)
+            .map_err(|_| "schedule automation owner remained shared after shutdown")?
+            .into_inner()
+            .close()
+            .await?;
         for entry in std::fs::read_dir(&root)? {
             std::fs::remove_file(entry?.path())?;
         }
@@ -624,18 +636,41 @@ async fn exercise_scheduled_run(
     worker.await?;
     served.stop().await?;
     backend.await??;
-    let mut push_connection = sqlx::SqliteConnection::connect_with(
-        &sqlx::sqlite::SqliteConnectOptions::new().filename(&database),
-    )
-    .await?;
-    let push_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM router_pushes")
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "schedule interaction owner remained shared after shutdown")?
+        .close()
+        .await?;
+    Arc::try_unwrap(store)
+        .map_err(|_| "schedule automation owner remained shared after shutdown")?
+        .into_inner()
+        .close()
+        .await?;
+    let mut push_connection = sqlx_turso::TursoConnectOptions::new()
+        .filename(&interaction_database)
+        .connect()
+        .await?;
+    let interaction_push_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM router_pushes")
         .fetch_one(&mut push_connection)
         .await?;
     push_connection.close().await?;
-    if push_count != 0 {
-        return Err(format!("fresh scheduled run created {push_count} push record(s)").into());
+    // The native owner stays empty, and the retired legacy table stays absent.
+    // Recreating that table is a regression even before a legacy push is stored.
+    let mut legacy_connection = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(&database)
+        .read_only(true)
+        .connect()
+        .await?;
+    let legacy_push_tables: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_schema WHERE type='table' AND name='router_pushes'",
+    )
+    .fetch_one(&mut legacy_connection)
+    .await?;
+    legacy_connection.close().await?;
+    if interaction_push_count != 0 || legacy_push_tables != 0 {
+        return Err(format!(
+            "fresh scheduled run created {interaction_push_count} native pushes or {legacy_push_tables} retired legacy push tables"
+        ).into());
     }
-    drop(store);
     for entry in std::fs::read_dir(&root)? {
         let entry = entry?;
         std::fs::remove_file(entry.path())?;

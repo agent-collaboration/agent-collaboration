@@ -225,8 +225,7 @@ pub(crate) async fn run_host_command<W: Write + Send>(
         command.require_debug_isolation,
         owner_home.as_deref(),
     );
-    let coordination_paths =
-        HostCoordinationPaths::new(router_root.join("host.sock"), router_root.join("host.lock"));
+    let coordination_paths = HostCoordinationPaths::for_router_root(&router_root);
     if command.runs_foreground() {
         let provider_launches = external_provider_launches(&command)?;
         return foreground_launch::run_foreground_host(

@@ -33,13 +33,19 @@ pub enum DebugProfileError {
 
 impl DebugCodexProfile {
     pub fn read(codex_home: &Path, port: u16) -> Result<Self, DebugProfileError> {
-        let file = std::fs::File::open(codex_home.join("codex-router-debug.config.toml"))
-            .map_err(|_| DebugProfileError::Unavailable)?;
-        let mut text = String::new();
-        file.take((MAX_PROFILE_BYTES + 1) as u64)
-            .read_to_string(&mut text)
-            .map_err(|_| DebugProfileError::Unavailable)?;
+        let text = read_profile_text(codex_home)?;
         Self::parse(&text, port)
+    }
+
+    /// Reads the saved profile without writing it, projecting only its endpoint for an isolated Host.
+    #[cfg(debug_assertions)]
+    pub fn read_for_isolated_launch(
+        codex_home: &Path,
+        selected_port: u16,
+    ) -> Result<Self, DebugProfileError> {
+        let text = read_profile_text(codex_home)?;
+        let projected = project_debug_profile_endpoint(&text, selected_port)?;
+        Self::parse(&projected, selected_port)
     }
 
     pub fn parse(text: &str, port: u16) -> Result<Self, DebugProfileError> {
@@ -139,6 +145,49 @@ impl DebugCodexProfile {
     pub(crate) fn root_overrides(&self) -> Vec<String> {
         self.overrides.clone()
     }
+}
+
+fn read_profile_text(codex_home: &Path) -> Result<String, DebugProfileError> {
+    let file = std::fs::File::open(codex_home.join("codex-router-debug.config.toml"))
+        .map_err(|_| DebugProfileError::Unavailable)?;
+    let mut text = String::new();
+    file.take((MAX_PROFILE_BYTES + 1) as u64)
+        .read_to_string(&mut text)
+        .map_err(|_| DebugProfileError::Unavailable)?;
+    Ok(text)
+}
+
+/// Validates a complete saved debug profile, then returns its endpoint-only in-memory projection.
+pub fn project_debug_profile_endpoint(
+    text: &str,
+    selected_port: u16,
+) -> Result<String, DebugProfileError> {
+    if text.len() > MAX_PROFILE_BYTES {
+        return Err(DebugProfileError::TooLarge);
+    }
+    let mut table: toml::Table = toml::from_str(text).map_err(|_| DebugProfileError::Malformed)?;
+    let provider = table
+        .get_mut("model_providers")
+        .and_then(toml::Value::as_table_mut)
+        .and_then(|providers| providers.get_mut("codex-router-debug"))
+        .and_then(toml::Value::as_table_mut)
+        .ok_or(DebugProfileError::RoutingMismatch)?;
+    let configured_port = provider
+        .get("base_url")
+        .and_then(toml::Value::as_str)
+        .and_then(|endpoint| endpoint.strip_prefix("http://127.0.0.1:"))
+        .and_then(|endpoint| endpoint.strip_suffix("/v1"))
+        .and_then(|port| port.parse::<u16>().ok())
+        .ok_or(DebugProfileError::RoutingMismatch)?;
+    // Never repair an invalid saved profile by overwriting the field that made it invalid.
+    DebugCodexProfile::parse(text, configured_port)?;
+    provider.insert(
+        "base_url".to_owned(),
+        toml::Value::String(format!("http://127.0.0.1:{selected_port}/v1")),
+    );
+    let projected = toml::to_string(&table).map_err(|_| DebugProfileError::Malformed)?;
+    DebugCodexProfile::parse(&projected, selected_port)?;
+    Ok(projected)
 }
 
 fn bounded_string(value: &toml::Value) -> bool {

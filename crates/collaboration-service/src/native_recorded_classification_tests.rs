@@ -140,11 +140,11 @@ async fn policy_captured_recorded_owner_expiry_refuses_before_resume_or_input() 
         panic!("expired known owner accepted");
     };
     assert_eq!(
-        failure.pointer("/error/data/effects/resume"),
+        failure.response.pointer("/error/data/effects/resume"),
         Some(&json!("notRequested"))
     );
     assert_eq!(
-        failure.pointer("/error/data/effects/submission"),
+        failure.response.pointer("/error/data/effects/submission"),
         Some(&json!("notDispatched"))
     );
     assert!(requests[1].iter().all(|request| !matches!(
@@ -173,11 +173,11 @@ async fn policy_captured_attempt_deadline_refuses_before_native_connection() {
         panic!("expired attempt accepted");
     };
     assert_eq!(
-        failure.pointer("/error/data/effects/resume"),
+        failure.response.pointer("/error/data/effects/resume"),
         Some(&json!("notRequested"))
     );
     assert_eq!(
-        failure.pointer("/error/data/effects/submission"),
+        failure.response.pointer("/error/data/effects/submission"),
         Some(&json!("notDispatched"))
     );
 }

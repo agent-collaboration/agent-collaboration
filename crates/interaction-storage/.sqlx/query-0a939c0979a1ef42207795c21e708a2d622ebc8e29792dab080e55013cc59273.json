@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT item_id AS \"item_id!: String\",context_json AS \"context_json!: String\",conversation_key,recorded_at AS \"recorded_at!: String\" FROM mail_read_contexts WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "item_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "context_json!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "conversation_key",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "recorded_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0a939c0979a1ef42207795c21e708a2d622ebc8e29792dab080e55013cc59273"
+}

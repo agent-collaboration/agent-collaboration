@@ -2,12 +2,11 @@
 
 import argparse
 import os
-from pathlib import Path
 import re
 import stat
 import sys
 import tempfile
-
+from pathlib import Path
 
 VERSION_PATTERN = re.compile(r"[0-9]+\.[0-9]+\.[0-9]+")
 SHA256_PATTERN = re.compile(r"[0-9a-f]{64}")
@@ -109,11 +108,10 @@ def update_codex_router_formula(
     legacy_binary_install = '    bin.install "agent-session"'
     collaboration_binary_install = '    bin.install "agent-collaboration"'
     session_binary_install = '    bin.install "agent-sessions"'
+    upgrade_binary_install = '    bin.install "codex-router-board-upgrade"'
     if legacy_binary_install in updated_formula:
         replacement = (
-            ""
-            if session_binary_install in updated_formula
-            else session_binary_install
+            "" if session_binary_install in updated_formula else session_binary_install
         )
         updated_formula = updated_formula.replace(legacy_binary_install, replacement, 1)
     if collaboration_binary_install not in updated_formula:
@@ -126,6 +124,12 @@ def update_codex_router_formula(
         updated_formula = updated_formula.replace(
             collaboration_binary_install,
             f"{collaboration_binary_install}\n{session_binary_install}",
+            1,
+        )
+    if upgrade_binary_install not in updated_formula:
+        updated_formula = updated_formula.replace(
+            session_binary_install,
+            f"{session_binary_install}\n{upgrade_binary_install}",
             1,
         )
     return updated_formula

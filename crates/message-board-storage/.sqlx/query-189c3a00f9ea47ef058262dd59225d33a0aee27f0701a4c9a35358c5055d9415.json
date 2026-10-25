@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT EXISTS(SELECT 1 FROM posts WHERE post_id = ?) AS \"present!: bool\"",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "present!: bool",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "189c3a00f9ea47ef058262dd59225d33a0aee27f0701a4c9a35358c5055d9415"
+}

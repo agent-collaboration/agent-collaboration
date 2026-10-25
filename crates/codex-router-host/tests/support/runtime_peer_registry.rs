@@ -372,6 +372,7 @@ impl RegistryCase {
             .ok_or("private registry peer missing from public discovery")?;
         let sent = client
             .send_message(MessageSendRequest {
+                item_id: None,
                 target: target.clone(),
                 message: PublicMessageContent::HumanUser {
                     text: body.to_owned().try_into()?,
@@ -380,6 +381,9 @@ impl RegistryCase {
                 generation_guard: None,
             })
             .await?;
+        let collaboration_protocol::MessageSendResult::Local(sent) = sent else {
+            return Err("local registry peer returned remote sender custody".into());
+        };
         check_equal(sent.target.clone(), target.clone(), "public target changed")?;
         check_equal(
             sent.delivery_state,
@@ -409,6 +413,9 @@ impl RegistryCase {
                 reference: sent.push_id.as_str().into(),
             })
             .await?;
+        let collaboration_client::protocol::MessageShowResult::Local(shown) = shown else {
+            return Err("native proof expected a stored local push".into());
+        };
         check_equal(shown.record.target, target, "store target changed")?;
         check_equal(
             shown.record.body.as_deref(),

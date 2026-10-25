@@ -1,8 +1,8 @@
+use super::{ProjectSubscriptionRecord, SubscriptionWindowStore};
 use message_board::{
-    BoardError, MessageId, SubscriptionBatch, SubscriptionMode, SubscriptionScope,
-    ThreadSubscriptionRecord, TopicId,
+    BoardError, ProjectId, SubscriptionBatch, SubscriptionMode, SubscriptionScope, ThreadId,
+    ThreadRef,
 };
-use message_board_storage::BoardStore;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::{Mutex, oneshot};
 use tokio::time::Instant;
@@ -10,8 +10,8 @@ use tokio::time::Instant;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SubscriptionWaitFilter {
     All,
-    Roots(Vec<MessageId>),
-    Topic(TopicId),
+    Roots(Vec<ThreadRef>),
+    Project(ProjectId),
 }
 
 #[derive(Clone, Debug)]
@@ -29,80 +29,69 @@ pub enum SubscriptionWaitResult {
 impl SubscriptionWaitFilter {
     pub(super) fn validate(&self) -> Result<(), BoardError> {
         if let Self::Roots(roots) = self
-            && (roots.is_empty() || roots.iter().collect::<HashSet<_>>().len() != roots.len())
+            && (roots.is_empty()
+                || roots
+                    .iter()
+                    .map(|root| &root.thread)
+                    .collect::<HashSet<_>>()
+                    .len()
+                    != roots.len())
         {
             return Err(BoardError::invalid_field(
-                "rootMessageIds",
+                "threads",
                 "must contain at least one distinct root",
             ));
         }
         Ok(())
     }
 
-    pub(super) async fn matches(
-        &self,
-        root: &MessageId,
-        store: &Arc<Mutex<BoardStore>>,
-    ) -> Result<bool, BoardError> {
+    pub(super) async fn resolve(
+        mut self,
+        store: &Arc<Mutex<SubscriptionWindowStore>>,
+    ) -> Result<Self, BoardError> {
+        if let Self::Roots(roots) = &mut self {
+            for root in roots {
+                root.project = Some(store.lock().await.thread_project(root).await?);
+            }
+        }
+        Ok(self)
+    }
+
+    pub(super) fn matches(&self, root: &ThreadId, project: &ProjectId) -> bool {
         match self {
-            Self::All => Ok(true),
-            Self::Roots(roots) => Ok(roots.contains(root)),
-            Self::Topic(topic) => Ok(store
-                .lock()
-                .await
-                .show_message(message_board::MessageShowRequest {
-                    message_id: root.clone(),
-                })
-                .await?
-                .0
-                .topic_id
-                == *topic),
+            Self::All => true,
+            Self::Roots(roots) => roots.iter().any(|reference| {
+                &reference.thread == root && reference.project.as_ref() == Some(project)
+            }),
+            Self::Project(selected) => selected == project,
         }
     }
 
-    pub(super) async fn covered_poll_scopes(
+    pub(super) fn covered_poll_scopes(
         &self,
-        records: &[ThreadSubscriptionRecord],
-        store: &Arc<Mutex<BoardStore>>,
+        records: &[ProjectSubscriptionRecord],
     ) -> Result<Vec<SubscriptionScope>, BoardError> {
         let mut scopes = Vec::new();
-        for record in records
+        for row in records
             .iter()
-            .filter(|record| record.policy().mode() == SubscriptionMode::Poll)
+            .filter(|row| row.record.policy().mode() == SubscriptionMode::Poll)
         {
+            let record = &row.record;
             let covered = match (self, record.scope()) {
                 (Self::All, _) => true,
-                (Self::Topic(topic), SubscriptionScope::Topic { topic_id }) => topic == topic_id,
-                (Self::Topic(_), SubscriptionScope::Thread { root_message_id }) => {
-                    self.matches(root_message_id, store).await?
+                (Self::Project(project), _) => project == &row.project,
+                (Self::Roots(_), SubscriptionScope::Thread { thread_id }) => {
+                    self.matches(thread_id, &row.project)
                 }
-                (Self::Roots(roots), SubscriptionScope::Thread { root_message_id }) => {
-                    roots.contains(root_message_id)
-                }
-                (Self::Roots(roots), SubscriptionScope::Topic { topic_id }) => {
-                    let mut found = false;
-                    for root in roots {
-                        let mut store = store.lock().await;
-                        if store
-                            .get_thread_subscription_record(
-                                record.reader(),
-                                &SubscriptionScope::thread(root.clone()),
-                            )
-                            .await?
-                            .is_some()
-                        {
-                            continue;
-                        }
-                        found |= store
-                            .show_message(message_board::MessageShowRequest {
-                                message_id: root.clone(),
+                (Self::Roots(roots), SubscriptionScope::Project { project_id }) => {
+                    roots.iter().any(|root| {
+                        root.project.as_ref() == Some(project_id)
+                            && !records.iter().any(|subscription| {
+                                subscription.project == *project_id
+                                    && subscription.record.scope()
+                                        == &SubscriptionScope::thread(root.thread.clone())
                             })
-                            .await?
-                            .0
-                            .topic_id
-                            == *topic_id;
-                    }
-                    found
+                    })
                 }
             };
             if covered {
@@ -112,7 +101,7 @@ impl SubscriptionWaitFilter {
         if scopes.is_empty() {
             return Err(BoardError::invalid_field(
                 "filter",
-                "wait requires a poll subscription; use board thread subscribe --mode poll",
+                "wait requires a poll subscription; use thread subscribe --mode poll",
             ));
         }
         Ok(scopes)
@@ -124,4 +113,8 @@ pub(super) struct PollWaiter {
     pub deadline: Instant,
     pub maximum_root_notice_bytes: usize,
     pub reply: oneshot::Sender<Result<Option<SubscriptionWaitResult>, BoardError>>,
+    // Only immutable frozen-filter misses survive a rescan. Temporary gate
+    // failures stay eligible for this same request's next existing hint.
+    pub poll_filter_mismatches: HashSet<fleet_sync_protocol::ItemId>,
+    pub poll_in_flight: Option<fleet_sync_protocol::ItemId>,
 }

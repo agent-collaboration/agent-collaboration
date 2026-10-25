@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT workspace_id AS \"workspace!: String\",board_id AS \"board!: String\" FROM project_state WHERE project_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "workspace!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "board!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "d3699a40965223c81f3bcf563da672f4a281912bcbb9dd1e9be8662166394796"
+}

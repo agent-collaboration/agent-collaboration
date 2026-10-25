@@ -1,4 +1,4 @@
-//! An aged durable wake can fire again after its previous push is physically pruned.
+//! U66 / MS-10: bounded wakes expire; age-only history pruning preserves their evidence.
 use super::{WakeDeliverySender, build_wake_push_draft};
 use crate::collaboration_application::{CollaborationApplication, CollaborationRejection};
 use crate::{
@@ -23,7 +23,7 @@ use tokio::sync::Mutex;
 
 type TestResult<TValue = ()> = Result<TValue, Box<dyn Error + Send + Sync>>;
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
-const INTERVAL_SECONDS: u32 = 31 * 24 * 60 * 60;
+const INTERVAL_SECONDS: u32 = 600;
 const WAKE_BODY: &str = "Report the same durable wake's new firing";
 
 fn ensure(condition: bool, detail: &'static str) -> TestResult {
@@ -35,7 +35,7 @@ fn ensure(condition: bool, detail: &'static str) -> TestResult {
 }
 
 struct StoredWakeRoute {
-    store: Arc<Mutex<AutomationStore>>,
+    interactions: Arc<interaction_storage::InteractionStore>,
     observed: Mutex<Vec<crate::layer_zero::DeliveryRequest>>,
     generation: CodexGeneration,
 }
@@ -45,12 +45,10 @@ impl SessionMessageDelivery for StoredWakeRoute {
         &'a self,
         request: crate::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt> {
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
         Box::pin(async move {
             let stored = self
-                .store
-                .lock()
-                .await
+                .interactions
                 .get_push_record(&request.payload.push_id)
                 .await
                 .map_err(|_| DeliveryContractError::InvalidEvidence)?;
@@ -80,11 +78,13 @@ impl SessionMessageDelivery for StoredWakeRoute {
             sink.record(RouteEffectEvidence::CodexAppServer(effects))
                 .await?;
             self.observed.lock().await.push(request);
-            Ok(DeliveryReceipt {
-                outcome: DeliveryOutcome::Started,
-                reachability: Some(SessionReachability::CodexAppServer),
-                client: None,
-            })
+            Ok(crate::native_delivery_result::scripted_delivery_result(
+                DeliveryReceipt {
+                    outcome: DeliveryOutcome::Started,
+                    reachability: Some(SessionReachability::CodexAppServer),
+                    client: None,
+                },
+            ))
         })
     }
 
@@ -136,10 +136,12 @@ async fn evaluate_and_dispatch(
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id.clone(),
     };
+    crate::PushHandoffWorker::new(Arc::clone(store), Arc::clone(&sender.interactions))
+        .apply_pending()
+        .await?;
     sender.dispatch(Arc::clone(store), delivery_id).await?;
-    let record = store
-        .lock()
-        .await
+    let record = sender
+        .interactions
         .get_push_record_by_origin_reference(&origin)
         .await?
         .ok_or("actual firing did not store its typed push")?;
@@ -151,38 +153,47 @@ async fn evaluate_and_dispatch(
 }
 
 #[tokio::test]
-async fn aged_wake_definition_fires_fresh_push_after_old_link_is_pruned() -> TestResult {
+async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_history_pruning()
+-> TestResult {
     let root = tempfile::tempdir()?;
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.path().join("automation.sqlite")).await?,
     ));
     let service_id = UuidIdentity::try_from(SERVICE_ID.to_owned())?;
+    let interactions = Arc::new(
+        interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
+    );
     let machine = MachineIdentity::new(service_id.clone(), Some("aged-wake-fixture"))?;
     let message: SavedMessage = serde_json::from_value(json!({
         "target":{"endpoint":{"serviceId":SERVICE_ID,"endpointId":"codex-local"},"sessionId":"aged-wake-target"},
         "content":{"kind":"humanUser","text":WAKE_BODY},"delivery":"auto",
     }))?;
     let target = message.target.clone();
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let firing_now_ms = chrono::Utc::now().timestamp_millis();
     let interval_ms = i64::from(INTERVAL_SECONDS) * 1000;
-    let anchor_ms = now_ms - 2 * interval_ms;
+    let anchor_ms = firing_now_ms - 2 * interval_ms;
+    // Native delivery runs within the real bounded lifetime; maintenance takes
+    // its existing explicit clock input 31 days later (U66 / MS-10).
+    let now_ms = firing_now_ms + chrono::Duration::days(31).num_milliseconds();
     let wake = store
         .lock()
         .await
         .create_wakeup(&WakeCreate {
+            requested_by: collaboration_protocol::WakeCreator::Owner {},
+            replace: false,
             operation_id: OperationId::generate(),
             message,
             timing: TimingRule::Interval {
                 seconds: INTERVAL_SECONDS,
             },
-            expiry: ExpiryRule::None,
+            expiry: ExpiryRule::After { seconds: 3600 },
             now_ms: anchor_ms,
         })
         .await?;
     let definition = serde_json::to_value(&wake.definition)?;
     let wakeup_id = wake.definition.wakeup_id.clone();
     let route = Arc::new(StoredWakeRoute {
-        store: Arc::clone(&store),
+        interactions: Arc::clone(&interactions),
         observed: Mutex::new(Vec::new()),
         generation: serde_json::from_value(json!({"serviceEpoch":SERVICE_ID,"generation":1}))?,
     });
@@ -190,8 +201,10 @@ async fn aged_wake_definition_fires_fresh_push_after_old_link_is_pruned() -> Tes
     let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)?
         .with_machine_identity(machine.clone())?
         .with_automation_store(Arc::clone(&store))
+        .with_interaction_store(Arc::clone(&interactions))
         .with_session_delivery(delivery);
     let sender = WakeDeliverySender {
+        interactions: Arc::clone(&interactions),
         delivery: identity
             .session_message_delivery()
             .ok_or("composed wake delivery missing")?,
@@ -213,42 +226,16 @@ async fn aged_wake_definition_fires_fresh_push_after_old_link_is_pruned() -> Tes
         old_push.push_id.clone(),
     )
     .to_string();
-    ensure(
-        store.lock().await.prune_push_records(now, 500).await? == 1,
-        "retention must physically prune the aged push",
-    )?;
-    ensure(
-        store
-            .lock()
-            .await
-            .get_push_record(&old_push.push_id)
-            .await?
-            .is_none(),
-        "aged push must be physically absent",
-    )?;
-    require_expired_link(&application, &target, &old_link).await?;
-    let retained = store
-        .lock()
-        .await
-        .read_wakeup::<SavedMessage>(&wakeup_id)
-        .await?;
-    ensure(
-        retained.state == WakeState::Active
-            && retained.pending_delivery_id.is_none()
-            && serde_json::to_value(&retained.definition)? == definition,
-        "pruning a push must preserve the original active durable wake definition",
-    )?;
-
     let (fresh_push, fresh_occurrence) =
-        evaluate_and_dispatch(&store, &sender, &wakeup_id, now_ms).await?;
+        evaluate_and_dispatch(&store, &sender, &wakeup_id, anchor_ms + 2 * interval_ms).await?;
     ensure(
         fresh_push.push_id != old_push.push_id
             && fresh_occurrence != old_occurrence
-            && fresh_push.created_at == now
+            && fresh_push.created_at.timestamp_millis() == anchor_ms + 2 * interval_ms
             && fresh_push.kind == PushKind::Wake
             && fresh_push.origin == PushOrigin::Router(PushKind::Wake)
             && fresh_push.header_facts == PushHeaderFacts::Wake,
-        "same aged wake must fire a fresh current push and occurrence",
+        "U66 / MS-10: the same bounded wake creates fresh pushes within its lifetime",
     )?;
     let fresh_link = RouterLink::new(MachineId::from(service_id), fresh_push.push_id.clone());
     let shown = application
@@ -263,13 +250,12 @@ async fn aged_wake_definition_fires_fresh_push_after_old_link_is_pruned() -> Tes
             && shown.record.body.as_deref() == Some(WAKE_BODY),
         "fresh firing must be readable with its full body through the application",
     )?;
-    require_expired_link(&application, &target, &old_link).await?;
     let observed = route.observed.lock().await;
     let [old_request, fresh_request] = observed.as_slice() else {
         return Err("both actual firings must cross the service route exactly once".into());
     };
     let expected_line = render_push_line(&PushLineInput {
-        link: fresh_link,
+        link: fresh_link.clone(),
         machine_label: machine.machine_label().clone(),
         origin: fresh_push.origin.clone(),
         header_facts: fresh_push.header_facts.clone(),
@@ -285,6 +271,58 @@ async fn aged_wake_definition_fires_fresh_push_after_old_link_is_pruned() -> Tes
         "new firing must deliver exactly the stored neutral wake line with fresh identity",
     )?;
     drop(observed);
+    // U66 / MS-10 retires the former same-active-wake-after-31-days oracle.
+    let expired = store
+        .lock()
+        .await
+        .evaluate_wakeup::<SavedMessage>(&wakeup_id, now_ms, build_wake_push_draft)
+        .await?;
+    ensure(
+        matches!(expired, WakeEvaluation::Expired(_)),
+        "MS-10 maintenance must expire the bounded wake",
+    )?;
+    ensure(
+        interactions.prune_push_records(now, 500).await? == 2,
+        "age-only history retention must physically prune both aged pushes",
+    )?;
+    ensure(
+        interactions
+            .get_push_record(&old_push.push_id)
+            .await?
+            .is_none(),
+        "aged push must be physically absent",
+    )?;
+    require_expired_link(&application, &target, &old_link).await?;
+    let retained = store
+        .lock()
+        .await
+        .read_wakeup::<SavedMessage>(&wakeup_id)
+        .await?;
+    ensure(
+        retained.state == WakeState::Expired
+            && retained.pending_delivery_id.is_none()
+            && retained
+                .first_fire
+                .as_ref()
+                .is_some_and(|fire| fire.occurrence_id == old_occurrence)
+            && serde_json::to_value(&retained.definition)? == definition,
+        "U66 / MS-10: pruning must retain the expired wake definition and first-fire evidence",
+    )?;
+
+    require_expired_link(&application, &target, &fresh_link.to_string()).await?;
+    let later = store
+        .lock()
+        .await
+        .evaluate_wakeup::<SavedMessage>(&wakeup_id, now_ms + interval_ms, build_wake_push_draft)
+        .await?;
+    ensure(
+        matches!(later, WakeEvaluation::Unchanged(ref wake) if wake.state == WakeState::Expired),
+        "MS-10 expired wakes must never fire again",
+    )?;
+    ensure(
+        route.observed.lock().await.len() == 2,
+        "MS-10 expiry must cause no native reinjection",
+    )?;
     let current = store
         .lock()
         .await
@@ -300,6 +338,10 @@ async fn aged_wake_definition_fires_fresh_push_after_old_link_is_pruned() -> Tes
     drop(sender);
     drop(route);
     drop(identity);
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "wake fixture interaction store remained shared")?
+        .close()
+        .await?;
     Arc::try_unwrap(store)
         .map_err(|_| "wake fixture store remained shared")?
         .into_inner()

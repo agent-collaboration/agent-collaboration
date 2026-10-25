@@ -151,7 +151,7 @@ pub trait SessionMessageDelivery: Send + Sync {
         &'a self,
         request: layer_zero::DeliveryRequest,
         evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt>;
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult>;
 
     fn reconcile_attempt(
         &self,
@@ -169,13 +169,13 @@ pub trait SessionDeliveryRoute: Send + Sync {
     fn supports_delivery_mode(&self, _target: &SessionRef, _mode: MessageDelivery) -> bool {
         true
     }
-    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, RouteClaim>;
+    fn claim(&self, target: &SessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim>;
     fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence>;
     fn deliver<'a>(
         &'a self,
         request: layer_zero::DeliveryRequest,
         evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, DeliveryReceipt>;
+    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult>;
     fn reconcile_attempt(
         &self,
         context: AttemptReconciliationContext,

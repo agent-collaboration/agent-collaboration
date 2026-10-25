@@ -1,0 +1,1 @@
+SELECT state_id, name, CAST(last_position AS TEXT) AS last_position, typeof(last_position) AS position_class, CAST(retained_through AS TEXT) AS retained_through, typeof(retained_through) AS floor_class FROM fleet_feed_state;

@@ -17,6 +17,7 @@ async fn collaboration_runtime_binds_a_fixed_mcp_port_once() {
     drop(reservation);
 
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("backend.sock"),

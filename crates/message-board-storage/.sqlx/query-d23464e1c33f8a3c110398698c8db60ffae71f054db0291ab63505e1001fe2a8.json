@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO read_marks(mark_id, reader_actor, request_id, router_time, time_basis, scope_kind, scope_id, through_epoch, through_position) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "d23464e1c33f8a3c110398698c8db60ffae71f054db0291ab63505e1001fe2a8"
+}

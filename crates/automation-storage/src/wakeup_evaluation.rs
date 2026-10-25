@@ -8,17 +8,17 @@ use serde::de::DeserializeOwned;
 use sqlx::{Connection, Row, SqliteConnection};
 
 pub enum WakeEvaluation<TMessage> {
-    Unchanged(WakeRecord<TMessage>),
+    Unchanged(WakeRecord<TMessage, collaboration_protocol::WakeCreator>),
     Fired {
-        wake: WakeRecord<TMessage>,
+        wake: WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
         fire: FirstFire,
         delivery_id: DeliveryId,
     },
     Coalesced {
-        wake: WakeRecord<TMessage>,
+        wake: WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
         delivery_id: DeliveryId,
     },
-    Expired(WakeRecord<TMessage>),
+    Expired(WakeRecord<TMessage, collaboration_protocol::WakeCreator>),
 }
 impl AutomationStore {
     /// Evaluates a wake and atomically records its mailbox row and typed push draft.
@@ -27,7 +27,7 @@ impl AutomationStore {
         id: &WakeupId,
         now_ms: i64,
         mut build_push_draft: impl FnMut(
-            &WakeRecord<TMessage>,
+            &WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
             &FirstFire,
         ) -> Result<PushRecordDraft, StorageError>
         + Send,
@@ -44,7 +44,10 @@ impl AutomationStore {
     ) -> Result<WakeEvaluation<TMessage>, StorageError>
     where
         TMessage: DurableMessage + DeserializeOwned,
-        TBuildPushDraft: FnMut(&WakeRecord<TMessage>, &FirstFire) -> Result<PushRecordDraft, StorageError>
+        TBuildPushDraft: FnMut(
+                &WakeRecord<TMessage, collaboration_protocol::WakeCreator>,
+                &FirstFire,
+            ) -> Result<PushRecordDraft, StorageError>
             + Send,
     {
         if now_ms < 0 {
@@ -53,7 +56,7 @@ impl AutomationStore {
         let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
             .ok_or(StorageError::InvalidRecord)?;
         let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
-        let current: WakeRecord<TMessage> =
+        let current: WakeRecord<TMessage, collaboration_protocol::WakeCreator> =
             crate::wakeup_repository::read_current(&mut transaction, id).await?;
         if matches!(
             current.state,
@@ -155,6 +158,7 @@ impl AutomationStore {
         let wake = crate::wakeup_repository::read_current(&mut transaction, id).await?;
         let draft = build_push_draft(&wake, &fire)?;
         let record = draft
+            .clone()
             .into_pending()
             .map_err(|_| StorageError::InvalidRecord)?;
         let expected_origin_reference = RouterOriginRef::Wake {
@@ -169,7 +173,14 @@ impl AutomationStore {
         {
             return Err(StorageError::InvalidRecord);
         }
-        crate::push_records::insert_push_record_with_connection(&mut transaction, &record).await?;
+        crate::owed_push_operations::insert_owed_push_operation(
+            &mut transaction,
+            crate::PushOperation::Admit {
+                push: Box::new(draft),
+            },
+            now,
+        )
+        .await?;
         transaction.commit().await?;
         Ok(WakeEvaluation::Fired {
             wake,

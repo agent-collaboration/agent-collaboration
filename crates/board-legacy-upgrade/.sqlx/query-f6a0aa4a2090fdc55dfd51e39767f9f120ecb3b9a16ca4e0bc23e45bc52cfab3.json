@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO subscription_delivery_progress(progress_id,project_id,membership_id,activated_epoch,activated_position,payload) VALUES (?,?,?,?,?,?) ON CONFLICT DO NOTHING",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "f6a0aa4a2090fdc55dfd51e39767f9f120ecb3b9a16ca4e0bc23e45bc52cfab3"
+}

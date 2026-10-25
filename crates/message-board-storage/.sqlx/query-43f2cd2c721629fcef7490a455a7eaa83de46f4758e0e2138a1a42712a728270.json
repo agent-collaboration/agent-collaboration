@@ -1,0 +1,44 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT row_id AS \"row_id!: String\",id AS \"id!: String\",kind AS \"kind!: String\",payload AS \"payload!: String\" FROM fleet_cache_rebuild_records WHERE id>?1 OR (id=?1 AND kind>?2) ORDER BY id,kind LIMIT 16",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "row_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "payload!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "43f2cd2c721629fcef7490a455a7eaa83de46f4758e0e2138a1a42712a728270"
+}

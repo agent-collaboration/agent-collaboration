@@ -1,6 +1,6 @@
 use crate::{
-    ActingForIdentity, Board, BoardId, Description, Identity, Page, PageRequest, Project,
-    ProjectId, RepositoryRef, ResourceName, Topic, TopicId,
+    ActingForIdentity, Board, BoardId, Description, Identity, Page, PageRequest,
+    ProjectDirectoryEntry, ProjectId, RepositoryRef, ResourceName, Workspace, WorkspaceId,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -13,75 +13,146 @@ macro_rules! contract {
     };
 }
 
-contract!(ProjectCreateRequest { project_id: ProjectId, name: ResourceName, description: Description, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(ProjectCreateResult {
-    project: Project,
-    outcome: String
+contract!(WorkspaceCreateRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    workspace_id: WorkspaceId,
+    name: ResourceName,
+    description: Description,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
 });
-contract!(ProjectUpdateRequest { project_id: ProjectId, name: ResourceName, description: Description, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(ProjectUpdateResult {
-    project: Project,
-    outcome: String
-});
-contract!(ProjectShowRequest {
-    project_id: ProjectId
-});
-contract!(ProjectShowResult { project: Project });
-contract!(ProjectListRequest { repository: Option<RepositoryRef>, page: PageRequest });
-contract!(ProjectListResult { page: Page<Project> });
 
-contract!(RepositoryAttachRequest { project_id: ProjectId, repository: RepositoryRef, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(RepositoryAttachResult {
-    project_id: ProjectId,
-    repository: RepositoryRef,
-    attached: bool,
-    outcome: String
+contract!(WorkspaceUpdateRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    workspace_id: WorkspaceId,
+    name: ResourceName,
+    description: Description,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
 });
-contract!(RepositoryDetachRequest { project_id: ProjectId, repository: RepositoryRef, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(RepositoryDetachResult {
-    project_id: ProjectId,
-    repository: RepositoryRef,
-    attached: bool,
-    outcome: String
+
+contract!(WorkspaceArchiveRequest {
+    request_id: crate::RequestId, protocol_version: crate::ProtocolVersion,
+    workspace_id: WorkspaceId,
+    actor: Identity, acting_for: Option<ActingForIdentity>,
 });
+
+contract!(WorkspaceShowRequest {
+    workspace_id: WorkspaceId
+});
+contract!(WorkspaceShowResult {
+    workspace: Workspace
+});
+contract!(WorkspaceListRequest { repository: Option<RepositoryRef>, page: PageRequest });
+contract!(WorkspaceListResult { page: Page<Workspace> });
+
+contract!(RepositoryAttachRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    workspace_id: WorkspaceId,
+    repository: RepositoryRef,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
+});
+
+contract!(RepositoryDetachRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    workspace_id: WorkspaceId,
+    repository: RepositoryRef,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
+});
+
 contract!(RepositoryListRequest {
-    project_id: ProjectId,
+    workspace_id: WorkspaceId,
     page: PageRequest
 });
 contract!(RepositoryListResult { page: Page<RepositoryRef> });
 
-contract!(BoardCreateRequest { board_id: BoardId, project_id: ProjectId, name: ResourceName, description: Description, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(BoardCreateResult {
-    board: Board,
-    outcome: String
-});
-contract!(BoardUpdateRequest { board_id: BoardId, name: ResourceName, description: Description, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(BoardUpdateResult {
-    board: Board,
-    outcome: String
-});
-contract!(BoardShowRequest { board_id: BoardId });
-contract!(BoardShowResult { board: Board });
-contract!(BoardListRequest { project_id: Option<ProjectId>, #[serde(default)] include_archived: bool, page: PageRequest });
-contract!(BoardListResult { page: Page<Board> });
-contract!(BoardArchiveRequest { board_id: BoardId, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(BoardArchiveResult {
-    board: Board,
-    outcome: String
+contract!(BoardCreateRequest {
+    kind: crate::BoardKind,
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    board_id: BoardId,
+    workspace_id: WorkspaceId,
+    name: ResourceName,
+    description: Description,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
 });
 
-contract!(TopicCreateRequest { topic_id: TopicId, board_id: BoardId, name: ResourceName, description: Description, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(TopicCreateResult {
-    topic: Topic,
-    outcome: String
+contract!(BoardUpdateRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    board_id: BoardId,
+    name: ResourceName,
+    description: Description,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
 });
-contract!(TopicUpdateRequest { topic_id: TopicId, name: ResourceName, description: Description, actor: Identity, acting_for: Option<ActingForIdentity> });
-contract!(TopicUpdateResult {
-    topic: Topic,
-    outcome: String
+
+contract!(BoardShowRequest { board_id: BoardId });
+contract!(BoardShowResult { board: Board });
+contract!(BoardListRequest { workspace_id: Option<WorkspaceId>, #[serde(default)] include_archived: bool, page: PageRequest });
+contract!(BoardListResult { page: Page<Board> });
+contract!(BoardArchiveRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    board_id: BoardId,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
 });
-contract!(TopicListRequest {
+
+contract!(BoardCloseRequest {
+    request_id: crate::RequestId, protocol_version: crate::ProtocolVersion,
+    board_id: BoardId,
+    actor: Identity, acting_for: Option<ActingForIdentity>,
+});
+
+contract!(ProjectCreateRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    project_id: ProjectId,
+    board_id: BoardId,
+    title: ResourceName,
+    description: Option<Description>,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
+});
+
+contract!(ProjectUpdateRequest {
+    request_id: crate::RequestId,
+    protocol_version: crate::ProtocolVersion,
+    project_id: ProjectId,
+    title: ResourceName,
+    actor: Identity,
+    acting_for: Option<ActingForIdentity>,
+});
+
+contract!(ProjectListRequest {
     board_id: BoardId,
     page: PageRequest
 });
-contract!(TopicListResult { page: Page<Topic> });
+contract!(ProjectListResult { page: Page<ProjectDirectoryEntry> });
+contract!(ProjectShowRequest {
+    project_id: ProjectId
+});
+contract!(ProjectShowResult {
+    project: ProjectDirectoryEntry,
+    state: ProjectStateView,
+});
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ProjectStateView {
+    Local(Box<crate::ProjectState>),
+    NotLocal,
+}

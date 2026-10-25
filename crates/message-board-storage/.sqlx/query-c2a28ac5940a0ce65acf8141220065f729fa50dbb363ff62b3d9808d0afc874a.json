@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE subtasks SET actor_id=?, request_id=?, epoch=?, position=?, router_time=?, time_basis=?, text=?, checked=?, removed=?, place=? WHERE subtask_id=?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "c2a28ac5940a0ce65acf8141220065f729fa50dbb363ff62b3d9808d0afc874a"
+}

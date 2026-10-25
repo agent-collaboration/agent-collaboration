@@ -41,6 +41,23 @@ impl<'service> SessionOperations<'service> {
         })
     }
 
+    pub fn installation_show(
+        &self,
+    ) -> Result<collaboration_protocol::InstallationIdentity, InstallationIdentityUnavailable> {
+        let peer = self
+            .identity
+            .installation_peer()
+            .ok_or(InstallationIdentityUnavailable)?;
+        Ok(collaboration_protocol::InstallationIdentity {
+            service_id: self.identity.service_id.clone(),
+            machine_label: self.identity.machine_identity.machine_label().clone(),
+            peer_id: peer
+                .to_string()
+                .try_into()
+                .map_err(|_| InstallationIdentityUnavailable)?,
+        })
+    }
+
     /// Pages a Codex endpoint's stored catalog or its loaded and active threads.
     pub async fn codex_session_list(
         &self,
@@ -441,7 +458,8 @@ pub(crate) fn classify_native_call_failure(
                 message,
                 reason,
                 next_action,
-                native_code: (reason == "unknown").then_some(*code),
+                native_code: (reason == collaboration_protocol::DeliveryRejectionReason::Unknown)
+                    .then_some(*code),
             }
         }
         NativeConnectionError::Unavailable if !mutation => {
@@ -506,8 +524,8 @@ pub enum NativeSessionFailure {
     NativeRejected {
         stage: NativeSessionStage,
         message: String,
-        reason: &'static str,
-        next_action: &'static str,
+        reason: collaboration_protocol::DeliveryRejectionReason,
+        next_action: collaboration_protocol::DeliveryNextAction,
         /// The native error code, kept when the refusal matches no known reason.
         native_code: Option<i64>,
     },
@@ -718,6 +736,19 @@ impl CollaborationRejection for ProviderInventoryFailure {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
 #[error("Endpoint directory unavailable")]
 pub struct EndpointDirectoryUnavailable;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("Installation identity unavailable")]
+pub struct InstallationIdentityUnavailable;
+
+impl CollaborationRejection for InstallationIdentityUnavailable {
+    fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
+        None
+    }
+    fn published_rejection(&self) -> PublishedRejection {
+        PublishedRejection::bare(PublishedRejection::INTERNAL, self.to_string())
+    }
+}
 
 impl CollaborationRejection for EndpointDirectoryUnavailable {
     fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {

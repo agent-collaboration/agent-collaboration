@@ -107,11 +107,16 @@ async fn generic_queue_host_stop_reconciles_exact_item_causal() {
         }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     });
-    let identity = identity(&root, store.clone(), NEW_EPOCH).unwrap();
+    let identity = identity(&root, store.clone(), NEW_EPOCH).await.unwrap();
     let delivery_route = identity.session_delivery.as_ref().unwrap();
-    crate::delivery_reconciliation::reconcile(&store, delivery_route.as_ref(), recovered)
-        .await
-        .unwrap();
+    crate::delivery_reconciliation::reconcile(
+        &store,
+        identity.interaction_store.as_ref().unwrap(),
+        delivery_route.as_ref(),
+        recovered,
+    )
+    .await
+    .unwrap();
     let after=store.lock().await.read_delivery::<SessionRef,CodexGeneration,crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery).await.unwrap();
     if after.status != DeliveryStatus::Accepted {
         native.abort();

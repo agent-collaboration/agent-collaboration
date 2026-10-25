@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO epoch_lines(line_id, epoch, inherited_through) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "cadb8afabda9aa4845fcd874b9520f571ddf30b4b15a9b9a38bd63e556c7dd65"
+}

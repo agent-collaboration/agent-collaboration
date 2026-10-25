@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT actor_id AS \"actor_id!: String\", canonical_identity AS \"canonical_identity!: String\" FROM actors WHERE canonical_identity = ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "actor_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "canonical_identity!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "0eaa56b4ad3f00fa49ae9cd97cf5129eefde37095eceff46cdda44f3e475ebe3"
+}

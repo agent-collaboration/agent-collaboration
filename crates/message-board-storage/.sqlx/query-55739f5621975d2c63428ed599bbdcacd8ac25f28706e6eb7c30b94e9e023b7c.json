@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT COUNT(*) AS \"count!: i64\", COUNT(DISTINCT position) AS \"distinct_count!: i64\" FROM project_feed WHERE position>? AND position<=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "distinct_count!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "55739f5621975d2c63428ed599bbdcacd8ac25f28706e6eb7c30b94e9e023b7c"
+}

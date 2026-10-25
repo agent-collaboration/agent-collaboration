@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT MAX(expansion_seq) AS \"highest?: i64\" FROM mail_cancel_expansions",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "highest?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "ab635715941e8c8217de68801662876fa3b5dbb5acd4605219e86b17aa79f0e1"
+}

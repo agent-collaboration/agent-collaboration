@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO project_creation_inputs(request_id, canonical_hash, input) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "127afc2c6e16b23d82708823e347f6d4968cb3fb9c8cd5433d026253811393bf"
+}

@@ -1,4 +1,4 @@
-//! Retention across real SQLite payload rows and the broker's SQLite history.
+//! Retention across native message/history rows and retained automation payload rows.
 use super::AutomationRetentionWorker;
 use crate::{
     InteractionHistoryRecord, NativeControlBackend, NativeGenerationGate, RefusedApprovalOption,
@@ -15,6 +15,7 @@ use collaboration_protocol::{
 };
 use serde_json::{Value, json};
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -79,7 +80,7 @@ fn history_value(
 
 async fn read_history(path: &Path) -> TestResult<BTreeMap<String, Value>> {
     let mut connection =
-        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(path).read_only(true))
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(path).read_only(true))
             .await?;
     let rows: Vec<(String, String, String)> = sqlx::query_as("SELECT request_id, record_json, created_at FROM typed_interaction_history ORDER BY request_id")
         .fetch_all(&mut connection).await?;
@@ -132,7 +133,7 @@ struct StoredContent {
 }
 
 async fn insert_content(
-    store: &mut AutomationStore,
+    store: &interaction_storage::InteractionStore,
     observer: &mut SqliteConnection,
     label: &str,
     created_at_ms: i64,
@@ -169,6 +170,7 @@ async fn insert_content(
     };
     let mailbox_json = serde_json::to_string(&content)?;
     let definition = WakeDefinition {
+        created_by: collaboration_protocol::WakeCreator::Owner {},
         wakeup_id: wakeup_id.clone(),
         change_id: change_id.clone(),
         message: SavedMessage {
@@ -207,12 +209,13 @@ async fn insert_content(
 }
 
 async fn ensure_physical_contents(
+    native_observer: &mut TursoConnection,
     observer: &mut SqliteConnection,
     expected: &[&StoredContent],
 ) -> TestResult {
     let pushes: Vec<(String, String)> =
         sqlx::query_as("SELECT push_id,body FROM router_pushes ORDER BY push_id")
-            .fetch_all(&mut *observer)
+            .fetch_all(&mut *native_observer)
             .await?;
     let mailboxes: Vec<(String, String)> = sqlx::query_as(
         "SELECT delivery_id,message_json FROM mailbox_deliveries ORDER BY delivery_id",
@@ -269,7 +272,7 @@ async fn ensure_history_contents(
     )?;
     ensure(
         disk_ids == expected_ids,
-        "worker must remove expired history records and bodies from real SQLite",
+        "worker must remove expired history records and bodies from native message storage",
     )
 }
 
@@ -287,8 +290,7 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     let first_broker = load_broker(directory.path(), &gate).await?;
     drop(first_broker);
     let mut seed =
-        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&history_path))
-            .await?;
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&history_path)).await?;
     let initial_record = history_value(INITIAL_REQUEST, "initial-history-body", None)?;
     let initial_stamp = Utc::now().to_rfc3339_opts(SecondsFormat::Nanos, true);
     let mut transaction = seed.begin().await?;
@@ -328,8 +330,7 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
         persisted.insert(id.to_owned(), history_value(id, body, Some(created_at))?);
     }
     let mut history_seed =
-        SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&history_path))
-            .await?;
+        TursoConnection::connect_with(&TursoConnectOptions::new().filename(&history_path)).await?;
     let mut transaction = history_seed.begin().await?;
     for (request_id, mut value) in persisted.clone() {
         if request_id == INITIAL_REQUEST {
@@ -360,32 +361,45 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     )?;
 
     let database_path = directory.path().join("automation.sqlite");
-    let mut store = AutomationStore::open(&database_path).await?;
+    let store = AutomationStore::open(&database_path).await?;
+    let native = broker.interaction_store();
+    let mut native_observer = TursoConnection::connect_with(
+        &TursoConnectOptions::new()
+            .filename(&history_path)
+            .read_only(true),
+    )
+    .await?;
     let mut observer = SqliteConnection::connect_with(
         &SqliteConnectOptions::new()
             .filename(&database_path)
             .foreign_keys(true),
     )
     .await?;
-    let expired_content =
-        insert_content(&mut store, &mut observer, "expired", cutoff_ms - 1).await?;
-    let cutoff_content = insert_content(&mut store, &mut observer, "cutoff", cutoff_ms).await?;
-    let recent_content = insert_content(&mut store, &mut observer, "recent", cutoff_ms + 1).await?;
+    let expired_content = insert_content(&native, &mut observer, "expired", cutoff_ms - 1).await?;
+    let cutoff_content = insert_content(&native, &mut observer, "cutoff", cutoff_ms).await?;
+    let recent_content = insert_content(&native, &mut observer, "recent", cutoff_ms + 1).await?;
     ensure_physical_contents(
+        &mut native_observer,
         &mut observer,
         &[&expired_content, &cutoff_content, &recent_content],
     )
     .await?;
     let shared_store = Arc::new(Mutex::new(store));
     let worker = AutomationRetentionWorker::new(shared_store.clone())
-        .with_interaction_broker(broker.clone());
+        .with_interaction_broker(broker.clone())
+        .with_native_push_store(native.clone());
     let first_maintenance_ms = cutoff_ms + RETENTION_MILLIS;
 
     ensure(
         worker.prune_batch(first_maintenance_ms).await? == 3,
         "worker must prune the expired push, mailbox row and interaction independently",
     )?;
-    ensure_physical_contents(&mut observer, &[&cutoff_content, &recent_content]).await?;
+    ensure_physical_contents(
+        &mut native_observer,
+        &mut observer,
+        &[&cutoff_content, &recent_content],
+    )
+    .await?;
     ensure_history_contents(
         &broker,
         &history_path,
@@ -406,7 +420,7 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
         worker.prune_batch(first_maintenance_ms + 1).await? == 4,
         "creation stamp must age normally after thirty days, without reload restamping",
     )?;
-    ensure_physical_contents(&mut observer, &[&recent_content]).await?;
+    ensure_physical_contents(&mut native_observer, &mut observer, &[&recent_content]).await?;
     ensure_history_contents(&broker, &history_path, &["recent-interaction"]).await?;
     ensure(
         !serde_json::to_string(&read_history(&history_path).await?)?
@@ -432,6 +446,11 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     drop(worker);
     drop(broker);
     observer.close().await?;
+    native_observer.close().await?;
+    Arc::try_unwrap(native)
+        .map_err(|_| "retention fixture retained the native owner")?
+        .close()
+        .await?;
     Arc::try_unwrap(shared_store)
         .map_err(|_| "retention worker must release its store")?
         .into_inner()

@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT retired_through AS \"retired_through!: i64\" FROM mail_retirement_progress WHERE project_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "retired_through!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "8207a359f38fbf8029e1d0091543140af658fe610f0f7c610a1c934f65ae85fc"
+}

@@ -238,9 +238,19 @@ impl<'service> AutomationOperations<'service> {
             .session_delivery
             .as_ref()
             .ok_or_else(failure::unavailable)?;
-        crate::delivery_reconciliation::reconcile(store, session_delivery.as_ref(), record)
-            .await
-            .map_err(failure::storage)?;
+        let interactions = self
+            .identity
+            .interaction_store
+            .as_ref()
+            .ok_or_else(failure::unavailable)?;
+        crate::delivery_reconciliation::reconcile(
+            store,
+            interactions,
+            session_delivery.as_ref(),
+            record,
+        )
+        .await
+        .map_err(failure::storage)?;
         let record = read_delivery(store, &request).await?;
         let mut snapshot = crate::delivery_projection::snapshot(record)
             .map_err(|()| failure::storage(StorageError::InvalidRecord))?;

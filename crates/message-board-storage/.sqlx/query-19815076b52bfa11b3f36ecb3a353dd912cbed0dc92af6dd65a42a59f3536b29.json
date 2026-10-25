@@ -1,0 +1,100 @@
+{
+  "db_name": "Turso",
+  "query": "WITH inputs AS (SELECT ? AS reader_actor,? AS selected,? AS unread,? AS project,? AS sweep,? AS reader_state),\nactivity AS (\n SELECT a.*,CASE WHEN a.record_kind='thread' THEN a.record_id ELSE json_extract(a.content,'$.record.record.placement.threadId') END AS thread_id\n FROM project_feed a WHERE a.record_kind IN ('post','thread') AND a.position>? AND a.position<=?\n), watched AS (\n SELECT a.*,i.reader_actor,i.selected,i.unread,i.project,i.sweep,\n  CASE WHEN a.thread_id IS NULL THEN json_extract(i.reader_state,'$.main') ELSE json_extract(t.value,'$.mark') END AS mark,\n  json_extract(t.value,'$.watch') AS watch\n FROM activity a CROSS JOIN inputs i\n LEFT JOIN json_each(json_extract(i.reader_state,'$.threads')) t ON CAST(t.key AS TEXT)=a.thread_id\n)\nSELECT a.position AS \"position!: i64\",a.epoch AS \"epoch!: i64\",a.record_kind AS \"record_kind!: String\",a.record_id AS \"record_id!: String\",\n a.router_time AS \"router_time?: String\",a.time_basis AS \"time_basis!: String\",\n CASE WHEN a.watch IS NULL THEN 0 ELSE 1 END AS \"watch_active!: i64\",\n json_extract(a.watch,'$.epoch') AS \"watch_epoch?: i64\",json_extract(a.watch,'$.position') AS \"watch_position?: i64\",\n json_extract(a.mark,'$.epoch') AS \"mark_epoch?: i64\",json_extract(a.mark,'$.position') AS \"mark_position?: i64\"\nFROM watched a\nWHERE (a.record_kind='post' OR (a.unread=1 AND json_extract(a.content,'$.record.record.state')!=(SELECT json_extract(previous.content,'$.record.record.state') FROM project_feed previous WHERE previous.record_kind='thread' AND previous.record_id=a.record_id AND previous.position<a.position ORDER BY previous.position DESC LIMIT 1)))\nAND (a.thread_id IS NULL AND a.selected=1 OR a.thread_id IS NOT NULL AND a.watch IS NOT NULL)\nAND (a.unread=0 OR (\n a.actor_id!=a.reader_actor\n AND (a.thread_id IS NULL AND a.mark IS NOT NULL AND json_extract(a.mark,'$.position')<a.position\n  OR a.thread_id IS NOT NULL AND a.watch IS NOT NULL AND json_extract(a.watch,'$.position')<a.position)\n AND (a.mark IS NULL OR json_extract(a.mark,'$.position')<a.position)))\nAND (a.sweep IS NULL OR (CASE a.time_basis WHEN 'legacy_unknown' THEN 0 ELSE 1 END,COALESCE(a.router_time,''),a.project,a.position)\n > (CASE json_extract(a.sweep,'$.time.kind') WHEN 'unknown' THEN 0 ELSE 1 END,COALESCE(json_extract(a.sweep,'$.time.value'),''),json_extract(a.sweep,'$.projectId'),json_extract(a.sweep,'$.position')))\nORDER BY a.position ASC LIMIT ?\n",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "position!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "epoch!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "record_kind!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "record_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "router_time?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "time_basis!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "watch_active!: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "watch_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 8,
+        "name": "watch_position?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 9,
+        "name": "mark_epoch?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      },
+      {
+        "ordinal": 10,
+        "name": "mark_position?: i64",
+        "type_info": {
+          "name": "NULL"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "19815076b52bfa11b3f36ecb3a353dd912cbed0dc92af6dd65a42a59f3536b29"
+}

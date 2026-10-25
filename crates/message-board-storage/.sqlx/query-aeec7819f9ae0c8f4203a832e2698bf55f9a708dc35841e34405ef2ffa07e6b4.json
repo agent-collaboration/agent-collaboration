@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT event_id AS \"id!: String\" FROM task_link_events WHERE event_id>? ORDER BY event_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "aeec7819f9ae0c8f4203a832e2698bf55f9a708dc35841e34405ef2ffa07e6b4"
+}

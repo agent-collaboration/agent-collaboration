@@ -357,6 +357,7 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
 
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
+            board_session: None,
             directory: service_directory.clone(),
             codex_home: std::env::var_os("CODEX_HOME")
                 .map(std::path::PathBuf::from)

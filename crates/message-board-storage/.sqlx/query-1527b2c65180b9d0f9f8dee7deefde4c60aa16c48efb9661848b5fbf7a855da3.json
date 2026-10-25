@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT request_id AS \"id!: String\" FROM request_decisions WHERE request_id>? ORDER BY request_id LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "1527b2c65180b9d0f9f8dee7deefde4c60aa16c48efb9661848b5fbf7a855da3"
+}

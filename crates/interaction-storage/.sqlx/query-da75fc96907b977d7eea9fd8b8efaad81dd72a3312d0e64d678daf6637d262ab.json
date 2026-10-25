@@ -1,0 +1,20 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT retry_attempts AS \"retry_attempts!: i64\" FROM local_delivery_retries WHERE item_id=?",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "retry_attempts!: i64",
+        "type_info": {
+          "name": "INTEGER"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "da75fc96907b977d7eea9fd8b8efaad81dd72a3312d0e64d678daf6637d262ab"
+}

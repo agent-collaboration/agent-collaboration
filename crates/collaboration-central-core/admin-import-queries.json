@@ -1,0 +1,40 @@
+{
+  "migrations": ["admin_import_migrations"],
+  "output": "src/generated_admin_imports.rs",
+  "metadata": "admin-import-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_admin_import",
+      "sql": "admin_import_sql/read_admin_import.sql",
+      "row": "StoredAdminImport",
+      "result": "optional",
+      "parameters": [
+        {"name": "project_id", "kind": "text", "nullable": false},
+        {"name": "digest", "kind": "text", "nullable": false}
+      ]
+    },
+    {
+      "name": "insert_admin_import",
+      "sql": "admin_import_sql/insert_admin_import.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {"name": "import_id", "kind": "text", "nullable": false},
+        {"name": "project_id", "kind": "text", "nullable": false},
+        {"name": "digest", "kind": "text", "nullable": false},
+        {"name": "header", "kind": "text", "nullable": false},
+        {"name": "phase", "kind": "text", "nullable": false}
+      ]
+    },
+    {
+      "name": "update_admin_import",
+      "sql": "admin_import_sql/update_admin_import.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {"name": "phase", "kind": "text", "nullable": false},
+        {"name": "import_id", "kind": "text", "nullable": false}
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1 @@
+SELECT state_id, name, CAST(last_position AS TEXT) AS last_position, typeof(last_position) AS position_class, CAST(pruned_through AS TEXT) AS pruned_through, typeof(pruned_through) AS floor_class, peer_id FROM machine_notice_state;

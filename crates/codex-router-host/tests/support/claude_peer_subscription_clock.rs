@@ -1,32 +1,23 @@
 //! Deterministic owner deadlines through the existing subscription clock seam.
-use super::{OWNER_EVENT_TIMEOUT, PRESENCE_RECHECK, ProofResult};
+use super::ProofResult;
 use chrono::{DateTime, Utc};
 use collaboration_service::SubscriptionClock;
 use std::{sync::Mutex, time::Duration};
-use tokio::{
-    sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel},
-    time::Instant,
-};
+use tokio::time::Instant;
 
 pub(super) struct ManualSubscriptionClock {
     wall: Mutex<DateTime<Utc>>,
     monotonic: Mutex<Instant>,
     advanced: tokio::sync::Notify,
-    sleep_deadlines: UnboundedSender<Instant>,
 }
 
 impl ManualSubscriptionClock {
-    pub(super) fn new(now: DateTime<Utc>) -> (Self, UnboundedReceiver<Instant>) {
-        let (sleep_deadlines, receiver) = unbounded_channel();
-        (
-            Self {
-                wall: Mutex::new(now),
-                monotonic: Mutex::new(Instant::now()),
-                advanced: tokio::sync::Notify::new(),
-                sleep_deadlines,
-            },
-            receiver,
-        )
+    pub(super) fn new(now: DateTime<Utc>) -> Self {
+        Self {
+            wall: Mutex::new(now),
+            monotonic: Mutex::new(Instant::now()),
+            advanced: tokio::sync::Notify::new(),
+        }
     }
 
     pub(super) fn advance(&self, amount: Duration) -> ProofResult {
@@ -50,38 +41,6 @@ impl ManualSubscriptionClock {
         self.advanced.notify_waiters();
         Ok(())
     }
-
-    pub(super) fn current_monotonic(&self) -> ProofResult<Instant> {
-        self.monotonic
-            .lock()
-            .map(|instant| *instant)
-            .map_err(|_| std::io::Error::other("manual monotonic clock lock poisoned").into())
-    }
-
-    pub(super) async fn next_sleep_deadline_matching(
-        clock: &Self,
-        receiver: &mut UnboundedReceiver<Instant>,
-        stage: &'static str,
-        exact_remaining: Option<Duration>,
-    ) -> ProofResult<Instant> {
-        tokio::time::timeout(OWNER_EVENT_TIMEOUT, async {
-            loop {
-                let deadline = receiver.recv().await.ok_or_else(|| {
-                    std::io::Error::other("owner sleep observation channel closed")
-                })?;
-                let remaining = deadline.checked_duration_since(clock.current_monotonic()?);
-                let matches_stage = match exact_remaining {
-                    Some(expected) => remaining == Some(expected),
-                    None => remaining.is_some_and(|value| value > PRESENCE_RECHECK),
-                };
-                if matches_stage {
-                    return Ok(deadline);
-                }
-            }
-        })
-        .await
-        .map_err(|_| std::io::Error::other(format!("owner did not reach {stage}")))?
-    }
 }
 
 impl SubscriptionClock for ManualSubscriptionClock {
@@ -104,7 +63,6 @@ impl SubscriptionClock for ManualSubscriptionClock {
         deadline: Instant,
     ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
-            let _observed = self.sleep_deadlines.send(deadline);
             loop {
                 let advanced = self.advanced.notified();
                 tokio::pin!(advanced);
@@ -116,4 +74,48 @@ impl SubscriptionClock for ManualSubscriptionClock {
             }
         })
     }
+}
+
+// A clock step followed by wake_at(now) must not retain a later fixed Instant.
+// Decision 1007 keeps this consumer regression red until the library repair lands.
+#[tokio::test]
+async fn manual_advance_also_releases_an_already_armed_native_timer() {
+    let proof: ProofResult = async {
+        use runtime_primitives::{Clock, SyncTime, TokioWakeTimer, WakeScheduler};
+        use std::{
+            future::{Future, poll_fn},
+            sync::Arc,
+            task::Poll,
+        };
+        struct TimerClock(Arc<ManualSubscriptionClock>);
+        impl Clock for TimerClock {
+            fn now(&self) -> SyncTime {
+                SyncTime::from_unix_millis(self.0.now().timestamp_millis())
+            }
+        }
+        let clock = Arc::new(ManualSubscriptionClock::new(Utc::now()));
+        let timer_clock = TimerClock(clock.clone());
+        let due = timer_clock.now().after(Duration::from_secs(1));
+        let timer = TokioWakeTimer::new(timer_clock);
+        timer.wake_at(due).await?;
+        let mut waiting = Box::pin(timer.wait());
+        assert!(
+            poll_fn(|context| Poll::Ready(waiting.as_mut().poll(context)))
+                .await
+                .is_pending()
+        );
+        clock.advance(Duration::from_secs(1))?;
+        timer
+            .wake_at(SyncTime::from_unix_millis(clock.now().timestamp_millis()))
+            .await?;
+        assert_eq!(
+            tokio::time::timeout(Duration::from_millis(100), waiting)
+                .await
+                .expect("fixture time advanced but the already armed native Tokio timer did not"),
+            due
+        );
+        Ok(())
+    }
+    .await;
+    proof.expect("native timer must honor a shared-clock step");
 }

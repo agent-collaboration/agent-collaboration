@@ -10,7 +10,9 @@ use serde::Serialize;
 
 use crate::backend::SecretStore;
 use crate::credential_key::AccountCredentialKey;
-use crate::credential_key::has_credential_bundle_marker;
+use crate::credential_key::{
+    SecretStorageClass, classify_secret_key, require_encrypted_secret_key,
+};
 use crate::credential_store_lock::CredentialStoreLock;
 use crate::credential_store_lock::CredentialStoreLockMode;
 use crate::file_backend::FileSecretStore;
@@ -255,7 +257,7 @@ impl EncryptedCredentialStore {
         key: &SecretKey,
         secret: &SecretString,
     ) -> Result<(), SecretStoreError> {
-        require_account_credential_key(key)?;
+        require_encrypted_secret_key(key)?;
         let data_key = self.ready_data_key()?;
         let envelope = encrypt_envelope(data_key, key, secret.expose_secret().as_bytes())?;
         let _store_lock =
@@ -279,17 +281,19 @@ impl EncryptedCredentialStore {
 
 impl SecretStore for EncryptedCredentialStore {
     fn write_secret(&self, key: &SecretKey, secret: &SecretString) -> Result<(), SecretStoreError> {
-        if has_credential_bundle_marker(key) {
-            return self.write_staged(key, secret);
+        match classify_secret_key(key)? {
+            SecretStorageClass::GeneralSecret => self.file_store.write_secret(key, secret),
+            SecretStorageClass::AccountCredential | SecretStorageClass::FleetCredential => {
+                self.write_staged(key, secret)
+            }
         }
-        self.file_store.write_secret(key, secret)
     }
 
     fn read_secret(&self, key: &SecretKey) -> Result<SecretString, SecretStoreError> {
-        if !has_credential_bundle_marker(key) {
-            return self.file_store.read_secret(key);
+        match classify_secret_key(key)? {
+            SecretStorageClass::GeneralSecret => return self.file_store.read_secret(key),
+            SecretStorageClass::AccountCredential | SecretStorageClass::FleetCredential => {}
         }
-        require_account_credential_key(key)?;
         let data_key = self.ready_data_key()?;
         let envelope = self.file_store.read_credential_envelope(key)?;
         decrypt_envelope(data_key, key, &envelope)
@@ -300,7 +304,7 @@ impl SecretStore for EncryptedCredentialStore {
     }
 
     fn delete_staged(&self, key: &SecretKey) -> Result<(), SecretStoreError> {
-        require_account_credential_key(key)?;
+        require_encrypted_secret_key(key)?;
         let _ = self.ready_data_key()?;
         let _store_lock =
             CredentialStoreLock::acquire(self.file_store.root(), CredentialStoreLockMode::Shared)?;
@@ -361,14 +365,6 @@ fn migration_failure_for_key_open_error(
         }
         _ => None,
     }
-}
-
-fn require_account_credential_key(
-    key: &SecretKey,
-) -> Result<AccountCredentialKey, SecretStoreError> {
-    AccountCredentialKey::parse(key)?.ok_or_else(|| SecretStoreError::InvalidCredentialKey {
-        key: key.as_str().to_owned(),
-    })
 }
 
 pub(crate) fn encrypt_envelope(
