@@ -31,7 +31,7 @@ jobs:
     permissions:
       contents: write
     runs-on: macos-15
-    timeout-minutes: 45
+    timeout-minutes: 90
     outputs:
       asset_sha256: ${{ steps.artifact.outputs.sha256 }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
