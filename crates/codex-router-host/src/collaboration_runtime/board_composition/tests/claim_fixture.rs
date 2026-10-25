@@ -49,6 +49,7 @@ impl ClaimFixture {
                 super::forwarded_notification_fixture::HolderNotifications::prepare(
                     &mut board,
                     &directory.path().join("router"),
+                    identity()?,
                 )
                 .await?,
             )

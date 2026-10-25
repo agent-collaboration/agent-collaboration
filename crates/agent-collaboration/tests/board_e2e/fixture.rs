@@ -65,7 +65,7 @@ pub struct BoardFixture {
 }
 
 impl BoardFixture {
-    fn new() -> FixtureResult<Self> {
+    fn new(directory_name: &str) -> FixtureResult<Self> {
         let parent = std::env::var_os("CODEX_ROUTER_E2E_PARENT")
             .map(PathBuf::from)
             .unwrap_or_else(std::env::temp_dir);
@@ -75,7 +75,7 @@ impl BoardFixture {
                 chrono::Utc::now().format("%Y-%m")
             ))
             .tempdir_in(parent)?;
-        let directory = root.path().join("host-a");
+        let directory = root.path().join(directory_name);
         std::fs::DirBuilder::new().mode(0o700).create(&directory)?;
         Ok(Self {
             root,
@@ -95,13 +95,10 @@ impl BoardFixture {
     }
 
     async fn start(&mut self) -> FixtureResult {
-        self.start_with_mailbox_items(None).await
+        self.start_with_small_mailbox(false).await
     }
 
-    async fn start_with_mailbox_items(
-        &mut self,
-        items: Option<std::num::NonZeroU64>,
-    ) -> FixtureResult {
+    async fn start_with_small_mailbox(&mut self, small_mailbox: bool) -> FixtureResult {
         self.host = Some(BoardHost::start(&self.directory, None).await?);
         let client = collaboration_client::CollaborationClient::connect(
             &self.directory,
@@ -116,12 +113,12 @@ impl BoardFixture {
             installation: String::from(installation.service_id.clone()).try_into()?,
             machine: installation.machine_label.as_str().to_owned().try_into()?,
         };
-        let controls = items
-            .map(|items| board_central_test_support::RuntimeControlRequest {
+        let controls = small_mailbox
+            .then(|| board_central_test_support::RuntimeControlRequest {
                 address: board_central_test_support::ObjectAddress::Mailbox(
                     origin.installation.clone(),
                 ),
-                command: board_central_test_support::RuntimeControl::MailboxItemLimit { items },
+                command: board_central_test_support::RuntimeControl::SmallMailboxCapacity,
             })
             .into_iter()
             .collect();
@@ -305,8 +302,24 @@ pub async fn scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
 {
+    scenario_in_directory("host-a", case).await
+}
+
+/// BC05's importer reads the same preexisting Host identity through its Router root.
+#[allow(dead_code)] // The shared fixture also compiles in targets that use only host-a.
+pub async fn router_root_scenario<F>(case: F) -> FixtureResult
+where
+    F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
+{
+    scenario_in_directory("agent-communication", case).await
+}
+
+async fn scenario_in_directory<F>(directory_name: &str, case: F) -> FixtureResult
+where
+    F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
+{
     run_scenario(
-        BoardFixture::new()?,
+        BoardFixture::new(directory_name)?,
         async move |fixture: &mut BoardFixture| {
             fixture.start().await?;
             case(fixture).await?;
@@ -321,14 +334,14 @@ where
 
 /// A real small mailbox makes missing retirement observable as admission refusal.
 #[allow(dead_code)] // Only the mail retirement root reaches it, through central_pair.
-pub async fn scenario_with_mailbox_items<F>(items: std::num::NonZeroU64, case: F) -> FixtureResult
+pub async fn scenario_with_small_mailbox<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
 {
     run_scenario(
-        BoardFixture::new()?,
+        BoardFixture::new("host-a")?,
         async move |fixture: &mut BoardFixture| {
-            fixture.start_with_mailbox_items(Some(items)).await?;
+            fixture.start_with_small_mailbox(true).await?;
             case(fixture).await?;
             fixture.finished = true;
             Ok(())

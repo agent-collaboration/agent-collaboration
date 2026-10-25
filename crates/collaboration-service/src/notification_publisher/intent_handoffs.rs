@@ -229,11 +229,11 @@ impl PublisherInner {
             .await
             .map_err(|_| BoardError::board_unavailable())?
             .ok_or_else(BoardError::board_unavailable)?;
+        let epoch = publication_epoch(&store).await?;
         let mut read = store
             .snapshot()
             .await
             .map_err(|_| BoardError::board_unavailable())?;
-        let epoch = read.high_water().epoch;
         let Some(Record::NotifyIntent(current)) = read
             .record(&intent_id.clone().into())
             .await

@@ -7,7 +7,7 @@ use collaboration_service::{FleetClient, ProjectRegistration};
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
 use fleet_sync_protocol::{PeerId, ReceiverId};
 use message_board::ActorOrigin;
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{future::Future, path::Path, pin::Pin, sync::Arc, time::Duration};
 
 mod access_edge;
 mod enrollment_edge;
@@ -23,15 +23,17 @@ pub use mail_wire_observer::{MailWireEvent, MailWireObservation};
 mod lease_notice_gate;
 pub use claim_grant_drop::{ClaimGrantDropObservation, DroppedClaimGrant};
 pub use lease_notice_gate::LeaseNoticeObservation;
+mod fixture_shutdown;
 mod fleet_observer;
 mod machine_enrollment;
 mod machine_session;
+mod owner_directory_observation;
 mod owner_transfers;
 pub use machine_enrollment::EnrolledTestMachine;
 #[cfg(feature = "conformance")]
 mod payload_input_observer;
 pub use collaboration_central_conformance::{
-    DispatchFaultObservation, RuntimeControl, RuntimeControlRequest,
+    DispatchCallSelector, DispatchFaultObservation, RuntimeControl, RuntimeControlRequest,
 };
 pub use collaboration_central_core::{ConformanceBoardState, ObjectAddress};
 pub use machine_session::FleetTestRuntime;
@@ -190,56 +192,105 @@ impl TestCentral {
         origin: &ActorOrigin,
         peer: PeerId,
     ) -> FixtureResult<Self> {
-        Self::start_with_peer_and_controls(root, origin, peer, Vec::new()).await
+        Self::start_observing_jwks(root, origin, peer, |_| {}).await
     }
 
-    /// Configure existing conformance seams before enrollment initializes its mailbox.
+    /// Configure conformance controls before enrollment initializes its mailbox.
     pub async fn start_with_peer_and_controls(
         root: &Path,
         origin: &ActorOrigin,
         peer: PeerId,
-        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
+        controls: Vec<RuntimeControlRequest>,
     ) -> FixtureResult<Self> {
-        let jwks = JwksFixtureServer::start().await?;
-        // Stable fixture deployment configuration across an owning-store reopen.
-        let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
-        let server = TokioServer::start_with_controls(
-            TokioSettings {
-                delivery: collaboration_central_tokio::DeliveryConfig {
-                    relay_peer: fleet_sync_protocol::PeerId::try_from(
-                        "019f0000-0000-7000-8000-000000005240".to_owned(),
-                    )?,
-                },
-                root: root.into(),
-                access_policy: fixture_policy(),
-                jwks_url: jwks.url.clone(),
-                registry: RegistryConfig {
-                    lease: LeasePolicy {
-                        lease_duration: Duration::from_secs(14_400),
-                        renew_interval: Duration::from_secs(900),
+        Self::start_with_controls_observing_jwks(root, origin, peer, controls, |_| {}).await
+    }
+
+    async fn start_observing_jwks(
+        root: &Path,
+        origin: &ActorOrigin,
+        peer: PeerId,
+        observe_jwks: impl FnOnce(&str) + Send,
+    ) -> FixtureResult<Self> {
+        Self::start_with_controls_observing_jwks(root, origin, peer, Vec::new(), observe_jwks).await
+    }
+
+    fn start_with_controls_observing_jwks<'fixture>(
+        root: &'fixture Path,
+        origin: &'fixture ActorOrigin,
+        peer: PeerId,
+        controls: Vec<RuntimeControlRequest>,
+        observe_jwks: impl FnOnce(&str) + Send + 'fixture,
+    ) -> Pin<Box<dyn Future<Output = FixtureResult<Self>> + Send + 'fixture>> {
+        Box::pin(async move {
+            // Validate static configuration before the first owned listener starts.
+            let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())?;
+            let relay_peer = PeerId::try_from("019f0000-0000-7000-8000-000000005240".to_owned())?;
+            let jwks = JwksFixtureServer::start().await?;
+            observe_jwks(&jwks.url);
+            let server = match TokioServer::start_with_controls(
+                TokioSettings {
+                    delivery: collaboration_central_tokio::DeliveryConfig { relay_peer },
+                    root: root.into(),
+                    access_policy: fixture_policy(),
+                    jwks_url: jwks.url.clone(),
+                    registry: RegistryConfig {
+                        lease: LeasePolicy {
+                            lease_duration: Duration::from_secs(14_400),
+                            renew_interval: Duration::from_secs(900),
+                        },
+                        authoritative_receiver: receiver,
+                        release_unsent_for: Duration::ZERO,
+                        move_needs_renewal_within: Some(Duration::from_secs(1800)),
                     },
-                    authoritative_receiver: receiver,
-                    release_unsent_for: Duration::ZERO,
-                    move_needs_renewal_within: Some(Duration::from_secs(1800)),
+                    holder_answer_timeout: Duration::from_secs(2),
+                    copy_ack_wait: Duration::from_secs(2),
                 },
-                holder_answer_timeout: Duration::from_secs(2),
-                copy_ack_wait: Duration::from_secs(2),
-            },
-            controls,
-        )
-        .await?;
-        let machine = EnrolledTestMachine::enroll(
-            server.base_url(),
-            origin,
-            peer,
-            receiver,
-            "board-central-native-fixture".to_owned(),
-        )
-        .await?;
-        Ok(Self {
-            server,
-            jwks,
-            machine,
+                controls,
+            )
+            .await
+            {
+                Ok(server) => server,
+                Err(error) => {
+                    return Err(match jwks.shutdown().await {
+                        Ok(()) => error.into(),
+                        Err(cleanup) => format!(
+                            "central startup failed: {error}; JWKS cleanup failed: {cleanup}"
+                        )
+                        .into(),
+                    });
+                }
+            };
+            let machine = match EnrolledTestMachine::enroll(
+                server.base_url(),
+                origin,
+                peer,
+                receiver,
+                "board-central-native-fixture".to_owned(),
+            )
+            .await
+            {
+                Ok(machine) => machine,
+                Err(error) => {
+                    let cleanup = fixture_shutdown::finish(
+                        async { Ok(()) },
+                        async { server.shutdown().await.map_err(Into::into) },
+                        jwks.shutdown(),
+                    )
+                    .await;
+                    return Err(match cleanup {
+                        Ok(()) => error,
+                        Err(cleanup) => {
+                            format!("machine enrollment failed: {error}; cleanup failed: {cleanup}")
+                                .into()
+                        }
+                    });
+                }
+            };
+            Ok(Self {
+                server,
+                jwks,
+                machine,
+            })
         })
     }
 
@@ -278,10 +329,17 @@ impl TestCentral {
     }
 
     pub async fn shutdown(self) -> FixtureResult {
-        self.machine.shutdown().await?;
-        self.server.shutdown().await?;
-        self.jwks.shutdown().await?;
-        Ok(())
+        let Self {
+            machine,
+            server,
+            jwks,
+        } = self;
+        fixture_shutdown::finish(
+            machine.shutdown(),
+            async { server.shutdown().await.map_err(Into::into) },
+            jwks.shutdown(),
+        )
+        .await
     }
 }
 

@@ -6,6 +6,9 @@
 //! or Ctrl-C; restart on the same directory to exercise durable board recovery.
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs, load_fleet_enrollment};
 use collaboration_protocol::ServiceManifest;
+#[cfg(feature = "runtime-test-support")]
+#[path = "board-debug-runtime/mail_faults.rs"]
+mod mail_faults;
 use std::{
     error::Error,
     io,
@@ -77,6 +80,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         remote_control_server_name: None,
     })
     .await?;
+    #[cfg(feature = "runtime-test-support")]
+    if let Err(error) = mail_faults::install(&runtime, &directory).await {
+        return match runtime.shutdown().await {
+            Ok(()) => Err(error.into()),
+            Err(cleanup) => Err(format!("mail fault setup: {error}; cleanup: {cleanup}").into()),
+        };
+    }
     let manifest: ServiceManifest =
         serde_json::from_slice(&std::fs::read(directory.join("service.json"))?)?;
     println!(

@@ -111,13 +111,16 @@ where
         if !allowed {
             return Err(refused());
         }
+        let limits = *limits;
+        #[cfg(feature = "conformance")]
+        let limits = self.conformance_mailbox_limits(limits);
         self.run_mailbox_step(
             target.recipient,
             operation,
             RelayMailbox {
                 recipient: target.recipient,
                 input,
-                limits: *limits,
+                limits,
                 now: shared_host.now(),
             },
         )
@@ -173,7 +176,22 @@ where
                             .await?,
                     ),
                     DeliveryRequest::Report { report, .. } => {
-                        DeliveryAnswer::Report(mailbox.report(self.input.actor, report).await?)
+                        DeliveryAnswer::Report(
+                            mailbox.report(self.input.actor, report).await.map_err(|error| {
+                                match error {
+                                    // Preserve rollback, but give the remote report task a
+                                    // terminal answer instead of an endless lost-answer retry.
+                                    fleet_sync_delivery::DeliveryError::InvalidBatch => {
+                                        fleet_sync_delivery::DeliveryError::Refused {
+                                            reason: fleet_sync_protocol::DeliveryRefusal::ProcessingFailed {
+                                                kind: fleet_sync_protocol::DeliveryFailureKind::ExecutionFailed,
+                                            },
+                                        }
+                                    }
+                                    error => error,
+                                }
+                            })?,
+                        )
                     }
                     DeliveryRequest::Query { items, .. } => {
                         DeliveryAnswer::Query(mailbox.query(&items).await?)

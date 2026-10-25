@@ -109,6 +109,8 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    #[cfg(feature = "runtime-test-support")]
+    runtime_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
     notification_publisher: Option<std::sync::Arc<collaboration_service::NotificationPublisher>>,
     board_session: Option<board_composition::RunningMachineSession>,
     owner_human_id: Option<message_board::HumanId>,
@@ -143,6 +145,23 @@ pub struct CollaborationRuntime {
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
 impl CollaborationRuntime {
+    #[cfg(feature = "runtime-test-support")]
+    pub const RUNTIME_TEST_MAIL_FAULT_FILE: &str = "messaging-test-fault.json";
+
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn runtime_test_install_mail_fault(
+        &self,
+        fault: collaboration_service::MailStoreTestFault,
+    ) -> io::Result<()> {
+        self.runtime_test_mail
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or_else(|| io::Error::other("test mail runtime is unavailable"))?
+            .runtime_test_install_mail_fault(fault)
+            .await
+            .map_err(io::Error::other)
+    }
+
     #[cfg(feature = "runtime-test-support")]
     #[must_use]
     pub fn runtime_test_project_admission(

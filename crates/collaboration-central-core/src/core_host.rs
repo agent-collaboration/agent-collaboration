@@ -39,6 +39,8 @@ pub struct CoreHost<Io: PlatformIo> {
     #[cfg(feature = "conformance")]
     dispatches: std::sync::Arc<std::sync::Mutex<Vec<ObjectAddress>>>,
     #[cfg(feature = "conformance")]
+    pub(crate) forward_route_probe: std::sync::Arc<crate::forward_observer::ForwardRouteProbe>,
+    #[cfg(feature = "conformance")]
     pub(crate) revocation_probe:
         std::sync::Arc<crate::machine_enrollment::conformance_revocation::RevocationProbe>,
 }
@@ -89,6 +91,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
             #[cfg(feature = "conformance")]
+            forward_route_probe: Default::default(),
+            #[cfg(feature = "conformance")]
             revocation_probe: Default::default(),
         }
     }
@@ -101,6 +105,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             publication: None,
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
+            #[cfg(feature = "conformance")]
+            forward_route_probe: Default::default(),
             #[cfg(feature = "conformance")]
             revocation_probe: Default::default(),
         }
@@ -119,6 +125,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
             #[cfg(feature = "conformance")]
+            forward_route_probe: Default::default(),
+            #[cfg(feature = "conformance")]
             revocation_probe: Default::default(),
         }
     }
@@ -131,6 +139,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             publication: self.publication.clone(),
             #[cfg(feature = "conformance")]
             dispatches: self.dispatches.clone(),
+            #[cfg(feature = "conformance")]
+            forward_route_probe: self.forward_route_probe.clone(),
             #[cfg(feature = "conformance")]
             revocation_probe: self.revocation_probe.clone(),
         }
@@ -149,6 +159,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             publication: Some(publication),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
+            #[cfg(feature = "conformance")]
+            forward_route_probe: Default::default(),
             #[cfg(feature = "conformance")]
             revocation_probe: Default::default(),
         }

@@ -193,6 +193,16 @@ impl TokioCentralPlatform {
         self.objects.health_sample(database).await
     }
 
+    /// Raw owning forwarding rows; no domain decoding discards unexpected content.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_forward_state(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<collaboration_central_core::ForwardStateObservation, durable_steps::StoreError>
+    {
+        self.objects.forward_state(service).await
+    }
+
     /// Read-only observation of live holder request correlations.
     #[cfg(feature = "conformance")]
     pub async fn conformance_holder_frames(

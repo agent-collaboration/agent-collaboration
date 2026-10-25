@@ -166,6 +166,20 @@ impl NativeObjects {
             collaboration_central_conformance::RuntimeControl::SetTime { .. }
         );
         let slot = self.slot(request.address).await?;
+        if matches!(
+            request.command,
+            collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity
+        ) {
+            let Some(runtime) = slot.runtime.get() else {
+                return Err(StoreError::backend("mailbox runtime not initialized"));
+            };
+            let RuntimeFace::Mailbox(mailbox) = runtime.as_ref() else {
+                return Err(StoreError::backend("small capacity requires a mailbox"));
+            };
+            mailbox
+                .conformance_small_mailbox_capacity()
+                .map_err(StoreError::backend)?;
+        }
         let observed = slot
             .io
             .faults
@@ -356,26 +370,25 @@ impl NativeObjects {
                     ObjectAddress::Mailbox(installation) => {
                         let limits = collaboration_central_core::central_mailbox_limits()
                             .map_err(StoreError::backend)?;
-                        #[cfg(feature = "conformance")]
-                        let limits = match slot
-                            .io
-                            .faults
-                            .mailbox_item_limit()
-                            .map_err(StoreError::backend)?
-                        {
-                            Some(items) => {
-                                collaboration_central_core::conformance_mailbox_item_limit(items)
-                                    .map_err(StoreError::backend)?
-                            }
-                            None => limits,
-                        };
-                        RuntimeFace::Mailbox(ObjectRuntime::mailbox(
+                        let mailbox = ObjectRuntime::mailbox(
                             host,
                             slot.io.clone(),
                             self.config.authoritative_receiver,
                             installation.clone(),
                             limits,
-                        )?)
+                        )?;
+                        #[cfg(feature = "conformance")]
+                        if slot
+                            .io
+                            .faults
+                            .small_mailbox_capacity()
+                            .map_err(StoreError::backend)?
+                        {
+                            mailbox
+                                .conformance_small_mailbox_capacity()
+                                .map_err(StoreError::backend)?;
+                        }
+                        RuntimeFace::Mailbox(mailbox)
                     }
                     ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(
                         host,
@@ -518,6 +531,29 @@ impl NativeObjects {
         self.tasks.close();
         self.tasks.wait().await;
         self.store.close().await
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn forward_state(
+        &self,
+        service: &message_board::ServiceId,
+    ) -> Result<collaboration_central_core::ForwardStateObservation, StoreError> {
+        let slot = self
+            .slots
+            .lock()
+            .await
+            .get(&format!("connection-{}", service.as_str()))
+            .cloned();
+        match slot
+            .as_ref()
+            .and_then(|slot| slot.runtime.get())
+            .map(Arc::as_ref)
+        {
+            Some(RuntimeFace::Session(runtime)) => runtime.conformance_forward_state().await,
+            _ => Err(StoreError::Aborted {
+                reason: "connection runtime missing".into(),
+            }),
+        }
     }
 
     #[cfg(feature = "conformance")]

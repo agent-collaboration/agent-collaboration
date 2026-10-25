@@ -249,6 +249,8 @@ where
                 shared_host,
                 installation,
                 limits,
+                #[cfg(feature = "conformance")]
+                conformance_limits: std::sync::OnceLock::new(),
                 health: Arc::default(),
             },
             face: PhantomData,

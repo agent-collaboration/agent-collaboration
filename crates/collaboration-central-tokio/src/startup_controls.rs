@@ -14,15 +14,18 @@ impl PreparedRuntimeControls {
             request.validate().map_err(StoreError::backend)?;
             match request.command {
                 RuntimeControl::SetTime { .. }
-                | RuntimeControl::MailboxItemLimit { .. }
+                | RuntimeControl::SmallMailboxCapacity
                 | RuntimeControl::CopyFull { .. }
                 | RuntimeControl::DropNextAnswer { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
-                | RuntimeControl::DropNextObjectReply { .. } => {}
+                | RuntimeControl::HoldNextSelectedDispatch { .. }
+                | RuntimeControl::DropNextObjectReply { .. }
+                | RuntimeControl::DropNextSelectedObjectReply { .. } => {}
                 RuntimeControl::AwaitDroppedAnswer { .. }
                 | RuntimeControl::AwaitHeldDispatch
                 | RuntimeControl::ResumeDispatch
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
+                | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
                 | RuntimeControl::Observe => {
                     return Err(StoreError::backend(

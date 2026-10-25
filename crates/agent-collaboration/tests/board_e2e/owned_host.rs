@@ -43,6 +43,56 @@ impl StoppedHost {
     pub fn directory(&self) -> &Path {
         &self.directory
     }
+
+    // SIGKILL skips listener Drop; only this joined child's three paths qualify.
+    #[allow(dead_code)] // Shared by targets that exercise joined SIGKILL readback.
+    async fn remove_listener_residue(&self) -> FixtureResult {
+        use std::os::unix::fs::{FileTypeExt, MetadataExt};
+
+        let mut failures = Vec::new();
+        for name in ["control.sock", "codex-native.sock", "codex-acp.sock"] {
+            let path = self.directory.join(name);
+            let removed: FixtureResult = async {
+                let before = match std::fs::symlink_metadata(&path) {
+                    Ok(metadata) => metadata,
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(error) => return Err(error.into()),
+                };
+                if !before.file_type().is_socket() {
+                    return Err("joined Host listener path is not a socket".into());
+                }
+                match tokio::time::timeout(
+                    Duration::from_secs(2),
+                    tokio::net::UnixStream::connect(&path),
+                )
+                .await?
+                {
+                    Ok(_) => return Err("joined Host socket still has an active listener".into()),
+                    Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+                    Err(error) => return Err(error.into()),
+                }
+                let after = std::fs::symlink_metadata(&path)?;
+                if !after.file_type().is_socket()
+                    || before.dev() != after.dev()
+                    || before.ino() != after.ino()
+                {
+                    return Err("joined Host listener inode changed during cleanup".into());
+                }
+                std::fs::remove_file(&path)?;
+                Ok(())
+            }
+            .await;
+            if let Err(error) = removed {
+                failures.push(format!("{name}: {error}"));
+            }
+        }
+        if failures.is_empty() {
+            Ok(())
+        } else {
+            Err(failures.join("; ").into())
+        }
+    }
 }
 
 pub struct McpReply {
@@ -253,6 +303,58 @@ impl BoardHost {
         let directory = self.directory.canonicalize()?;
         self.stop().await?;
         Ok(StoppedHost { directory })
+    }
+
+    /// Readback begins only after this owned child is killed, reaped and drained.
+    #[allow(dead_code)] // Some process-test roots only need graceful readback.
+    pub async fn crash_for_readback(mut self) -> FixtureResult<StoppedHost> {
+        use std::os::unix::process::ExitStatusExt;
+
+        let directory = self.directory.canonicalize();
+        let killed = self.child.start_kill();
+        let mut remaining = Vec::new();
+        let (waited, drained) = tokio::join!(
+            tokio::time::timeout(STOP_BOUND, self.child.wait()),
+            tokio::time::timeout(STOP_BOUND, self.output.read_to_end(&mut remaining)),
+        );
+        let mut failures = Vec::new();
+        if let Err(error) = killed {
+            failures.push(format!("owned child SIGKILL: {error}"));
+        }
+        match waited {
+            Ok(Ok(status)) if status.signal() == Some(9) => {}
+            Ok(Ok(status)) => failures.push(format!("expected owned child SIGKILL9, got {status}")),
+            Ok(Err(error)) => failures.push(format!("owned child reap: {error}")),
+            Err(error) => {
+                failures.push(format!("owned child reap bound: {error}"));
+                match tokio::time::timeout(STOP_BOUND, self.child.kill()).await {
+                    Ok(Ok(())) => {}
+                    Ok(Err(error)) => {
+                        failures.push(format!("owned child fallback kill/reap: {error}"))
+                    }
+                    Err(error) => {
+                        failures.push(format!("owned child fallback kill/reap bound: {error}"))
+                    }
+                }
+            }
+        }
+        match drained {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => failures.push(format!("owned child stdout drain: {error}")),
+            Err(error) => failures.push(format!("owned child stdout drain bound: {error}")),
+        }
+        match directory {
+            Ok(directory) if failures.is_empty() => {
+                let stopped = StoppedHost { directory };
+                stopped.remove_listener_residue().await?;
+                Ok(stopped)
+            }
+            Ok(_) => Err(failures.join("; ").into()),
+            Err(error) => {
+                failures.push(format!("owned directory: {error}"));
+                Err(failures.join("; ").into())
+            }
+        }
     }
 
     pub async fn stop(mut self) -> FixtureResult {

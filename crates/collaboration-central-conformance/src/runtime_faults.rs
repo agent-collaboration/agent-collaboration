@@ -12,6 +12,10 @@ use std::{
 #[path = "runtime_faults/session_faults.rs"]
 mod session_faults;
 pub use session_faults::{SessionFaultControl, SessionFaultObservation};
+mod selected_calls;
+use selected_calls::DispatchSelection;
+#[cfg(all(test, feature = "client"))]
+mod selected_call_tests;
 
 #[derive(Default)]
 struct SignalState {
@@ -72,6 +76,7 @@ enum DispatchFault {
     Idle,
     Armed {
         destination: ObjectAddress,
+        selection: DispatchSelection,
         reached: Arc<Signal>,
         release: Arc<Signal>,
     },
@@ -88,6 +93,7 @@ enum ObjectReplyFault {
     Idle,
     Armed {
         destination: ObjectAddress,
+        selection: DispatchSelection,
         observed: Arc<Signal>,
     },
     Dropped {
@@ -98,7 +104,7 @@ enum ObjectReplyFault {
 }
 struct FaultState {
     clock: Option<RegistryTime>,
-    mailbox_item_limit: Option<std::num::NonZeroU64>,
+    small_mailbox_capacity: bool,
     storage: StorageFaultObservation,
     answer: AnswerFault,
     dispatch: DispatchFault,
@@ -109,7 +115,7 @@ impl Default for FaultState {
     fn default() -> Self {
         Self {
             clock: None,
-            mailbox_item_limit: None,
+            small_mailbox_capacity: false,
             storage: StorageFaultObservation::Idle,
             answer: AnswerFault::Idle,
             dispatch: DispatchFault::Idle,
@@ -122,10 +128,8 @@ impl Default for FaultState {
 #[derive(Default)]
 pub struct RuntimeFaults(Mutex<FaultState>);
 impl RuntimeFaults {
-    pub fn mailbox_item_limit(
-        &self,
-    ) -> Result<Option<std::num::NonZeroU64>, RuntimeControlFailure> {
-        Ok(self.state()?.mailbox_item_limit)
+    pub fn small_mailbox_capacity(&self) -> Result<bool, RuntimeControlFailure> {
+        Ok(self.state()?.small_mailbox_capacity)
     }
     fn state(&self) -> Result<MutexGuard<'_, FaultState>, RuntimeControlFailure> {
         self.0.lock().map_err(|_| RuntimeControlFailure::Poisoned)
@@ -196,9 +200,10 @@ impl RuntimeFaults {
             match &state.dispatch {
                 DispatchFault::Armed {
                     destination: expected,
+                    selection,
                     reached,
                     release,
-                } if expected == destination => {
+                } if expected == destination && selection.matches(request) => {
                     let reached = reached.clone();
                     let release = release.clone();
                     state.dispatch = DispatchFault::Held {
@@ -232,8 +237,9 @@ impl RuntimeFaults {
             match &state.object_reply {
                 ObjectReplyFault::Armed {
                     destination: expected,
+                    selection,
                     observed,
-                } if expected == destination => {
+                } if expected == destination && selection.matches(request) => {
                     let observed = observed.clone();
                     state.object_reply = ObjectReplyFault::Dropped {
                         destination: destination.clone(),
@@ -305,10 +311,9 @@ impl RuntimeFaults {
         command: RuntimeControl,
     ) -> Result<RuntimeFaultObservation, RuntimeControlFailure> {
         match command {
+            // Startup and live controls select the same fixed quota at the platform owner.
+            RuntimeControl::SmallMailboxCapacity => self.state()?.small_mailbox_capacity = true,
             RuntimeControl::SetTime { now } => self.state()?.clock = Some(now),
-            RuntimeControl::MailboxItemLimit { items } => {
-                self.state()?.mailbox_item_limit = Some(items)
-            }
             RuntimeControl::CopyFull { after_writes } => {
                 self.state()?.storage = StorageFaultObservation::Armed { after_writes };
             }
@@ -340,15 +345,10 @@ impl RuntimeFaults {
                 observed.wait().await?;
             }
             RuntimeControl::HoldNextDispatch { destination } => {
-                let mut state = self.state()?;
-                if !matches!(state.dispatch, DispatchFault::Idle) {
-                    return Err(RuntimeControlFailure::AlreadyArmed);
-                }
-                state.dispatch = DispatchFault::Armed {
-                    destination,
-                    reached: Arc::default(),
-                    release: Arc::default(),
-                };
+                self.arm_dispatch(destination, DispatchSelection::Any)?;
+            }
+            RuntimeControl::HoldNextSelectedDispatch { destination, call } => {
+                self.arm_dispatch(destination, DispatchSelection::Call(call))?;
             }
             RuntimeControl::AwaitHeldDispatch => {
                 let reached = match &self.state()?.dispatch {
@@ -376,34 +376,16 @@ impl RuntimeFaults {
                 release.signal()?;
             }
             RuntimeControl::DropNextObjectReply { destination } => {
-                let mut state = self.state()?;
-                if matches!(state.object_reply, ObjectReplyFault::Armed { .. }) {
-                    return Err(RuntimeControlFailure::AlreadyArmed);
-                }
-                state.object_reply = ObjectReplyFault::Armed {
-                    destination,
-                    observed: Arc::default(),
-                };
+                self.arm_object_reply(destination, DispatchSelection::Any)?;
+            }
+            RuntimeControl::DropNextSelectedObjectReply { destination, call } => {
+                self.arm_object_reply(destination, DispatchSelection::Call(call))?;
             }
             RuntimeControl::ResumeDispatchAndHoldNext { destination } => {
-                let release = {
-                    let mut state = self.state()?;
-                    let release = match &state.dispatch {
-                        DispatchFault::Held { release, .. } => release.clone(),
-                        DispatchFault::Idle | DispatchFault::Armed { .. } => {
-                            return Err(RuntimeControlFailure::NotHeld);
-                        }
-                    };
-                    // The next match is installed before the resumed caller
-                    // can transmit another object call on a different task.
-                    state.dispatch = DispatchFault::Armed {
-                        destination,
-                        reached: Arc::default(),
-                        release: Arc::default(),
-                    };
-                    release
-                };
-                release.signal()?;
+                self.resume_and_hold(destination, DispatchSelection::Any)?;
+            }
+            RuntimeControl::ResumeDispatchAndHoldNextSelected { destination, call } => {
+                self.resume_and_hold(destination, DispatchSelection::Call(call))?;
             }
             RuntimeControl::AwaitDroppedObjectReply => {
                 let observed = match &self.state()?.object_reply {
@@ -416,5 +398,65 @@ impl RuntimeFaults {
             RuntimeControl::Observe => {}
         }
         self.observe()
+    }
+
+    fn arm_dispatch(
+        &self,
+        destination: ObjectAddress,
+        selection: DispatchSelection,
+    ) -> Result<(), RuntimeControlFailure> {
+        let mut state = self.state()?;
+        if !matches!(state.dispatch, DispatchFault::Idle) {
+            return Err(RuntimeControlFailure::AlreadyArmed);
+        }
+        state.dispatch = DispatchFault::Armed {
+            destination,
+            selection,
+            reached: Arc::default(),
+            release: Arc::default(),
+        };
+        Ok(())
+    }
+
+    fn resume_and_hold(
+        &self,
+        destination: ObjectAddress,
+        selection: DispatchSelection,
+    ) -> Result<(), RuntimeControlFailure> {
+        let release = {
+            let mut state = self.state()?;
+            let release = match &state.dispatch {
+                DispatchFault::Held { release, .. } => release.clone(),
+                DispatchFault::Idle | DispatchFault::Armed { .. } => {
+                    return Err(RuntimeControlFailure::NotHeld);
+                }
+            };
+            // Install the next selection before releasing the current caller.
+            state.dispatch = DispatchFault::Armed {
+                destination,
+                selection,
+                reached: Arc::default(),
+                release: Arc::default(),
+            };
+            release
+        };
+        release.signal()
+    }
+
+    fn arm_object_reply(
+        &self,
+        destination: ObjectAddress,
+        selection: DispatchSelection,
+    ) -> Result<(), RuntimeControlFailure> {
+        let mut state = self.state()?;
+        if matches!(state.object_reply, ObjectReplyFault::Armed { .. }) {
+            return Err(RuntimeControlFailure::AlreadyArmed);
+        }
+        state.object_reply = ObjectReplyFault::Armed {
+            destination,
+            selection,
+            observed: Arc::default(),
+        };
+        Ok(())
     }
 }

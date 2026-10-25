@@ -212,11 +212,11 @@ jobs:
       # the built artifacts so they don't contend for cargo's build lock. Each
       # build uses exactly its run step's package selection and features, so
       # the run reuses these artifacts instead of relinking them.
-      # Prebuilt-Host roots live in board-e2e below; add future board_central_e2e
-      # and local_mail_e2e roots to both selections when they land.
+      # Real Host, importer and forwarding-timer roots run in board-e2e below.
+      # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
         run: |
-          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e))' --no-run
+          cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
           df -h /
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
@@ -225,7 +225,7 @@ jobs:
       - name: Test Rust workspace
         id: workspace_tests
         background: true
-        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e))'
+        run: cargo nextest run --profile ci --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
@@ -234,7 +234,7 @@ jobs:
   board-e2e:
     name: Rust local end-to-end
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       CARGO_BUILD_JOBS: "4"
       TMPDIR: /tmp
@@ -259,10 +259,13 @@ jobs:
         run: |
           cargo build --locked -p agent-collaboration --all-features --bins
           cargo build --locked -p codex-router-host --features runtime-test-support --example board-debug-runtime
+          cargo build --locked -p board-legacy-upgrade --bin codex-router-board-upgrade
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
-          cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test board_records_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1
@@ -349,6 +352,11 @@ jobs:
       - name: Prove bounded normal Access and session cases
         run: |
           for scenario in access-sessions access-carryover session-carryover; do
+            cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+          done
+      - name: Prove forwarding and mailbox rules on workerd
+        run: |
+          for scenario in forward-boundary forward-overlap forward-state forward-terminal forward-real-timer mailbox-identity mailbox-capacity mailbox-cancel mailbox-deadline mailbox-held-retention mailbox-report-terminal; do
             cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
           done
       - name: Build the deployment candidate without test features

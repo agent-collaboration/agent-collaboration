@@ -13,7 +13,9 @@ mod owned_host;
 mod readback;
 #[path = "mail_retirement/wake_and_capacity.rs"]
 mod wake_and_capacity;
-use codex_router_test_support::FixtureResult;
+use codex_router_test_support::{
+    FixtureResult, owned_peer_fixture::PeerFixture, scenario_finalization::run_scenario,
+};
 use collaboration_client::protocol::{EndpointRef, SessionRef};
 use serde_json::json;
 
@@ -24,11 +26,7 @@ async fn ordinary_requested_control_retires_and_keeps_its_result_after_restart()
 
 #[tokio::test]
 async fn terminal_direct_mail_releases_the_only_admission_slot() -> FixtureResult {
-    central_pair::scenario_with_mailbox_items(
-        std::num::NonZeroU64::new(1).ok_or("one slot")?,
-        wake_and_capacity::capacity,
-    )
-    .await
+    central_pair::scenario_with_small_mailbox(wake_and_capacity::capacity).await
 }
 
 #[tokio::test]
@@ -47,8 +45,8 @@ async fn delivered_direct_mail_is_compacted_and_keeps_terminal_replay_after_host
     central_pair::scenario(async |fixture, sender_host| {
         let service = fixture.installation.as_ref().ok_or("recipient installation absent")?.service_id.clone();
         let endpoint: EndpointRef = serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
-        let mut peer = wake_and_capacity::start_peer(fixture, &endpoint).await?;
-        let result = async {
+        let peer = wake_and_capacity::start_peer(fixture, &endpoint).await?;
+        run_scenario(peer, async |peer: &mut PeerFixture| {
             let sender: SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":sender_host.service_id()?,"endpointId":"codex-local"},"sessionId":"retirement-sender"}))?;
             let item = fixture::identity();
             let request = json!({"itemId":item,"target":peer.target,"message":{"kind":"agent","sender":sender,"text":"retirement direct marker"},"delivery":"auto"});
@@ -62,8 +60,6 @@ async fn delivered_direct_mail_is_compacted_and_keeps_terminal_replay_after_host
             assert_eq!(shown.pointer("/mail/status/kind"),Some(&json!("delivered")),"{shown}");
             assert_eq!(peer.count_matching_after_barrier("retirement direct marker").await?,1);
             readback::require_compacted(fixture, &String::from(service), &item).await
-        }.await;
-        let closed=peer.shutdown().await;
-        result.and(closed)
+        }, PeerFixture::shutdown, || Ok(())).await
     }).await
 }

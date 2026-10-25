@@ -48,6 +48,8 @@ mod copy_write_calls;
 pub use copy_receiver_rules::{CopyDirectorySummary, CopyReceiverRules};
 mod delivery_config;
 pub use delivery_config::DeliveryConfig;
+#[cfg(feature = "conformance")]
+mod conformance_mailbox;
 mod effect_driver;
 mod forward_calls;
 mod forward_delivery;
@@ -83,8 +85,6 @@ pub use machine_enrollment::{
     AdmittedMachine, EnrollMachine, EnrollmentDecision, EnrollmentRefusal, RevocationDecision,
 };
 pub use mailbox_limits::central_mailbox_limits;
-#[cfg(feature = "conformance")]
-pub use mailbox_limits::conformance_mailbox_item_limit;
 mod object_bootstrap;
 mod object_runtime;
 mod object_transport;
@@ -150,6 +150,12 @@ mod fleet_read_step;
 mod fleet_record_codec;
 #[cfg(feature = "conformance")]
 mod fleet_record_observer;
+#[cfg(feature = "conformance")]
+mod forward_observer;
+#[cfg(feature = "conformance")]
+pub use forward_observer::{
+    FORWARD_STATE_PATH, ForwardStateObservation, ForwardStateRequest, ForwardStoredRecord,
+};
 mod fleet_record_store;
 mod fleet_repository_store;
 mod fleet_retirement_gate;

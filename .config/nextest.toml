@@ -12,10 +12,11 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 # These suites own subprocesses, process groups, PTYs, fixed readiness budgets,
 # and loopback/Unix listeners. Running them against each other creates host-level
 # scheduling starvation that their semantic deadlines correctly report as failure.
-# Keep only this resource-heavy group mutually exclusive; the rest of the workspace
-# remains fully parallel.
+# Process-runtime cases reserve every slot. Other tests can share the remaining
+# scheduler slots with one member of the heavy fixture group below.
 [test-groups]
 process-runtime = { max-threads = 1 }
+heavy-tests = { max-threads = 1 }
 
 [[profile.ci.overrides]]
 filter = "binary(update_reexec) | binary(runtime_restart) | binary(compiled_cli_host_acceptance) | binary(quota_reset_pty_test) | (package(=codex-router-auth) & test(=claude_oauth::tests::refresh_timeout_is_ambiguous_and_never_returns_the_old_token)) | (package(=codex-router-proxy) & test(=tests::tunnel_affinity_tests::async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder))"
@@ -26,7 +27,7 @@ threads-required = "num-test-threads"
 # delayed NotWriter check can cross the SDK retry deadline; starving the archive
 # or Serve child crosses their unchanged request and shutdown deadlines.
 [[profile.ci.overrides]]
-filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(=tailscale_exposure::tests::shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_retired) | test(=tailscale_process::tests::cancelling_an_observation_keeps_the_child_owned_until_explicit_shutdown)))"
+filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(tailscale_exposure::) | test(tailscale_process::)))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
@@ -37,13 +38,21 @@ filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_di
 slow-timeout = { period = "60s", terminate-after = 6 }
 
 # These cases deliberately fill the real production queue or construct 260
-# maximum descriptions / 31,000 historical effects. Keep those inputs intact
-# and give their native storage work an exclusive, bounded execution window.
+# maximum descriptions / 31,000 historical effects. Keep those inputs and
+# deadlines intact, but allow only one heavy case while ordinary tests retain
+# the remaining scheduler slots. Process-runtime cases still require every slot.
 [[profile.ci.overrides]]
 filter = "binary(=held_queue_depth) | binary(=project_description_encoded_sizes) | (package(=message-board-storage) & test(=project_record_size_tests::history_growing_records_are_measured_without_capping_or_truncating))"
-test-group = "process-runtime"
-threads-required = "num-test-threads"
+test-group = "heavy-tests"
+threads-required = 1
 slow-timeout = { period = "60s", terminate-after = 15 }
+
+# These branch-added fixture workloads were also slow in the retained Linux CI
+# run. Bound concurrent heavy work instead of adding another timing exception.
+[[profile.ci.overrides]]
+filter = "(package(=collaboration-service) & (test(=service_identity::subscription_delivery::subscription_service::intent_progress_tests::deferred_history_does_not_grow_the_next_intent_pass) | (binary(=board_control_path) & test(=control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats)) | (binary(=board_metadata_records) & test(=large_metadata_lists_continue_before_the_control_frame_limit)) | binary(=board_write_scale) | binary(=bounded_fleet_reads) | (binary(=bounded_post_lookup) & test(=post_lookup_costs_ignore_unopened_project_files))))"
+test-group = "heavy-tests"
+threads-required = 1
 
 [[profile.ci.overrides]]
 filter = "binary(=request_effects_public) & test(=a_large_fleet_write_returns_a_signed_public_continuation)"
@@ -59,6 +68,6 @@ threads-required = "num-test-threads"
 
 # Real local Host/central journeys run in the required slower CI job.
 [[profile.ci.overrides]]
-filter = "binary(=board_records_e2e)"
+filter = "binary(/^(board_records_e2e|board_central_e2e|local_mail_e2e|board_takeover_e2e|messaging_rules_e2e|installation_directory_e2e|mail_reconcile_e2e|mail_retirement_e2e|upgrade_binary_e2e|forwarding_real_timer)$/)"
 test-group = "process-runtime"
 threads-required = "num-test-threads"

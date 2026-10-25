@@ -22,6 +22,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
             #[cfg(feature = "conformance")]
+            forward_route_probe: Default::default(),
+            #[cfg(feature = "conformance")]
             revocation_probe: Default::default(),
         })
     }

@@ -5,7 +5,7 @@
 #[path = "native_http/support.rs"]
 mod configuration;
 use collaboration_central_conformance::{
-    ConformanceResult, RuntimeControl, RuntimeControlRequest, fixture_policy,
+    ConformanceResult, DispatchCallSelector, RuntimeControl, RuntimeControlRequest, fixture_policy,
 };
 use collaboration_central_core::ObjectAddress;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
@@ -20,6 +20,10 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
         RuntimeControl::ResumeDispatch,
         RuntimeControl::ResumeDispatchAndHoldNext {
             destination: ObjectAddress::Fleet,
+        },
+        RuntimeControl::ResumeDispatchAndHoldNextSelected {
+            destination: ObjectAddress::Fleet,
+            call: DispatchCallSelector::MailboxSubmit,
         },
         RuntimeControl::AwaitDroppedObjectReply,
         RuntimeControl::AwaitDroppedAnswer {

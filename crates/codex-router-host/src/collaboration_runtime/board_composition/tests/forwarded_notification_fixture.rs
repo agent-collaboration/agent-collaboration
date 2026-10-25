@@ -60,8 +60,11 @@ impl HolderNotifications {
         Ok((release, task))
     }
 
-    pub async fn prepare(board: &mut BoardComposition, root: &Path) -> TestResultOwner {
-        let machine = identity()?;
+    pub async fn prepare(
+        board: &mut BoardComposition,
+        root: &Path,
+        machine: MachineIdentity,
+    ) -> TestResultOwner {
         let session = board.mail_session().ok_or("holder mail session")?;
         let peer = session.peer;
         let owner =
@@ -79,7 +82,7 @@ impl HolderNotifications {
         });
         actors.start().await?;
         let identity = ServiceIdentity::new(
-            origin()?.installation.as_str(),
+            &String::from(machine.service_id().clone()),
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_machine_identity(machine.clone())

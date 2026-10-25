@@ -8,6 +8,7 @@
 mod workerd_process;
 
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, owner_assertion};
+use futures_util::FutureExt as _;
 use serde_json::{Value, json};
 use std::time::Duration;
 use workerd_process::{WorkerdProcess, WorkerdSettings};
@@ -36,12 +37,22 @@ mod delivery_config_scenarios;
 mod fleet_notice_scenarios;
 #[path = "session_scope_workerd/forward_reopen.rs"]
 mod forward_reopen;
+#[path = "../tests/support/forwarded_post_deadline_boundaries.rs"]
+mod forwarded_post_deadline_boundaries;
 #[path = "../tests/support/forwarded_post_lifecycle_oracles.rs"]
 mod forwarded_post_lifecycle_oracles;
 #[path = "../tests/support/forwarded_post_oracles.rs"]
 mod forwarded_post_oracles;
+#[path = "../tests/support/forwarded_post_route_overlap.rs"]
+mod forwarded_post_route_overlap;
 #[path = "../tests/support/forwarded_post_scenarios.rs"]
 mod forwarded_post_scenarios;
+#[path = "../tests/support/forwarded_post_state_cases.rs"]
+mod forwarded_post_state_cases;
+#[path = "../tests/support/forwarded_post_state_oracles.rs"]
+mod forwarded_post_state_oracles;
+#[path = "../tests/support/forwarded_post_terminal_slots.rs"]
+mod forwarded_post_terminal_slots;
 #[path = "../tests/support/forwarded_post_wire.rs"]
 mod forwarded_post_wire;
 #[path = "../tests/support/holder_full_wait.rs"]
@@ -56,8 +67,20 @@ mod http_body_scenarios;
 mod imported_claim_scenarios;
 #[path = "../tests/support/mail_submit_scenarios.rs"]
 mod mail_submit_scenarios;
+#[path = "../tests/support/mailbox_cancel_scenarios.rs"]
+mod mailbox_cancel_scenarios;
+#[path = "../tests/support/mailbox_capacity_scenarios.rs"]
+mod mailbox_capacity_scenarios;
 #[path = "../tests/support/mailbox_deadline_scenarios.rs"]
 mod mailbox_deadline_scenarios;
+#[path = "../tests/support/mailbox_held_retention_scenario.rs"]
+mod mailbox_held_retention_scenario;
+#[path = "../tests/support/mailbox_identity_scenarios.rs"]
+mod mailbox_identity_scenarios;
+#[path = "../tests/support/mailbox_report_terminal_scenario.rs"]
+mod mailbox_report_terminal_scenario;
+#[path = "../tests/support/mailbox_rule_fixture.rs"]
+mod mailbox_rule_fixture;
 #[path = "../tests/support/malformed_frame_scenarios.rs"]
 mod malformed_frame_scenarios;
 #[path = "session_scope_workerd/normal_capability_cases.rs"]
@@ -83,6 +106,11 @@ mod template_config_refusals;
 mod installation_peer_directory_scenarios;
 
 enum Scenario {
+    MailboxReportTerminal,
+    MailboxHeldRetention,
+    MailboxIdentity,
+    MailboxCapacity,
+    MailboxCancel,
     MailboxDeadline,
     DeliveryConfigRefusals,
     ForwardReopen,
@@ -155,6 +183,21 @@ async fn main() -> ConformanceResult<()> {
         Some("forward-deadline") => {
             Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::Deadline)
         }
+        Some("forward-boundary") => {
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::ExactBoundary)
+        }
+        Some("forward-overlap") => {
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::RouteOverlap)
+        }
+        Some("forward-state") => {
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::OwnState)
+        }
+        Some("forward-terminal") => {
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::TerminalRelease)
+        }
+        Some("forward-real-timer") => {
+            Scenario::ForwardPost(forwarded_post_scenarios::ForwardCase::RealTimer)
+        }
         Some("claim-retiring") => Scenario::ClaimRetiring,
         Some("claim-retired") => Scenario::ClaimRetired,
         Some("claim-archived") => Scenario::ClaimArchived,
@@ -187,6 +230,11 @@ async fn main() -> ConformanceResult<()> {
         Some("readmission-open") => Scenario::ReadmissionOpen,
         Some("mail-status") => Scenario::MailStatus,
         Some("mailbox-deadline") => Scenario::MailboxDeadline,
+        Some("mailbox-report-terminal") => Scenario::MailboxReportTerminal,
+        Some("mailbox-held-retention") => Scenario::MailboxHeldRetention,
+        Some("mailbox-identity") => Scenario::MailboxIdentity,
+        Some("mailbox-capacity") => Scenario::MailboxCapacity,
+        Some("mailbox-cancel") => Scenario::MailboxCancel,
         Some("mail-submit-admission") => Scenario::MailSubmitAdmission,
         Some("raw-submit-refusal") => Scenario::RawSubmitRefusal,
         Some("sender-settlement") => Scenario::SenderSettlement,
@@ -277,8 +325,13 @@ async fn main() -> ConformanceResult<()> {
             return Err(error);
         }
     };
-    let result = match scenario {
+    let result = std::panic::AssertUnwindSafe(async { match scenario {
+        Scenario::MailboxReportTerminal => mailbox_report_terminal_scenario::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::MailboxHeldRetention => mailbox_held_retention_scenario::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxDeadline => mailbox_deadline_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::MailboxIdentity => mailbox_identity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::MailboxCapacity => mailbox_capacity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
+        Scenario::MailboxCancel => mailbox_cancel_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::DeliveryConfigRefusals => Err("config refusal scenario owns its process lifetimes".into()),
         Scenario::ForwardReopen => Err("reopen scenario must own its two process lifetimes".into()),
         Scenario::ForwardPost(case) => forwarded_post_scenarios::run(&format!("http://127.0.0.1:{port}"), case).await,
@@ -442,7 +495,7 @@ async fn main() -> ConformanceResult<()> {
                 Ok(())
             }}).await
         }
-    };
+    }}).catch_unwind().await.unwrap_or_else(|_| Err("workerd scenario assertion failed".into()));
     let stopped = server.stop().await;
     let fixture = jwks.shutdown().await;
     result?;

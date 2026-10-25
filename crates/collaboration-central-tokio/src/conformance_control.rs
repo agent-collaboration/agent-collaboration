@@ -30,6 +30,10 @@ pub(crate) fn mount(
     Ok(router.merge(
         Router::new()
             .route(ROUTE, post(control))
+            .route(
+                collaboration_central_core::FORWARD_STATE_PATH,
+                post(forward_state),
+            )
             .with_state(Arc::new(Controls {
                 application,
                 platform,
@@ -50,6 +54,33 @@ async fn control(
         Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
     }
     match controls.platform.runtime_control(request).await {
+        Ok(observed) => Json(observed).into_response(),
+        Err(error) => (StatusCode::CONFLICT, Json(error.to_string())).into_response(),
+    }
+}
+
+async fn forward_state(
+    State(controls): State<Arc<Controls>>,
+    headers: HeaderMap,
+    Json(request): Json<collaboration_central_core::ForwardStateRequest>,
+) -> Response {
+    let assertion = headers
+        .get("Cf-Access-Jwt-Assertion")
+        .and_then(|value| value.to_str().ok());
+    match controls
+        .application
+        .verify_access(assertion, collaboration_central_core::FORWARD_STATE_PATH)
+        .await
+    {
+        Ok(AccessCaller::Owner { .. }) => {}
+        Ok(_) => return StatusCode::UNAUTHORIZED.into_response(),
+        Err(refusal) => return (StatusCode::UNAUTHORIZED, Json(refusal)).into_response(),
+    }
+    match controls
+        .platform
+        .conformance_forward_state(&request.service)
+        .await
+    {
         Ok(observed) => Json(observed).into_response(),
         Err(error) => (StatusCode::CONFLICT, Json(error.to_string())).into_response(),
     }

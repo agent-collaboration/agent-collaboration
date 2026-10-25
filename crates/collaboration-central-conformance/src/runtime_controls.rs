@@ -15,7 +15,7 @@ impl RuntimeControlRequest {
     pub fn validate(&self) -> Result<(), RuntimeControlFailure> {
         match (&self.command, &self.address) {
             (RuntimeControl::CopyFull { .. }, ObjectAddress::Copy(_))
-            | (RuntimeControl::MailboxItemLimit { .. }, ObjectAddress::Mailbox(_))
+            | (RuntimeControl::SmallMailboxCapacity, ObjectAddress::Mailbox(_))
             | (
                 RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
                 ObjectAddress::Connection(_),
@@ -23,10 +23,13 @@ impl RuntimeControlRequest {
             | (
                 RuntimeControl::SetTime { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
+                | RuntimeControl::HoldNextSelectedDispatch { .. }
                 | RuntimeControl::AwaitHeldDispatch
                 | RuntimeControl::ResumeDispatch
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
+                | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
+                | RuntimeControl::DropNextSelectedObjectReply { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
                 | RuntimeControl::Observe,
                 _,
@@ -45,12 +48,9 @@ impl RuntimeControlRequest {
     deny_unknown_fields
 )]
 pub enum RuntimeControl {
+    SmallMailboxCapacity,
     SetTime {
         now: RegistryTime,
-    },
-    /// Startup-only quota seam; production builds have no conformance control route.
-    MailboxItemLimit {
-        items: NonZeroU64,
     },
     CopyFull {
         after_writes: NonZeroU64,
@@ -64,16 +64,38 @@ pub enum RuntimeControl {
     HoldNextDispatch {
         destination: ObjectAddress,
     },
+    HoldNextSelectedDispatch {
+        destination: ObjectAddress,
+        call: DispatchCallSelector,
+    },
     AwaitHeldDispatch,
     ResumeDispatch,
     ResumeDispatchAndHoldNext {
         destination: ObjectAddress,
     },
+    ResumeDispatchAndHoldNextSelected {
+        destination: ObjectAddress,
+        call: DispatchCallSelector,
+    },
     DropNextObjectReply {
         destination: ObjectAddress,
     },
+    DropNextSelectedObjectReply {
+        destination: ObjectAddress,
+        call: DispatchCallSelector,
+    },
     AwaitDroppedObjectReply,
     Observe,
+}
+
+/// Closed outer invocation kinds used to select a fault amid concurrent traffic.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum DispatchCallSelector {
+    MailboxSubmit,
+    InstallationPeer,
+    ForwardRoute,
+    CopyWrite,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

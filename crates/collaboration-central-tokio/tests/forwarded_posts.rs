@@ -4,12 +4,42 @@
 
 #[path = "native_http/support.rs"]
 mod configuration;
+#[allow(
+    dead_code,
+    reason = "The normal fixture is shared with Worker creation and holder scenarios."
+)]
+#[path = "support/creation_scenarios.rs"]
+mod creation_scenarios;
+#[path = "support/forwarded_post_deadline_boundaries.rs"]
+mod forwarded_post_deadline_boundaries;
 #[path = "support/forwarded_post_lifecycle_oracles.rs"]
 mod forwarded_post_lifecycle_oracles;
+#[path = "support/forwarded_post_native_cases.rs"]
+mod forwarded_post_native_cases;
 #[path = "support/forwarded_post_oracles.rs"]
 mod forwarded_post_oracles;
+#[path = "support/forwarded_post_route_overlap.rs"]
+mod forwarded_post_route_overlap;
+#[allow(
+    dead_code,
+    reason = "The same scenario enum serves all native and Worker lifecycle entrypoints."
+)]
+#[path = "support/forwarded_post_scenarios.rs"]
+mod forwarded_post_scenarios;
+#[path = "support/forwarded_post_state_cases.rs"]
+mod forwarded_post_state_cases;
+#[path = "support/forwarded_post_state_oracles.rs"]
+mod forwarded_post_state_oracles;
+#[path = "support/forwarded_post_terminal_slots.rs"]
+mod forwarded_post_terminal_slots;
 #[path = "support/forwarded_post_wire.rs"]
 mod forwarded_post_wire;
+#[allow(
+    dead_code,
+    reason = "The same helper also serves independent real writer cases."
+)]
+#[path = "support/holder_writer_retry.rs"]
+mod holder_writer_retry;
 #[path = "forwarded_posts/identity.rs"]
 mod identity;
 #[path = "forwarded_posts/lifecycle.rs"]
@@ -92,4 +122,27 @@ async fn a_disconnected_holder_is_reported_with_its_registry_presence() -> Confo
     server.shutdown().await?;
     jwks.shutdown().await?;
     proof
+}
+
+#[tokio::test]
+async fn a_reply_at_29999ms_succeeds_and_each_original_expires_exactly_at_30000ms()
+-> ConformanceResult<()> {
+    forwarded_post_native_cases::run(forwarded_post_scenarios::ForwardCase::ExactBoundary).await
+}
+
+#[tokio::test]
+async fn each_terminal_releases_one_slot_while_fifteen_independent_requests_remain_live()
+-> ConformanceResult<()> {
+    forwarded_post_native_cases::run(forwarded_post_scenarios::ForwardCase::TerminalRelease).await
+}
+
+#[tokio::test]
+async fn an_expired_held_route_cannot_resurrect_or_replace_a_fresh_correlation()
+-> ConformanceResult<()> {
+    forwarded_post_native_cases::run(forwarded_post_scenarios::ForwardCase::RouteOverlap).await
+}
+#[tokio::test]
+async fn terminal_forwarding_has_no_raw_owning_content_or_correlation_state()
+-> ConformanceResult<()> {
+    forwarded_post_native_cases::run(forwarded_post_scenarios::ForwardCase::OwnState).await
 }

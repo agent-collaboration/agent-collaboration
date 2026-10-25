@@ -10,6 +10,17 @@ impl ShellActor {
     ) -> Result<Option<Response>> {
         if request.path() == crate::composed_control::OBJECT_PATH {
             let command: collaboration_central_conformance::RuntimeControl = request.json().await?;
+            if matches!(
+                command,
+                collaboration_central_conformance::RuntimeControl::SmallMailboxCapacity
+            ) {
+                let RuntimeFace::Mailbox(mailbox) = runtime else {
+                    return Err(error("small capacity requires a mailbox"));
+                };
+                mailbox
+                    .conformance_small_mailbox_capacity()
+                    .map_err(error)?;
+            }
             if let collaboration_central_conformance::RuntimeControl::SetTime { now } = &command {
                 self.state
                     .storage()
@@ -24,6 +35,13 @@ impl ShellActor {
                     .map_err(error)?;
             }
             return crate::composed_control::observation(self.faults.control(command).await)
+                .map(Some);
+        }
+        if request.path() == "/test/forward-state" {
+            let RuntimeFace::Session(runtime) = runtime else {
+                return Err(error("not a connection runtime"));
+            };
+            return Response::from_json(&runtime.conformance_forward_state().await.map_err(error)?)
                 .map(Some);
         }
         if request.path() == "/test/holder-frames" {

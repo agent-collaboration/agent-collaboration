@@ -7,7 +7,7 @@ use std::{
     io::{self, Write as _},
     os::unix::fs::{OpenOptionsExt as _, PermissionsExt as _},
     path::{Path, PathBuf},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 
@@ -19,6 +19,11 @@ enum PeerReadStage {
     WaitingForAccept,
     ReadingAuthentication,
     ReadingUser,
+}
+
+enum PeerPublication {
+    DeliveryOnly,
+    CurrentProcessContext { cwd: PathBuf, recorded_at_ms: i64 },
 }
 
 pub struct PeerFixture {
@@ -39,6 +44,7 @@ impl PeerFixture {
             endpoint,
             SessionId::try_from("fixture-session".to_owned())?,
             registry.join("peer.sock"),
+            PeerPublication::DeliveryOnly,
         )
         .await
     }
@@ -54,6 +60,12 @@ impl PeerFixture {
             endpoint,
             session,
             registry.join(format!("peer-{}.sock", std::process::id())),
+            PeerPublication::CurrentProcessContext {
+                cwd: std::env::current_dir()?,
+                recorded_at_ms: i64::try_from(
+                    SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis(),
+                )?,
+            },
         )
         .await
     }
@@ -63,6 +75,7 @@ impl PeerFixture {
         endpoint: &EndpointRef,
         session: SessionId,
         socket: PathBuf,
+        publication: PeerPublication,
     ) -> ProofResult<Self> {
         let mut target = SessionRef {
             endpoint: endpoint.clone(),
@@ -72,7 +85,8 @@ impl PeerFixture {
         if !registry.is_dir() || std::fs::metadata(registry)?.permissions().mode() & 0o077 != 0 {
             return Err("Debug Host did not enable a private fixture peer registry".into());
         }
-        let (listener, created_artifacts) = prepare_registry(registry, &socket, &target)?;
+        let (listener, created_artifacts) =
+            prepare_registry(registry, &socket, &target, publication)?;
         let (transmit, received) = tokio::sync::mpsc::channel(16);
         let stop = tokio_util::sync::CancellationToken::new();
         let task_stop = stop.clone();
@@ -178,6 +192,7 @@ fn prepare_registry(
     registry: &Path,
     socket: &Path,
     target: &SessionRef,
+    publication: PeerPublication,
 ) -> ProofResult<(tokio::net::UnixListener, Vec<PathBuf>)> {
     let mut created_artifacts = Vec::new();
     let prepared: ProofResult<tokio::net::UnixListener> = (|| {
@@ -191,12 +206,32 @@ fn prepare_registry(
             .mode(0o600)
             .open(&record)?;
         created_artifacts.push(record);
-        record_file.write_all(
-            json!({"pid":pid,"sessionId":String::from(target.session_id.clone()),
-            "peerProtocol":1,"messagingSocketPath":socket,"status":"busy"})
-            .to_string()
-            .as_bytes(),
-        )?;
+        let mut record_value = serde_json::Map::from_iter([
+            ("pid".to_owned(), json!(pid)),
+            (
+                "sessionId".to_owned(),
+                json!(String::from(target.session_id.clone())),
+            ),
+            ("peerProtocol".to_owned(), json!(1)),
+            ("messagingSocketPath".to_owned(), json!(socket)),
+            ("status".to_owned(), json!("busy")),
+        ]);
+        match publication {
+            PeerPublication::DeliveryOnly => {}
+            PeerPublication::CurrentProcessContext {
+                cwd,
+                recorded_at_ms,
+            } => {
+                record_value.extend([
+                    ("cwd".to_owned(), json!(cwd)),
+                    ("startedAt".to_owned(), json!(recorded_at_ms)),
+                    ("updatedAt".to_owned(), json!(recorded_at_ms)),
+                    ("kind".to_owned(), json!("interactive")),
+                    ("entrypoint".to_owned(), json!("cli")),
+                ]);
+            }
+        }
+        record_file.write_all(&serde_json::to_vec(&record_value)?)?;
         let digest = Sha256::digest(socket.to_string_lossy().as_bytes());
         let key = registry.join(format!("{pid}.{digest:x}.key"));
         let mut key_file = std::fs::OpenOptions::new()

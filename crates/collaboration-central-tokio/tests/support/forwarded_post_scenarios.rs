@@ -11,11 +11,12 @@ use fleet_admission::FleetOperation;
 use fleet_sync_protocol::{DatabaseId, PeerId, RequestId};
 use message_board::{ActorOrigin, BoardId, Description, ResourceName, ServiceId, WorkspaceId};
 
-const SENDER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440476";
-const SENDER_PEER: &str = "019f0000-0000-7000-8000-000000000476";
+pub(super) const SENDER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440476";
+pub(super) const SENDER_PEER: &str = "019f0000-0000-7000-8000-000000000476";
+pub(super) const SENDER_SESSION: &str = "019f0000-0000-7000-8000-000000004760";
 pub(super) const SENDER_CREDENTIAL: &str = "forward sender";
-const HOLDER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440477";
-const HOLDER_PEER: &str = "019f0000-0000-7000-8000-000000000477";
+pub(super) const HOLDER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440477";
+pub(super) const HOLDER_PEER: &str = "019f0000-0000-7000-8000-000000000477";
 pub(super) const HOLDER_CREDENTIAL: &str = "forward holder";
 
 #[derive(Clone, Copy)]
@@ -25,6 +26,11 @@ pub(super) enum ForwardCase {
     Reconnected,
     Capacity,
     Deadline,
+    ExactBoundary,
+    RealTimer,
+    TerminalRelease,
+    RouteOverlap,
+    OwnState,
 }
 
 pub(super) struct RegisteredForwardingPeers {
@@ -42,7 +48,7 @@ pub(super) async fn registered_forwarding_peers(
         SENDER_SERVICE,
         SENDER_PEER,
         SENDER_CREDENTIAL,
-        &Uuid::now_v7().to_string(),
+        SENDER_SESSION,
     )
     .await?;
     let holder = enroll_admitted_peer(
@@ -57,28 +63,7 @@ pub(super) async fn registered_forwarding_peers(
     let mut holder = Some(holder.socket);
     let arranged = async {
         let socket = holder.as_mut().ok_or("initial holder socket is absent")?;
-        let workspace = WorkspaceId::generate();
-        let board = BoardId::generate();
-        let database = DatabaseId::new(Uuid::now_v7())?;
-        for operation in [
-            FleetOperation::WorkspaceCreate {
-                name: ResourceName::try_from("forwarding workspace".to_owned())?,
-                description: Description::try_from("normal forwarding composition".to_owned())?,
-            },
-            FleetOperation::BoardCreate {
-                board: board.clone(),
-                name: ResourceName::try_from("forwarding board".to_owned())?,
-                description: Description::try_from("normal holder carrier".to_owned())?,
-                board_kind: message_board::BoardKind::Area {},
-            },
-            creation::project(database, board)?,
-        ] {
-            creation::accepted(creation::metadata(socket, &workspace, operation).await?)?;
-        }
-        let peer = PeerId::try_from(HOLDER_PEER.to_owned())?;
-        let registered =
-            creation::register(socket, database, peer, RequestId::new(Uuid::now_v7())?).await?;
-        creation::registered(&registered, peer)?;
+        let database = register_database(socket, PeerId::try_from(HOLDER_PEER.to_owned())?).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(database)
     }
     .await;
@@ -89,13 +74,42 @@ pub(super) async fn registered_forwarding_peers(
             holder_socket: holder.take().ok_or("registered holder socket absent")?,
         }),
         Err(error) => {
-            let _ = wire::close(sender).await;
-            if let Some(holder) = holder {
-                let _ = wire::close(holder).await;
-            }
-            Err(error)
+            let sender = wire::close(sender).await;
+            let holder = match holder {
+                Some(holder) => wire::close(holder).await,
+                None => Ok(()),
+            };
+            finish_forwarding(Err(error), sender, holder)
         }
     }
+}
+
+async fn register_database(
+    socket: &mut reqwest_websocket::WebSocket,
+    peer: PeerId,
+) -> ConformanceResult<DatabaseId> {
+    let workspace = WorkspaceId::generate();
+    let board = BoardId::generate();
+    let database = DatabaseId::new(Uuid::now_v7())?;
+    for operation in [
+        FleetOperation::WorkspaceCreate {
+            name: ResourceName::try_from(format!("forwarding workspace {}", workspace.as_str()))?,
+            description: Description::try_from("normal forwarding composition".to_owned())?,
+        },
+        FleetOperation::BoardCreate {
+            board: board.clone(),
+            name: ResourceName::try_from("forwarding board".to_owned())?,
+            description: Description::try_from("normal holder carrier".to_owned())?,
+            board_kind: message_board::BoardKind::Area {},
+        },
+        creation::project(database, board)?,
+    ] {
+        creation::accepted(creation::metadata(socket, &workspace, operation).await?)?;
+    }
+    let registered =
+        creation::register(socket, database, peer, RequestId::new(Uuid::now_v7())?).await?;
+    creation::registered(&registered, peer)?;
+    Ok(database)
 }
 
 pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> {
@@ -115,6 +129,28 @@ pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> 
             ForwardCase::Deadline => {
                 super::forwarded_post_lifecycle_oracles::deadline(&mut sender, socket, database, |command| control(base, command)).await?;
                 println!("FORWARD_DEADLINE_CASE original_deadline_unanswered_late_reply_cannot_answer_fresh_identity passed");
+            }
+            ForwardCase::ExactBoundary => {
+                super::forwarded_post_deadline_boundaries::exact_boundary(&mut sender, socket, database, |command| control(base, command)).await?;
+                println!("FORWARD_BOUNDARY_CASE pre_boundary_answer_exact_expiry_and_independent_fresh_correlation passed");
+            }
+            ForwardCase::TerminalRelease => {
+                let sender_owned = register_database(&mut sender, PeerId::try_from(SENDER_PEER.to_owned())?).await?;
+                super::forwarded_post_terminal_slots::terminal_release(&mut sender, socket, database, sender_owned,
+                    |command| control(base, command)).await?;
+                println!("FORWARD_TERMINAL_CASE sender_holds_not_held_answer_and_deadline_each_release_only_their_slot passed");
+            }
+            ForwardCase::RouteOverlap => {
+                super::forwarded_post_state_cases::overlap(base,&mut sender,socket,database).await?;
+                println!("FORWARD_OVERLAP_CASE completed_late_route_no_resurrection_or_fresh_reply_replacement passed");
+            }
+            ForwardCase::OwnState => {
+                super::forwarded_post_state_cases::own_state(base,&mut sender,socket,database).await?;
+                println!("FORWARD_STATE_CASE raw_owning_forward_content_and_state_absent_after_terminal passed");
+            }
+            ForwardCase::RealTimer => {
+                super::forwarded_post_deadline_boundaries::real_timer(&mut sender, socket, database).await?;
+                println!("FORWARD_REAL_TIMER_CASE actual_alarm_unanswered_full_capacity_and_fresh_correlation passed");
             }
             ForwardCase::OriginAndReply => {
                 oracle::preserves_origin_and_opaque_reply(&mut sender, socket, database, ActorOrigin {
@@ -143,10 +179,32 @@ pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> 
         Some(holder) => wire::close(holder).await,
         None => Ok(()),
     };
-    proof?;
-    closed_sender?;
-    closed_holder?;
-    Ok(())
+    finish_forwarding(proof, closed_sender, closed_holder)
+}
+
+fn finish_forwarding<Output>(
+    proof: ConformanceResult<Output>,
+    sender: ConformanceResult<()>,
+    holder: ConformanceResult<()>,
+) -> ConformanceResult<Output> {
+    let mut failures = Vec::new();
+    let output = match proof {
+        Ok(output) => Some(output),
+        Err(error) => {
+            failures.push(format!("scenario: {error}"));
+            None
+        }
+    };
+    for (owner, result) in [("sender socket", sender), ("holder socket", holder)] {
+        if let Err(error) = result {
+            failures.push(format!("{owner}: {error}"));
+        }
+    }
+    if failures.is_empty() {
+        output.ok_or_else(|| "forwarding scenario omitted its output".into())
+    } else {
+        Err(failures.join("; ").into())
+    }
 }
 
 pub(super) async fn control(

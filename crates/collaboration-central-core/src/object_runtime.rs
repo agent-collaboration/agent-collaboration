@@ -54,6 +54,8 @@ pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
         shared_host: Arc<CoreHost<Io>>,
         installation: message_board::ServiceId,
         limits: fleet_sync_delivery::DeliveryLimits,
+        #[cfg(feature = "conformance")]
+        conformance_limits: std::sync::OnceLock<fleet_sync_delivery::DeliveryLimits>,
         health: Arc<crate::mailbox_step::MailboxHealth>,
     },
 }

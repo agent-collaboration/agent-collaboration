@@ -6,7 +6,7 @@ use message_board::{
 };
 use message_board_storage::MailHandoffItem;
 
-async fn create_addressed_intent(fixture: &OwnerFixture) -> NotifyIntent {
+pub(super) async fn create_addressed_intent(fixture: &OwnerFixture) -> NotifyIntent {
     let post = PostId::generate();
     fixture
         .write_as(
@@ -46,7 +46,7 @@ fn installation_peer() -> PeerId {
     PeerId::new(uuid::Uuid::parse_str("0192a1b2-c3d4-7000-8000-000000000001").unwrap()).unwrap()
 }
 
-async fn frozen_item(
+pub(super) async fn frozen_item(
     fixture: &OwnerFixture,
     intent: &NotifyIntent,
 ) -> fleet_sync_protocol::DeliveryItem<crate::RouterDeliveryTypes> {

@@ -32,12 +32,16 @@ mod native_frontier_proofs;
 mod native_generation_isolation_proofs;
 #[path = "native_generation_prevention_proofs.rs"]
 mod native_generation_prevention_proofs;
+#[path = "native_handoff_recovery_proofs.rs"]
+mod native_handoff_recovery_proofs;
 #[path = "native_held_mail_proofs.rs"]
 mod native_held_mail_proofs;
 #[path = "native_intent_publisher_proofs.rs"]
 mod native_intent_publisher_proofs;
 #[path = "../../../tests/support/native_mail_owner.rs"]
 pub(super) mod native_mail_owner;
+#[path = "native_owed_transfer_proofs.rs"]
+mod native_owed_transfer_proofs;
 #[path = "native_poll_gate_proofs.rs"]
 mod native_poll_gate_proofs;
 #[path = "native_poll_incoming_proofs.rs"]

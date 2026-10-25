@@ -13,19 +13,3 @@ pub fn central_mailbox_limits() -> Result<DeliveryLimits, DeliveryConfigError> {
         minimum_settlement_allowance::<BoardDeliveryTypes>()?,
     )
 }
-
-/// Keep production byte reservations while making item-cap exhaustion practical in conformance.
-#[cfg(feature = "conformance")]
-pub fn conformance_mailbox_item_limit(
-    items: std::num::NonZeroU64,
-) -> Result<DeliveryLimits, DeliveryConfigError> {
-    let limits = central_mailbox_limits()?;
-    DeliveryLimits::new::<BoardDeliveryTypes>(
-        limits.mailbox_payload_bytes(),
-        items.get(),
-        limits.outbox_bytes(),
-        limits.outbox_items(),
-        limits.inbox_bytes(),
-        limits.settlement_allowance(),
-    )
-}

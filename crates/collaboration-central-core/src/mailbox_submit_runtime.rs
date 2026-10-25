@@ -69,13 +69,16 @@ where
         {
             return Err(refused());
         }
+        let limits = *limits;
+        #[cfg(feature = "conformance")]
+        let limits = self.conformance_mailbox_limits(limits);
         self.run_mailbox_step(
             target.recipient,
             MailboxOperation::Submit,
             SubmitMailbox {
                 recipient: target.recipient,
                 submission,
-                limits: *limits,
+                limits,
                 now: shared_host.now(),
             },
         )

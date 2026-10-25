@@ -87,6 +87,17 @@ impl Clock for MailClock {
 }
 
 impl MailDeliveryRuntime {
+    #[cfg(feature = "runtime-test-support")]
+    pub async fn runtime_test_install_mail_fault(
+        &self,
+        fault: interaction_storage::MailStoreTestFault,
+    ) -> Result<(), StoreError> {
+        self.owner
+            .runtime_test_install_mail_fault(fault)
+            .await
+            .map_err(StoreError::backend)
+    }
+
     /// The existing reader-delivery owner composed with this physical mail runtime.
     #[must_use]
     pub fn subscription_delivery(&self) -> &crate::SubscriptionDeliveryService {

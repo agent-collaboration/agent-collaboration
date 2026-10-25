@@ -1,6 +1,10 @@
 //! One Turso transaction owner for typed interactions and local message delivery.
 mod interaction_store;
 pub use interaction_store::{InteractionStore, StorageError};
+#[cfg(feature = "runtime-test-support")]
+mod mail_store_test_faults;
+#[cfg(feature = "runtime-test-support")]
+pub use mail_store_test_faults::MailStoreTestFault;
 mod interaction_atomic_store;
 pub use collaboration_protocol::{PushDeliveryState, PushRecord, PushRecordDraft};
 pub use interaction_atomic_store::InteractionAtomicStore;

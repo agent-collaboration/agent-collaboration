@@ -587,6 +587,8 @@ impl CollaborationRuntime {
                 shutdown: shutdown.clone(),
             });
         let mut tasks = JoinSet::new();
+        #[cfg(feature = "runtime-test-support")]
+        let runtime_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         if let Some(mail) = mail_delivery {
             let mail_shutdown = shutdown.clone();
             tasks.spawn(async move { mail.run(mail_shutdown).await.map_err(io::Error::other) });
@@ -628,6 +630,8 @@ impl CollaborationRuntime {
             tokio::spawn(async move { maintenance_store.run_maintenance(maintenance_stop).await })
         });
         let mut runtime = Self {
+            #[cfg(feature = "runtime-test-support")]
+            runtime_test_mail,
             notification_publisher,
             installation_peer,
             board_session: None,

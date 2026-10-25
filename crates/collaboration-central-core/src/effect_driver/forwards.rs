@@ -58,16 +58,26 @@ where
                 driver.replies.clone(),
             );
             let clock = driver.shared_host.clone();
+            let forward_frame = pending.forward_frame;
             // A late reply cannot send or reserve a new slot. On store failure the
             // already-committed deadline remains the recovery path.
-            let _ = Box::pin(store.transaction(move |scope| {
+            let completed = Box::pin(store.transaction(move |scope| {
                 Box::pin(async move {
                     scope
-                        .forward_route_result(pending.forward_frame, answer, post, clock.now())
+                        .forward_route_result(forward_frame, answer, post, clock.now())
                         .await
                 })
             }))
             .await;
+            #[cfg(feature = "conformance")]
+            if completed.is_ok() {
+                let _ = driver
+                    .shared_host
+                    .forward_route_probe
+                    .completed(forward_frame);
+            }
+            #[cfg(not(feature = "conformance"))]
+            let _ = completed;
         })
     }
     pub(super) fn deliver_forward(

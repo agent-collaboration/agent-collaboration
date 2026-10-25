@@ -11,8 +11,25 @@ use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 use std::sync::Arc;
 
+struct PageReadCost {
+    cost: ReadCost,
+    statement_kinds: Vec<String>,
+}
+impl PageReadCost {
+    fn assert_same_cost(&self, other: &Self, page: &str) {
+        if self.cost != other.cost {
+            for (size, observed) in [("small", self), ("large", other)] {
+                for (index, kind) in observed.statement_kinds.iter().enumerate() {
+                    eprintln!("{page} {size} statement {index}: {kind}");
+                }
+            }
+        }
+        assert_eq!(self.cost, other.cost, "{page} read cost changed");
+    }
+}
+
 #[allow(clippy::panic_in_result_fn)]
-async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
+async fn window_cost(size: usize) -> Result<PageReadCost, TestError> {
     let mut fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
     let store = fixture
@@ -158,6 +175,7 @@ async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
         .observe(windows.rescan_missing_subscription_windows(&reader, now))
         .await?;
     let cost = observation.cost();
+    let statement_kinds = observation.statement_kinds();
     assert_eq!(
         added, 5,
         "unrelated non-post body suppressed a watched window"
@@ -173,11 +191,14 @@ async fn window_cost(size: usize) -> Result<ReadCost, TestError> {
     );
     read.finish().await?;
     fixture.stop().await?;
-    Ok(cost)
+    Ok(PageReadCost {
+        cost,
+        statement_kinds,
+    })
 }
 
 #[allow(clippy::panic_in_result_fn)]
-async fn feed_cost(size: usize) -> Result<ReadCost, TestError> {
+async fn feed_cost(size: usize) -> Result<PageReadCost, TestError> {
     let mut fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
     let store = fixture
@@ -220,6 +241,7 @@ async fn feed_cost(size: usize) -> Result<ReadCost, TestError> {
         .observe(read.feed_after(cursor, 5, false))
         .await?;
     let cost = observation.cost();
+    let statement_kinds = observation.statement_kinds();
     let FeedRead::Entries { entries, .. } = page else {
         return Err("feed page".into());
     };
@@ -227,11 +249,14 @@ async fn feed_cost(size: usize) -> Result<ReadCost, TestError> {
     assert!(entries.iter().all(|entry| matches!(&entry.content, FeedContent::Shown(record) if matches!(record.as_ref(), Record::WorkTrailRow(row) if !row.redacted))));
     assert_eq!(
         cost.statements, 1,
-        "redaction projection must be batched with the page"
+        "redaction projection must be batched with the page: {statement_kinds:?}"
     );
     read.finish().await?;
     fixture.stop().await?;
-    Ok(cost)
+    Ok(PageReadCost {
+        cost,
+        statement_kinds,
+    })
 }
 
 #[tokio::test]
@@ -241,12 +266,21 @@ async fn subscription_and_content_pages_bound_their_body_and_followup_reads()
     read_cost_counter::install();
     let small = window_cost(8).await?;
     let large = window_cost(80).await?;
-    eprintln!("window page costs: small={small:?}; large={large:?}");
-    assert_eq!(small, large);
-    assert_eq!(large.feed_entries, 5, "only the watched posts are bodies");
+    eprintln!(
+        "window page costs: small={:?}; large={:?}",
+        small.cost, large.cost
+    );
+    small.assert_same_cost(&large, "window");
+    assert_eq!(
+        large.cost.feed_entries, 5,
+        "only the watched posts are bodies"
+    );
     let small = feed_cost(8).await?;
     let large = feed_cost(80).await?;
-    eprintln!("content page costs: small={small:?}; large={large:?}");
-    assert_eq!(small, large);
+    eprintln!(
+        "content page costs: small={:?}; large={:?}",
+        small.cost, large.cost
+    );
+    small.assert_same_cost(&large, "content");
     Ok(())
 }

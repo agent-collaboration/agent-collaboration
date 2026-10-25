@@ -5,7 +5,10 @@ use crate::{
     creation_scenarios as creation,
 };
 use board_sync_protocol::BoardAnnotation;
-use collaboration_central_conformance::{ConformanceClient, enroll_admitted_peer, owner_assertion};
+use collaboration_central_conformance::{
+    ConformanceClient, RuntimeControl, RuntimeControlRequest, enroll_admitted_peer, owner_assertion,
+};
+use collaboration_central_core::{ObjectAddress, RegistryTime};
 use collaboration_central_tokio::{HealthFileSample, TokioCentralPlatform};
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
@@ -27,6 +30,7 @@ use std::{future::Future, path::Path, time::Duration};
 const SERVICE: &str = "550e8400-e29b-41d4-a716-446655440735";
 const PEER: &str = "019f0000-0000-7000-8000-000000000735";
 const RECORD_KEY: &str = "019f0000-0000-7000-8000-000000007735";
+const MIGRATION_TIME: &str = "2030-03-17T17:46:40Z";
 
 async fn serve<Scenario, Run, Output>(
     root: &Path,
@@ -37,7 +41,18 @@ where
     Scenario: FnOnce(String, TokioCentralPlatform) -> Run,
     Run: Future<Output = ConformanceResult<Output>>,
 {
-    let server = TokioServer::start(settings(root, jwks)?).await?;
+    // A retry replaces the diagnostic's time. Keep Copy business time fixed
+    // before startup discovery can schedule an alarm; the real alarm still runs.
+    let server = TokioServer::start_with_controls(
+        settings(root, jwks)?,
+        vec![RuntimeControlRequest {
+            address: ObjectAddress::Copy(DatabaseId::try_from(PROJECT.to_owned())?),
+            command: RuntimeControl::SetTime {
+                now: RegistryTime(MIGRATION_TIME.parse()?),
+            },
+        }],
+    )
+    .await?;
     let observed = scenario(
         server.base_url().to_owned(),
         server.conformance_platform().clone(),
@@ -389,15 +404,26 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
             if platform.conformance_health_sample(database).await.is_some() { return Err("fixture had another Health sample before its deciding call".into()); }
             let health = owner.health(PROJECT).await?;
             bookkeeping(&health, Some(2))?;
+            let expected_at: chrono::DateTime<chrono::Utc> = MIGRATION_TIME.parse()?;
+            if health.pointer("/value/migrationFailures/value/0/at") != Some(&json!(expected_at)) { return Err("Health did not retain the literal Copy migration time".into()); }
             let measured_at_health = sampled_storage_bytes(&platform, root_path).await?;
             grow_files_after_health(root_path).await?;
             let later = measured_files(root_path)?;
             if later == measured_at_health { return Err("real post-response SQL write did not force a distinct later file size".into()); }
             if health.pointer("/value/storageBytes").and_then(Value::as_u64) != Some(measured_at_health) { return Err(format!("Health bytes differ from its actual same-call sample: reported={:?}, sample={measured_at_health}, later={later}",health.pointer("/value/storageBytes")).into()); }
             println!("G47_HEALTH_SAMPLE reported={measured_at_health} sampled={measured_at_health} later={later}");
+            // A normal repeated attempt forces the same interleaving as alarm redelivery.
+            let (status, body) = owner.repair(PROJECT).await?;
+            if status != StatusCode::SERVICE_UNAVAILABLE || body != pending { return Err("repeated pending repair changed its typed answer".into()); }
             Ok(health)
         }).await?;
-        if failed.pointer("/value/migrationFailures") != Some(&stored_failure(root_path).await?) { return Err("Health hid or changed the exact stored pending migration diagnostic".into()); }
+        let stored = stored_failure(root_path).await?;
+        if failed.pointer("/value/migrationFailures") != Some(&stored) {
+            for field in ["corpus", "version", "reason", "at"] {
+                eprintln!("pending diagnostic field {field} changed_after_health={}", failed.pointer(&format!("/value/migrationFailures/value/0/{field}")) != stored.pointer(&format!("/value/0/{field}")));
+            }
+            return Err("Health hid or changed the exact stored pending migration diagnostic".into());
+        }
         println!("OWNER_MIGRATION_REOPEN_CASE pending_health_exact_diagnostic_bytes_and_preview_refusal passed");
         // Assert recovery after exact restoration, including the normal snapshot contents.
         restore_stamp(root_path, &stamp).await?;

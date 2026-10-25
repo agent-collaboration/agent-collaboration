@@ -26,6 +26,9 @@ enum Command {
         service: message_board::ServiceId,
         connection: fleet_sync_protocol::ConnectionId,
     },
+    ForwardState {
+        service: message_board::ServiceId,
+    },
     HolderFrames {
         service: message_board::ServiceId,
     },
@@ -57,21 +60,14 @@ enum Command {
 }
 
 pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
-    let labels = access_verification::InvocationLabels::for_request(&request)?;
-    let assertion = request.headers().get("Cf-Access-Jwt-Assertion")?;
-    match access_verification::verify(
-        &env,
-        assertion.as_deref(),
-        "/admin/v1/conformance",
-        &labels,
-        access_verification::VerificationLayer::Edge,
-    )
-    .await
-    {
-        Ok(AccessCaller::Owner { .. }) => {}
-        _ => return Response::error("owner required", 401),
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
     }
     let command: Command = request.json().await?;
+    forward_command(command, env).await
+}
+
+async fn forward_command(command: Command, env: Env) -> Result<Response> {
     let (address, path, body) = match command {
         #[cfg(feature = "conformance-faults")]
         Command::SessionBarrier {
@@ -127,6 +123,11 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
             "/test/session-alarm",
             Some(serde_json::to_string(&connection)?),
         ),
+        Command::ForwardState { service } => (
+            ObjectAddress::Connection(service),
+            "/test/forward-state",
+            None,
+        ),
         Command::HolderFrames { service } => (
             ObjectAddress::Connection(service),
             "/test/holder-frames",
@@ -155,4 +156,35 @@ pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
             &init,
         )?)
         .await
+}
+
+pub(crate) async fn forward_state(mut request: Request, env: Env) -> Result<Response> {
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
+    }
+    let input: collaboration_central_core::ForwardStateRequest = request.json().await?;
+    forward_command(
+        Command::ForwardState {
+            service: input.service,
+        },
+        env,
+    )
+    .await
+}
+
+async fn owner_allowed(request: &Request, env: &Env) -> Result<bool> {
+    let labels = access_verification::InvocationLabels::for_request(request)?;
+    let assertion = request.headers().get("Cf-Access-Jwt-Assertion")?;
+    match access_verification::verify(
+        env,
+        assertion.as_deref(),
+        "/admin/v1/conformance",
+        &labels,
+        access_verification::VerificationLayer::Edge,
+    )
+    .await
+    {
+        Ok(AccessCaller::Owner { .. }) => Ok(true),
+        _ => Ok(false),
+    }
 }

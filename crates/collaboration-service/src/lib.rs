@@ -224,6 +224,8 @@ mod mail_push_delivery;
 mod mail_push_outcome;
 pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
 mod mail_delivery_runtime;
+#[cfg(feature = "runtime-test-support")]
+pub use interaction_storage::MailStoreTestFault;
 pub use mail_delivery_runtime::{LocalCancelReference, MailDeliveryRuntime};
 mod mail_delivery_session;
 pub use mail_delivery_session::MailDeliverySession;

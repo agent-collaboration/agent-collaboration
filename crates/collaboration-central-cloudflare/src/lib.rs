@@ -48,6 +48,10 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         return composed_control::fetch(request.try_into()?, env).await;
     }
     #[cfg(feature = "conformance")]
+    if request.uri().path() == collaboration_central_core::FORWARD_STATE_PATH {
+        return conformance_admission::forward_state(request.try_into()?, env).await;
+    }
+    #[cfg(feature = "conformance")]
     if request.uri().path() == "/__conformance/admission" {
         return conformance_admission::fetch(request.try_into()?, env).await;
     }

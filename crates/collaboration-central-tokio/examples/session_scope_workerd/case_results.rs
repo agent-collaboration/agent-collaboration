@@ -5,6 +5,21 @@ use super::{Scenario, forwarded_post_scenarios::ForwardCase};
 impl Scenario {
     pub(super) fn print_success(self) {
         match self {
+            Scenario::MailboxReportTerminal => println!(
+                "MAILBOX_REPORT_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (real SDK report task and central socket; terminal refusal stops retries)"
+            ),
+            Scenario::MailboxHeldRetention => println!(
+                "MAILBOX_HELD_RETENTION_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle, actual held payload across31controlled days and exact receipt release; no physical restart claim)"
+            ),
+            Scenario::MailboxCapacity => println!(
+                "MAILBOX_CAPACITY_RESULT 1 passed; 0 failed; 0 ignored (shared one-item quota, unknown rejected item, exact original and reserved cancel; no disk-full claim)"
+            ),
+            Scenario::MailboxCancel => println!(
+                "MAILBOX_CANCEL_RESULT 1 passed; 0 failed; 0 ignored (real dropped custody answer, pending cancel readback, recipient decision and final original status; no Router end-to-end claim)"
+            ),
+            Scenario::MailboxIdentity => println!(
+                "MAILBOX_IDENTITY_RESULT 1 passed; 0 failed; 0 ignored (shared native/workerd oracle, real mailbox replay/conflict and exact single original payload; no Router end-to-end claim)"
+            ),
             Scenario::MailboxDeadline => println!(
                 "MAILBOX_DEADLINE_RESULT 1 passed; 0 failed; 0 ignored (shared normal session, offline recipient, real alarm, newer status and released payload; no physical restart claim)"
             ),
@@ -22,6 +37,21 @@ impl Scenario {
             ),
             Scenario::ForwardPost(ForwardCase::Deadline) => println!(
                 "FORWARD_DEADLINE_RESULT 1 passed; 0 failed; 0 ignored (shared retained Native oracle, normal Worker enrollment/Fleet/Register; actual owning sender clock/alarm, original Unanswered and late-reply isolation from fresh identity; no process restart or full row19 claim)"
+            ),
+            Scenario::ForwardPost(ForwardCase::ExactBoundary) => println!(
+                "FORWARD_BOUNDARY_RESULT 1 passed; 0 failed; 0 ignored (shared Native/Worker literal29.999s answer and30s exact original expiry, reserved capacity and independent fresh correlation; no physical restart or full row19 claim)"
+            ),
+            Scenario::ForwardPost(ForwardCase::TerminalRelease) => println!(
+                "FORWARD_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (same Native/Worker oracle; normal own-holder and foreign-holder registration, fifteen retained requests across SenderHolds/NotHeld/answer/deadline slot release; no route-overlap or full row19 claim)"
+            ),
+            Scenario::ForwardPost(ForwardCase::RouteOverlap) => println!(
+                "FORWARD_OVERLAP_RESULT 1 passed; 0 failed; 0 ignored (real held route expires, fresh correlation admitted, completion witness then raw owning read, no resurrection or duplicate terminal; no restart claim)"
+            ),
+            Scenario::ForwardPost(ForwardCase::OwnState) => println!(
+                "FORWARD_STATE_RESULT 1 passed; 0 failed; 0 ignored (normal sockets and terminal reply, owner-only raw own forwarding tables contain no content/correlation; no global database scan or restart claim)"
+            ),
+            Scenario::ForwardPost(ForwardCase::RealTimer) => println!(
+                "FORWARD_REAL_TIMER_RESULT 1 passed; 0 failed; 0 ignored (literal production30s, actual unpinned alarm, exact Unanswered, sixteen reusable fresh slots and late-reply isolation; no physical restart or full row19 claim)"
             ),
             Scenario::ForwardPost(_) => println!(
                 "FORWARD_SESSION_RESULT 1 passed; 0 failed; 0 ignored (selected retained Native oracle through actual normal Worker enrollment/Fleet-create/Register/session/Registry/holder; no capacity, deadline, physical restart or full row19 claim)"

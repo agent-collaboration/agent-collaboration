@@ -64,7 +64,14 @@ pub async fn send_forward(
 }
 
 pub async fn next(socket: &mut WebSocket) -> ConformanceResult<ServerFrame<BoardConsumerProtocol>> {
-    tokio::time::timeout(Duration::from_secs(5), async {
+    next_with_bound(socket, Duration::from_secs(5)).await
+}
+
+pub async fn next_with_bound(
+    socket: &mut WebSocket,
+    bound: Duration,
+) -> ConformanceResult<ServerFrame<BoardConsumerProtocol>> {
+    tokio::time::timeout(bound, async {
         loop {
             let message = socket
                 .next()

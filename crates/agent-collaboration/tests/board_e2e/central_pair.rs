@@ -142,20 +142,27 @@ pub async fn scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
 {
-    fixture::scenario(async move |fixture| with_second(fixture, case).await).await
+    fixture::scenario(async move |fixture| with_second_host(fixture, case).await).await
 }
 
-pub async fn scenario_with_mailbox_items<F>(items: std::num::NonZeroU64, case: F) -> FixtureResult
+#[allow(dead_code)] // Shared roots choose the Router layout or mailbox-capacity entry.
+pub async fn router_root_scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
 {
-    fixture::scenario_with_mailbox_items(items, async move |fixture| {
-        with_second(fixture, case).await
-    })
-    .await
+    fixture::router_root_scenario(async move |fixture| with_second_host(fixture, case).await).await
 }
 
-async fn with_second<F>(fixture: &mut BoardFixture, case: F) -> FixtureResult
+#[allow(dead_code)] // Only retirement cases configure the real mailbox capacity.
+pub async fn scenario_with_small_mailbox<F>(case: F) -> FixtureResult
+where
+    F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
+{
+    fixture::scenario_with_small_mailbox(async move |fixture| with_second_host(fixture, case).await)
+        .await
+}
+
+async fn with_second_host<F>(fixture: &mut BoardFixture, case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
 {
@@ -178,6 +185,10 @@ pub async fn work_view(host: &BoardHost, project: &str) -> FixtureResult<Value> 
             json!({"projectId":project,"includeRemoved":false}),
         )
         .await?;
+    checked_work_view(reply, project)
+}
+
+fn checked_work_view(reply: Value, project: &str) -> FixtureResult<Value> {
     let view: message_board::WorkView = serde_json::from_value(reply)?;
     assert_eq!(view.project.as_str(), project);
     Ok(serde_json::to_value(view)?)
@@ -186,7 +197,25 @@ pub async fn work_view(host: &BoardHost, project: &str) -> FixtureResult<Value> 
 pub async fn await_view(host: &BoardHost, project: &str, expected: &Value) -> FixtureResult<Value> {
     tokio::time::timeout(Duration::from_secs(30), async {
         loop {
-            let view = work_view(host, project).await?;
+            let reply = host
+                .mcp_reply(
+                    "view_work",
+                    json!({"projectId":project,"includeRemoved":false}),
+                )
+                .await?;
+            if reply.is_error {
+                if reply.value.get("kind") == Some(&json!("boardUnavailable"))
+                    && reply.value.get("stage") == Some(&json!("storage"))
+                    && reply.value.get("nextAction") == Some(&json!("retryLater"))
+                {
+                    tokio::task::yield_now().await;
+                    continue;
+                }
+                return Err(
+                    format!("view refused while awaiting copied prefix: {}", reply.value).into(),
+                );
+            }
+            let view = checked_work_view(reply.value, project)?;
             if view.get("asOf") == Some(expected) {
                 return Ok(view);
             }

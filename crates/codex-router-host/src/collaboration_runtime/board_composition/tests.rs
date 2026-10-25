@@ -40,6 +40,9 @@ mod forwarded_notification_fixture;
 mod forwarded_post_sender;
 #[path = "tests/importer_claim.rs"]
 mod importer_claim;
+#[cfg(feature = "runtime-test-support")]
+#[path = "tests/messaging_rule_cases.rs"]
+mod messaging_rule_cases;
 #[path = "tests/notice_acknowledgement.rs"]
 mod notice_acknowledgement;
 #[path = "tests/notice_reactions.rs"]

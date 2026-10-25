@@ -15,6 +15,7 @@ conformance = []
 codex-router-core.workspace = true
 codex-router-secret-store = { version = "0.1.96", path = "../codex-router-secret-store" }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core", features = ["conformance"] }
+collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 board-fleet-sync = { version = "0.1.96", path = "../board-fleet-sync" }
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
@@ -34,3 +35,6 @@ serde_json.workspace = true
 sha2.workspace = true
 tokio.workspace = true
 tokio-util.workspace = true
+
+[dev-dependencies]
+tempfile = "3.27.0"
