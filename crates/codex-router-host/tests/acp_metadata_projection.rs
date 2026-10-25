@@ -149,9 +149,12 @@ async fn check_metadata_projection(replay: bool) {
     .expect("provider operation deadline");
     client.shutdown().await;
     let mut items = Vec::new();
+    let mut completed_ids = Vec::new();
     while let Ok(event) = received.try_recv() {
-        if let SessionEvent::ItemStarted { item } = event {
-            items.push(item);
+        match event {
+            SessionEvent::ItemStarted { item } => items.push(item),
+            SessionEvent::ItemCompleted { item_id } => completed_ids.push(item_id),
+            _ => {}
         }
     }
 
@@ -176,7 +179,52 @@ async fn check_metadata_projection(replay: bool) {
         json!({"availableCommands":[{"name":"compact","description":"Compact context",
             "input":{"hint":"instructions"}}],"_meta":{"providerDetail":"retained"}})
     );
-    assert_eq!(items.len(), 7);
+    let mut expected_kinds = vec![
+        SessionItemKind::Notice,
+        SessionItemKind::Usage,
+        SessionItemKind::ModeChange,
+        SessionItemKind::ConfigChange,
+        SessionItemKind::SessionInfo,
+        SessionItemKind::AgentMessage,
+        SessionItemKind::AgentThought,
+    ];
+    if !replay {
+        expected_kinds.insert(0, SessionItemKind::UserMessage);
+    }
+    assert_eq!(
+        items
+            .iter()
+            .map(|item| item.kind.clone())
+            .collect::<Vec<_>>(),
+        expected_kinds
+    );
+    let submitted_id = if replay {
+        None
+    } else {
+        let submitted = &items[0];
+        assert_eq!(submitted.text.as_deref(), Some("Reply"));
+        assert_eq!(
+            uuid::Uuid::parse_str(&submitted.item_id)
+                .expect("submitted item UUID")
+                .get_version_num(),
+            7
+        );
+        assert_eq!(
+            items
+                .iter()
+                .filter(|item| item.item_id == submitted.item_id)
+                .count(),
+            1
+        );
+        assert_eq!(
+            completed_ids
+                .iter()
+                .filter(|item_id| *item_id == &submitted.item_id)
+                .count(),
+            1
+        );
+        Some(submitted.item_id.clone())
+    };
     let assistant_id = items
         .iter()
         .find(|item| item.kind == SessionItemKind::AgentMessage)
@@ -199,13 +247,16 @@ async fn check_metadata_projection(replay: bool) {
             local_cause: None,
         },
     });
-    assert_eq!(
-        rendered.get("items"),
-        Some(&json!([
-            {"type":"agentMessage","id":assistant_id,"text":"Ordinary assistant reply"},
-            {"type":"reasoning","id":thought_id,"summary":["Useful reasoning"],"content":[]}
-        ]))
-    );
+    let mut expected_items = Vec::new();
+    if let Some(submitted_id) = submitted_id {
+        expected_items.push(json!({"type":"userMessage","id":submitted_id,
+            "content":[{"type":"text","text":"Reply"}]}));
+    }
+    expected_items.extend([
+        json!({"type":"agentMessage","id":assistant_id,"text":"Ordinary assistant reply"}),
+        json!({"type":"reasoning","id":thought_id,"summary":["Useful reasoning"],"content":[]}),
+    ]);
+    assert_eq!(rendered.get("items"), Some(&Value::Array(expected_items)));
 }
 
 #[tokio::test]
