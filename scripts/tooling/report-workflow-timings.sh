@@ -19,7 +19,7 @@ while IFS=$'\t' read -r job_id job_name; do
   # GitHub serves logs only for finished jobs; the CLI also supports a later
   # complete-run invocation so post-action and report steps are included.
   gh run view "$run_id" --repo "$repository" --job "$job_id" --log > "$output_directory/job-$job_id.log"
-  awk -v job="$job_name" -f "$(dirname "$0")/extract-test-timings.awk" "$output_directory/job-$job_id.log" >> "$output_directory/tests.tsv"
+  bash "$(dirname "$0")/extract-test-timings.sh" "$job_name" "$output_directory/job-$job_id.log" >> "$output_directory/tests.tsv"
 done < <(jq -r '.[].jobs[] | select(.status == "completed") | [.id, .name] | @tsv' "$output_directory/jobs.json")
 sort -nr -u "$output_directory/tests.tsv" > "$output_directory/tests-sorted.tsv"
 {

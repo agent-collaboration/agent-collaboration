@@ -34,9 +34,9 @@ parallel_step_pids=()
 parallel_step_names=()
 start_step success true
 wait_steps
-parsed_timing="$(printf 'job\tstep\tdate ^[[32;1m PASS^[[0m [ 1.250s] ( 1/2) crate::suite case\n' | awk -v job=example -f "$repository_root/scripts/tooling/extract-test-timings.awk")"
+parsed_timing="$(printf 'job\tstep\tdate ^[[32;1m PASS^[[0m [ 1.250s] ( 1/2) crate::suite case\n' | bash "$repository_root/scripts/tooling/extract-test-timings.sh" example)"
 [[ "$parsed_timing" == $'1.250\tPASS\texample\tcrate::suite case' ]]
-parsed_timing="$(printf '0.003s test_case (suite.Class.test_case)\n' | awk -v job=example -f "$repository_root/scripts/tooling/extract-test-timings.awk")"
+parsed_timing="$(printf '0.003s test_case (suite.Class.test_case)\n' | bash "$repository_root/scripts/tooling/extract-test-timings.sh" example)"
 [[ "$parsed_timing" == $'0.003\tMEASURED\texample\ttest_case (suite.Class.test_case)' ]]
 printf 'Workflow timing checks: 5 passed\n'
 # Remove only this test's generated files, after every child has exited.

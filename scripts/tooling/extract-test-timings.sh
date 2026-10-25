@@ -1,3 +1,9 @@
+#!/usr/bin/env bash
+# Print test durations from nextest and unittest logs, including gh escaping.
+set -euo pipefail
+job_name="${1:?job name is required}"
+shift
+awk -v job="$job_name" '
 # Parse nextest statuses and Python unittest --durations 0 output.
 {
   gsub(/\033\[[0-9;]*m/, "")
@@ -22,3 +28,4 @@
     print duration "\tMEASURED\t" job "\t" result
   }
 }
+' "$@"
