@@ -1,6 +1,9 @@
 //! Compose the native ordinary, legacy and installed-plugin filesystem views.
 #[path = "claude_project_context.rs"]
 mod project_context;
+#[cfg(test)]
+#[path = "claude_project_roots_tests.rs"]
+mod project_roots_tests;
 use super::*;
 use acp_client_runtime::native_capabilities::{
     ClaudeFileSkill, ClaudeFileSkillScope, ClaudeSkillOverride, ClaudeSkillRoot,
@@ -92,7 +95,6 @@ fn read_native_claude_skill_section(
     let home = fs::canonicalize(home).map_err(|_| CatalogueReadFailure::InvalidScope)?;
     let workspace = fs::canonicalize(workspace).map_err(|_| CatalogueReadFailure::InvalidScope)?;
     let project = project_context::read_project_context(&home, &workspace)?;
-    let project_directories = project.skill_directories;
     // Current native ICr/UEo consult the managed directory separately from
     // settings. Presence needs its own ownership/policy qualification.
     let managed = Path::new("/Library/Application Support/ClaudeCode/.claude");
@@ -146,10 +148,15 @@ fn read_native_claude_skill_section(
             directory: config_home.join("skills"),
             scope: ClaudeFileSkillScope::User,
         }];
-        roots.extend(project_directories.iter().map(|directory| ClaudeSkillRoot {
-            directory: directory.join("skills"),
-            scope: ClaudeFileSkillScope::Workspace,
-        }));
+        roots.extend(
+            project
+                .skill_directories
+                .iter()
+                .map(|directory| ClaudeSkillRoot {
+                    directory: directory.clone(),
+                    scope: ClaudeFileSkillScope::Workspace,
+                }),
+        );
         let ordinary = read_claude_filesystem_skills("2.1.310", &roots, &overrides, cancelled)
             .map_err(map_claude_file_failure)?;
         for failure in ordinary.errors {
@@ -167,10 +174,15 @@ fn read_native_claude_skill_section(
             directory: config_home.join("commands"),
             scope: ClaudeFileSkillScope::User,
         }];
-        command_roots.extend(project_directories.iter().map(|directory| ClaudeSkillRoot {
-            directory: directory.join("commands"),
-            scope: ClaudeFileSkillScope::Workspace,
-        }));
+        command_roots.extend(
+            project
+                .command_directories
+                .iter()
+                .map(|directory| ClaudeSkillRoot {
+                    directory: directory.clone(),
+                    scope: ClaudeFileSkillScope::Workspace,
+                }),
+        );
         let legacy =
             read_claude_legacy_skill_files("2.1.310", &command_roots, &overrides, cancelled)
                 .map_err(map_claude_file_failure)?;

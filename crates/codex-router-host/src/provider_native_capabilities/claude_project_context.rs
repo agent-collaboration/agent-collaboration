@@ -4,6 +4,7 @@ use std::{fs, io::Read, path::Path};
 
 pub(super) struct ClaudeProjectContext {
     pub skill_directories: Vec<PathBuf>,
+    pub command_directories: Vec<PathBuf>,
     /// Native merges the legacy cwd local file first, canonical file last.
     pub local_settings_files: Vec<PathBuf>,
 }
@@ -39,16 +40,14 @@ pub(super) fn read_project_context(
         Some(root) => canonical_worktree_root(root)?,
         None => workspace.to_owned(),
     };
-    // R1e adds a linked worktree's common-root sources after its own roots.
-    if git_root
-        .as_ref()
-        .is_some_and(|root| root != &canonical_root)
-    {
-        let common = canonical_root.join(".claude");
-        if !directories.contains(&common) {
-            directories.push(common);
-        }
-    }
+    let skill_directories =
+        project_kind_directories(&directories, git_root.as_deref(), &canonical_root, "skills")?;
+    let command_directories = project_kind_directories(
+        &directories,
+        git_root.as_deref(),
+        &canonical_root,
+        "commands",
+    )?;
     let local_root = if canonical_root != workspace
         && canonical_root != home
         && local_root_owned_by_current_user(&canonical_root)?
@@ -62,9 +61,38 @@ pub(super) fn read_project_context(
         local_settings_files.push(local_root.join(".claude/settings.local.json"));
     }
     Ok(ClaudeProjectContext {
-        skill_directories: directories,
+        skill_directories,
+        command_directories,
         local_settings_files,
     })
+}
+
+fn project_kind_directories(
+    project_directories: &[PathBuf],
+    git_root: Option<&Path>,
+    canonical_root: &Path,
+    kind: &str,
+) -> Result<Vec<PathBuf>, CatalogueReadFailure> {
+    let mut directories = Vec::new();
+    for directory in project_directories {
+        let candidate = directory.join(kind);
+        match fs::metadata(&candidate) {
+            Ok(_) => directories.push(candidate),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(_) => return Err(CatalogueReadFailure::Unavailable),
+        }
+    }
+    // Zte retains existing directories in ancestor order. R1e adds a common
+    // fallback only when that kind is absent at the physical worktree root.
+    if let Some(root) = git_root.filter(|root| *root != canonical_root)
+        && !directories.contains(&root.join(".claude").join(kind))
+    {
+        let common = canonical_root.join(".claude").join(kind);
+        if !directories.contains(&common) {
+            directories.push(common);
+        }
+    }
+    Ok(directories)
 }
 
 fn canonical_worktree_root(root: &Path) -> Result<PathBuf, CatalogueReadFailure> {
@@ -178,15 +206,19 @@ mod tests {
         fs::create_dir_all(repository.join(".git")).expect("git directory");
         fs::create_dir_all(&home).expect("home");
         fs::create_dir_all(&workspace).expect("workspace");
+        for directory in [&workspace, &repository.join("nested"), &repository] {
+            fs::create_dir_all(directory.join(".claude/skills")).expect("existing skill root");
+        }
         let context = read_project_context(&home, &workspace).expect("native setup");
         assert_eq!(
             context.skill_directories,
             vec![
-                workspace.join(".claude"),
-                repository.join("nested/.claude"),
-                repository.join(".claude")
+                workspace.join(".claude/skills"),
+                repository.join("nested/.claude/skills"),
+                repository.join(".claude/skills")
             ]
         );
+        assert!(context.command_directories.is_empty());
         assert_eq!(
             context.local_settings_files,
             vec![
@@ -197,7 +229,7 @@ mod tests {
     }
 
     #[test]
-    fn native_capabilities_claude_linked_worktree_adds_common_skill_root_and_checks_back_pointer() {
+    fn native_capabilities_claude_linked_worktree_uses_common_fallback_and_checks_back_pointer() {
         let fixture = tempfile::tempdir_in("/tmp").expect("fixture");
         let root = fs::canonicalize(fixture.path()).expect("physical root");
         let home = root.join("home");
@@ -207,6 +239,7 @@ mod tests {
         fs::create_dir_all(&gitdir).expect("git worktree directory");
         fs::create_dir_all(&home).expect("home");
         fs::create_dir_all(&worktree).expect("worktree");
+        fs::create_dir_all(main.join(".claude/skills")).expect("existing common skill root");
         fs::write(
             worktree.join(".git"),
             format!("gitdir: {}\n", gitdir.display()),
@@ -219,10 +252,7 @@ mod tests {
         )
         .expect("back pointer");
         let context = read_project_context(&home, &worktree).expect("qualified native worktree");
-        assert_eq!(
-            context.skill_directories,
-            vec![worktree.join(".claude"), main.join(".claude")]
-        );
+        assert_eq!(context.skill_directories, vec![main.join(".claude/skills")]);
         assert_eq!(
             context.local_settings_files,
             vec![
@@ -233,7 +263,7 @@ mod tests {
         fs::write(gitdir.join("gitdir"), "/not-the-worktree/.git\n").expect("wrong back pointer");
         let context =
             read_project_context(&home, &worktree).expect("native falls back to physical root");
-        assert_eq!(context.skill_directories, vec![worktree.join(".claude")]);
+        assert!(context.skill_directories.is_empty());
         assert_eq!(
             context.local_settings_files,
             vec![worktree.join(".claude/settings.local.json")]
