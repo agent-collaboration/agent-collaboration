@@ -7,7 +7,15 @@ use provider_filter_details::{compact_session_details_poses, expected_session_ch
 // Collapsed FormField values can occupy the next terminal row. Only padding
 // and the painted frame may separate a label from its exact value; the bound
 // also accommodates VHS's retained 2400-cell right-padded screen text.
-const COLLAPSED_FILTER_VALUE_GAP: &str = r"[ \t\r\n│┃]{1,4096}";
+// Keep each counted repeat at most 1000 for the nominated VHS parser while
+// retaining the exact overall minimum of 1 and maximum of 4096 characters.
+const COLLAPSED_FILTER_VALUE_GAP: &str = concat!(
+    r"[ \t\r\n│┃]{1,1000}",
+    r"[ \t\r\n│┃]{0,1000}",
+    r"[ \t\r\n│┃]{0,1000}",
+    r"[ \t\r\n│┃]{0,1000}",
+    r"[ \t\r\n│┃]{0,96}",
+);
 
 fn quota_openai_filter_ready() -> String {
     format!(r"Account filters.*Account provider{COLLAPSED_FILTER_VALUE_GAP}OpenAI\b")

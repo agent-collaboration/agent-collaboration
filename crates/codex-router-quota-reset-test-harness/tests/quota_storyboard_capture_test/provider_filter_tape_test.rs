@@ -41,6 +41,11 @@ fn collapsed_filter_waits_bind_inline_and_stacked_field_values() -> TestResult<(
             inline.to_owned(),
             stacked.to_owned(),
             super::super::vhs_wait_pattern_oracle::right_padded_rows(stacked, 2400),
+            format!(
+                "Account filters\nAccount provider{}OpenAI\nDisabled accounts{}Shown",
+                " ".repeat(4096),
+                " ".repeat(4096),
+            ),
         ];
         let mut negatives = vec![
             stacked.replace("OpenAI", "Claude"),
@@ -48,10 +53,19 @@ fn collapsed_filter_waits_bind_inline_and_stacked_field_values() -> TestResult<(
             stacked.replace("Account provider", "Session client"),
             stacked.replace("  OpenAI ▾", "  ▾"),
             stacked.replace("  OpenAI ▾", "Other field\n  OpenAI ▾"),
+            "Account filters\nAccount providerOpenAI\nDisabled accounts Shown".to_owned(),
+            format!(
+                "Account filters\nAccount provider{}OpenAI\nDisabled accounts Shown",
+                " ".repeat(4097),
+            ),
         ];
         if wait.contains("Disabled accounts") {
             negatives.push(stacked.replace("Shown", "Hidden"));
             negatives.push(stacked.replace("Disabled accounts", "Other accounts"));
+            negatives.push(format!(
+                "Account filters\nAccount provider OpenAI\nDisabled accounts{}Shown",
+                " ".repeat(4097),
+            ));
         }
         super::super::vhs_wait_pattern_oracle::ensure_wait_shapes(
             &pattern, &positives, &negatives,

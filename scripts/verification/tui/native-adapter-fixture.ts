@@ -6,7 +6,6 @@ import {
 	mkdirSync,
 	readFileSync,
 	realpathSync,
-	watch,
 	writeFileSync,
 } from 'node:fs';
 import { isAbsolute, join } from 'node:path';
@@ -115,6 +114,23 @@ export function prepareNativeAdapterFixture(root: string, mode: string, node: st
 	}
 	save(join(root, 'configuration.json'), configuration);
 }
+
+function waitForNativeFixtureRelease(
+	release: string,
+	expected: string,
+	onRelease: () => void,
+): void {
+	// The native test's existing outer deadline bounds this wait. Observe the
+	// file state directly: filesystem notifications can miss startup writes.
+	const checkRelease = (): void => {
+		if (!existsSync(release) || readFileSync(release, 'utf8') !== expected) return;
+		clearInterval(releaseTimer);
+		onRelease();
+	};
+	const releaseTimer = setInterval(checkRelease, 20);
+	checkRelease();
+}
+
 function runControlledChild(root: string, argumentsList: readonly string[]): void {
 	const raw: unknown = JSON.parse(readFileSync(join(root, 'control.json'), 'utf8'));
 	const control = controlSchema.parse(raw);
@@ -174,16 +190,11 @@ function runControlledChild(root: string, argumentsList: readonly string[]): voi
 			control.mode === 'pending-valid'
 				? join(output, 'fixture-release')
 				: join(root, 'release-child');
-		const watcher = watch(control.mode === 'pending-valid' ? output : root, () => {
-			if (
-				existsSync(release) &&
-				readFileSync(release, 'utf8') ===
-					(control.mode === 'pending-valid' ? 'settle\n' : 'release\n')
-			) {
-				watcher.close();
-				finish();
-			}
-		});
+		waitForNativeFixtureRelease(
+			release,
+			control.mode === 'pending-valid' ? 'settle\n' : 'release\n',
+			finish,
+		);
 		process.stdout.write('NATIVE_ADAPTER_READY\n');
 	} else finish();
 }
@@ -200,10 +211,7 @@ export function nativeAdapterFixtureMain(args: readonly string[]): void {
 		return;
 	}
 	if (operation === 'bystander' && root !== undefined) {
-		const watcher = watch(root, () => {
-			const release = join(root, 'release-bystander');
-			if (existsSync(release) && readFileSync(release, 'utf8') === 'release\n') watcher.close();
-		});
+		waitForNativeFixtureRelease(join(root, 'release-bystander'), 'release\n', () => undefined);
 		writeFileSync(join(root, 'output/bystander.pid'), String(process.pid));
 		return;
 	}
