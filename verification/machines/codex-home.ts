@@ -4,21 +4,28 @@ import { parse } from "smol-toml";
 import { z } from "zod";
 import { userInfo } from "node:os";
 import type { Machine } from "../declaration.ts";
-import type { Receipt } from "../receipt.ts";
+import { ObservationOpen, type Receipt } from "../receipt.ts";
 import type { Remote } from "./remote.ts";
 import { shellQuote } from "./owned-process.ts";
 import { sampleConfigAccess } from "./config-access.ts";
 
 const files = ["config.toml", "codex-router-debug.config.toml"];
 interface GuardSnapshot {
-  readonly hashes: readonly (string | null)[];
-  readonly modifiedAt: readonly (string | null)[];
+  readonly hashes: readonly string[];
+  readonly modifiedAt: readonly string[];
+}
+export interface ConfigurationEligibility {
+  readonly eligible: boolean;
+  readonly requiredFilesReadable: boolean;
+  readonly ownedWriteAccessDuringChange: boolean;
 }
 export class CodexHomeGuard {
   private readonly machine: Machine;
   private readonly remote: Remote | undefined;
   private readonly before: GuardSnapshot;
   private hostWindow: GuardSnapshot | undefined;
+  private requiredFilesReadable = true;
+  private ownedWriteAccessDuringChange = false;
   private constructor(machine: Machine, remote: Remote | undefined, before: GuardSnapshot) {
     this.machine = machine;
     this.remote = remote;
@@ -30,6 +37,13 @@ export class CodexHomeGuard {
     return this.remote === undefined
       ? readFile(path, "utf8")
       : this.remote.shell(`/bin/cat ${shellQuote(path)}`);
+  }
+  get eligibility(): ConfigurationEligibility {
+    return {
+      eligible: this.requiredFilesReadable && !this.ownedWriteAccessDuringChange,
+      requiredFilesReadable: this.requiredFilesReadable,
+      ownedWriteAccessDuringChange: this.ownedWriteAccessDuringChange,
+    };
   }
   private async snapshot(): Promise<GuardSnapshot> {
     const snapshots = await Promise.all(
@@ -52,8 +66,11 @@ export class CodexHomeGuard {
                     ) * 1000,
                 );
           return { hash, modifiedAt: time.toISOString() };
-        } catch {
-          return { hash: null, modifiedAt: null };
+        } catch (cause: unknown) {
+          this.requiredFilesReadable = false;
+          throw new ObservationOpen("required Codex configuration could not be read or hashed", {
+            cause,
+          });
         }
       }),
     );
@@ -103,6 +120,21 @@ export class CodexHomeGuard {
     const unchanged =
       baseline.hashes.length === after.hashes.length &&
       baseline.hashes.every((hash, index): boolean => hash === after.hashes[index]);
+    const ownedFileAccess = await sampleConfigAccess({
+      remote: this.remote,
+      paths: files.map((name) => `${this.machine.codexHome}/${name}`),
+      ownedPids,
+    });
+    // A changed file held writable by an owned process cannot establish the
+    // read-only configuration boundary. This is correlation, not syscall tracing.
+    if (
+      ownedFileAccess.openFiles.some(
+        (file) =>
+          (file.access === "w" || file.access === "u") &&
+          baseline.hashes[file.file] !== after.hashes[file.file],
+      )
+    )
+      this.ownedWriteAccessDuringChange = true;
     if (receipt !== undefined)
       await receipt.record("codexHomeGuard", {
         machine: this.machine.name,
@@ -113,11 +145,8 @@ export class CodexHomeGuard {
         beforeModifiedAt: baseline.modifiedAt,
         afterModifiedAt: after.modifiedAt,
         stopsCases: false,
-        ownedFileAccess: await sampleConfigAccess({
-          remote: this.remote,
-          paths: files.map((name) => `${this.machine.codexHome}/${name}`),
-          ownedPids,
-        }),
+        eligibility: this.eligibility,
+        ownedFileAccess,
       });
   }
   async beginHostWindow(receipt: Receipt): Promise<void> {

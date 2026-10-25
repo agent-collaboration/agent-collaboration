@@ -139,8 +139,9 @@ export class CodexSession {
             .map((item) => (item.success ? item.data.item.type : "invalid"));
           await this.receipt.require(
             "passive verification recipient performs no tools or file actions",
+            // Native hook prompts are input metadata, not recipient tool actions.
             completedKinds.every((kind) =>
-              ["userMessage", "agentMessage", "reasoning"].includes(kind),
+              ["userMessage", "agentMessage", "reasoning", "hookPrompt"].includes(kind),
             ),
           );
           const agentTextSHA256 = createHash("sha256")

@@ -17,7 +17,7 @@ import {
   fingerprint,
 } from "./owned-process.ts";
 import { Remote, type RemoteProcess } from "./remote.ts";
-import { CodexHomeGuard } from "./codex-home.ts";
+import { CodexHomeGuard, type ConfigurationEligibility } from "./codex-home.ts";
 
 type Child =
   | { readonly kind: "local"; readonly process: OwnedProcess }
@@ -114,6 +114,9 @@ export class Installation {
   get mcp(): RouterMcp {
     if (this.state.kind !== "ready") throw new Error("installation Host is not ready");
     return this.state.mcp;
+  }
+  configurationEligibility(): ConfigurationEligibility {
+    return this.guard.eligibility;
   }
   get enrollmentLabel(): string {
     switch (this.machine.enrollment.kind) {

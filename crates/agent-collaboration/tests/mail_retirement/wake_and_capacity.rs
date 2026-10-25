@@ -4,7 +4,9 @@ use crate::{
     fixture::{self, BoardFixture},
     readback,
 };
-use codex_router_test_support::{FixtureResult, owned_peer_fixture::PeerFixture};
+use codex_router_test_support::{
+    FixtureResult, owned_peer_fixture::PeerFixture, scenario_finalization::run_scenario,
+};
 use collaboration_client::protocol::EndpointRef;
 use serde_json::{Value, json};
 use std::os::unix::fs::DirBuilderExt;
@@ -62,8 +64,7 @@ pub async fn capacity(fixture: &mut BoardFixture, sender_host: &mut SecondHost) 
         .into();
     let endpoint: EndpointRef =
         serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
-    let mut peer = start_peer(fixture, &endpoint).await?;
-    let result=async {
+    run_scenario(start_peer(fixture, &endpoint).await?, async |peer: &mut PeerFixture| {
         let sender=sender(sender_host)?;
         let mut previous: Option<String>=None;
         for index in 0..3 {
@@ -79,8 +80,7 @@ pub async fn capacity(fixture: &mut BoardFixture, sender_host: &mut SecondHost) 
         }
         assert_eq!(peer.count_matching_after_barrier("capacity marker").await?,3);
         readback::await_compacted(fixture,&service,&previous.ok_or("last item")?).await
-    }.await;
-    result.and(peer.shutdown().await)
+    }, PeerFixture::shutdown, || Ok(())).await
 }
 
 pub async fn wakes(fixture: &mut BoardFixture, sender_host: &mut SecondHost) -> FixtureResult {
@@ -134,8 +134,7 @@ pub async fn requested_control(
         .into();
     let endpoint: EndpointRef =
         serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
-    let mut peer = start_peer(fixture, &endpoint).await?;
-    let result=async {
+    run_scenario(start_peer(fixture, &endpoint).await?, async |peer: &mut PeerFixture| {
         let sender=sender(sender_host)?;
         let original=fixture::identity();
         call(sender_host.host()?,"message_send",json!({"itemId":original,"target":peer.target,
@@ -153,6 +152,5 @@ pub async fn requested_control(
         assert_eq!(sender_host.host()?.mcp("message_cancel",request).await?,answered);
         assert_eq!(peer.count_matching_after_barrier("requested control marker").await?,1);
         readback::require_compacted(fixture,&service,&cancel).await
-    }.await;
-    result.and(peer.shutdown().await)
+    }, PeerFixture::shutdown, || Ok(())).await
 }

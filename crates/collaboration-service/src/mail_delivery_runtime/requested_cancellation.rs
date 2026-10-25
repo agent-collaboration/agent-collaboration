@@ -137,12 +137,12 @@ impl MailDeliveryRuntime {
                             _ => reference,
                         }
                     };
-                    if project.is_none() {
-                        super::terminal_retirement::admit_terminal_retirement(
-                            scope, &admission, retirement,
-                        )
-                        .await?;
-                    }
+                    // Requested controls have no project handoff, including those
+                    // sent by a Project. Their admission owns this exact retirement.
+                    super::terminal_retirement::admit_terminal_retirement(
+                        scope, &admission, retirement,
+                    )
+                    .await?;
                     if canonical.item.as_uuid().to_string() != proposed.as_str() {
                         delete_tentative_local_cancel_in_scope(scope, &proposed, preparation)
                             .await

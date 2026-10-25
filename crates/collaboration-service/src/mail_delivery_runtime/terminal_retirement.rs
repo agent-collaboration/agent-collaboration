@@ -1,4 +1,4 @@
-//! Non-project origin retirement keeps its route and call identity in the existing journal.
+//! Requested mail retirement keeps its route and call identity in the existing journal.
 use super::*;
 use durable_steps::{JournalScope, OperationContext, OperationFailure, StepError, Task};
 use fleet_sync_delivery::{

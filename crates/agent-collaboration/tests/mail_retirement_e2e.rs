@@ -5,10 +5,14 @@
 mod central_pair;
 #[path = "board_e2e/fixture.rs"]
 mod fixture;
+#[path = "board_e2e/fixture_inputs.rs"]
+mod fixture_inputs;
 #[path = "mail_retirement/lost_answer.rs"]
 mod lost_answer;
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
+#[path = "mail_retirement/project_requested.rs"]
+mod project_requested;
 #[path = "mail_retirement/readback.rs"]
 mod readback;
 #[path = "mail_retirement/wake_and_capacity.rs"]
@@ -18,6 +22,18 @@ use codex_router_test_support::{
 };
 use collaboration_client::protocol::{EndpointRef, SessionRef};
 use serde_json::json;
+
+#[tokio::test]
+async fn requested_project_control_retires_without_a_handoff_and_replays_after_restart()
+-> FixtureResult {
+    central_pair::scenario(project_requested::retire_and_replay).await
+}
+
+#[tokio::test]
+async fn requested_project_control_retirement_retries_the_same_lost_answer_after_restart()
+-> FixtureResult {
+    central_pair::scenario(project_requested::lost_answer).await
+}
 
 #[tokio::test]
 async fn ordinary_requested_control_retires_and_keeps_its_result_after_restart() -> FixtureResult {

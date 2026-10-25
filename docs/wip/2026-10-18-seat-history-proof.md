@@ -49,4 +49,4 @@ in the following cutover commit. The catalog refresh exposed 97 older A2
 schema entries needing that cutover; only the participant-list reason enum is
 included here. No full workspace test or compile result is claimed for this
 early slice. The next declared target must include the cutover and its required
-gates. The work trace remains `2026-10-18-board-storage-proof.md`.
+gates. The work trace is kept outside the public tree.

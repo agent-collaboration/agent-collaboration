@@ -114,10 +114,11 @@ async function main(): Promise<void> {
   const lifetime = new RunLifetime(receipt);
   let cleanupFailures: readonly string[] = [];
   let setupUnconfirmed = false;
+  let context: PreparedRun | undefined;
   if (missing.length === 0) {
     try {
       await checkSource(declaration, receipt);
-      const context = await prepareRun({ declaration, receipt, lifetime });
+      context = await prepareRun({ declaration, receipt, lifetime });
       await executeCases({ declaration, cases, context, receipt, results });
       await checkSource(declaration, receipt);
     } catch (error: unknown) {
@@ -132,11 +133,22 @@ async function main(): Promise<void> {
     }
   }
   const outcomes = collectOutcomes({ rows, selected: declaration.rows, cases, results });
+  const configurationEvidence =
+    context?.machines.map((machine) => ({
+      machine: machine.installation.machine.name,
+      ...machine.installation.configurationEligibility(),
+    })) ?? [];
+  const configurationEligible =
+    configurationEvidence.length === 2 &&
+    configurationEvidence.every((observation) => observation.eligible);
   let exit = exitCode(outcomes);
-  if (exit === 0 && (setupUnconfirmed || cleanupFailures.length > 0)) exit = 2;
+  if (exit === 0 && (setupUnconfirmed || cleanupFailures.length > 0 || !configurationEligible))
+    exit = 2;
+  const releaseProofEligible =
+    declaration.purpose === "confirmation" && exit === 0 && configurationEligible;
   await receipt.save("result.json", {
     purpose: declaration.purpose,
-    releaseProofEligible: declaration.purpose === "confirmation" && exit === 0,
+    releaseProofEligible,
     selected: declaration.rows,
     outcomes: Object.fromEntries(outcomes),
     executedCases: results.size,
@@ -146,7 +158,13 @@ async function main(): Promise<void> {
     configurationObservation: {
       evidence: "observations.jsonl",
       changedFilesStopCases: false,
-      ownedWriteAttribution: "notEstablished",
+      eligible: configurationEligible,
+      installations: configurationEvidence,
+      ownedWriteAttribution: configurationEvidence.some(
+        (observation) => observation.ownedWriteAccessDuringChange,
+      )
+        ? "changedFileOpenForWriteByOwnedProcess"
+        : "notEstablished",
       limit:
         "Owned open-file descriptors sampled; syscall writes not traced. Changes alone are notes.",
     },
@@ -160,7 +178,7 @@ async function main(): Promise<void> {
   process.stdout.write(
     `${encode({
       purpose: declaration.purpose,
-      releaseProofEligible: declaration.purpose === "confirmation" && exit === 0,
+      releaseProofEligible,
       selectedRows: declaration.rows.length,
       executedCases: results.size,
       unmappedRows: missing.length,

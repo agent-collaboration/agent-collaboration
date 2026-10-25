@@ -4,8 +4,12 @@ use crate::{
     fixture::{self, BoardFixture},
     readback, wake_and_capacity,
 };
-use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
-use codex_router_test_support::FixtureResult;
+use board_central_test_support::{
+    DispatchFaultObservation, ObjectAddress, RuntimeControl, TestCentral,
+};
+use codex_router_test_support::{
+    FixtureResult, owned_peer_fixture::PeerFixture, scenario_finalization::run_scenario,
+};
 use collaboration_client::protocol::EndpointRef;
 use serde_json::json;
 
@@ -19,12 +23,12 @@ pub async fn run(fixture: &mut BoardFixture, sender_host: &mut SecondHost) -> Fi
         .into();
     let endpoint: EndpointRef =
         serde_json::from_value(json!({"serviceId":service,"endpointId":"claude-local"}))?;
-    let mut peer = wake_and_capacity::start_peer(fixture, &endpoint).await?;
     // Sender Submit/Retire resolve the enrolled peer through Registry, then call Mailbox.
     let origin = ObjectAddress::Registry;
     let destination = ObjectAddress::Mailbox(service.clone().try_into()?);
     let central = central_pair::central(fixture)?;
-    let result=async {
+    let peer = wake_and_capacity::start_peer(fixture, &endpoint).await?;
+    run_scenario(peer, async |peer: &mut PeerFixture| {
         central.runtime_control(origin.clone(),RuntimeControl::HoldNextDispatch{destination:destination.clone()}).await?;
         let sender=wake_and_capacity::sender(sender_host)?;
         let item=fixture::identity();
@@ -55,10 +59,76 @@ pub async fn run(fixture: &mut BoardFixture, sender_host: &mut SecondHost) -> Fi
         readback::require_compacted(fixture,&service,&item).await?;
         sender_host.stop_host().await?;
         readback::require_cold_terminal(&sender_host.directory,&item).await
-    }.await;
-    // Release only this fixture's held object call, including on the pre-fix failure.
-    let _ = central
-        .runtime_control(origin, RuntimeControl::ResumeDispatch)
-        .await;
-    result.and(peer.shutdown().await)
+    }, |peer| finish_peer_and_release(peer, Ok(central)), || Ok(())).await
+}
+
+/// Both cleanup results remain observable, including when the body panics.
+pub async fn finish_peer_and_release(
+    peer: PeerFixture,
+    central: FixtureResult<&TestCentral>,
+) -> FixtureResult {
+    run_scenario(
+        (),
+        async |_: &mut ()| release_if_held(central).await,
+        |_| peer.shutdown(),
+        || Ok(()),
+    )
+    .await
+}
+
+pub async fn release_if_held(central: FixtureResult<&TestCentral>) -> FixtureResult {
+    let central = central?;
+    let observed = central
+        .runtime_control(ObjectAddress::Registry, RuntimeControl::Observe)
+        .await?;
+    if matches!(observed.dispatch, DispatchFaultObservation::Held { .. }) {
+        central
+            .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+            .await?;
+    }
+    Ok(())
+}
+
+pub async fn hold_retirement_after_submit(
+    central: &TestCentral,
+    destination: ObjectAddress,
+) -> FixtureResult {
+    central
+        .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
+        .await
+        .map_err(|error| format!("requested-control Submit was not held: {error}"))?;
+    central
+        .runtime_control(
+            ObjectAddress::Registry,
+            RuntimeControl::ResumeDispatchAndHoldNext { destination },
+        )
+        .await?;
+    Ok(())
+}
+
+pub async fn lose_reply_and_hold_retry(
+    central: &TestCentral,
+    destination: ObjectAddress,
+) -> FixtureResult {
+    central
+        .runtime_control(
+            ObjectAddress::Registry,
+            RuntimeControl::DropNextObjectReply {
+                destination: destination.clone(),
+            },
+        )
+        .await?;
+    central
+        .runtime_control(
+            ObjectAddress::Registry,
+            RuntimeControl::ResumeDispatchAndHoldNext { destination },
+        )
+        .await?;
+    central
+        .runtime_control(
+            ObjectAddress::Registry,
+            RuntimeControl::AwaitDroppedObjectReply,
+        )
+        .await?;
+    Ok(())
 }

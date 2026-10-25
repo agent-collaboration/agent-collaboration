@@ -62,8 +62,8 @@ The harness redirects only the synthetic issuer's certs URL to its owned local
 JWKS fixture. Worker WebCrypto verification remains real. No local run proves
 Google sign-in, deployed Access policies, TLS or cross-machine behavior.
 
-Retired launchers and their exact historical oracles are recorded in
-`docs/wip/2026-10-19-central-legacy-removal-map.md` and its companion inventory.
+Retired launchers and their historical oracles were recorded in the 0.1.102
+process logs, which are kept outside the public tree.
 Complete normal Worker session/holder equivalence and G18 panic rollback with
 subsequent store usability remain PR3 obligations. The removed legacy fixtures
 do not count as proof of those behaviors on the shared core.

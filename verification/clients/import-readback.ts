@@ -73,7 +73,7 @@ const followingSchema = z.object({
 const summarySchema = z.object({ database: z.uuid(), position: z.unknown(), summary: z.unknown() });
 const unknownSummary = {
   kind: "projectSummary",
-  value: { status: null, latestRecordAt: { kind: "legacyUnknown" } },
+  value: { latestRecordAt: { kind: "legacyUnknown" } },
 };
 function one(rows: readonly string[]): unknown {
   if (rows.length !== 1 || rows[0] === undefined)
