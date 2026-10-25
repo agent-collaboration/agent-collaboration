@@ -46,6 +46,19 @@ fn command_fixture(mode: &str, control: Option<&Path>) -> TailscaleCommand {
     TailscaleCommand::fixture(specification)
 }
 
+fn normal_serve_fixture() -> TailscaleCommand {
+    TailscaleCommand::fixture(
+        ChildCommandSpec::new(std::env::current_exe().expect("Host unit-test binary"))
+            .with_arguments([
+                "--exact",
+                "tailscale_process::tests::isolated_normal_serve_fixture",
+                "--ignored",
+                "--nocapture",
+                "--",
+            ]),
+    )
+}
+
 fn port() -> NonZeroU16 {
     NonZeroU16::new(8443).expect("port")
 }
@@ -114,7 +127,7 @@ async fn startup_failure_is_reaped_without_a_ready_receipt() {
 
 #[tokio::test]
 async fn normal_shutdown_reaps_the_advertised_foreground_child() {
-    let mut process = command_fixture("normal", None)
+    let mut process = normal_serve_fixture()
         .spawn_serve(
             port(),
             "127.0.0.1:19088".parse().expect("backend"),
@@ -164,7 +177,7 @@ async fn exit_after_advertisement_is_a_failure_and_reaps_the_same_child() {
 
 #[tokio::test]
 async fn cancelling_an_observation_keeps_the_child_owned_until_explicit_shutdown() {
-    let mut process = command_fixture("normal", None)
+    let mut process = normal_serve_fixture()
         .spawn_serve(
             port(),
             "127.0.0.1:19088".parse().expect("backend"),
@@ -231,4 +244,19 @@ async fn finite_overflow_identifies_command_and_stdout_phase_without_output() {
 #[tokio::test]
 async fn finite_timeout_identifies_command_and_pending_phases_without_retry() {
     assert_finite_failure_context("finite_hang", "timed out").await;
+}
+
+#[tokio::test]
+#[ignore = "Private normal Serve fixture child, not a behavior test"]
+async fn isolated_normal_serve_fixture() {
+    use std::io::Write as _;
+
+    let mut interrupt = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())
+        .expect("fixture SIGINT listener");
+    {
+        let mut output = std::io::stdout().lock();
+        writeln!(output, "https://node.example.ts.net:8443/").expect("fixture advertisement");
+        output.flush().expect("flushed fixture advertisement");
+    }
+    interrupt.recv().await.expect("fixture interrupt");
 }
