@@ -211,6 +211,12 @@ export function nativeAdapterFixtureMain(args: readonly string[]): void {
 		return;
 	}
 	if (operation === 'bystander' && root !== undefined) {
+		// A controlling-PTY leader's exit can send HUP to its foreground group.
+		// Keep this stand-in alive to detect an accidental group TERM instead;
+		// termination retains its default behavior and is proved by the native test.
+		process.on('SIGHUP', () => {
+			writeFileSync(join(root, 'output/bystander-hangup'), 'SIGHUP\n');
+		});
 		waitForNativeFixtureRelease(join(root, 'release-bystander'), 'release\n', () => undefined);
 		writeFileSync(join(root, 'output/bystander.pid'), String(process.pid));
 		return;

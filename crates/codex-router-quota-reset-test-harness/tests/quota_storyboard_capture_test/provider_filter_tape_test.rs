@@ -2,6 +2,21 @@
 use super::*;
 
 #[test]
+fn compact_quota_help_waits_for_the_measured_control_pose() {
+    // Measured independently by the mounted Quota filter Help witness.
+    for (columns, rows, down_count) in [(48, 24, 3), (48, 12, 8), (40, 24, 6), (32, 24, 5)] {
+        let (tape, _) = build_compact_filter_tape(CapturedTuiSurface::Quota, columns, rows);
+        let readiness = format!(
+            "F1\nWait+Screen /Quota Help/\nDown@1ms {down_count}\nWait+Screen /(?s)Quota Help.*Move field/"
+        );
+        assert!(
+            tape.contains(&readiness),
+            "{columns}x{rows} must expose contextual Help controls before capture"
+        );
+    }
+}
+
+#[test]
 fn collapsed_filter_waits_bind_inline_and_stacked_field_values() -> TestResult<()> {
     let (tape, _) = build_compact_filter_tape(CapturedTuiSurface::Quota, 48, 24);
     let waits = tape

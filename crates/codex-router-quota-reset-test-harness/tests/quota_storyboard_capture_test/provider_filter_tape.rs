@@ -518,7 +518,19 @@ pub(super) fn build_compact_filter_tape(
                     quota_openai_filter_ready()
                 ),
             );
-            tape.push_str("Up\nF1\n");
+            tape.push_str("Up\nF1\nWait+Screen /Quota Help/\n");
+            // The mounted compact_filter_help_controls_are_reachable_and_preserve_draft
+            // witness measures the complete control entry below Current quota.
+            let help_down_count = match (columns, rows) {
+                (48, 24) => 3,
+                (48, 12) => 8,
+                (40, 24) => 6,
+                (32, 24) => 5,
+                _ => 0,
+            };
+            if help_down_count > 0 {
+                tape.push_str(&format!("Down@1ms {help_down_count}\n"));
+            }
             checkpoint(
                 &mut tape,
                 &mut checkpoints,

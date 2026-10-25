@@ -656,6 +656,13 @@ checkpoint still requires its field label, exact query and No matching choices;
 its separate FocusReveal path exposes them at the short grid. Reuse a prior capture only when its actual image/source/fixture dependencies still apply; a checker supplement is separate evidence.
 
 
+Compact Quota Filters Help first acknowledges its title, then scrolls to the
+complete field-control entry below Current quota: Down3 at48×24, Down8 at48×12,
+Down6 at40×24 and Down5 at32×24;120×36 and76×30 need none. The permanent mounted
+`compact_filter_help_controls_are_reachable_and_preserve_draft` witness measures
+those poses and checks exact draft/focus return. The screenshot still requires
+the contextual controls, and closing Help must preserve the uncommitted filters.
+
 ### Component completion after terminal scrollback
 
 The component wrapper prints final validated `QUOTA_STORYBOARD_CHILD_EXIT` on a fresh cursor line without trailing newline. Component Normal/first-frame tapes use anchored `Wait+Line /^QUOTA_STORYBOARD_CHILD_EXIT=0$/`. This is synchronization only: real child/wrapper exit0, exact durable fixture receipt, zero external requests/persisted writes, original images and independent owned cleanup remain mandatory. Early/forged markers cannot replace these. Other surfaces retain their own existing framing.

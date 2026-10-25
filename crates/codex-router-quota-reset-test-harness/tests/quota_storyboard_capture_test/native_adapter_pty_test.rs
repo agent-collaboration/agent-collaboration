@@ -221,6 +221,56 @@ fn exact_public_argv_cwd_environment_and_host_guard() -> TestResult<()> {
 }
 
 #[test]
+fn controlled_bystander_survives_terminal_hangup_but_not_termination() -> TestResult<()> {
+    let fixture = NativeFixture::prepare("public-held-sibling")?;
+    let mut adapter = NativeAdapter::spawn(&fixture, None)?;
+    adapter.wait_ready()?;
+    let deadline = Instant::now() + TIMEOUT;
+    let bystander_pid = loop {
+        if let Ok(pid) = fixture.read("bystander.pid")
+            && pid.parse::<u32>().is_ok()
+        {
+            break pid;
+        }
+        if Instant::now() >= deadline {
+            return Err("bystander PID readiness deadline".into());
+        }
+        adapter.receive(Duration::from_millis(20))?;
+    };
+    let before = observe_process(&bystander_pid)?;
+    run_command(
+        &fixture.root,
+        "bystander-hangup",
+        Command::new("/bin/kill").args(["-HUP", &bystander_pid]),
+    )?;
+    let deadline = Instant::now() + TIMEOUT;
+    while fixture.read("bystander-hangup").ok().as_deref() != Some("SIGHUP\n") {
+        if observe_process(&bystander_pid).is_err() {
+            return Err("controlled bystander exited on terminal hangup".into());
+        }
+        if Instant::now() >= deadline {
+            return Err("bystander hangup observation deadline".into());
+        }
+        adapter.receive(Duration::from_millis(20))?;
+    }
+    require_equal(
+        observe_process(&bystander_pid)?,
+        before,
+        "hangup must preserve the controlled bystander identity",
+    )?;
+    run_command(
+        &fixture.root,
+        "bystander-terminate",
+        Command::new("/bin/kill").args(["-TERM", &bystander_pid]),
+    )?;
+    require_process_absent(&bystander_pid)?;
+    fs::write(fixture.root.join("release-child"), "release\n")?;
+    let (exit, transcript) = adapter.finish()?;
+    require_equal(exit, 0, &transcript)?;
+    fixture.cleanup()
+}
+
+#[test]
 fn wrapper_reaps_only_its_retained_public_child() -> TestResult<()> {
     let fixture = NativeFixture::prepare("public-held-sibling")?;
     let other = NativeFixture::prepare("public-held")?;

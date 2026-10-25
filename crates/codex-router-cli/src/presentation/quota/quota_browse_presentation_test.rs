@@ -25,3 +25,6 @@ mod quota_normal_browse_pose_test;
 
 #[path = "quota_hard_fixture_consistency_test.rs"]
 mod quota_hard_fixture_consistency_test;
+
+#[path = "quota_filter_help_pose_test.rs"]
+mod quota_filter_help_pose_test;
