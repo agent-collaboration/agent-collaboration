@@ -690,16 +690,33 @@ struct VerifyScreenImage {
       ("eligibility", ["not checked"]),
       ("freshness", ["fresh", "stale", "unknown"]),
     ]
+    // Vision can split a label into adjacent native boxes on the same row.
+    // Reconstruct only an exact known label, with no skipped or distant word.
+    let splitLabels: [ScreenTextRegion] = (terminalRows(regions) ?? []).compactMap { row in
+      let label = terminalRowText(row)
+      guard row.count > 1, fields.contains(where: { $0.0 == label }),
+        let first = row.first, let last = row.last
+      else { return nil }
+      let cell = (last.bounds.maxX - first.bounds.minX) / Double(label.count)
+      guard zip(row, row.dropFirst()).allSatisfy({ left, right in
+        right.bounds.minX - left.bounds.maxX >= -0.1 * cell
+          && right.bounds.minX - left.bounds.maxX <= 1.5 * cell
+      }) else { return nil }
+      return ScreenTextRegion(text: label, bounds: row.dropFirst().reduce(first.bounds) {
+        $0.union($1.bounds)
+      })
+    }
+    let fieldRegions = regions + splitLabels
     return fields.compactMap { label, allowed in
       var values: Set<String> = []
-      for region in regions {
+      for region in fieldRegions {
         let text = normalizedMarkerText(region.text)
         if text.hasPrefix(label + " "),
           let value = fieldValue(String(text.dropFirst(label.count + 1)), allowed: allowed)
         {
           values.insert(value)
         } else if text == label && region.bounds.height > 0 {
-          let right = regions.filter { candidate in
+          let right = fieldRegions.filter { candidate in
             let overlap =
               min(region.bounds.maxY, candidate.bounds.maxY)
               - max(region.bounds.minY, candidate.bounds.minY)
@@ -713,15 +730,15 @@ struct VerifyScreenImage {
           // below the label. Never skip an intervening same-column observation.
           let cell = region.bounds.width / Double(max(1, label.count))
           let below =
-            ["use credits", "client", "eligibility", "freshness"].contains(label) && right.isEmpty
-            ? regions.filter { candidate in
+            ["account provider", "disabled accounts", "use credits", "client", "eligibility", "freshness"].contains(label) && right.isEmpty
+            ? fieldRegions.filter { candidate in
               candidate.bounds.midY < region.bounds.minY
                 && region.bounds.minY - candidate.bounds.maxY
                   <= max(region.bounds.height, candidate.bounds.height)
                 && candidate.bounds.minX - region.bounds.minX
                   >= -0.1 * min(region.bounds.width, candidate.bounds.width)
                 && candidate.bounds.minX - region.bounds.minX <= 2.5 * cell
-            }.sorted { $0.bounds.maxY > $1.bounds.maxY }
+            }.sorted { $0.bounds.midY > $1.bounds.midY }
             : []
           let candidates = right.isEmpty ? below : right
           // Do not skip a wrong nearest value to find a convenient word behind
@@ -729,7 +746,7 @@ struct VerifyScreenImage {
           if let nearest = candidates.first,
             candidates.dropFirst().allSatisfy({ candidate in
               right.isEmpty
-                ? abs(candidate.bounds.maxY - nearest.bounds.maxY) > 0.001
+                ? abs(candidate.bounds.midY - nearest.bounds.midY) > 0.001
                 : abs(candidate.bounds.minX - nearest.bounds.minX) > 0.001
             }
             ),

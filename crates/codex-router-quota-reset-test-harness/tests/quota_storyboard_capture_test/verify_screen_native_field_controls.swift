@@ -63,7 +63,59 @@ extension VerifyScreenImage {
     failures.append(contentsOf: accountGutters.failures)
     let splitQueries = checkSplitQueryFieldControls()
     failures.append(contentsOf: splitQueries.failures)
-    return (cases.count + 5 + creditChoices.count + accountGutters.count + splitQueries.count, failures)
+    let stackedChooser = checkStackedChooserFieldControls()
+    failures.append(contentsOf: stackedChooser.failures)
+    return (cases.count + 5 + creditChoices.count + accountGutters.count + splitQueries.count
+      + stackedChooser.count, failures)
+  }
+
+  static func checkStackedChooserFieldControls() -> (count: Int, failures: [String]) {
+    func box(_ text: String, _ x: Double, _ y: Double, _ w: Double, _ h: Double) -> ScreenTextRegion {
+      ScreenTextRegion(text: text, bounds: CGRect(x: x, y: y, width: w, height: h))
+    }
+    // Retained 016 48x24 chooser: native recognition splits the disabled label;
+    // both values occupy the immediately following row, indented two cells.
+    let provider = box("Account provider", 0.0817, 0.6198, 0.3385, 0.0413)
+    let openai = box("OpenAI y", 0.1162, 0.5760, 0.1761, 0.0464)
+    let disabled = box("Disabled", 0.0815, 0.5404, 0.1716, 0.0390)
+    let accounts = box("accounts", 0.2529, 0.5451, 0.1830, 0.0338)
+    let shown = box("Shown", 0.1165, 0.4948, 0.1600, 0.0434)
+    let base = [provider, openai, disabled, accounts, shown]
+    func replacing(_ index: Int, _ region: ScreenTextRegion) -> [ScreenTextRegion] {
+      var result = base; result[index] = region; return result
+    }
+    let cases: [(String, [ScreenTextRegion], Bool)] = [
+      ("chooser-native-stacked-fields", base, true),
+      ("chooser-native-stacked-order", Array(base.reversed()), true),
+      ("chooser-stacked-whole-label", [provider, openai,
+        box("Disabled accounts", 0.0815, 0.5404, 0.3544, 0.0390), shown], true),
+      ("chooser-stacked-wrong-provider", replacing(1, box("Claude y", 0.1162, 0.5760, 0.1761, 0.0464)), false),
+      ("chooser-stacked-wrong-disabled", replacing(4, box("Hidden", 0.1165, 0.4948, 0.1600, 0.0434)), false),
+      ("chooser-stacked-provider-above", replacing(1, box("OpenAI y", 0.1162, 0.68, 0.1761, 0.0464)), false),
+      ("chooser-stacked-provider-distant", replacing(1, box("OpenAI y", 0.1162, 0.3, 0.1761, 0.0464)), false),
+      ("chooser-stacked-provider-other-column", replacing(1, box("OpenAI y", 0.65, 0.5760, 0.1761, 0.0464)), false),
+      ("chooser-stacked-disabled-other-column", replacing(4, box("Shown", 0.65, 0.4948, 0.1600, 0.0434)), false),
+      ("chooser-stacked-nearest-wrong", base + [box("Claude", 0.1162, 0.599, 0.16, 0.015)], false),
+      ("chooser-stacked-duplicate-value", base + [openai], false),
+      ("chooser-stacked-same-centre-competing-value", base + [box("Claude", 0.1162, 0.5917, 0.16, 0.015)], false),
+      ("chooser-stacked-extra-value-word", replacing(1, box("OpenAI y Claude", 0.1162, 0.5760, 0.3, 0.0464)), false),
+      ("chooser-split-label-other-row", replacing(3, box("accounts", 0.2529, 0.42, 0.1830, 0.0338)), false),
+      ("chooser-split-label-distant-column", replacing(3, box("accounts", 0.65, 0.5451, 0.1830, 0.0338)), false),
+      ("chooser-split-label-overlapping-words", replacing(3, box("accounts", 0.15, 0.5451, 0.1830, 0.0338)), false),
+      ("chooser-split-label-extra-word", base + [box("other", 0.45, 0.5451, 0.12, 0.0338)], false),
+      ("chooser-split-label-wrong-order", [provider, openai,
+        box("accounts", 0.0815, 0.5404, 0.1716, 0.0390),
+        box("Disabled", 0.2529, 0.5451, 0.1830, 0.0338), shown], false),
+      ("chooser-stacked-no-provider", base.filter { $0.text != "Account provider" }, false),
+      ("chooser-stacked-no-disabled-label", base.filter { $0.text != "Disabled" }, false),
+    ]
+    var failures: [String] = []
+    for (name, regions, expected) in cases {
+      let matched = measuredFieldPairs(regions)
+        == ["account provider openai", "disabled accounts shown"]
+      if matched != expected { failures.append(name) }
+    }
+    return (cases.count, failures)
   }
 
   static func checkSplitQueryFieldControls() -> (count: Int, failures: [String]) {
