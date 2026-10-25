@@ -153,20 +153,6 @@ impl NotificationPublisher {
         let inner = self.inner.clone();
         self.inner.tasks.spawn(async move {
             loop {
-                let reconciled = tokio::select! {
-                    biased;
-                    () = inner.shutdown.cancelled() => {
-                        inner.projects.lock().await.remove(&key);
-                        break;
-                    },
-                    reconciled = async {
-                        let runtime = inner.mail.upgrade().ok_or_else(BoardError::board_unavailable)?;
-                        runtime.subscription_delivery().reconcile_available_project(&project).await
-                    } => reconciled,
-                };
-                if let Err(error) = reconciled {
-                    tracing::warn!(%error, project = project.as_str(), "live subscription discovery delayed");
-                }
                 if let Err(error) = inner.consume_project_intents(&project).await {
                     tracing::warn!(%error, project = project.as_str(), "notification publication delayed");
                 }

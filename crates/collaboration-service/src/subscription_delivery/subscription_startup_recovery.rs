@@ -1,4 +1,4 @@
-//! Persisted reader discovery routes startup restoration and live refresh to one owner.
+//! Persisted reader discovery restores startup and starts missing writable-project owners.
 use super::super::{
     ProjectSubscriptionRecord, SubscriptionWindowStore, subscription_facts::STORAGE_RETRY_INTERVAL,
     subscription_windows::StartupProjectDiscovery,
@@ -13,55 +13,41 @@ pub(super) enum StartupProjectOutcome {
 }
 
 impl SubscriptionDeliveryService {
-    // Erase the future to break the reader/publisher spawned-future Send cycle.
-    pub(crate) fn reconcile_available_project<'a>(
-        &'a self,
-        project: &'a ProjectId,
-    ) -> futures_util::future::BoxFuture<'a, Result<(), BoardError>> {
-        Box::pin(async move {
-            self.require_started().await?;
-            let probe_store = self
-                .inner
-                .board_availability
-                .require_store()?
-                .lock()
-                .await
-                .clone();
-            let known_readers: Vec<_> = self.inner.owners.lock().await.keys().cloned().collect();
-            let readers = match probe_store
-                .discover_startup_project(project, &known_readers)
-                .await?
-            {
-                StartupProjectDiscovery::Readers(readers) => readers,
-                StartupProjectDiscovery::Retry => {
-                    tracing::debug!(
-                        project = project.as_str(),
-                        "live subscription discovery awaits project storage"
-                    );
-                    return Err(BoardError::board_unavailable());
-                }
-                StartupProjectDiscovery::Unavailable => {
-                    tracing::warn!(
-                        project = project.as_str(),
-                        "live subscription project unavailable"
-                    );
-                    return Err(BoardError::board_unavailable());
-                }
-            };
-            for reader in readers {
-                let refreshed = self
-                    .reconcile_owned_scope(
-                        reader,
-                        ReaderScanScope::project(project.clone()),
-                        ReaderReconcilePurpose::Refresh,
-                    )
-                    .await?;
-                if refreshed.unavailable.contains(project) {
-                    return Err(BoardError::board_unavailable());
-                }
+    /// Start inherited readers at writable entry without refreshing live owners.
+    pub async fn start_inherited_project_readers(
+        &self,
+        project: &ProjectId,
+    ) -> Result<(), BoardError> {
+        self.require_started().await?;
+        let probe_store = self
+            .inner
+            .board_availability
+            .require_store()?
+            .lock()
+            .await
+            .clone();
+        let readers = match probe_store.discover_startup_project(project, &[]).await? {
+            StartupProjectDiscovery::Readers(readers) => readers,
+            StartupProjectDiscovery::Retry => {
+                tracing::debug!(
+                    project = project.as_str(),
+                    "live subscription discovery awaits project storage"
+                );
+                return Err(BoardError::board_unavailable());
             }
-            Ok(())
-        })
+            StartupProjectDiscovery::Unavailable => {
+                tracing::warn!(
+                    project = project.as_str(),
+                    "live subscription project unavailable"
+                );
+                return Err(BoardError::board_unavailable());
+            }
+        };
+        for reader in readers {
+            self.ensure_owner_input(reader, ReaderScanScope::project(project.clone()), None)
+                .await?;
+        }
+        Ok(())
     }
 
     pub(super) async fn ensure_restored_owners(

@@ -443,6 +443,19 @@ fn spawn_project_lifecycle(
     owners: &MachineSessionEventOwners,
     signal: ProjectLifecycleSignal,
 ) {
+    if let ProjectLifecycleSignal::WritingConfirmed(project) = &signal {
+        let project = project.clone();
+        let mail = owners.mail.clone();
+        spawn_operation(handlers, async move {
+            if let Some(mail) = mail.upgrade() {
+                mail.subscription_delivery()
+                    .start_inherited_project_readers(&project)
+                    .await
+                    .map_err(io::Error::other)?;
+            }
+            Ok(())
+        });
+    }
     match signal {
         ProjectLifecycleSignal::Superseded { project, source } => {
             let owner = owners.projects.clone();

@@ -8,6 +8,7 @@ import { Installation } from "./machines/installation.ts";
 import { readLegacyOracle } from "./clients/legacy-oracle.ts";
 import { readLegacyReaderIdentities } from "./inputs/legacy-reader-identities.ts";
 import { compareLegacyInbox } from "./clients/import-inbox.ts";
+import { sampleLegacyInbox, type OracleReaders } from "./clients/legacy-inbox-sample.ts";
 import { verifyMacImportClaim } from "./clients/import-claim.ts";
 import { runUpgrade, type UploadedUpgrade } from "./clients/board-upgrade.ts";
 import { verifyImportReplay } from "./clients/import-replay.ts";
@@ -100,12 +101,9 @@ async function observeImport(
   declaration: ImportDeclaration,
   receipt: Receipt,
   lifetime: RunLifetime,
-): Promise<void> {
+): Promise<ReturnType<typeof sampleLegacyInbox>["evidence"]> {
   const copies: SealedLegacyCopy[] = [];
-  const selections: {
-    oracle: Awaited<ReturnType<typeof readLegacyOracle>>;
-    readers: Awaited<ReturnType<typeof readLegacyReaderIdentities>>;
-  }[] = [];
+  const selections: OracleReaders[] = [];
   await checkSource(declaration, receipt);
   lifetime.own("sealed-inputs", {
     close: async (): Promise<void> => {
@@ -120,6 +118,17 @@ async function observeImport(
       readers: await readLegacyReaderIdentities(copy),
     });
   }
+  const sample = sampleLegacyInbox({ sources: selections, ...declaration.inboxSample });
+  await receipt.save("legacy-inbox-sample.json", sample.evidence);
+  await receipt.record("legacyInboxSampleSelected", {
+    seed: sample.evidence.seed,
+    population: sample.evidence.population,
+    selected: sample.evidence.selected,
+    unsampled: sample.evidence.unsampled,
+    sourceReaders: sample.evidence.sourceReaders,
+    projects: sample.evidence.projects,
+    modes: sample.evidence.modes,
+  });
   const central = lifetime.own(
     "central",
     await TokioCentral.start({
@@ -150,7 +159,7 @@ async function observeImport(
   lifetime.afterDependencies(installation);
   await installation.start();
   await verifyMacImport({ installation, report: imported.report, receipt });
-  for (const selection of selections)
+  for (const selection of sample.sources)
     await compareLegacyInbox({
       ...selection,
       client: installation.mcp,
@@ -170,7 +179,7 @@ async function observeImport(
     receipt,
     deadline: declaration.deadline,
   });
-  for (const selection of selections) {
+  for (const selection of sample.sources) {
     const claimedSelections = selection.oracle.selections.filter(
       (row) => row.legacy_topic === claimed.project,
     );
@@ -185,6 +194,7 @@ async function observeImport(
   }
   await installation.check();
   await checkSource(declaration, receipt);
+  return sample.evidence;
 }
 async function main(): Promise<void> {
   const declaration = await declarationFromArguments();
@@ -193,8 +203,14 @@ async function main(): Promise<void> {
   const lifetime = new RunLifetime(receipt);
   let observation: CaseOutcome = { kind: "open", reason: "Mac import has not been observed" };
   let cleanupFailures: readonly string[] = [];
+  let inboxParity:
+    | { readonly kind: "unobserved" }
+    | { readonly kind: "sampled"; readonly selected: number; readonly unsampled: number } = {
+    kind: "unobserved",
+  };
   try {
-    await observeImport(declaration, receipt, lifetime);
+    const sample = await observeImport(declaration, receipt, lifetime);
+    inboxParity = { kind: "sampled", selected: sample.selected, unsampled: sample.unsampled };
     observation = { kind: "observed" };
   } catch (error: unknown) {
     observation =
@@ -226,6 +242,7 @@ async function main(): Promise<void> {
     dataBoundary: declaration.dataBoundary,
     releaseProofEligible: false,
     observation,
+    inboxParity,
     agentTurnsStarted: 0,
     remoteInstallations: 0,
     cleanupFailures,

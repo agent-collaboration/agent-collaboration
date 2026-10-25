@@ -54,8 +54,12 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
         .post(&poll_root, "poll activity remains pending")
         .await;
     runtime.owner_barrier(&fixture.reader).await;
-    // Preserve the staggered presence schedule: observe publication without
-    // issuing an explicit reconcile that would clear its existing checks.
+    // Writable entry must preserve this live reader's staggered presence checks.
+    runtime
+        .service
+        .start_inherited_project_readers(&fixture.project)
+        .await
+        .unwrap();
     let frozen = tokio::time::timeout(Duration::from_secs(6), async {
         loop {
             let items = frozen_follow(&fixture).await;

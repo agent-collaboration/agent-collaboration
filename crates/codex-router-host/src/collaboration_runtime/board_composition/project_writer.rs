@@ -148,16 +148,19 @@ impl ProjectWriter {
         let lifecycle = self.lifecycle_signals.clone();
         let terminal_stop = self.stop.clone();
         let observing = async move {
-            let mut authority_changed = false;
+            let mut was_writable = false;
             loop {
                 if *stopped.borrow() {
                     return Ok(());
                 }
                 match store.writer_state().await {
-                    Ok(WriterState::Writing { .. }) if authority_changed => {
-                        lifecycle
-                            .send(ProjectLifecycleSignal::WritingConfirmed(project.clone()))
-                            .map_err(io::Error::other)?;
+                    Ok(WriterState::Writing { .. }) => {
+                        if !was_writable {
+                            lifecycle
+                                .send(ProjectLifecycleSignal::WritingConfirmed(project.clone()))
+                                .map_err(io::Error::other)?;
+                        }
+                        was_writable = true;
                     }
                     Ok(WriterState::Superseded { .. }) => {
                         lifecycle
@@ -172,14 +175,12 @@ impl ProjectWriter {
                         error: HolderError::RegistrationRejected { .. },
                     })) => return Ok(()), // The registration watcher owns orphaning.
                     Err(error) => return Err(io::Error::other(error)),
-                    Ok(_) => {}
+                    Ok(_) => was_writable = false,
                 }
-                authority_changed = false;
                 tokio::select! {
                     _ = stopped.changed() => return Ok(()),
                     changed = authority.changed() => {
                         if changed.is_err() { return Ok(()); }
-                        authority_changed = true;
                     },
                     event = received.recv() => match event {
                         Some(Ok(ReplicationEvents::LeaseChanged(WriterState::Superseded { .. }))) => {
@@ -189,9 +190,7 @@ impl ProjectWriter {
                         Some(Ok(ReplicationEvents::Acknowledged { .. })) => {
                             lifecycle.send(ProjectLifecycleSignal::Acknowledged(project.clone())).map_err(io::Error::other)?;
                         },
-                        Some(Ok(ReplicationEvents::LeaseChanged(WriterState::Writing { .. }))) => {
-                            authority_changed = true;
-                        },
+                        Some(Ok(ReplicationEvents::LeaseChanged(WriterState::Writing { .. }))) => {},
                         Some(Ok(event)) => tracing::debug!(?project, ?event, "native project replication event"),
                         Some(Err(error)) => match &error.error {
                             SenderError::Refused { reason: PieceRefusal::IntegrityViolation { table, references }, .. } => {
