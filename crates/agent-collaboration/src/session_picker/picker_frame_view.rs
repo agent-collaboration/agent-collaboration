@@ -198,7 +198,17 @@ pub(super) fn render_picker_view(
         let presentation = if short_filters {
             DialogPresentation::FullScreen
         } else {
-            DialogPresentation::default()
+            match DialogPresentation::default() {
+                DialogPresentation::Sized { width, height } => DialogPresentation::Sized {
+                    width,
+                    height: if viewport_width <= 48 {
+                        codex_router_tui::DialogAxisSize::cells(viewport_height.saturating_sub(2))
+                    } else {
+                        height
+                    },
+                },
+                DialogPresentation::FullScreen => DialogPresentation::FullScreen,
+            }
         };
         let margins = if short_filters {
             DialogMargins::default()

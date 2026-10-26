@@ -11,6 +11,12 @@ fn is_field_label(line: &str, label: &str) -> bool {
         == label
 }
 
+fn rendered_text_without_spacing(body: &str) -> String {
+    body.chars()
+        .filter(|character| !character.is_whitespace() && !matches!(character, '│' | '┃'))
+        .collect()
+}
+
 #[tokio::test]
 async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_frame() {
     assert_source_choice_frame(48, 24).await;
@@ -19,6 +25,16 @@ async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_f
 #[tokio::test]
 async fn source_choice_48x12_keeps_query_reasons_and_selection_in_settled_frame() {
     assert_source_choice_frame(48, 12).await;
+}
+
+#[tokio::test]
+async fn filter_choices_32x24_keep_labels_queries_and_full_reasons() {
+    assert_source_choice_frame(32, 24).await;
+}
+
+#[tokio::test]
+async fn filter_choices_40x24_keep_labels_queries_and_full_reasons() {
+    assert_source_choice_frame(40, 24).await;
 }
 
 async fn assert_source_choice_frame(width: usize, height: usize) {
@@ -89,19 +105,14 @@ async fn assert_source_choice_frame(width: usize, height: usize) {
                         "{frame}"
                     );
                     assert!(folder < search && search < selected, "{frame}");
-                    assert!(
-                        body.contains("Current directory")
-                            && body.contains("Repository / linked worktrees"),
-                        "{frame}"
-                    );
+                    let normalized = rendered_text_without_spacing(&body);
+                    assert!(body.contains("Current directory"), "{frame}");
+                    assert!(normalized.contains("Repository/linkedworktrees"), "{frame}");
+                    if width >= 48 {
+                        assert!(body.contains("Repository / linked worktrees"), "{frame}");
+                    }
                     // Wrapping may split the literal --checkout token; require
                     // every non-space character in order across rendered rows.
-                    let normalized = body
-                        .chars()
-                        .filter(|character| {
-                            !character.is_whitespace() && !matches!(character, '│' | '┃')
-                        })
-                        .collect::<String>();
                     assert!(
                         normalized.contains("CheckoutscopeissupportedbyCLI--checkout--listonly"),
                         "{frame}"
@@ -121,7 +132,9 @@ async fn assert_source_choice_frame(width: usize, height: usize) {
                     send(key(KeyCode::Enter));
                     phase = 9;
                 }
-                9 if body.contains("Search:") && body.contains("Any model provider") => {
+                9 if body.contains("Search:")
+                    && rendered_text_without_spacing(&body).contains("❯Anymodelprovider") =>
+                {
                     send(key(KeyCode::Esc));
                     send(key(KeyCode::Tab));
                     phase = 10;
@@ -164,16 +177,20 @@ async fn assert_source_choice_frame(width: usize, height: usize) {
                         let line = lines[source.unwrap()];
                         assert!(line.find("Source") < line.find("Search:"), "{frame}");
                     }
-                    assert_eq!(
-                        body.matches("External provider inventories").count(),
-                        2,
-                        "{frame}"
-                    );
+                    let normalized = rendered_text_without_spacing(&body);
+                    assert!(normalized.contains("InteractiveExternalproviderinventoriesrequireAllsourcesSubagentsExternalproviderinventoriesrequireAllsources❯Allsources"), "{frame}");
+                    if width >= 48 {
+                        assert_eq!(
+                            body.matches("External provider inventories").count(),
+                            2,
+                            "{frame}"
+                        );
+                        assert_eq!(body.matches("require All sources").count(), 2, "{frame}");
+                    }
                     assert!(
                         body.contains("Interactive") && body.contains("Subagents"),
                         "{frame}"
                     );
-                    assert_eq!(body.matches("require All sources").count(), 2, "{frame}");
                     assert!(
                         body.lines()
                             .any(|line| line.contains("Cancel") && line.contains("Select")),
