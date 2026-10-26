@@ -97,6 +97,27 @@ BELOW the knot (no dependency on it; leaves)
   - A crate below `collaboration-service` with the leaf groups, about 8k lines.
   - A crate above it with `project_admission`, `notification_publisher` and `session`, about 9k lines.
 - **Not mechanical:** the knot. `collaboration_application` calls provider, native, schedule, codex and mail delivery, and they call back into its types. Splitting it means inverting some of those edges behind interfaces. That is design work and an owner decision.
+### Why `collaboration_application` has no DAG or injection today
+
+`CollaborationApplication` holds only a `ServiceIdentity` (`collaboration_application/mod.rs:66-74`). Each operation family is built on demand with concrete collaborators, for example `WakeOperations::new(&service, Some(&store))`. Nothing is injected behind an interface, and Rust allows cycles between modules inside one crate, so nothing forced layering.
+
+The 30k-line cycle comes from only **16 production back-references** from lower modules into `collaboration_application`:
+- **Shared types placed in the application module** (most of them): `NativeSessionFailure*`, `ProviderInventoryFailure*`, `ScheduleOperationFailure`, `CollaborationRejection`, `MessageFailureKind`, `WakeWaitFailure`, `ResultByteBudget` and `INVALID_INVENTORY_PARAMETERS`. Users include:
+  - `codex_session_inventory.rs:3`
+  - `provider_session_inventory.rs:4`
+  - `schedule_preparation.rs:8`
+  - `push_record_delivery.rs:31,273,287`
+  - `board_views/card_projection.rs:122`
+- **One real upward call:** `mail_delivery_runtime/remote_wakes.rs:290` constructs `WakeOperations` (an application operation) inside the mail runtime, plus wake failure helpers at `:399` and `:417`.
+- `native_control_backend.rs:6` references the application only under `#[cfg(test)]`.
+
+**Measured:** with those back-references removed, the module graph is a DAG apart from three small local cycles:
+- delivery ⇄ wake (1.3k lines);
+- schedule ⇄ run ⇄ summary_native_worker (3.8k);
+- mail_delivery_runtime ⇄ mail_push_outcome ⇄ service_identity (4.4k).
+
+Moving the shared failure and budget types to a module (or crate) below the application, and inverting the one remote-wake call behind a small trait that the application implements and injects into the mail runtime, is therefore close to mechanical. It turns the knot into layers that can become separate crates.
+
 - **Expected effect:** modest. About 16k of 50k lines leave the 9-minute crate, maybe 9 → 6 minutes on that link, and the crate above still sits in the chain. The bigger single item is `collaboration-mcp` (Finding 5).
 
 How to reproduce the graph: list `mod` declarations in `crates/collaboration-service/src/lib.rs`, collect `crate::<module>` references per module's non-test files, group by prefix, and compute strongly connected components.
