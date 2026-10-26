@@ -1,0 +1,17 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#initialize-1",
+  "originalSHA256": "334ad2923dbbdd307f8ee54786c73da1c353fb3b1c341fa74e13de6c976f78df",
+  "target": "host-initialization-agent.ts",
+  "arguments": ["1", "<RECEIPT>"],
+  "pidFiles": ["receipt.json"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"fixture-agent\", \"version\": \"1.2.3\"}}}\n",
+    "stderr": "",
+    "receipt": "<OWN_PID>",
+    "files": {
+      "receipt.json": "<OWN_PID>"
+    }
+  }
+}

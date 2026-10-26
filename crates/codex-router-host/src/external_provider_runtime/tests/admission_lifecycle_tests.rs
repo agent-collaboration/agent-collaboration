@@ -17,7 +17,7 @@ async fn missing_executable_fails_before_runtime_admission() {
 #[cfg(unix)]
 #[tokio::test]
 async fn stable_v1_initialize_admits_runtime_and_capabilities() {
-    let runtime = ExternalProviderRuntime::initialize(python_fixture(1, None))
+    let runtime = ExternalProviderRuntime::initialize(initialization_fixture(1, None))
         .await
         .expect("fixture initializes");
 
@@ -279,9 +279,10 @@ async fn configured_router_mcp_is_injected_into_create_and_load_requests() {
 async fn unsupported_protocol_version_is_rejected() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let error = ExternalProviderRuntime::initialize(python_fixture(0, Some(&process_id_path)))
-        .await
-        .expect_err("v0 must not be admitted");
+    let error =
+        ExternalProviderRuntime::initialize(initialization_fixture(0, Some(&process_id_path)))
+            .await
+            .expect_err("v0 must not be admitted");
 
     assert_eq!(
         error.to_string(),
@@ -447,9 +448,10 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
 async fn dropping_admitted_runtime_reaps_owned_process() {
     let fixture_root = tempfile::tempdir().expect("fixture root");
     let process_id_path = fixture_root.path().join("provider.pid");
-    let runtime = ExternalProviderRuntime::initialize(python_fixture(1, Some(&process_id_path)))
-        .await
-        .expect("fixture initializes");
+    let runtime =
+        ExternalProviderRuntime::initialize(initialization_fixture(1, Some(&process_id_path)))
+            .await
+            .expect("fixture initializes");
 
     drop(runtime);
     tokio::time::timeout(Duration::from_secs(2), async {

@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#replay",
+  "originalSHA256": "cb13eab5458bd06e4a7d6b6fcc69cff544c54bc2b4ae9f5e5061b064db4c3ba9",
+  "target": "host-basic-session-agent.ts",
+  "arguments": ["replay"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"load-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"OLD_HISTORY\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"NEW_OUTPUT\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

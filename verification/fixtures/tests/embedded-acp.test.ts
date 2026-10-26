@@ -15,6 +15,7 @@ const baselineSchema = z.object({
   arguments: z.array(z.string()),
   stdin: z.string(),
   initialFiles: z.record(z.string(), z.string()).optional(),
+  pidFiles: z.array(z.string()).optional(),
   expected: z.object({
     exit: z.number().or(z.bigint()).transform(Number),
     stdout: z.union([
@@ -53,6 +54,14 @@ for (const name of readdirSync(directory)
         },
       );
       if (result.error !== undefined) throw result.error;
+      const readRetainedFile = (filename: string): string => {
+        const content = readFileSync(join(root, filename), "utf8");
+        if (fixture.pidFiles?.includes(filename)) {
+          assert.equal(content, String(result.pid));
+          return "<OWN_PID>";
+        }
+        return content;
+      };
       assert.deepEqual(
         {
           exit: result.status,
@@ -64,15 +73,12 @@ for (const name of readdirSync(directory)
                   bytes: Buffer.byteLength(result.stdout),
                 },
           stderr: result.stderr,
-          receipt: existsSync(receipt) ? readFileSync(receipt, "utf8") : null,
+          receipt: existsSync(receipt) ? readRetainedFile("receipt.json") : null,
           ...(fixture.expected.files === undefined
             ? {}
             : {
                 files: Object.fromEntries(
-                  readdirSync(root).map((filename) => [
-                    filename,
-                    readFileSync(join(root, filename), "utf8"),
-                  ]),
+                  readdirSync(root).map((filename) => [filename, readRetainedFile(filename)]),
                 ),
               }),
         },

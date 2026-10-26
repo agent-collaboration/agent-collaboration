@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#successor",
+  "originalSHA256": "59e8d67f364eca5d510b05615a33590c5c50770f1597638b86bc3d8c6b338513",
+  "target": "host-basic-session-agent.ts",
+  "arguments": ["successor"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"successor-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}
