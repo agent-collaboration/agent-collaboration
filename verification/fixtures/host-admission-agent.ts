@@ -4,16 +4,22 @@ import { requireArgument } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
 const scenario = requireArgument(2);
 const agent = new AcpExchange();
-if (scenario === "saturated") writeFileSync(requireArgument(4), String(process.pid));
+const saturated = scenario === "saturated" || scenario === "supervisor-saturated";
+if (saturated) writeFileSync(requireArgument(4), String(process.pid));
 agent.respond(await agent.read(), {
   protocolVersion: 1,
   agentCapabilities: { loadSession: true },
   agentInfo: {
-    name: scenario === "saturated" ? "saturated-load-fixture" : "concurrent-fixture",
+    name:
+      scenario === "supervisor-saturated"
+        ? "saturated-supervisor-fixture"
+        : saturated
+          ? "saturated-load-fixture"
+          : "concurrent-fixture",
     version: "1",
   },
 });
-if (scenario === "saturated") {
+if (saturated) {
   for (;;) {
     const request = await agent.readRequest();
     if (request === undefined) break;
