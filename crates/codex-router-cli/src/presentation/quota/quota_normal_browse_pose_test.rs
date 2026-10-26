@@ -40,6 +40,7 @@ async fn reach_normal_short_group<TRenderedFrames>(
     mut frames: std::pin::Pin<&mut TRenderedFrames>,
     reference_rows: &[(bool, String)],
     reverse_page_count: usize,
+    wheel_steps: usize,
     reference_row_slice: std::ops::Range<usize>,
 ) -> Canvas
 where
@@ -51,7 +52,7 @@ where
     let bottom = super::super::quota_frame_observation::next_matching_frame(
         frames.as_mut(),
         Duration::from_secs(2),
-        |canvas| normalized_body(canvas).as_slice() == &reference_rows[34..38],
+        |canvas| normalized_body(canvas).as_slice() == &reference_rows[32..36],
     )
     .await
     .unwrap();
@@ -63,13 +64,35 @@ where
     for _ in 0..reverse_page_count {
         sender.send(provider_filter_key(KeyCode::PageUp)).unwrap();
     }
-    super::super::quota_frame_observation::next_matching_frame(
+    let mut canvas = super::super::quota_frame_observation::next_matching_frame(
         frames.as_mut(),
         Duration::from_secs(2),
-        |canvas| normalized_body(canvas).as_slice() == &reference_rows[reference_row_slice.clone()],
+        |canvas| normalized_body(canvas).as_slice() == &reference_rows[16..20],
     )
     .await
-    .unwrap()
+    .unwrap();
+    for step in 1..=wheel_steps {
+        sender
+            .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                MouseEventKind::ScrollUp,
+                15,
+                6,
+            )))
+            .unwrap();
+        let start = 16 - step * 3;
+        canvas = super::super::quota_frame_observation::next_matching_frame(
+            frames.as_mut(),
+            Duration::from_secs(2),
+            |canvas| normalized_body(canvas).as_slice() == &reference_rows[start..start + 4],
+        )
+        .await
+        .unwrap();
+    }
+    assert_eq!(
+        normalized_body(&canvas).as_slice(),
+        &reference_rows[reference_row_slice]
+    );
+    canvas
 }
 
 #[tokio::test]
@@ -135,19 +158,19 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
     .unwrap()
     .unwrap();
     let reference_rows = normalized_body(&reference_canvas);
-    assert_eq!(reference_rows.len(), 38, "independent natural row count");
+    assert_eq!(
+        reference_rows.len(),
+        36,
+        "independent natural row count: {reference_rows:?}"
+    );
     assert_eq!(reference_rows[10], (true, "Weekly pace".to_owned()));
     assert_eq!(reference_rows[12], (true, "burn unavailable".to_owned()));
-    assert_eq!(
-        reference_rows[13],
-        (true, "reset pace unavailable".to_owned())
-    );
-    assert_eq!(reference_rows[14], (true, "Extra".to_owned()));
-    assert_eq!(reference_rows[16], (true, "62.5k credits".to_owned()));
-    assert_eq!(reference_rows[17], (true, "2 resets".to_owned()));
-    assert_eq!(reference_rows[34], (false, "Extra".to_owned()));
-    assert_eq!(reference_rows[36], (false, "Credits unknown".to_owned()));
-    assert_eq!(reference_rows[37], (false, "2 resets".to_owned()));
+    assert_eq!(reference_rows[13], (true, "Extra".to_owned()));
+    assert_eq!(reference_rows[15], (true, "62.5k credits".to_owned()));
+    assert_eq!(reference_rows[16], (true, "2 resets".to_owned()));
+    assert_eq!(reference_rows[32], (false, "Extra".to_owned()));
+    assert_eq!(reference_rows[34], (false, "Credits unknown".to_owned()));
+    assert_eq!(reference_rows[35], (false, "2 resets".to_owned()));
 
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
@@ -168,19 +191,16 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
             initial.contains("東京") && initial.contains("Alpha"),
             "{initial}"
         );
-        for (reverse_page_count, reference_row_slice, literals) in [
-            (5, 14..18, ["Extra", "62.5k credits", "2 resets"]),
-            (
-                6,
-                10..14,
-                ["Weekly pace", "burn unavailable", "reset pace unavailable"],
-            ),
+        for (reverse_page_count, wheel_steps, reference_row_slice, literals) in [
+            (4, 1, 13..17, &["Extra", "62.5k credits", "2 resets"][..]),
+            (4, 2, 10..14, &["Weekly pace", "burn unavailable"][..]),
         ] {
             let pose_canvas = reach_normal_short_group(
                 &sender,
                 frames.as_mut(),
                 &reference_rows,
                 reverse_page_count,
+                wheel_steps,
                 reference_row_slice.clone(),
             )
             .await;
@@ -191,7 +211,7 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
             assert_eq!(pose_rows.len(), 4, "four body rows above the footer");
             for literal in literals {
                 assert!(
-                    pose_rows.iter().any(|(_, text)| text == literal),
+                    pose_rows.iter().any(|(_, text)| text == *literal),
                     "literal group fact {literal} stays in body: {pose}"
                 );
             }
@@ -245,6 +265,7 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
                 frames.as_mut(),
                 &reference_rows,
                 reverse_page_count,
+                wheel_steps,
                 reference_row_slice.clone(),
             )
             .await;
@@ -272,6 +293,7 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
                 frames.as_mut(),
                 &reference_rows,
                 reverse_page_count,
+                wheel_steps,
                 reference_row_slice.clone(),
             )
             .await;

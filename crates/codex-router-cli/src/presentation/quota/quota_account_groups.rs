@@ -116,6 +116,26 @@ pub(super) fn render_interactive_account(
     focused: bool,
 ) -> AnyElement<'static> {
     let widths = group_widths(width.saturating_sub(2));
+    let pace = &row.reset_pace;
+    let pace_label = pace
+        .impact_label
+        .clone()
+        .unwrap_or_else(|| pace.semantic_label.to_owned());
+    let pace_detail =
+        if pace.state == super::quota_status_view_model::ResetPaceState::Unavailable {
+            let unavailable = super::quota_status_view_model::ResetPaceViewModel::default();
+            pace.unavailable_reason
+                .as_ref()
+                .filter(|reason| Some(reason.as_str()) != unavailable.unavailable_reason.as_deref())
+                .cloned()
+                .or_else(|| {
+                    (pace.multiple_label != unavailable.multiple_label)
+                        .then(|| pace.multiple_label.clone())
+                })
+        } else {
+            Some(pace.multiple_label.clone())
+        }
+        .filter(|detail| detail != &pace_label);
     let groups=vec![
         ("Account",account_group(row,focused)),
         ("Quota left · reset in",element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
@@ -123,8 +143,8 @@ pub(super) fn render_interactive_account(
             #(render_window(&row.display_short,"5h",UiTextRole::ShortWindow))
         }).into_any()),
         ("Weekly pace",element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            Text(content:row.reset_pace.impact_label.clone().unwrap_or_else(||row.reset_pace.semantic_label.to_owned()),color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)
-            Text(content:if row.reset_pace.state==super::quota_status_view_model::ResetPaceState::Unavailable {row.reset_pace.unavailable_reason.clone().unwrap_or_else(||row.reset_pace.multiple_label.clone())}else {row.reset_pace.multiple_label.clone()},color:Color::Grey,wrap:TextWrap::Wrap)
+            Text(content:pace_label,color:reset_pace_color(pace.state),wrap:TextWrap::Wrap)
+            #(pace_detail.map(|detail|element!(Text(content:detail,color:Color::Grey,wrap:TextWrap::Wrap))))
         }).into_any()),
         ("Extra",extra_group(row)),
     ];

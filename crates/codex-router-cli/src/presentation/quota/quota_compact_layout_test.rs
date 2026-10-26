@@ -1,6 +1,52 @@
 //! Mock-size dialog geometry, section spacing and complete command wrapping.
 use super::*;
 
+#[test]
+fn unavailable_pace_does_not_repeat_generic_copy_but_keeps_a_specific_reason() {
+    let mut model = quota_two_account_view_model();
+    let unavailable = super::super::super::quota_status_view_model::ResetPaceViewModel::default();
+    for width in [120, 48] {
+        for reason in [
+            unavailable.unavailable_reason.as_deref(),
+            None,
+            Some("collecting quota samples"),
+        ] {
+            model.rows[0].reset_pace.unavailable_reason = reason.map(str::to_owned);
+            let frame = super::super::super::quota_account_groups::render_interactive_account(
+                &model.rows[0],
+                width,
+                false,
+            )
+            .render(None)
+            .to_string();
+            assert_eq!(frame.matches("burn unavailable").count(), 1, "{frame}");
+            assert!(
+                !frame.contains(unavailable.unavailable_reason.as_deref().unwrap()),
+                "Generic repetition adds no information: {frame}"
+            );
+            assert_eq!(
+                frame.contains("collecting quota samples"),
+                reason == Some("collecting quota samples"),
+                "Specific reasons remain visible: {frame}"
+            );
+        }
+    }
+    model.rows[0].reset_pace.state = ResetPaceState::Healthy;
+    model.rows[0].reset_pace.impact_label = Some("runs out 3h".to_owned());
+    model.rows[0].reset_pace.multiple_label = "1.2×".to_owned();
+    let frame = super::super::super::quota_account_groups::render_interactive_account(
+        &model.rows[0],
+        120,
+        false,
+    )
+    .render(None)
+    .to_string();
+    assert!(
+        frame.contains("runs out 3h") && frame.contains("1.2×"),
+        "Known pace impact and measurement stay visible: {frame}"
+    );
+}
+
 #[tokio::test]
 async fn floor_editor_fits_content_and_separates_sections_at_mock_sizes() {
     for (width, height) in [(132, 34), (100, 34), (48, 32)] {

@@ -5,8 +5,8 @@
 │ │   Account           Quota left · reset in         Weekly pace        Extra               │  │ Selected account                                           │ │
 │ │   ───────────────── ───────────────────────────── ────────────────── ──────────────────  │  │ acct00                                                     │ │
 │ │ ❯ acct00            █████░░ 83% · week · 7d 0h    burn unavailable   Credits unknown   ┃ │  │ Status      available                                      │ │
-│ │   ◎ OpenAI · 0      ██████░ 99% · 5h · 5h 0m      reset pace         2 resets          │ │  │ Reason      account 00 detail                              │ │
-│ │   clients                                         unavailable                          │ │  │ Quota windows                                              │ │
+│ │   ◎ OpenAI · 0      ██████░ 99% · 5h · 5h 0m                         2 resets          │ │  │ Reason      account 00 detail                              │ │
+│ │   clients                                                                              │ │  │ Quota windows                                              │ │
 │ └──────────────────────────────────────────────────────────────────────────────────────────┘  └────────────────────────────────────────────────────────────┘ │
 │ F4 Details  F3 Filters  F5 Pool  F1 Help  Ctrl+R Options                                                                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
