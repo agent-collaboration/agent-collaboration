@@ -170,3 +170,16 @@ Raw outputs, local only (not committed): `tmp/compile-time/*.txt` in the analysi
 
 - Release run: 40395924377. Its timings artifact is `release-timing-inventory`, with three `cargo-timing-*.html` files.
 - Analysis worktree: `codex-router.analysis-compile-time` (branch `analysis/compile-time`).
+
+## Standards gap and the proposed rule
+
+Neither the Rust standard (`domain-rust`) nor `principle-separate-the-concerns` says anything about dependency direction, module cycles or where shared types live, so nothing prevented this knot. Proposed rule, with its home pending an owner decision (sunstack `domain-rust` and the separation principle, this repo's `AGENTS.md`, or both):
+
+> **Dependencies point one way.**
+> - Modules and crates form a DAG: a lower layer never imports from a higher one.
+> - Shared types (failures, budgets, ids) live in the lowest layer that uses them, never in the application or facade module.
+> - When a lower part must call upward, it defines the small trait it needs, and the higher layer implements it and injects it at composition.
+> - Prefer a crate boundary for a real layer, because the compiler then enforces the DAG.
+> - A generic entry point that other crates call gets a non-generic wrapper in the crate that owns it, so its code isn't generated again in every crate that calls it.
+
+Enforcement comes from structure first: crates cannot form cycles. A module-cycle tool such as `cargo-modules` is a candidate for in-crate checks; verify its behaviour before adopting it.
