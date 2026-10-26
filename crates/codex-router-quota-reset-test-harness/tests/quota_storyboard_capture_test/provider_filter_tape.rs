@@ -415,7 +415,9 @@ pub(super) fn build_compact_filter_tape(
                 &mut tape,
                 &mut checkpoints,
                 "compact-sessions-model-provider-choice",
-                "Session filters.*Model provider[:]?.*Any model provider.*Cancel.*Select",
+                &format!(
+                    r"Session filters.*Model provider[:]?.*Search:.*❯ Any model{COLLAPSED_FILTER_VALUE_GAP}provider\b.*Cancel.*Select"
+                ),
             );
             tape.push_str("Escape\nTab\nEnter\n");
             checkpoint(

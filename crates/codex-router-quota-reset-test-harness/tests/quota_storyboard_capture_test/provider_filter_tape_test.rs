@@ -2,6 +2,54 @@
 use super::*;
 
 #[test]
+fn model_provider_wait_accepts_wrapped_selection_but_rejects_wrong_content() -> TestResult<()> {
+    let (tape, _) = build_compact_filter_tape(CapturedTuiSurface::Sessions, 32, 24);
+    let wait = tape
+        .lines()
+        .find(|line| line.contains("Session filters.*Model provider[:]?"))
+        .ok_or("model-provider wait missing")?;
+    let pattern = wait
+        .strip_prefix("Wait+Screen /")
+        .and_then(|line| line.strip_suffix('/'))
+        .ok_or("model-provider pattern missing")?;
+    let pattern = super::super::vhs_wait_pattern_oracle::wait_pattern(pattern)?;
+    // Literal rows from the failed native 32x24 capture, without VHS padding.
+    let wrapped = "│ │ Session filters     Help │ │\n\
+│ │ Model provider         ┃ │ │\n\
+│ │   Search: ▏            ┃ │ │\n\
+│ │     ❯ Any model        ┃ │ │\n\
+│ │       provider         ┃ │ │\n\
+│ │       Current model    ┃ │ │\n\
+│ │       provider         ┃ │ │\n\
+│ │ Cancel  Select           │ │";
+    let inline = "Session filters Model provider Search: ▏ ❯ Any model provider Cancel Select";
+    let positives = [
+        inline.to_owned(),
+        wrapped.to_owned(),
+        super::super::vhs_wait_pattern_oracle::right_padded_rows(wrapped, 2400),
+        format!(
+            "Session filters Model provider Search: ▏ ❯ Any model{}provider Cancel Select",
+            " ".repeat(4096),
+        ),
+    ];
+    let negatives = [
+        inline.replace("Model provider", "Account provider"),
+        inline.replace("Any model provider", "Any other provider"),
+        inline.replace("❯ ", ""),
+        inline.replace("Search:", "Other field:"),
+        inline.replace("Any model provider", "Any model Other field provider"),
+        inline.replace("Any model provider", "Any modelprovider"),
+        inline.replace("Any model provider", "Any model providerextra"),
+        inline.replace("Cancel Select", "Cancel"),
+        format!(
+            "Session filters Model provider Search: ▏ ❯ Any model{}provider Cancel Select",
+            " ".repeat(4097),
+        ),
+    ];
+    super::super::vhs_wait_pattern_oracle::ensure_wait_shapes(&pattern, &positives, &negatives)
+}
+
+#[test]
 fn compact_quota_help_waits_for_the_measured_control_pose() {
     // Measured independently by the mounted Quota filter Help witness.
     for (columns, rows, down_count) in [(48, 24, 3), (48, 12, 8), (40, 24, 6), (32, 24, 5)] {
