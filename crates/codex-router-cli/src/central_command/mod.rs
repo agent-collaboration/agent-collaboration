@@ -1,8 +1,10 @@
 mod arguments;
 mod configuration;
+#[cfg(test)]
+mod credential_lifetimes_tests;
 pub(crate) use arguments::CentralCommand;
 use arguments::{CredentialKind, MintArguments};
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{Duration as ChronoDuration, SubsecRound, Utc};
 use codex_router_secret_store::{
     SecretStore,
     central_credentials::{CentralCredential, CentralSecretKind},
@@ -99,7 +101,7 @@ fn mint(arguments: MintArguments) -> Result<String, CentralCommandError> {
         crate::secret_store_factory::open_cli_secret_store(&arguments.root.join("secrets"))?;
     let key = store.read_secret(&CentralSecretKind::SigningKey.secret_key()?)?;
     let issuer = configuration::decode_issuer(&key, &config)?;
-    let now = Utc::now();
+    let now = Utc::now().trunc_subsecs(0);
     let owner_expiry = now + ChronoDuration::minutes(15);
     let owner_assertion = issuer.mint(
         &AccessCaller::Owner {
