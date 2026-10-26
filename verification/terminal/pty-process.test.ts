@@ -171,7 +171,7 @@ test("output beyond the bound fails every observation and ends the child", async
   assert.deepEqual(await child.waitForOutput("EARLY", 0, failureDeadline), { kind: "overflowed" });
 });
 
-test("stop ends only its own child, escalating when SIGTERM is ignored", async (t) => {
+test("stop escalates to SIGKILL when its child ignores SIGTERM", async (t) => {
   const child = startNodeChild(
     t,
     `

@@ -56,12 +56,19 @@ interface CodexRun {
   readonly passed: boolean;
 }
 
-async function runCodex(
-  executable: string,
-  evidence: string,
-  environment: Readonly<Record<string, string>>,
-  argument: "--version" | "--help",
-): Promise<CodexRun> {
+interface CodexRunRequest {
+  readonly executable: string;
+  readonly evidence: string;
+  readonly environment: Readonly<Record<string, string>>;
+  readonly argument: "--version" | "--help";
+}
+
+async function runCodex({
+  executable,
+  evidence,
+  environment,
+  argument,
+}: CodexRunRequest): Promise<CodexRun> {
   const child = PtyProcess.start({
     executable,
     arguments: [argument],
@@ -141,8 +148,8 @@ async function main(): Promise<number> {
   ];
   const settingsBefore = await Promise.all(settingsFiles.map(fingerprintIfPresent));
   const runs = [
-    await runCodex(executable, options.evidence, environment, "--version"),
-    await runCodex(executable, options.evidence, environment, "--help"),
+    await runCodex({ executable, evidence: options.evidence, environment, argument: "--version" }),
+    await runCodex({ executable, evidence: options.evidence, environment, argument: "--help" }),
   ];
   const settingsAfter = await Promise.all(settingsFiles.map(fingerprintIfPresent));
   const settingsUnchanged = settingsFiles.every(
