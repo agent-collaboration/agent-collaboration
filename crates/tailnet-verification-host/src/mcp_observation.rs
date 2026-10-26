@@ -34,7 +34,8 @@ impl LoopbackEndpoint {
         if parsed.scheme() != "http"
             || !loopback
             || port.is_none_or(|value| value == 0)
-            || parsed.path() != "/mcp" || !literal_mcp_path(&url)
+            || parsed.path() != "/mcp"
+            || !literal_mcp_path(&url)
             || parsed.query().is_some()
             || parsed.fragment().is_some()
             || !parsed.username().is_empty()

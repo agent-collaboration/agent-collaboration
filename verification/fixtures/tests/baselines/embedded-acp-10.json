@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_event_overflow.rs#CLOSED_AUTH_SINK_FIXTURE",
+  "originalSHA256": "ca255e4ee07c38dc548d6f28b4431a13ee8d7167e217d9a0fe5c7e3e38fd1aa2",
+  "target": "provider-closed-auth-agent.ts",
+  "arguments": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"closed-auth-sink-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"_auth/status_update\", \"params\": {\"authStatus\": {\"kind\": \"none\", \"label\": \"Signed out\"}}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

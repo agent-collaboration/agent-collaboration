@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_idle_updates.rs#IDLE_UPDATE_FIXTURE",
+  "originalSHA256": "482b171f878599c489702b169611f8bffe3e39ff30bc75c5404131f13fe14999",
+  "target": "provider-idle-updates-agent.ts",
+  "arguments": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"_session/steering\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"idle-update-fixture\", \"version\": \"1\"}, \"_meta\": {\"steering\": {\"supported\": true}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\", \"modes\": {\"currentModeId\": \"auto\", \"availableModes\": [{\"id\": \"auto\", \"name\": \"Auto\"}, {\"id\": \"ask\", \"name\": \"Ask\"}]}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"current_mode_update\", \"currentModeId\": \"ask\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"config_option_update\", \"configOptions\": [{\"id\": \"model\", \"name\": \"Model\", \"category\": \"model\", \"type\": \"select\", \"currentValue\": \"b\", \"options\": [{\"value\": \"a\", \"name\": \"A\"}, {\"value\": \"b\", \"name\": \"B\"}]}]}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"future_idle_kind\", \"content\": {\"type\": \"text\", \"text\": \"Future detail\"}}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call\", \"toolCallId\": \"late-tool\", \"title\": \"Run check\", \"kind\": \"execute\", \"status\": \"pending\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call_update\", \"toolCallId\": \"late-tool\", \"title\": \"Check passed\", \"status\": \"completed\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"outcome\": \"promptRequired\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/cursor_plan_approval.rs#CREATE_PLAN_FIXTURE",
+  "originalSHA256": "5e725cad5f2f21ee199e6099597c39a161e2ccaa9f97c6cd5e136a16ed875745",
+  "target": "cursor-plan-agent.ts",
+  "arguments": ["<RECEIPT>"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"clientCapabilities\": {\"elicitation\": {\"form\": {}}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": \"create-plan\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"plan-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call\", \"toolCallId\": \"plan-tool\", \"title\": \"Create plan\", \"kind\": \"other\", \"status\": \"pending\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": \"create-plan\", \"method\": \"cursor/create_plan\", \"params\": {\"toolCallId\": \"plan-tool\", \"name\": \"Migration plan\", \"overview\": \"Move clients safely\", \"plan\": \"# Steps\\n\\nShip in slices.\", \"todos\": [{\"id\": \"one\", \"content\": \"Build client\", \"status\": \"pending\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": "{\"jsonrpc\": \"2.0\", \"id\": \"create-plan\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}"
+  }
+}
