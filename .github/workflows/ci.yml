@@ -54,11 +54,11 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
-          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
       - name: Verify and install pinned Rust tools
-        run: |
-          scripts/tooling/bootstrap-tools.sh ci
-          echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/install-ci-tools
+        with:
+          cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
       - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
       - name: Test tool bootstrap
@@ -146,7 +146,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
-          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-sqlx-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-sqlx-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
       - name: Enforce Rust file size limit
         run: python3 scripts/tooling/check-rust-file-size.py
       - name: Test Rust file size checker
@@ -225,11 +225,11 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
-          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
       - name: Verify and install pinned Rust tools
-        run: |
-          scripts/tooling/bootstrap-tools.sh ci
-          echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
+        uses: ./.github/actions/install-ci-tools
+        with:
+          cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
       # Compile every test binary once, then run the suites in parallel from
       # the built artifacts so they don't contend for cargo's build lock. Each
       # build uses exactly its run step's package selection and features, so
@@ -287,12 +287,13 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
-          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
-      - name: Prepare owned runtime roots and pinned test runner
-        run: |
-          mkdir -m 700 "$CODEX_ROUTER_E2E_PARENT"
-          scripts/tooling/bootstrap-tools.sh ci
-          echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
+      - name: Verify and install pinned Rust tools
+        uses: ./.github/actions/install-ci-tools
+        with:
+          cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
+      - name: Prepare owned runtime roots
+        run: mkdir -m 700 "$CODEX_ROUTER_E2E_PARENT"
       - name: Build the real local entry points
         run: |
           cargo build --locked -p agent-collaboration --all-features --bins
@@ -365,9 +366,19 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           version: 10
+      - name: Restore pinned Worker build tool
+        id: worker_tools
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/central-worker-tools
+          key: ${{ runner.os }}-${{ runner.arch }}-worker-build-0.8.7-${{ env.RUST_TOOLCHAIN }}
+      # worker-build publishes no prebuilt release asset at this version.
+      - name: Compile pinned Worker build tool
+        if: steps.worker_tools.outputs.cache-hit != 'true'
+        run: cargo install worker-build --version 0.8.7 --locked --root "$RUNNER_TEMP/central-worker-tools"
       - name: Install pinned local Worker tools
         run: |
-          cargo install worker-build --version 0.8.7 --locked --root "$RUNNER_TEMP/central-worker-tools"
+          test "$("$RUNNER_TEMP/central-worker-tools/bin/worker-build" --version)" = '0.8.7'
           mkdir -p "$RUNNER_TEMP/central-node-tools"
           pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact miniflare@5.20261012.0-beta
           echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
@@ -411,6 +422,12 @@ jobs:
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           python3 scripts/tooling/check-central-worker-bundle.py production
+      - name: Save pinned Worker build tool
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/central-worker-tools
+          key: ${{ steps.worker_tools.outputs.cache-primary-key }}
 
   validated:
     name: Validate Rust workspace

@@ -1,0 +1,39 @@
+name: Install pinned prebuilt CI tools
+description: Restore or download the exact CI tools declared by the repository
+
+inputs:
+  cache-hit:
+    description: Whether the pinned tool directory was restored exactly
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - name: Read pinned CI tool versions
+      if: inputs.cache-hit != 'true'
+      id: versions
+      shell: bash
+      run: |
+        tools="$(awk '$4 == "ci" {printf "%s@%s,", $1, $2}' scripts/tooling/tool-versions.tsv)"
+        test -n "$tools"
+        printf 'tools=%s\n' "${tools%,}" >> "$GITHUB_OUTPUT"
+    - name: Download pinned prebuilt tools
+      if: inputs.cache-hit != 'true'
+      uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+      with:
+        tool: ${{ steps.versions.outputs.tools }}
+        fallback: none
+    - name: Retain binaries in the tool cache
+      if: inputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        mkdir -p tmp/rust-tools/bin
+        while read -r crate version binary role extra; do
+          [[ "$role" == ci ]] || continue
+          install -m 0755 "$(command -v "$binary")" "tmp/rust-tools/bin/$binary"
+        done < scripts/tooling/tool-versions.tsv
+    - name: Verify exact versions and expose tools
+      shell: bash
+      run: |
+        scripts/tooling/bootstrap-tools.sh ci --check
+        echo "$GITHUB_WORKSPACE/tmp/rust-tools/bin" >> "$GITHUB_PATH"
