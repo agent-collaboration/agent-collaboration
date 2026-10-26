@@ -21,6 +21,7 @@ import { sha256 } from "../runtime-qualification.ts";
 
 export async function harmlessChild(
   graceful: boolean = false,
+  holdUntilSignalled: boolean = false,
 ): Promise<{ readonly child: ChildProcess; readonly identity: IdentityRecord }> {
   lookupProcessIdentity(process.pid);
   const child = spawn(
@@ -28,6 +29,7 @@ export async function harmlessChild(
     [
       new URL("../../fixtures/harmless-owned-child.ts", import.meta.url).pathname,
       ...(graceful ? ["--graceful"] : []),
+      ...(holdUntilSignalled ? ["--hold-until-signalled"] : []),
     ],
     { stdio: ["pipe", "pipe", "pipe"], detached: true },
   );
@@ -150,7 +152,7 @@ export class LifecycleFixture {
         JSON.stringify({ serviceVersion: "fixture" }),
       );
     }
-    const owned = await harmlessChild(true);
+    const owned = await harmlessChild(true, this.scenario === "interrupt");
     this.children.push(owned);
     return owned.child;
   };
@@ -158,6 +160,12 @@ export class LifecycleFixture {
   private save = (path: string, value: unknown): void => {
     saveRecord(path, value);
     const name = basename(path);
+    if (name === "lifecycle-settlement.json" && this.scenario === "interrupt")
+      saveRecord(join(this.plan.evidence, "signal-owner-settlement.json"), {
+        childrenReapedBeforeFixtureCleanup: this.children.every(
+          ({ child }) => child.exitCode !== null || child.signalCode !== null,
+        ),
+      });
     if (name === "router-ready.json" && this.scenario === "profile-before-host")
       writeFileSync(this.plan.profile, this.ownerProfile);
     if (name === "router-ready.json" && this.scenario === "config-before-host")
@@ -173,6 +181,11 @@ export class LifecycleFixture {
 
   private hostReady(): void {
     this.ready = true;
+    if (this.scenario === "interrupt")
+      saveRecord(join(this.plan.evidence, "signal-ready.json"), {
+        identities: this.children.map(({ identity }) => identity),
+        profileBefore: readFileSync(this.plan.profile).toString("base64"),
+      });
     if (this.scenario === "profile-after-host") writeFileSync(this.plan.profile, this.ownerProfile);
     if (this.scenario === "config-after-host")
       writeFileSync(this.plan.codex_config, this.ownerConfig);

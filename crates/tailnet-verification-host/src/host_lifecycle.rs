@@ -208,8 +208,7 @@ fn run_projected(
     before: &Value,
     profile: &Path,
 ) -> DriverResult<()> {
-    let projection = ProfileProjection::acquire(profile, &plan.profile_sha256, plan.port)?;
-    let body = (|| {
+    with_projected_profile(profile, &plan.profile_sha256, plan.port, || {
         let mut child = spawn_host(plan, binary, native)?;
         let image = wait_for_host_image(&mut child, binary);
         with_owned_child(&mut child, &plan.evidence(), |child, known| {
@@ -240,10 +239,24 @@ fn run_projected(
             ));
         }
         Ok(())
-    })();
-    projection.restore()?;
-    body
+    })
 }
+
+fn with_projected_profile(
+    profile: &Path,
+    expected_hash: &str,
+    port: u16,
+    body: impl FnOnce() -> DriverResult<()>,
+) -> DriverResult<()> {
+    let projection = ProfileProjection::acquire(profile, expected_hash, port)?;
+    let result = body();
+    projection.restore()?;
+    result
+}
+
+#[cfg(test)]
+#[path = "host_lifecycle_interrupt_tests.rs"]
+mod interrupt_tests;
 
 fn final_checks(
     plan: &HostPlan,

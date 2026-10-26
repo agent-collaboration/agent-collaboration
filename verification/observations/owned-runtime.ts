@@ -87,6 +87,13 @@ export const runtimeOperations = {
 };
 export type RuntimeOperations = typeof runtimeOperations;
 
+class KeyboardInterrupt extends Error {
+  constructor() {
+    super();
+    this.name = "KeyboardInterrupt";
+  }
+}
+
 interface PreparedRuntime {
   readonly binaries: ReadonlyMap<string, QualifiedBinary>;
   readonly binary: QualifiedBinary;
@@ -153,6 +160,7 @@ interface RuntimeContext {
   readonly plan: RuntimePlan;
   readonly prepared: PreparedRuntime;
   readonly operations: RuntimeOperations;
+  readonly requireContinuing: () => void;
 }
 
 async function awaitRouterReadiness(
@@ -180,6 +188,7 @@ async function awaitRouterReadiness(
     operations.wallNow() < deadlineEpoch(plan) &&
     !existsSync(join(plan.evidence, "stop.json"))
   ) {
+    input.requireContinuing();
     try {
       await operations.health(plan);
       ready = true;
@@ -241,6 +250,7 @@ async function awaitHostReadiness(input: HostContext): Promise<void> {
     operations.monotonicNow() < until &&
     operations.wallNow() < deadlineEpoch(plan)
   ) {
+    input.requireContinuing();
     observeChild(host, known, operations.process);
     const path = join(plan.router_root, "agent-communication/service.json");
     if (existsSync(path)) {
@@ -268,6 +278,7 @@ async function awaitHostReadiness(input: HostContext): Promise<void> {
 async function awaitHostDirective(input: HostContext): Promise<"stop" | "reopen"> {
   const { plan, operations, phase, host, known } = input;
   for (;;) {
+    input.requireContinuing();
     if (operations.wallNow() >= deadlineEpoch(plan))
       throw new AllocationTimeout(`Host ${phase} allocation deadline expired`);
     if (processExit(host) !== null)
@@ -320,6 +331,7 @@ async function runHostPhase(
     const command = hostCommand(plan, prepared);
     if (operations.wallNow() >= deadlineEpoch(plan))
       throw new AllocationTimeout("allocation deadline expired at launch");
+    input.requireContinuing();
     host = await operations.launch({
       command,
       environment,
@@ -372,14 +384,36 @@ export async function runLifecycle(
   plan: RuntimePlan,
   overrides: Partial<RuntimeOperations> = {},
 ): Promise<void> {
+  let interrupted = false;
+  const onInterrupt = (): void => {
+    interrupted = true;
+  };
+  const requireContinuing = (): void => {
+    if (interrupted) throw new KeyboardInterrupt();
+  };
+  process.on("SIGINT", onInterrupt);
+  try {
+    await runOwnedLifecycle(plan, overrides, requireContinuing);
+  } finally {
+    // Keep handling repeated Ctrl-C until both owned shutdowns have settled.
+    process.off("SIGINT", onInterrupt);
+  }
+}
+
+async function runOwnedLifecycle(
+  plan: RuntimePlan,
+  overrides: Partial<RuntimeOperations>,
+  requireContinuing: () => void,
+): Promise<void> {
   const operations = { ...runtimeOperations, ...overrides };
   const prepared = await prepareRuntime(plan, operations);
-  const context = { plan, prepared, operations };
+  const context = { plan, prepared, operations, requireContinuing };
   let router: ChildProcess | undefined;
   const known = new Map<number, ProcessIdentity>();
   const settlements: JsonObject[] = [];
   let failure: { class: string; message: string } | null = null;
   try {
+    requireContinuing();
     router = await operations.launch({
       command: [
         prepared.binary.path,
@@ -398,6 +432,7 @@ export async function runLifecycle(
     });
     await awaitRouterReadiness({ ...context, child: router, known });
     for (const phase of ["A", "B"] satisfies readonly ("A" | "B")[]) {
+      requireContinuing();
       if (operations.wallNow() >= deadlineEpoch(plan))
         throw new AllocationTimeout(`Host ${phase} allocation deadline expired before launch`);
       if (existsSync(join(plan.evidence, "stop.json"))) break;
@@ -450,5 +485,5 @@ export async function main(): Promise<void> {
 if (import.meta.main)
   main().catch((error: unknown): void => {
     console.error(error);
-    process.exitCode = 1;
+    process.exitCode = error instanceof KeyboardInterrupt ? 130 : 1;
   });

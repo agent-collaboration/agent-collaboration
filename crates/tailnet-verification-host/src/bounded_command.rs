@@ -14,6 +14,7 @@ static INTERRUPTED: OnceLock<Arc<AtomicBool>> = OnceLock::new();
 pub fn install_termination_handler() -> DriverResult<()> {
     let interrupted = Arc::new(AtomicBool::new(false));
     signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&interrupted))?;
+    signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&interrupted))?;
     INTERRUPTED
         .set(interrupted)
         .map_err(|_| DriverError::Runtime("termination handler already installed"))?;

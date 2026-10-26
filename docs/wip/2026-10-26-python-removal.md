@@ -1,8 +1,8 @@
 # Python removal: disposition and proof
 
-Base: `be7e61e8bca32ebac172eb743e8064d2c7d6ffe7`. Inventory:61 tracked files,43 ported,7 deleted,11 unchanged for PR #161. Embedded Rust/shell programs and active instructions are included. PR #165 is merged and the workflow cutover is implemented on top of main; final-head CI and release dry-run results are reported in PR #169. This report does not claim merge readiness.
+Base: `be7e61e8bca32ebac172eb743e8064d2c7d6ffe7`. Inventory: 61 tracked files; 37 originals replaced, 7 deleted, 17 unchanged for PR #161. Embedded Rust/shell programs and active instructions are included. PR #165 is merged and the workflow cutover is implemented on top of main; final-head CI and release dry-run results are reported in PR #169. This report does not claim merge readiness.
 
-This is the direct unpaired Worker assignment. The Lead verifies the diff/logs and arranges independent review before merge. No production Router, tag, actual Homebrew/tap operation, provider model or deployment was touched. The workspace inherits main’s0.1.103; the next version remains the Lead’s merge-time assignment.
+This is the direct unpaired Worker assignment. The Lead verifies the diff/logs and arranges independent review before merge. The complete 17-file TUI import closure stays unchanged by the Lead’s explicit decision; six support originals temporarily coexist with their TypeScript owners until #161 removes the whole closure. No production Router, tag, actual Homebrew/tap operation, provider model or deployment was touched. The workspace inherits main’s0.1.103; the next version remains the Lead’s merge-time assignment.
 
 ## Per-file dispositions
 
@@ -49,18 +49,18 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/verification/board_journey_runtime.py` | Deleted | D |
 | `scripts/verification/board_journey_target.py` | Deleted | D |
 | `scripts/verification/board_journey_values.py` | Deleted | D |
-| `scripts/verification/config_sections.py` | Ported | `verification/observations/config-sections.ts` (O) |
+| `scripts/verification/config_sections.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/config-sections.ts` remains in use |
 | `scripts/verification/harness_report.py` | Ported | `verification/observations/harness-report.ts` (O) |
 | `scripts/verification/interaction_journey.py` | Ported | `verification/observations/interaction-journey.ts` (I) |
 | `scripts/verification/interaction_readback.py` | Ported | `verification/observations/interaction-readback.ts` (I) |
 | `scripts/verification/mail_journey_peer.py` | Deleted | D |
 | `scripts/verification/native_correlation.py` | Ported | `verification/observations/native-correlation.ts` (O) |
-| `scripts/verification/owned_runtime.py` | Ported | `verification/observations/owned-runtime.ts` (L) |
+| `scripts/verification/owned_runtime.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/owned-runtime.ts` remains in use |
 | `scripts/verification/process_inventory.py` | Ported | `verification/observations/process-inventory.ts` (L) |
-| `scripts/verification/process_ownership.py` | Ported | `verification/observations/process-ownership.ts` (L) |
+| `scripts/verification/process_ownership.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/process-ownership.ts` remains in use |
 | `scripts/verification/provider_session_control.py` | Ported | `verification/observations/provider-session-control.ts` (I) |
-| `scripts/verification/readonly_codex_home.py` | Ported | `verification/observations/readonly-codex-home.ts` (O) |
-| `scripts/verification/runtime_qualification.py` | Ported | `verification/observations/runtime-qualification.ts` (L) |
+| `scripts/verification/readonly_codex_home.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/readonly-codex-home.ts` remains in use |
+| `scripts/verification/runtime_qualification.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/runtime-qualification.ts` remains in use |
 | `scripts/verification/tailnet_mcp.py` | Ported | `verification/observations/tailnet-mcp.ts` (T) |
 | `scripts/verification/tailnet_mcp_client.py` | Ported | `verification/observations/tailnet-transport.ts` (T) |
 | `scripts/verification/tailnet_mcp_host.py` | Ported | `crates/tailnet-verification-host/src/main.rs` (T) |
@@ -70,7 +70,7 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/verification/tui_component_capture.py` | Left to #161 | Unchanged |
 | `scripts/verification/tui_public_sessions.py` | Left to #161 | Unchanged |
 | `scripts/verification/tui_verification.py` | Left to #161 | Unchanged |
-| `scripts/verification/typed_observations.py` | Ported | `verification/observations/evidence-models.ts` (O) |
+| `scripts/verification/typed_observations.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/evidence-models.ts` remains in use |
 
 ## Original-input proof
 
@@ -127,7 +127,7 @@ The five board/mail helpers form an unreachable closure after their journey entr
 
 ## Local checks and remaining gates
 
-- `pnpm --dir verification test`:834 passed,0 failed, exit0. Lifecycle tests need process inspection of their own harmless children; a restricted-sandbox `/bin/ps` refusal is not a passing run.
+- `pnpm --dir verification test`:835 passed,0 failed, exit0. Lifecycle tests need process inspection of their own harmless children; a restricted-sandbox `/bin/ps` refusal is not a passing run.
 - Type check, lint and formatter pass. Focused fixture-cutover rerun:91 passed,0 failed.
 - `cargo clippy -p acp-client-runtime -p agent-collaboration -p codex-router-host -p codex-router-test-support -p collaboration-mcp -p codex-router-tailnet-verification-host --all-targets -- -D warnings`: exit0 with narrow debug profiles.
 - Cargo formatting, Git whitespace and the Rust1000-line guard pass. Existing generated Cargo.lock/pnpm-lock.yaml exceed1000 lines; authored files remain within the cap.
@@ -138,3 +138,11 @@ The five board/mail helpers form an unreachable closure after their journey entr
 The first workflow-cutover CI at9a0600ae passed5568 workspace cases but found the startup wrapper above and timed out one unchanged subscription-view test. The wrapper is corrected with original-input proof. The unchanged test passes on merged main in2.24s and locally in1.32s; the cause of its300s CI timeout remains unconfirmed, and no timeout, scheduler, test-selection or product behavior was changed. Corrected final-head CI/release results are linked from PR #169.
 
 The next CI atb4afbf06 passed5569 workspace cases, including both tests above, and failed the oversized-initialize assertion after2.088s. Its diagnostic omitted the actual error variant. The fixture now avoids shared JSON startup and a large string conversion; an added permanent original-output comparison covers the complete64 MiB frame. Local byte/receipt parity, the unchanged rejection/reaping test and all16 admission tests pass. The assertion now prints any unexpected error variant. Refreshed Linux CI remains the required proof for this correction.
+
+## Accepted review corrections
+
+- SIGINT uses the existing native interruption flag and a scoped TypeScript listener. Both wait for owned-child settlement; the native profile restore remains in the same Rust-owned critical section. A private profile wrapper shared with Host execution makes the real-signal test exercise the production restore operation. The TypeScript test checks child reaping at settlement before fixture fallback cleanup.
+- Real-signal subprocess tests fail without the wiring and pass with it. The Rust negative control observes both an unreaped harmless child and projected disposable profile bytes. Green runs require child absence, settled evidence and exact original profile bytes; no production profile, Host or Tailscale instance is used.
+- All 17 retained Python files match main byte-for-byte. Original-source and current-source import traversal closes over exactly those 17. Nine real module --help runs pass. The non-help quota child passes a stdlib pydoc import check; the ttyd adapter’s own --version branch dispatches to a harmless controlled stand-in. The retained unit/fixture suite passes 45 tests. This is import/dispatch proof, without a capture or installed ttyd claim.
+- `.sqlx/README.md`, `docs/testing/rust-reliability-tools.md` and the central Worker README now use the TypeScript commands and the Node/pnpm pins in `verification/package.json`. Historical receipts remain unchanged.
+- Local quality: 835 TypeScript tests pass; the complete Rust driver suite passes 14 tests (its one ignored subprocess fixture is invoked by the passing parent signal test), and its all-target Clippy check with `-D warnings` passes. Fresh final-head CI and release dry-run results are recorded in the PR and handback.
