@@ -17,6 +17,8 @@ use tokio::sync::Mutex;
 
 #[path = "fleet_client/cache_refresh.rs"]
 mod cache_refresh;
+mod synchronization;
+use synchronization::SynchronizationRequests;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -26,6 +28,10 @@ pub struct FleetReply {
 
 #[derive(Debug, thiserror::Error)]
 pub enum FleetClientError {
+    #[error(transparent)]
+    Synchronization(Arc<FleetClientError>),
+    #[error("Fleet synchronization generation exhausted")]
+    SynchronizationGenerationExhausted,
     #[error("fleet directory is unavailable: {0}")]
     Directory(#[from] std::io::Error),
     #[error(transparent)]
@@ -51,6 +57,7 @@ pub struct FleetClient {
     outbox: FleetOutbox,
     cache: FleetCache,
     admission_mutex: Mutex<()>,
+    synchronization: SynchronizationRequests,
     registration: Arc<dyn crate::ProjectRegistration>,
 }
 
@@ -106,6 +113,7 @@ impl FleetClient {
             outbox,
             cache,
             admission_mutex: Mutex::new(()),
+            synchronization: SynchronizationRequests::default(),
             registration,
         })
     }
@@ -174,7 +182,17 @@ impl FleetClient {
         request: &FleetRequest,
         _origin: &message_board::ActorOrigin,
     ) -> Result<FleetReply, FleetClientError> {
-        let _guard = self.admission_mutex.lock().await;
+        let guard = self.admission_mutex.lock().await;
+        let result = self.submit_admitted(request).await;
+        drop(guard);
+        self.finish_submission_sync().await;
+        result
+    }
+
+    async fn submit_admitted(
+        &self,
+        request: &FleetRequest,
+    ) -> Result<FleetReply, FleetClientError> {
         let queued = match self.outbox.enqueue(request).await {
             Ok(queued) => queued,
             Err(RouterLocalStorageError::ConflictingRequest) => {
@@ -204,7 +222,18 @@ impl FleetClient {
         directory: &FleetRequest,
         _origin: &message_board::ActorOrigin,
     ) -> Result<FleetReply, FleetClientError> {
-        let _guard = self.admission_mutex.lock().await;
+        let guard = self.admission_mutex.lock().await;
+        let result = self.submit_creation_admitted(input, directory).await;
+        drop(guard);
+        self.finish_submission_sync().await;
+        result
+    }
+
+    async fn submit_creation_admitted(
+        &self,
+        input: &message_board::ProjectCreateRequest,
+        directory: &FleetRequest,
+    ) -> Result<FleetReply, FleetClientError> {
         let queued = match self.outbox.enqueue_creation(directory, input).await {
             Ok(queued) => queued,
             Err(RouterLocalStorageError::ConflictingRequest) => {
@@ -228,6 +257,19 @@ impl FleetClient {
         Ok(reply)
     }
 
+    async fn finish_submission_sync(&self) {
+        // A deferred sync must not replace the submitted request's own result.
+        // Respect queued mutations and synchronization callers before another batch.
+        let Ok(guard) = self.admission_mutex.try_lock() else {
+            return;
+        };
+        let outcome = self.synchronize_pending_batch_admitted().await;
+        drop(guard);
+        if let Err(error) = outcome {
+            tracing::warn!(%error, "Fleet synchronization after submission failed");
+        }
+    }
+
     pub async fn creation_input(
         &self,
         request: &RequestId,
@@ -243,14 +285,7 @@ impl FleetClient {
         Ok(self.outbox.accepted_creation_page(after, limit).await?)
     }
 
-    /// Welcome, feed hints and the connected refresh timer all enter this owner.
-    /// Concurrent reactions coalesce into the synchronization already holding
-    /// admission. Its Fleet read is newer than notices pruned after seven days;
-    /// the connected refresh timer retries if that synchronization fails.
-    pub async fn synchronize(&self) -> Result<(), FleetClientError> {
-        let Ok(_guard) = self.admission_mutex.try_lock() else {
-            return Ok(());
-        };
+    async fn synchronize_admitted(&self) -> Result<(), FleetClientError> {
         // Durable Accepted decisions can resume without a remote metadata read.
         self.recover_project_registrations().await?;
         for queued in self.outbox.pending().await? {

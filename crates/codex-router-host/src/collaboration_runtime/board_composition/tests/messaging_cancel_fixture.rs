@@ -10,6 +10,7 @@ use message_board_storage::{MailCancelExpansion, MailCancelGroup, MailHandoffIte
 pub(in crate::collaboration_runtime::board_composition::tests::messaging_rule_cases) struct FollowSeed
 {
     pub item: DeliveryItem<BoardDeliveryTypes>,
+    pub handoff_sequence: HandoffSeq,
     pub membership: SubscriptionMembership,
     pub root: ThreadId,
 }
@@ -131,7 +132,7 @@ impl RuleFixture {
         let item = self.build_follow_item(&membership, &root, session, peer, through)?;
         let mut write = store.begin_admission(origin()?).await?;
         let original = serde_json::to_value(&item)?;
-        write
+        let handoff_sequence = write
             .append_mail_handoff(&MailHandoffItem::Delivery(Box::new(
                 DeliveryEnvelope::Item(item),
             )))
@@ -139,6 +140,7 @@ impl RuleFixture {
         write.commit().await?;
         Ok(FollowSeed {
             item: serde_json::from_value(original)?,
+            handoff_sequence,
             membership,
             root,
         })

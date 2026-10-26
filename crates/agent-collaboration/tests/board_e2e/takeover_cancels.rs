@@ -221,6 +221,24 @@ async fn assert_remote_successor(
         expected_state,
     )
     .await?;
+    if !matches!(prefix, EndPrefix::Discarded) {
+        let [frozen] = expansions.as_slice() else {
+            return Err("retained end has no unique frozen cancel association".into());
+        };
+        let cancel = serde_json::from_value(
+            frozen
+                .get("cancel")
+                .ok_or("frozen child cancel is absent")?
+                .clone(),
+        )?;
+        let host = second.host_mut()?;
+        // Rejected already held before takeover; only this committed row proves replay.
+        tokio::time::timeout(BOUND, async {
+            while !host.local_cancel_delivery_recorded(cancel).await? {}
+            FixtureResult::Ok(())
+        })
+        .await??;
+    }
     let stopped = second.stop_for_readback().await?;
     let inherited = readbacks::handoffs(&stopped, &fixture.project, 2).await?;
     if matches!(prefix, EndPrefix::Discarded) {

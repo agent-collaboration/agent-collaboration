@@ -213,13 +213,17 @@ async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
         .consume_project_intents(&fixture.project)
         .await
         .unwrap();
-    let delivered = {
+    // Another publisher pass can already own delivery after custody commits.
+    // Observe both real requests before checking their identities.
+    let delivered = tokio::time::timeout(std::time::Duration::from_secs(10), async {
         let mut requests = runtime.requests.lock().await;
-        let first = requests.try_recv().unwrap();
-        let second = requests.try_recv().unwrap();
+        let first = requests.recv().await.unwrap();
+        let second = requests.recv().await.unwrap();
         assert_ne!(first.payload.push_id, second.payload.push_id);
         vec![first, second]
-    };
+    })
+    .await
+    .expect("both addressed intent requests must reach the native client");
     let mut delivered_intents = BTreeSet::new();
     for request in delivered {
         let push = fixture

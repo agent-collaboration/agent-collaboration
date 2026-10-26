@@ -41,6 +41,26 @@ pub async fn assert_local_post_at_cursor(
     Ok(())
 }
 
+pub async fn contains_post_at(
+    stopped: &StoppedHost,
+    project: &str,
+    epoch: u64,
+    cursor: message_board::FeedCursor,
+) -> FixtureResult<bool> {
+    let path = PathBuf::from(format!("projects/{project}/e{epoch}.sqlite"));
+    let rows = stopped_database_values(
+        stopped,
+        &path,
+        "SELECT json_object('epoch',epoch,'position',position) AS value FROM posts",
+    )
+    .await?;
+    let positions = rows
+        .iter()
+        .map(|row| serde_json::from_str::<message_board::FeedCursor>(row))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(positions.contains(&cursor))
+}
+
 pub async fn cause_capture(
     stopped: &StoppedHost,
     project: &str,
