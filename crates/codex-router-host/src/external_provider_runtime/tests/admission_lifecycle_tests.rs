@@ -427,7 +427,10 @@ async fn oversized_initialize_frame_is_rejected_and_reaps_owned_process() {
         .await
         .expect_err("oversized frame must fail initialization");
 
-    assert!(matches!(error, ExternalProviderRuntimeError::Initialize(_)));
+    assert!(
+        matches!(error, ExternalProviderRuntimeError::Initialize(_)),
+        "expected oversized frame rejection, got {error:?}"
+    );
     assert_process_reaped(&process_id_path).await;
 }
 
