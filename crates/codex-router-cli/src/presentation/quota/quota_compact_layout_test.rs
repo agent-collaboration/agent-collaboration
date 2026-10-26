@@ -49,7 +49,7 @@ fn unavailable_pace_does_not_repeat_generic_copy_but_keeps_a_specific_reason() {
 
 #[tokio::test]
 async fn floor_editor_fits_content_and_separates_sections_at_mock_sizes() {
-    for (width, height) in [(132, 34), (100, 34), (48, 32)] {
+    for (width, height) in [(132, 34), (100, 34), (48, 32), (120, 36)] {
         let frames = render_quota_filter_phases(
             quota_two_account_view_model(),
             width,
@@ -76,6 +76,21 @@ async fn floor_editor_fits_content_and_separates_sections_at_mock_sizes() {
             })
             .unwrap();
         let dialog = actual_dialog_text(frame, "Weekly floor");
+        if width == 120 {
+            let (row, line) = frame
+                .lines()
+                .enumerate()
+                .find(|(_, line)| line.contains('▶'))
+                .unwrap();
+            let (prefix, _) = line.split_once('▶').unwrap();
+            let column = unicode_width::UnicodeWidthStr::width(prefix);
+            eprintln!("Native floor increment coordinate {width}x{height}: ({column}, {row})");
+            assert_eq!(
+                (column, row),
+                (47, 18),
+                "Native PTY click must target the rendered increment control"
+            );
+        }
         let lines = dialog.lines().collect::<Vec<_>>();
         let row = |label: &str| {
             lines
