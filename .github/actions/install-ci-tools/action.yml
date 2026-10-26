@@ -1,5 +1,5 @@
 name: Install pinned prebuilt CI tools
-description: Restore or download the exact CI tools declared by the repository
+description: Verify or download the exact CI tools declared by the repository
 
 inputs:
   cache-hit:
