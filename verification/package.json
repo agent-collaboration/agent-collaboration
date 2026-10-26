@@ -6,11 +6,14 @@
     "check": "tsc --noEmit",
     "lint": "oxlint --deny-warnings .",
     "format": "oxfmt .",
-    "format:check": "oxfmt --check ."
+    "format:check": "oxfmt --check .",
+    "build:pty": "npm_config_build_from_source=true pnpm rebuild node-pty",
+    "test:terminal": "node --test terminal/pty-process.test.ts"
   },
   "dependencies": {
     "lossless-json": "4.3.3",
     "miniflare": "5.20261012.0-beta",
+    "node-pty": "1.1.0",
     "smol-toml": "1.9.1",
     "workerd": "1.20261012.1",
     "zod": "4.6.7"

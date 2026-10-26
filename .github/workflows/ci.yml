@@ -87,6 +87,7 @@ jobs:
           pnpm --dir verification run check
           pnpm --dir verification run lint
           pnpm --dir verification run format:check
+          pnpm --dir verification run test:terminal
       - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
       - name: Test tool bootstrap
