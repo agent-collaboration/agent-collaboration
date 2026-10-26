@@ -16,6 +16,7 @@ const baselineSchema = z.object({
   stdin: z.string(),
   initialFiles: z.record(z.string(), z.string()).optional(),
   pidFiles: z.array(z.string()).optional(),
+  environment: z.record(z.string(), z.string()).optional(),
   expected: z.object({
     exit: z.number().or(z.bigint()).transform(Number),
     stdout: z.union([
@@ -48,6 +49,15 @@ for (const name of readdirSync(directory)
         ],
         {
           input: fixture.stdin.replaceAll("<ROOT>", root),
+          env: {
+            ...process.env,
+            ...Object.fromEntries(
+              Object.entries(fixture.environment ?? {}).map(([name, value]) => [
+                name,
+                value.replaceAll("<ROOT>", root),
+              ]),
+            ),
+          },
           encoding: "utf8",
           timeout: 5000,
           maxBuffer:

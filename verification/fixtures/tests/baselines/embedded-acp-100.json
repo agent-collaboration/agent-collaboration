@@ -1,0 +1,22 @@
+{
+  "original": "Tailscale synthetic foreign-command fixture#LEASE_FIXTURE",
+  "originalSHA256": "ea69509d3375b5a01d7f979a4745b399140e803ce292aee4f1a6cb321d59fd22",
+  "target": "tailscale-lease-agent.ts",
+  "arguments": ["serve", "status", "--json"],
+  "environment": {
+    "TAILNET_TEST_STATE": "<ROOT>/state.json"
+  },
+  "initialFiles": {
+    "state.json": "{\"Foreground\":{\"foreign\":{\"TCP\":{\"443\":{\"HTTPS\":true}}}}}\n"
+  },
+  "stdin": "",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"Foreground\":{\"foreign\":{\"TCP\":{\"443\":{\"HTTPS\":true}}}}}\n\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "state.json": "{\"Foreground\":{\"foreign\":{\"TCP\":{\"443\":{\"HTTPS\":true}}}}}\n"
+    }
+  }
+}
