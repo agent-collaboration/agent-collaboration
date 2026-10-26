@@ -6,6 +6,9 @@
 //! or Ctrl-C; restart on the same directory to exercise durable board recovery.
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs, load_fleet_enrollment};
 use collaboration_protocol::ServiceManifest;
+#[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+#[path = "board-debug-runtime/local_cancel_observation.rs"]
+mod local_cancel_observation;
 #[cfg(feature = "runtime-test-support")]
 #[path = "board-debug-runtime/mail_faults.rs"]
 mod mail_faults;
@@ -94,16 +97,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
         serde_json::json!({"kind":"boardDebugRuntimeReady","directory":directory,
             "mcpUrl":manifest.mcp.url,"nativeBackend":"absent"})
     );
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let outcome = tokio::select! {
-        result = tokio::signal::ctrl_c() => result,
-        _ = terminate.recv() => Ok(()),
-        error = runtime.listener_failure() => Err(io::Error::other(error)),
-    };
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    let outcome = local_cancel_observation::serve_until_shutdown(&mut runtime).await;
+    #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
+    let outcome = wait_for_shutdown(&mut runtime).await;
     let shutdown = runtime.shutdown().await;
     outcome?;
     shutdown?;
     Ok(())
+}
+
+#[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
+async fn wait_for_shutdown(runtime: &mut CollaborationRuntime) -> io::Result<()> {
+    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => result,
+        _ = terminate.recv() => Ok(()),
+        error = runtime.listener_failure() => Err(io::Error::other(error)),
+    }
 }
 
 #[cfg(test)]

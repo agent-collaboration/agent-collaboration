@@ -15,6 +15,7 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
         let (release, task) = notifications.hold_progress_writer().await?;
         let seed = fixture.seed_follow(true).await?;
         fixture.confirm_prefix(fixture.head().await?).await?;
+        wait_seed_handoff_acknowledgment(&fixture, seed.handoff_sequence).await?;
         release.send(()).map_err(|_| "native progress hold ended")?;
         task.await??;
         notifications
@@ -95,6 +96,29 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
     let closed = fixture.close().await;
     closed?;
     proof
+}
+
+async fn wait_seed_handoff_acknowledgment(
+    fixture: &RuleFixture,
+    sequence: HandoffSeq,
+) -> TestResult {
+    timeout(BOUND, async {
+        loop {
+            let marks = fixture
+                .holder
+                .projects
+                .acknowledged_mail_changes(&fixture.project)
+                .await?;
+            if marks
+                .max_handoff_seq
+                .is_some_and(|through| through >= sequence.get())
+            {
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await?
 }
 
 async fn local_progress(

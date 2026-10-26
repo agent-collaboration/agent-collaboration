@@ -59,10 +59,10 @@ filter = "binary(=request_effects_public) & test(=a_large_fleet_write_returns_a_
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# The real SIGKILL/reopen proof shares the same native-process scheduling
-# requirement as the other crash/restart cases; its one-second storage fence stays.
+# Real SIGKILL/reopen proofs share the native-process scheduling requirement
+# of the other crash/restart cases. Keep their one-second storage fence intact.
 [[profile.ci.overrides]]
-filter = "package(=collaboration-service) & test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen)"
+filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::local_runtime::crash::crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen) | test(/^mail_push_delivery::tests::remote_assembly::project_admission::crash::sigkill_between_/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
