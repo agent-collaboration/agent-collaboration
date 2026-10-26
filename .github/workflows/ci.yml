@@ -188,7 +188,9 @@ jobs:
           cargo build -p codex-router-cli --bin codex-router
           cargo build -p codex-router-cli --all-features --bin codex-router
           install_root="${RUNNER_TEMP}/codex-router-cli-all-features-install"
-          cargo install --path crates/codex-router-cli --all-features --root "${install_root}"
+          # Keep installation-shape assertions on the dev build. The release
+          # workflow owns optimized production builds, signing and packaging.
+          cargo install --debug --path crates/codex-router-cli --all-features --root "${install_root}"
           test -x "${install_root}/bin/codex-router"
           test "$(find "${install_root}/bin" -maxdepth 1 -type f | wc -l | tr -d ' ')" = "1"
           cargo build -p codex-router-quota-reset-test-harness --bin codex-router-quota-reset-test-harness
