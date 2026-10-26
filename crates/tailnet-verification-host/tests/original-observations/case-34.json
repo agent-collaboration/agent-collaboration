@@ -1,0 +1,23 @@
+{
+  "function": "require_serve_during",
+  "args": [
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        }
+      }
+    },
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": false
+        }
+      }
+    },
+    8443
+  ],
+  "expected": {
+    "refused": true
+  }
+}

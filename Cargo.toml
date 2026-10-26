@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/tailnet-verification-host",
     "crates/board-central-test-support",
     "crates/board-legacy-upgrade",
     "crates/board-fleet-sync",

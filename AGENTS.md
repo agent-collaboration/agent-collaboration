@@ -5,6 +5,18 @@
 - No Python in this repository. Write code in TypeScript or Rust; for any
   other language, ask the owner first.
 
+## Verification Tooling
+
+- Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.
+  Run `check`, `lint`, `format:check`, and `test` through that package.
+- The isolated Tailnet Host driver is a verification-only Rust executable:
+  `cargo build -p codex-router-tailnet-verification-host` and
+  `target/debug/codex-router-tailnet-verification-host host "$HOST_PLAN"`.
+  Follow its [runbook](crates/tailnet-verification-host/README.md) and the
+  verification skill's declared-target and allocation requirements.
+- Check that driver with `cargo test -p codex-router-tailnet-verification-host`
+  and `cargo clippy -p codex-router-tailnet-verification-host --all-targets -- -D warnings`.
+
 ## Release And Homebrew Distribution
 
 - Before merging a user-facing code change, advance the workspace package

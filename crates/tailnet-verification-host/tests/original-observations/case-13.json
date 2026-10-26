@@ -1,0 +1,44 @@
+{
+  "function": "observe_native_readiness",
+  "args": [
+    {
+      "serviceEpoch": "epoch",
+      "sequence": "bad",
+      "endpoints": [
+        {
+          "endpoint": {
+            "serviceId": "destination",
+            "endpointId": "claude-local"
+          },
+          "label": "Claude Code",
+          "availability": {
+            "state": "unavailable",
+            "observedAt": "2026-10-16T00:00:00Z",
+            "reason": "disabled in providers.json",
+            "fix": "enable provider"
+          },
+          "channels": []
+        },
+        {
+          "endpoint": {
+            "serviceId": "destination",
+            "endpointId": "cursor-local"
+          },
+          "label": "Cursor",
+          "availability": {
+            "state": "unavailable",
+            "observedAt": "2026-10-16T00:00:00Z",
+            "reason": "disabled in providers.json",
+            "fix": "enable provider"
+          },
+          "channels": []
+        }
+      ]
+    },
+    "destination",
+    "epoch"
+  ],
+  "expected": {
+    "refused": true
+  }
+}

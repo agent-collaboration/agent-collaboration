@@ -1,0 +1,34 @@
+{
+  "function": "require_serve_restored",
+  "args": [
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        }
+      }
+    },
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        },
+        "8443": {
+          "HTTPS": true
+        }
+      },
+      "Foreground": {
+        "owned": {
+          "Web": {
+            "node:8443": {
+              "Handlers": {}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "expected": {
+    "refused": true
+  }
+}
