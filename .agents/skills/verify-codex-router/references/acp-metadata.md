@@ -39,8 +39,7 @@ Require the ordinary reply in both captures and no raw command-catalogue JSON. O
 Read `MetadataObservationPlan` in `verification/observations/acp-metadata-observation.ts`. Save its JSON in the task evidence with repository/source and `build_manifest`, candidate Host/Router hashes and Host PID, installed Codex path/hash, installed collaboration CLI, private service directory, exact endpoint/Session ID, both original PTY paths, expected reply and a fresh evidence output directory. The Host must still be running and the committed worktree clean. Set `require_usage` only when this run is required to demonstrate actual usage emission.
 
 ```sh
-uv run --no-project --with pydantic==2.14.1 --with websockets==17.3 --python 3.13 \
-  python -m scripts.verification.acp_metadata_observation "$METADATA_PLAN"
+node verification/observations/acp-metadata-observation.ts "$METADATA_PLAN"
 ```
 
 Passing evidence includes original provider metadata items with their IDs/kinds/exact payloads, genuine assistant output in those events, the same output in both Codex API views and actual live/reopened PTYs, and no metadata item IDs in either Codex transcript. The script retains raw API responses before reducing the result. An absent catalogue, truncated/reset observation, wrong target/build or missing ordinary reply fails. A provider that emits no Usage leaves usage/context/cost runtime proof explicitly unobserved; permanent ACP live/replay regressions cover those payloads separately and cannot be relabelled real-provider observations.
@@ -50,10 +49,9 @@ Metadata is retained under the existing loaded-Session observation contract, not
 ## Apparatus and cleanup
 
 ```sh
-uv run --no-project --with pydantic==2.14.1 --with websockets==17.3 --python 3.13 \
-  python -m unittest scripts.tests.test_acp_metadata_observation -v
+pnpm --dir verification run test:observations
 ```
 
-Run the existing Python lint/type/format checks over the helper and its test. The independent oracle cases reject metadata leakage in either history view, metadata deletion, lost genuine prose, wrong threads, incomplete observation, missing PTY rendering and silently missing required usage. They establish apparatus sensitivity, not product proof.
+Run `check`, `lint` and `format:check` through the verification package. The independent oracle cases reject metadata leakage in either history view, metadata deletion, lost genuine prose, wrong threads, incomplete observation, missing PTY rendering and silently missing required usage. They establish apparatus sensitivity, not product proof.
 
 After collecting the exact observation, close only the synthetic provider Session if its runtime advertises close. When close is unsupported, retain the typed rejection/operation ID and stop the owned runtime; do not invent a close, delete vendor history or retry the rejected operation. Preserve uncertain operation IDs. Stop only the recorded task-owned Host/process closure using the existing identity guards. Verify protected production identities/settings, no owned survivors and surviving evidence. Return per-provider observations and gaps, exact source/build/tools, real IDs, quality commands/exits and cleanup. The journey remains unqualified for a provider until its actual installed route is observed; do not infer Claude from Cursor or Cursor from Claude.

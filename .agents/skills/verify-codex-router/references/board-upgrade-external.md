@@ -1,6 +1,14 @@
 # Import into an external central (OB5 / G4)
 
-This route uses `board_upgrade_journey.py --external-plan` and the actual signed
+## Current entry
+
+The external wrapper retired in 0.1.102. Local publication/replay/restart coverage now lives in `crates/board-legacy-upgrade/tests/upgrade_binary_e2e.rs`; use `cargo test --locked -p board-legacy-upgrade --test upgrade_binary_e2e -- --test-threads=1` after CI-equivalent artifact preparation. `verification/import-run.ts` is the separately commissioned sealed-copy Mac/local-Tokio entry. The current two-machine/Worker entry is `node verification/run.ts "$PRIVATE_DECLARATION"`, governed by `verification/declaration.ts` and `verification/case-registry.ts`. These entries do not establish the entire former external publication matrix; an obligation without a retained mapped case remains unavailable.
+
+## Retained obligations and historical evidence
+
+The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
+
+The historical external wrapper used the actual signed
 upgrade CLI, machine WebSocket session and isolated model-free Host. It does not
 deploy, enroll an installation, start or stop the external central, or obtain
 real legacy stores. Use only synthetic legacy copies. A staging run requires a
@@ -65,7 +73,7 @@ stop the drive. Do not log in, enroll, deploy or change Access as a workaround.
 
 ## Plan and entry
 
-`ExternalPlan` in `scripts/verification/board_upgrade_external_plan.py` owns the
+`ExternalPlan` in `scripts/verification/board_upgrade_external_plan` (retired wrapper) owns the
 validated format. `artifact_receipt` is the single source for artifact paths,
 hashes, signatures and the build pin. The
 checkout may advance through apparatus-only commits; any committed or dirty
@@ -98,11 +106,7 @@ contains no token, secret reference or credential path. `localFixture` and its
 assertion/machine-edge paths are exclusively the local qualification route;
 `ownerAccess` refuses those overrides.
 
-```sh
-uv run --offline --no-project --python 3.13 --with pydantic==2.14.1 \
-  --with websockets==17.3 python -m scripts.verification.board_upgrade_journey \
-  --external-plan "$OB5_PLAN"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 `websockets` is the optional G4 wire transport; it is loaded only during a
 machine drive. The existing entry/help/local-publication commands do not need
@@ -154,13 +158,7 @@ owner enrollment for one disposable synthetic machine and the same external
 driver. This creates and reaps only its local test central/edge/Host. It neither
 signs in to Access nor reads the real credential environment:
 
-```sh
-uv run --offline --no-project --python 3.13 --with pydantic==2.14.1 \
-  --with websockets==17.3 python -m scripts.verification.board_upgrade_external_local \
-  --repository "$OB5_REPOSITORY" --build-head "$OB5_BUILD_HEAD" \
-  --artifacts-json "$OB5_ARTIFACTS_JSON" --runtime-parent "$OB5_PRIVATE_PARENT" \
-  --output-directory "$OB5_LOCAL_OUTPUT"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 The artifact input is the full frozen-build receipt object: `pin`,
 `artifactDirectory` and `artifacts`. Each artifact entry has `path`, `sourcePath`,
@@ -183,8 +181,4 @@ Private local machine files are deleted only after the owning Host stops.
 
 Apparatus checks, separate from product assertions:
 
-```sh
-uv run --offline --no-project --python 3.13 --with pydantic==2.14.1 \
-  --with pytest==9.1.1 python -m pytest \
-  scripts/verification/board_upgrade_external_test.py -q
-```
+The retired command is unavailable; use the current entry and declaration above.

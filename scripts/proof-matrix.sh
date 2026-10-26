@@ -237,7 +237,7 @@ expected_observation() {
 }
 
 freshness_guard() {
-  printf 'verification/tooling/proof-*.ts verification/tooling/proof-receipt-patches.json verification/evidence-json.ts verification/exact-json.ts verification/filesystem-paths.ts verification/fixtures/source-shell-words.ts '
+  printf 'verification/tooling/*.ts verification/tooling/proof-receipt-patches.json verification/fixtures/*.ts verification/package.json verification/pnpm-lock.yaml verification/evidence-json.ts verification/exact-json.ts verification/filesystem-paths.ts verification/fixtures/source-shell-words.ts '
   case "$1" in
     AR-WS-GUARD) printf 'crates/codex-router-proxy/src/websocket.rs crates/codex-router-proxy/src/server.rs verification/tooling/check-release-runtime-guardrails.ts scripts/proof-matrix.sh' ;;
     AR-WS-PASSTHROUGH|AR-WS-ACTIVE-TURN) printf 'crates/codex-router-proxy/src/websocket.rs crates/codex-router-proxy/src/server.rs crates/codex-router-proxy/src/lib.rs crates/codex-router-selection/src/* scripts/proof-matrix.sh' ;;
