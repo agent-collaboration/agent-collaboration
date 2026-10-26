@@ -100,6 +100,7 @@ The local current-release receipts are `tmp/python-removal-proof/final-formula-c
 | Tailscale test commands and leases | TS preflight/lease agents. Original/replacement24 tests and2 exposure-startup tests pass. Real Tailscale state is untouched. |
 | Host supervisor and composed routes | Focused TS agents and one launch-helper module per test target. Original/replacement supervisor13, delivery/schedule/steering/race29 and FIFO/message-route7 pass, plus composed routes. Final shared-helper consumers13 pass. |
 | SSH carriers |10 original native/managed receipt cases, one publication wire case and6 original shlex vectors. The permanent Rust parent checks all10 scenarios and no replay of uncertain submissions. |
+| Startup token/exec wrapper | `token-observed-exec.ts` preserves the original token-file bytes, argument vector, environment, inherited stdin and process PID through native exec. Three original-wrapper comparisons and the real startup consumer pass. The first CI run found this previously missed plain quoted program; the expanded string/command audit covers that form too. |
 | SQLite/stderr pressure | Same disposable DB retains the same rows, blocks a writer after `acquired`, and releases on exit. The installed harness's ordinary unit tests pass17;11 pre-existing opt-in cases stay ignored. |
 | Shell path guards |64 original CLI observations cover missing paths, links, loops and parent traversal. Two regressions fail the earlier incorrect port and pass the original/current implementation. |
 | Proof matrix heredocs |79 original passed/refused receipt cases compare bytes/messages. Touched-target metadata deliberately points to the new TS guard. Source freshness guards include moved implementation/dependencies. |
@@ -125,10 +126,12 @@ The five board/mail helpers form an unreachable closure after their journey entr
 
 ## Local checks and remaining gates
 
-- `pnpm --dir verification test`:830 passed,0 failed, exit0. Lifecycle tests need process inspection of their own harmless children; a restricted-sandbox `/bin/ps` refusal is not a passing run.
+- `pnpm --dir verification test`:833 passed,0 failed, exit0. Lifecycle tests need process inspection of their own harmless children; a restricted-sandbox `/bin/ps` refusal is not a passing run.
 - Type check, lint and formatter pass. Focused fixture-cutover rerun:91 passed,0 failed.
 - `cargo clippy -p acp-client-runtime -p agent-collaboration -p codex-router-host -p codex-router-test-support -p collaboration-mcp -p codex-router-tailnet-verification-host --all-targets -- -D warnings`: exit0 with narrow debug profiles.
 - Cargo formatting, Git whitespace and the Rust1000-line guard pass. Existing generated Cargo.lock/pnpm-lock.yaml exceed1000 lines; authored files remain within the cap.
 - Main atb4881497 is merged without rebase. The four validation jobs, background/wait-all structure and main-only cache policy are preserved. Static validation runs the TypeScript suite; Rust fixture consumers install pinned Node/dependencies, and SQLx/size/Worker checks call the ports. The release dry run generates an idempotent formula preview from its packaged digest and retains it while publication/tap steps remain disabled. Final-head CI and release dry-run links/results belong to PR #169 and the handback.
 - Version bump awaits the Lead's merge-time reservation. Independent review and merge remain outside this Worker's acceptance authority.
 - Fake-command/apparatus evidence does not establish real Homebrew publication, provider behavior, hosted delivery, production replacement or a real Tailnet journey.
+
+The first workflow-cutover CI at9a0600ae passed5568 workspace cases but found the startup wrapper above and timed out one unchanged subscription-view test. The wrapper is corrected with original-input proof. The unchanged test passes on merged main in2.24s and locally in1.32s; the cause of its300s CI timeout remains unconfirmed, and no timeout, scheduler, test-selection or product behavior was changed. Corrected final-head CI/release results are linked from PR #169.
