@@ -5,30 +5,14 @@ use reqwest::header::{HeaderMap, HeaderValue};
 
 pub async fn publisher(
     endpoint: reqwest::Url,
-    self_hosted_root: Option<std::path::PathBuf>,
     owner_credential_file: Option<std::path::PathBuf>,
 ) -> Result<UpgradePublisher, Box<dyn std::error::Error>> {
     let mut headers = HeaderMap::new();
-    if self_hosted_root.is_some() || owner_credential_file.is_some() {
+    if let Some(path) = owner_credential_file {
         let credential = tokio::task::spawn_blocking(
             move || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
-                use codex_router_secret_store::{
-                    SecretStore,
-                    central_credentials::{CentralCredential, CentralSecretKind},
-                };
-                if let Some(root) = self_hosted_root {
-                    if !root.is_absolute() {
-                        return Err("--self-hosted-root must be absolute".into());
-                    }
-                    let store = codex_router_host::open_fleet_enrollment_store(&root)?;
-                    let encoded =
-                        store.read_secret(&CentralSecretKind::OwnerCredential.secret_key()?)?;
-                    Ok(CentralCredential::decode_secret(&encoded)?)
-                } else if let Some(path) = owner_credential_file {
-                    Ok(CentralCredential::consume_private_file(&path)?)
-                } else {
-                    Err("self-hosted owner credential unavailable".into())
-                }
+                use codex_router_secret_store::central_credentials::CentralCredential;
+                Ok(CentralCredential::consume_private_file(&path)?)
             },
         )
         .await?

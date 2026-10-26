@@ -44,14 +44,15 @@ codex-router-board-upgrade \
   --source "$LEGACY_SOURCE" --router-directory "$ROUTER_ROOT" \
   --report "${IMPORT_REPORT}.dry-run.json" --dry-run
 
-codex-router central mint --root "$CENTRAL_ROOT" --kind owner
+export OWNER_HANDOFF="${TMPDIR:-/tmp}/central-owner-credential.json"
+codex-router central mint --root "$CENTRAL_ROOT" --kind owner --out "$OWNER_HANDOFF"
 codex-router-board-upgrade \
   --source "$LEGACY_SOURCE" --router-directory "$ROUTER_ROOT" \
   --report "$IMPORT_REPORT" --central-url "$CENTRAL_URL" \
-  --self-hosted-root "$CENTRAL_ROOT"
+  --owner-credential-file "$OWNER_HANDOFF"
 ```
 
-Owner credentials last 15 minutes. Mint immediately before importing; mint again if an owner credential expires. The importer reports what it uploaded and preserves the legacy board source.
+Owner credentials last 15 minutes. Mint immediately before importing; mint again after a failed import or if the credential expires. The importer consumes and removes the private `0600` file when it reads the credential, without opening Keychain, reports what it uploaded, and preserves the legacy board source.
 
 Start the enrolled Router in its own terminal, then claim the imported projects using their IDs from the report:
 
@@ -79,6 +80,6 @@ Choose this public URL on the first start; it becomes the saved issuer identity.
 codex-router central mint --root "$CENTRAL_ROOT" --out "$ENROLLMENT_HANDOFF"
 ```
 
-Transfer the file privately, keeping mode `0600`, then use `--enrollment-credential-file "$ENROLLMENT_HANDOFF"` instead of `--self-hosted-root` in `fleet enroll`. The receiving command consumes and removes the file. For an importer on another machine, mint with `--kind owner --out "$OWNER_HANDOFF"` and use `--owner-credential-file "$OWNER_HANDOFF"` instead of `--self-hosted-root`.
+Transfer the file privately, keeping mode `0600`, then use `--enrollment-credential-file "$ENROLLMENT_HANDOFF"` instead of `--self-hosted-root` in `fleet enroll`. The receiving command consumes and removes the file. For an importer on another machine, transfer the owner handoff file privately and use the same `--owner-credential-file` command above.
 
 For an isolated debug rehearsal only, add `--allow-plaintext-file-secrets` to `central serve` and `fleet enroll`, with separate scratch roots and ports. Release builds do not offer this option.
