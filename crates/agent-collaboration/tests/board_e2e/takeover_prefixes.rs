@@ -87,7 +87,6 @@ async fn prove_prefix(
     let follow =
         FollowMembership::arrange(fixture, recipients::session(second.host()?).await?).await?;
     let baseline = settled_view(fixture.host()?, &fixture.project).await?;
-    let pre_post_ack = controls::copy_ack(fixture).await?;
     match prefix {
         ReplicatedPrefix::Neither => {
             controls::hold(
@@ -121,6 +120,9 @@ async fn prove_prefix(
         // The actual stopped-owner readback below must then prove no capture.
         commit_and_hold_prior_piece(fixture).await?;
     }
+    // In the prior-piece cut, the hold blocks further same-copy ACK progress.
+    // Sample after that barrier and before the post; other cuts use only its epoch.
+    let pre_post_ack = controls::copy_ack(fixture).await?;
     let range = follow
         .post(fixture, "one literal takeover owed post")
         .await?;
