@@ -184,8 +184,8 @@ impl FleetClient {
     ) -> Result<FleetReply, FleetClientError> {
         let guard = self.admission_mutex.lock().await;
         let result = self.submit_admitted(request).await;
-        self.finish_submission_sync().await;
         drop(guard);
+        self.finish_submission_sync().await;
         result
     }
 
@@ -224,8 +224,8 @@ impl FleetClient {
     ) -> Result<FleetReply, FleetClientError> {
         let guard = self.admission_mutex.lock().await;
         let result = self.submit_creation_admitted(input, directory).await;
-        self.finish_submission_sync().await;
         drop(guard);
+        self.finish_submission_sync().await;
         result
     }
 
@@ -259,7 +259,13 @@ impl FleetClient {
 
     async fn finish_submission_sync(&self) {
         // A deferred sync must not replace the submitted request's own result.
-        if let Err(error) = self.synchronize_pending_admitted().await {
+        // Respect queued mutations and synchronization callers before another batch.
+        let Ok(guard) = self.admission_mutex.try_lock() else {
+            return;
+        };
+        let outcome = self.synchronize_pending_batch_admitted().await;
+        drop(guard);
+        if let Err(error) = outcome {
             tracing::warn!(%error, "Fleet synchronization after submission failed");
         }
     }

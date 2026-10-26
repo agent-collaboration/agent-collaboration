@@ -78,7 +78,7 @@ impl FleetClient {
                     }
                     Err(oneshot::error::TryRecvError::Empty) => {}
                 }
-                let _ = self.synchronize_pending_admitted().await;
+                let _ = self.synchronize_pending_batch_admitted().await;
                 drop(guard);
                 completion.await
             }
@@ -86,12 +86,12 @@ impl FleetClient {
         unwrap_outcome(outcome.map_err(|_| FleetClientError::Unavailable)?)
     }
 
-    pub(super) async fn synchronize_pending_admitted(&self) -> SharedOutcome {
-        while let Some(generation) = self.synchronization.pending().await {
+    pub(super) async fn synchronize_pending_batch_admitted(&self) -> SharedOutcome {
+        if let Some(generation) = self.synchronization.pending().await {
             // Snapshot before starting: a request arriving during this run needs the next run.
             let outcome = self.synchronize_admitted().await.map_err(Arc::new);
             self.synchronization.finish(generation, &outcome).await;
-            outcome?;
+            return outcome;
         }
         Ok(())
     }
