@@ -14,6 +14,33 @@ struct CaptureMark {
     last: Option<u64>,
 }
 
+pub async fn assert_local_post_at_cursor(
+    stopped: &StoppedHost,
+    project: &str,
+    cursor: message_board::FeedCursor,
+) -> FixtureResult {
+    let path = PathBuf::from(format!("projects/{project}/e1.sqlite"));
+    let rows = stopped_database_values(
+        stopped,
+        &path,
+        "SELECT json_object('epoch',epoch,'position',position) AS value FROM posts",
+    )
+    .await?;
+    let positions = rows
+        .iter()
+        .map(|row| serde_json::from_str::<message_board::FeedCursor>(row))
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(
+        positions
+            .iter()
+            .filter(|position| **position == cursor)
+            .count(),
+        1,
+        "crashed owner must retain the exact committed post cursor"
+    );
+    Ok(())
+}
+
 pub async fn cause_capture(
     stopped: &StoppedHost,
     project: &str,

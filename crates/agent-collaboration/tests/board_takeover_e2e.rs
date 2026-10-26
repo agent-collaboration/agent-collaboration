@@ -53,6 +53,11 @@ async fn takeover_with_neither_commit_acknowledged_does_not_invent_remote_custod
 }
 
 #[tokio::test]
+async fn takeover_before_local_cause_capture_does_not_invent_remote_custody() -> FixtureResult {
+    central_pair::scenario(takeover_prefixes::uncaptured_prefix).await
+}
+
+#[tokio::test]
 async fn takeover_with_only_cause_acknowledged_derives_a_new_item_once() -> FixtureResult {
     central_pair::scenario(async |fixture, second| {
         takeover_prefixes::prefix(fixture, second, ReplicatedPrefix::CauseOnly).await
