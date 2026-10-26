@@ -1,0 +1,49 @@
+{
+  "mode": "metric-present",
+  "secret": "private-canary",
+  "payload": {
+    "data": [1]
+  },
+  "originalSHA256": "dac28f0cdb97f58e64d1f58e08b5ef2a5ec5d1a0a27f6878337cb4bc57694e0e",
+  "cases": [
+    {
+      "name": "valid original input",
+      "path": [],
+      "action": "keep",
+      "accepted": true
+    },
+    {
+      "name": "delete data",
+      "path": ["data"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0",
+      "path": ["data", "0"],
+      "action": "delete",
+      "accepted": true
+    },
+    {
+      "name": "set data",
+      "path": ["data"],
+      "action": "set",
+      "value": [],
+      "accepted": false
+    },
+    {
+      "name": "set data",
+      "path": ["data"],
+      "action": "set",
+      "value": {},
+      "accepted": false
+    },
+    {
+      "name": "set data",
+      "path": ["data"],
+      "action": "set",
+      "value": 0,
+      "accepted": false
+    }
+  ]
+}

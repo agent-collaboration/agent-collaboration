@@ -237,8 +237,9 @@ expected_observation() {
 }
 
 freshness_guard() {
+  printf 'verification/tooling/proof-*.ts verification/tooling/proof-receipt-patches.json verification/evidence-json.ts verification/exact-json.ts verification/filesystem-paths.ts verification/fixtures/source-shell-words.ts '
   case "$1" in
-    AR-WS-GUARD) printf 'crates/codex-router-proxy/src/websocket.rs crates/codex-router-proxy/src/server.rs scripts/check-release-runtime-guardrails.py scripts/proof-matrix.sh' ;;
+    AR-WS-GUARD) printf 'crates/codex-router-proxy/src/websocket.rs crates/codex-router-proxy/src/server.rs verification/tooling/check-release-runtime-guardrails.ts scripts/proof-matrix.sh' ;;
     AR-WS-PASSTHROUGH|AR-WS-ACTIVE-TURN) printf 'crates/codex-router-proxy/src/websocket.rs crates/codex-router-proxy/src/server.rs crates/codex-router-proxy/src/lib.rs crates/codex-router-selection/src/* scripts/proof-matrix.sh' ;;
     AR-HTTP-PASSTHROUGH) printf 'crates/codex-router-proxy/src/http_sse.rs crates/codex-router-proxy/src/upstream.rs crates/codex-router-proxy/src/server.rs crates/codex-router-proxy/src/lib.rs scripts/proof-matrix.sh' ;;
     AR-CLI-UX) printf 'crates/codex-router-cli/src/* Cargo.toml crates/codex-router-cli/Cargo.toml scripts/proof-matrix.sh' ;;
@@ -259,42 +260,7 @@ ensure_guarded_source_paths_clean() {
   local row_id="$1"
   local guard
   guard="$(freshness_guard "$row_id")"
-  python3 - "$row_id" "$guard" <<'PY'
-import glob
-import shlex
-import subprocess
-import sys
-
-row_id = sys.argv[1]
-guard = sys.argv[2]
-patterns = shlex.split(guard)
-paths: list[str] = []
-for pattern in patterns:
-    matches = sorted(glob.glob(pattern))
-    if matches:
-        paths.extend(matches)
-    else:
-        paths.append(pattern)
-paths = sorted(set(paths))
-if not paths:
-    print(f"proof row {row_id} has no guarded paths", file=sys.stderr)
-    raise SystemExit(1)
-
-worktree = subprocess.run(
-    ["git", "diff", "--quiet", "HEAD", "--", *paths],
-    check=False,
-)
-index = subprocess.run(
-    ["git", "diff", "--cached", "--quiet", "--", *paths],
-    check=False,
-)
-if worktree.returncode != 0 or index.returncode != 0:
-    print(
-        f"proof row {row_id} guarded source paths are dirty; commit or revert guarded paths before accepting this receipt",
-        file=sys.stderr,
-    )
-    raise SystemExit(1)
-PY
+  node verification/tooling/proof-matrix-receipt.ts guard "$row_id" "$guard"
 }
 
 known_row() {
@@ -417,21 +383,7 @@ mark_row_pass() {
   fi
 
   receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-  python3 - "$receipt" "$notes" <<'PY'
-import json
-import sys
-from pathlib import Path
-
-path = Path(sys.argv[1])
-notes = sys.argv[2]
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = notes
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+  node verification/tooling/proof-matrix-receipt.ts pass "$receipt" "$notes"
   printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
   exit 0
 }
@@ -457,7 +409,7 @@ main() {
   case "$row_id" in
     AR-WS-GUARD)
       CODEX_ROUTER_PROOF_COMMAND="scripts/proof-matrix.sh $row_id" \
-        scripts/check-release-runtime-guardrails.py "$row_id"
+        node verification/tooling/check-release-runtime-guardrails.ts "$row_id"
       exit $?
       ;;
     AR-WS-PASSTHROUGH)
@@ -533,68 +485,7 @@ main() {
         exit 1
       fi
       receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-      if python3 - "$receipt" "$serial_artifact" "$concurrent_artifact" <<'PY'
-import json
-import shutil
-import sys
-from pathlib import Path
-
-receipt_path = Path(sys.argv[1])
-serial_path = Path(sys.argv[2])
-concurrent_path = Path(sys.argv[3])
-receipt = json.loads(receipt_path.read_text())
-serial = json.loads(serial_path.read_text())
-concurrent = json.loads(concurrent_path.read_text())
-errors = []
-
-websocket = serial.get("websocket", {})
-if websocket.get("selected_expected_account") is not True:
-    errors.append("serial WebSocket artifact did not prove expected account selection")
-if not serial.get("selected_account", {}).get("safe_tag"):
-    errors.append("serial WebSocket artifact did not include selected account safe tag")
-
-clients = concurrent.get("clients", {})
-if clients.get("count") != 3:
-    errors.append("concurrent artifact did not run three clients")
-if clients.get("all_success") is not True:
-    errors.append("concurrent artifact did not report all clients successful")
-if concurrent.get("selected_account", {}).get("expected_upstream_account_selected") is not True:
-    errors.append("concurrent artifact did not prove selected upstream account evidence")
-if not concurrent.get("selected_account", {}).get("safe_tag"):
-    errors.append("concurrent artifact did not include selected account safe tag")
-upstream = concurrent.get("upstream", {})
-if len(upstream.get("upstream_client_sessions", [])) < 3:
-    errors.append("concurrent artifact did not record upstream client sessions")
-if upstream.get("active_high_water", 0) < 3:
-    errors.append("concurrent artifact did not prove overlapping WebSocket sessions")
-
-serial_copy = receipt_path.parent / "AR-E2E-ACCOUNTS-serial-transcript.json"
-concurrent_copy = receipt_path.parent / "AR-E2E-ACCOUNTS-concurrent-transcript.json"
-shutil.copyfile(serial_path, serial_copy)
-shutil.copyfile(concurrent_path, concurrent_copy)
-try:
-    artifact_paths = [
-        str(serial_copy.resolve().relative_to(Path.cwd().resolve())),
-        str(concurrent_copy.resolve().relative_to(Path.cwd().resolve())),
-    ]
-except ValueError:
-    artifact_paths = [str(serial_copy), str(concurrent_copy)]
-
-receipt["status_after"] = "[x] passed" if not errors else "[ ] pending"
-receipt["result"] = "pass" if not errors else "fail"
-receipt["exit_code"] = 0 if not errors else 1
-receipt["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-receipt["artifact_paths"] = artifact_paths
-receipt["notes"] = (
-    "Serial and three-client concurrent installed-Codex WebSocket transcripts prove selected-account routing and transport continuity."
-    if not errors else "; ".join(errors)
-)
-receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-if errors:
-    for error in errors:
-        print(error, file=sys.stderr)
-    raise SystemExit(1)
-PY
+      if node verification/tooling/proof-matrix-receipt.ts accounts "$receipt" "$serial_artifact" "$concurrent_artifact"
       then
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
@@ -751,361 +642,7 @@ PY
         exit 1
       fi
       receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-      if python3 - "$row_id" "$three_websocket_artifact" "$receipt" "$artifact_source" "$(freshness_guard "$row_id")" <<'PY'
-import glob
-import json
-import shlex
-import shutil
-import sys
-from pathlib import Path
-
-row_id = sys.argv[1]
-artifact_path = Path(sys.argv[2])
-receipt_path = Path(sys.argv[3])
-artifact_source = sys.argv[4]
-freshness_guard = sys.argv[5]
-artifact = json.loads(artifact_path.read_text())
-receipt = json.loads(receipt_path.read_text())
-
-errors: list[str] = []
-import subprocess
-
-source_paths: list[str] = []
-for pattern in shlex.split(freshness_guard):
-    matches = sorted(glob.glob(pattern))
-    if matches:
-        source_paths.extend(matches)
-    else:
-        source_paths.append(pattern)
-source_paths = sorted(set(source_paths))
-
-dirty_worktree = subprocess.run(
-    ["git", "diff", "--quiet", "HEAD", "--", *source_paths],
-    check=False,
-)
-dirty_index = subprocess.run(
-    ["git", "diff", "--cached", "--quiet", "--", *source_paths],
-    check=False,
-)
-if dirty_worktree.returncode != 0 or dirty_index.returncode != 0:
-    errors.append("guarded proof source paths are dirty; commit or revert them before accepting E-row proof")
-if artifact.get("git_head") != receipt.get("git_head"):
-    diff_result = subprocess.run(
-        ["git", "diff", "--quiet", f"{artifact.get('git_head')}..{receipt.get('git_head')}", "--", *source_paths],
-        check=False,
-    )
-    if diff_result.returncode != 0:
-        errors.append(
-            f"artifact git_head {artifact.get('git_head')} does not match current proof git_head {receipt.get('git_head')} and relevant source paths changed"
-        )
-codex_version_result = subprocess.run(
-    ["codex", "--version"],
-    check=False,
-    stdout=subprocess.PIPE,
-    stderr=subprocess.PIPE,
-    text=True,
-)
-if codex_version_result.returncode != 0:
-    errors.append("failed to read installed Codex version for E-row freshness")
-else:
-    current_codex_version = codex_version_result.stdout.strip()
-    if artifact.get("codex_version") != current_codex_version:
-        errors.append(
-            f"artifact codex_version {artifact.get('codex_version')} does not match installed Codex {current_codex_version}"
-        )
-if artifact.get("mode") != "three-websocket-soak":
-    errors.append("artifact mode is not three-websocket-soak")
-if not artifact.get("clients", {}).get("all_success"):
-    errors.append("clients did not all succeed")
-if artifact.get("clients", {}).get("count") != 3:
-    errors.append("client count is not 3")
-if artifact.get("clients", {}).get("target_model") != "gpt-5.4-mini":
-    errors.append("target client model is not gpt-5.4-mini")
-
-upstream = artifact.get("upstream", {})
-registry = artifact.get("router_websocket_registry", {})
-socket_cleanup = artifact.get("socket_cleanup", {})
-
-if upstream.get("target_model") != "gpt-5.4-mini":
-    errors.append("upstream target_model is not gpt-5.4-mini")
-if upstream.get("target_model_session_count") != 3:
-    errors.append("upstream target_model_session_count is not 3")
-unexpected_models = upstream.get("unexpected_response_create_models")
-if not isinstance(unexpected_models, list):
-    errors.append("unexpected_response_create_models is not a list")
-elif unexpected_models:
-    errors.append(f"unexpected response.create models observed: {unexpected_models}")
-
-if row_id == "E-01":
-    router_process = artifact.get("router_process", {})
-    if artifact.get("shared_router_pid") != router_process.get("pid"):
-        errors.append("shared_router_pid does not match router_process.pid")
-    if router_process.get("spawned_real_serve_child") is not True:
-        errors.append("router_process.spawned_real_serve_child is not true")
-    if upstream.get("active_high_water", 0) < 3:
-        errors.append("upstream active_high_water is below 3")
-    if upstream.get("multi_step_interleave_completed") is not True:
-        errors.append("multi_step_interleave_completed is not true")
-    for status in artifact.get("clients", {}).get("statuses", []):
-        markers = status.get("stderr_transport_error_markers")
-        if not isinstance(markers, list):
-            errors.append("client status is missing stderr_transport_error_markers")
-        elif markers:
-            errors.append(f"client stderr contains WebSocket transport error markers: {markers}")
-elif row_id == "E-02":
-    if upstream.get("hold_duration_ms", 0) < 300_000:
-        errors.append("hold_duration_ms is below five minutes")
-    if upstream.get("active_high_water", 0) < 3:
-        errors.append("upstream active_high_water is below 3")
-    if registry.get("high_water_sessions", 0) < 3:
-        errors.append("router registry high_water_sessions is below 3")
-elif row_id == "E-03":
-    if upstream.get("overlap_proven") is not True:
-        errors.append("overlap_proven is not true")
-    if upstream.get("real_overlap_duration_ms", 0) < 300_000:
-        errors.append("real_overlap_duration_ms is below five minutes")
-    if not upstream.get("overlap_started_unix_ms") or not upstream.get("real_overlap_completed_unix_ms"):
-        errors.append("real overlap timestamps are missing")
-elif row_id == "E-04":
-    counts = registry.get("final_session_forwarded_upstream_message_counts", [])
-    if not isinstance(counts, list):
-        errors.append("final_session_forwarded_upstream_message_counts is not a list")
-        counts = []
-    valid_final_counts = [count for count in counts if isinstance(count, int) and count >= 3]
-    if len(valid_final_counts) < 3:
-        errors.append(f"final-session forwarded counts do not prove three unique sessions with >=3 frames: {counts}")
-    in_overlap_event_counts = upstream.get("in_overlap_session_event_counts", [])
-    if not isinstance(in_overlap_event_counts, list):
-        errors.append("in_overlap_session_event_counts is not a list")
-        in_overlap_event_counts = []
-    if sum(1 for count in in_overlap_event_counts if isinstance(count, int) and count >= 3) < 3:
-        errors.append(f"upstream in_overlap_session_event_counts do not prove three unique non-prewarm sessions with >=3 in-overlap events: {in_overlap_event_counts}")
-    if registry.get("forwarded_upstream_messages", 0) < 9:
-        errors.append("forwarded_upstream_messages is below 9")
-elif row_id == "E-05":
-    if upstream.get("multi_step_interleave_completed") is not True:
-        errors.append("multi_step_interleave_completed is not true")
-    if upstream.get("multi_step_followup_frame_count", 0) < 1:
-        errors.append("multi_step_followup_frame_count is below 1")
-    if upstream.get("multi_step_followup_active_session_count", 0) < 3:
-        errors.append("multi_step_followup_active_session_count is below 3")
-    if upstream.get("multi_step_completed_before_overlap_end") is not True:
-        errors.append("multi_step_completed_before_overlap_end is not true for real 3-way overlap")
-elif row_id == "E-06":
-    if registry.get("handled_connections") != 3:
-        errors.append("router final report handled_connections is not 3")
-    if registry.get("active_sessions") != 0:
-        errors.append("router registry active_sessions is not 0")
-    if registry.get("high_water_sessions", 0) < 3:
-        errors.append("router registry high_water_sessions is below 3")
-    if registry.get("closed_sessions", 0) < 3:
-        errors.append("router registry closed_sessions is below 3")
-    if registry.get("completed_response_sessions", 0) < 3:
-        errors.append("router registry completed_response_sessions is below 3")
-elif row_id == "E-07":
-    router_process = artifact.get("router_process", {})
-    if not router_process.get("binary_path"):
-        errors.append("router_process.binary_path is missing")
-    if not router_process.get("argv"):
-        errors.append("router_process.argv is missing")
-    if not router_process.get("listener"):
-        errors.append("router_process.listener is missing")
-    if not router_process.get("readiness_line"):
-        errors.append("router_process.readiness_line is missing")
-    if artifact.get("shared_router_pid") != router_process.get("pid"):
-        errors.append("shared router PID correlation is missing")
-    if upstream.get("expected_sessions") != 3 or upstream.get("completed_sessions") != 3:
-        errors.append("upstream session count correlation is incomplete")
-    if registry.get("registered_sessions", 0) < 3 or registry.get("closed_sessions", 0) < 3:
-        errors.append("router registry session correlation is incomplete")
-    for field in ["registered_session_ids", "completed_session_ids", "closed_session_ids"]:
-        values = registry.get(field)
-        if not isinstance(values, list) or len(values) < 3:
-            errors.append(f"router registry {field} missing observed session ids")
-    upstream_session_ids = upstream.get("upstream_session_ids")
-    if not isinstance(upstream_session_ids, list) or len(upstream_session_ids) < 3:
-        errors.append("upstream_session_ids missing observed upstream session ids")
-        upstream_session_ids = []
-    counts = registry.get("final_session_forwarded_upstream_message_counts", [])
-    if not isinstance(counts, list) or len(counts) < 3:
-        errors.append("router registry final per-session counters are missing")
-    if upstream.get("http_probe_count") != 0:
-        errors.append("unexpected HTTP probe count in WebSocket continuity artifact")
-    continuity = artifact.get("session_continuity")
-    if not isinstance(continuity, dict):
-        errors.append("session_continuity object is missing")
-        continuity = {}
-    if continuity.get("per_client_session_join_key_observed") is not True:
-        errors.append("session_continuity did not prove per-client session join keys")
-    if continuity.get("correlation_level") != "per_client_socket_and_marker_join":
-        errors.append("session_continuity correlation_level is not per_client_socket_and_marker_join")
-    per_client_join_keys = continuity.get("per_client_join_keys")
-    if not isinstance(per_client_join_keys, list) or len(per_client_join_keys) != 3:
-        errors.append("session_continuity per_client_join_keys must contain exactly three entries")
-        per_client_join_keys = []
-    observed_client_indexes = set()
-    joined_router_session_ids = set()
-    joined_upstream_session_ids = set()
-    for index, join_key in enumerate(per_client_join_keys):
-        if not isinstance(join_key, dict):
-            errors.append(f"per_client_join_keys[{index}] is not an object")
-            continue
-        observed_client_indexes.add(join_key.get("client_index"))
-        for field in ["client_pid", "router_session_id", "upstream_session_id"]:
-            if join_key.get(field) in (None, ""):
-                errors.append(f"per_client_join_keys[{index}] missing {field}")
-        if isinstance(join_key.get("router_session_id"), int):
-            joined_router_session_ids.add(join_key.get("router_session_id"))
-        if isinstance(join_key.get("upstream_session_id"), int):
-            joined_upstream_session_ids.add(join_key.get("upstream_session_id"))
-    if observed_client_indexes != {0, 1, 2}:
-        errors.append(f"per_client_join_keys client indexes are wrong: {sorted(observed_client_indexes)}")
-    registered_ids = registry.get("registered_session_ids") if isinstance(registry.get("registered_session_ids"), list) else []
-    closed_ids = registry.get("closed_session_ids") if isinstance(registry.get("closed_session_ids"), list) else []
-    if len(set(registered_ids)) < 3:
-        errors.append(f"router registered_session_ids do not contain three unique ids: {registered_ids}")
-    if len(set(closed_ids)) < 3:
-        errors.append(f"router closed_session_ids do not contain three unique ids: {closed_ids}")
-    if len(set(upstream_session_ids)) < 3:
-        errors.append(f"upstream_session_ids do not contain three unique ids: {upstream_session_ids}")
-    if joined_router_session_ids != set(registered_ids):
-        errors.append(f"joined router session ids {sorted(joined_router_session_ids)} do not match registered ids {sorted(set(registered_ids))}")
-    if joined_upstream_session_ids != set(upstream_session_ids):
-        errors.append(f"joined upstream session ids {sorted(joined_upstream_session_ids)} do not match upstream ids {sorted(set(upstream_session_ids))}")
-    if continuity.get("router_registered_unique_session_count") != len(set(registered_ids)):
-        errors.append("session_continuity router_registered_unique_session_count does not match registry")
-    if continuity.get("router_closed_unique_session_count") != len(set(closed_ids)):
-        errors.append("session_continuity router_closed_unique_session_count does not match registry")
-    if continuity.get("upstream_unique_session_count") != len(set(upstream_session_ids)):
-        errors.append("session_continuity upstream_unique_session_count does not match upstream")
-    correlations = artifact.get("runtime_correlations")
-    if not isinstance(correlations, list) or len(correlations) != 3:
-        errors.append("runtime_correlations must contain exactly three client process entries")
-        correlations = []
-    for index, correlation in enumerate(correlations):
-        if not isinstance(correlation, dict):
-            errors.append(f"runtime correlation {index} is not an object")
-            continue
-        required_fields = [
-            "client_pid",
-            "router_pid",
-            "router_session_id",
-            "upstream_session_id",
-            "transport",
-            "stderr_transport_error_markers",
-            "stdout_contains_smoke_text",
-        ]
-        for field in required_fields:
-            if correlation.get(field) in (None, ""):
-                errors.append(f"runtime correlation {index} missing {field}")
-        if correlation.get("transport") != "websocket":
-            errors.append(f"runtime correlation {index} transport is not websocket")
-        if correlation.get("stderr_transport_error_markers") != []:
-            errors.append(f"runtime correlation {index} has transport error markers")
-        if correlation.get("stdout_contains_smoke_text") is not True:
-            errors.append(f"runtime correlation {index} stdout did not contain smoke text")
-        if correlation.get("router_pid") != router_process.get("pid"):
-            errors.append(f"runtime correlation {index} router_pid does not match router process")
-elif row_id == "E-08":
-    if upstream.get("normal_close_sessions", 0) < 3:
-        errors.append("upstream normal_close_sessions is below 3")
-    if upstream.get("abnormal_close_sessions") != 0:
-        errors.append("upstream abnormal_close_sessions is not 0")
-    close_outcomes = upstream.get("session_close_outcomes", [])
-    if not isinstance(close_outcomes, list) or len(close_outcomes) < 3:
-        errors.append("upstream session_close_outcomes is missing or incomplete")
-    elif any(outcome != "normal" for outcome in close_outcomes):
-        errors.append(f"upstream session_close_outcomes contains non-normal outcomes: {close_outcomes}")
-    if socket_cleanup.get("established_count") != 0:
-        errors.append("socket cleanup established_count is not 0")
-    if socket_cleanup.get("close_wait_count") != 0:
-        errors.append("socket cleanup close_wait_count is not 0")
-    if not isinstance(socket_cleanup.get("raw_state_counts"), list):
-        errors.append("socket cleanup raw_state_counts is missing")
-elif row_id == "E-09":
-    forbidden_fragments = [
-        "installed-smoke-upstream-token",
-        "installed-smoke-matches-token",
-        "local-token",
-        "CODEX_ROUTER_TOKEN=",
-        "Bearer ",
-        "prompt-canary",
-        "raw-previous-response-id-canary",
-        "response.create",
-        "codex-router smoke ok",
-        "acct_",
-        "askluna",
-        "matches",
-        "ssdev",
-    ]
-    rendered_artifact = artifact_path.read_text()
-    for fragment in forbidden_fragments:
-        if fragment in rendered_artifact:
-            errors.append(f"artifact leaked forbidden fragment: {fragment}")
-    allowed_top_level = {
-        "clients",
-        "codex_version",
-        "git_head",
-        "mode",
-        "router_process",
-        "router_websocket_registry",
-        "runtime_correlations",
-        "session_continuity",
-        "shared_router_pid",
-        "socket_cleanup",
-        "upstream",
-    }
-    extra_keys = set(artifact) - allowed_top_level
-    if extra_keys:
-        errors.append(f"artifact contains non-allowlisted top-level keys: {sorted(extra_keys)}")
-
-receipt["status_after"] = "[x] passed" if not errors else "[ ] pending"
-receipt["result"] = "pass" if not errors else "fail"
-receipt["exit_code"] = 0 if not errors else 1
-evidence_artifact_path = receipt_path.parent / "three-websocket-soak-transcript.json"
-shutil.copyfile(artifact_path, evidence_artifact_path)
-try:
-    artifact_path_value = str(evidence_artifact_path.resolve().relative_to(Path.cwd().resolve()))
-except ValueError:
-    artifact_path_value = str(evidence_artifact_path)
-receipt["artifact_paths"] = [artifact_path_value]
-receipt["freshness_check"] = "explicit_artifact_pointer_and_git_head_match_current_head_or_relevant_source_unchanged"
-receipt["artifact_source"] = artifact_source
-receipt["touched_targets"] = [
-    "crates/codex-router-test-support/src/installed_codex.rs",
-    "tests/smoke/installed_codex_mock.sh",
-    "crates/codex-router-proxy/src/websocket.rs",
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-cli/src/lib.rs",
-    "scripts/proof-matrix.sh",
-]
-receipt["notes"] = "Validated explicit installed-Codex three-WebSocket soak artifact." if not errors else "; ".join(errors)
-receipt["soak_summary"] = {
-    "mode": artifact.get("mode"),
-    "clients": artifact.get("clients"),
-    "upstream": upstream,
-    "router_websocket_registry": registry,
-    "socket_cleanup": socket_cleanup,
-}
-receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-
-if row_id == "E-09":
-    rendered_receipt = receipt_path.read_text()
-    for fragment in ["/Users/", "/var/folders/"]:
-        if fragment in rendered_artifact or fragment in rendered_receipt:
-            errors.append(f"proof pack leaked local absolute path fragment: {fragment}")
-    if errors:
-        receipt["status_after"] = "[ ] pending"
-        receipt["result"] = "fail"
-        receipt["exit_code"] = 1
-        receipt["notes"] = "; ".join(errors)
-        receipt_path.write_text(json.dumps(receipt, indent=2, sort_keys=True) + "\n")
-
-if errors:
-    for error in errors:
-        print(error, file=sys.stderr)
-    sys.exit(1)
-PY
+      if node verification/tooling/proof-matrix-receipt.ts soak "$row_id" "$three_websocket_artifact" "$receipt" "$artifact_source" "$(freshness_guard "$row_id")"
       then
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
@@ -1128,66 +665,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$row_id" "$receipt" "$artifact_path" "$smoke_output_file" <<'PY'
-import json
-import shutil
-import sys
-from pathlib import Path
-row_id = sys.argv[1]
-path = Path(sys.argv[2])
-artifact_path = Path(sys.argv[3])
-smoke_output_path = Path(sys.argv[4])
-payload = json.loads(path.read_text())
-artifact = json.loads(artifact_path.read_text())
-errors = []
-router_process = artifact.get("router_process", {})
-if row_id == "S-03":
-    for field in ["binary_path", "pid", "argv", "listener", "readiness_line", "cleanup_result"]:
-        if router_process.get(field) in (None, "", []):
-            errors.append(f"router_process.{field} missing from serial smoke artifact")
-    if router_process.get("spawned_real_serve_child") is not True:
-        errors.append("router_process.spawned_real_serve_child is not true")
-if row_id == "S-04":
-    rendered_artifact = artifact_path.read_text()
-    rendered_output = smoke_output_path.read_text()
-    for fragment in ["falling back", "fallback", "reconnecting", "request timed out"]:
-        if fragment in rendered_artifact.lower() or fragment in rendered_output.lower():
-            errors.append(f"serial WebSocket smoke observed forbidden transport degradation text: {fragment}")
-    websocket = artifact.get("websocket", {})
-    upstream = artifact.get("upstream", {})
-    if websocket.get("request_frame_count", 0) < 1:
-        errors.append("serial WebSocket smoke did not record upstream request frames")
-    if upstream.get("handshake_count") != 1:
-        errors.append("serial WebSocket smoke did not record exactly one upstream handshake")
-try:
-    evidence_artifact_path = path.parent / f"{row_id}-transcript.json"
-    shutil.copyfile(artifact_path, evidence_artifact_path)
-    artifact_path_value = str(evidence_artifact_path.resolve().relative_to(Path.cwd().resolve()))
-except ValueError:
-    artifact_path_value = str(evidence_artifact_path)
-payload["status_after"] = "[x] passed" if not errors else "[ ] pending"
-payload["result"] = "pass" if not errors else "fail"
-payload["exit_code"] = 0 if not errors else 1
-payload["touched_targets"] = [
-    "crates/codex-router-test-support/src/installed_codex.rs",
-    "tests/smoke/installed_codex_mock.sh",
-    "crates/codex-router-cli/src/lib.rs",
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/websocket.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["artifact_paths"] = [artifact_path_value]
-payload["notes"] = {
-    "S-01": "Installed Codex WebSocket smoke passed with tokenless spawned router profile.",
-    "S-03": "Installed Codex WebSocket smoke passed through spawned built codex-router serve child.",
-    "S-04": "Installed Codex WebSocket mock upstream smoke passed deterministic runtime/no-fallback contract.",
-}[row_id] if not errors else "; ".join(errors)
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-if errors:
-    for error in errors:
-        print(error, file=sys.stderr)
-    raise SystemExit(1)
-PY
+        node verification/tooling/proof-matrix-receipt.ts serial "$row_id" "$receipt" "$artifact_path" "$smoke_output_file"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1207,25 +685,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-test-support/src/installed_codex.rs",
-    "crates/codex-router-proxy/src/lib.rs",
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/websocket.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Hardening smoke/tests passed: missing local token does not reach upstream, forbidden carriers reject before selection, stale WebSocket generation closes on rotation, and WebSocket token smuggling is rejected."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "S-02"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1241,23 +701,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-proxy/src/websocket.rs",
-    "crates/codex-router-proxy/src/lib.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Focused async WebSocket slow-recorder integration test passed; side-effect persistence is spawned after local frame forwarding."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-17b"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1273,23 +717,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/lib.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Old-failure equivalent reproducer passed: a single-lane accept loop leaves the second client without application progress until the first handler is released."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-05a"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1307,24 +735,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/websocket.rs",
-    "crates/codex-router-proxy/src/lib.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Async comparison fixtures passed: blocked first WebSocket does not block survivor, served runtime drains active sessions on shutdown, and active duplex pumps cancel cleanly."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-05b"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1341,24 +752,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-cli/src/lib.rs",
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/websocket.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Real served-router WebSocket fixture traversed actual listener, Hyper upgrade, persisted quota selection during blocked refresh, upstream forwarding, and registry shutdown cleanup."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-18"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1379,24 +773,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-proxy/src/websocket.rs",
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/lib.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Focused pump cleanup family passed: active duplex pumps cancel on shutdown, pre-duplex routing/connect phases cancel on shutdown, serve shutdown drains active sessions, and reset/idle-close handling does not leak failed turns."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-19"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1414,23 +791,7 @@ PY
           exit 1
         fi
         receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-        python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-proxy/src/websocket.rs",
-    "crates/codex-router-proxy/src/lib.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Focused exact-forwarding tests passed: first response.create frame and direct response payload route once and reach upstream unchanged, including async tunnel forwarding."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+        node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-20"
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
       fi
@@ -1439,54 +800,7 @@ PY
       exit 1
       ;;
     I-21)
-      if python3 - <<'PY'
-from pathlib import Path
-source = Path("crates/codex-router-proxy/src/server.rs").read_text()
-errors = []
-async_resolver_start = source.find("struct AsyncProxyCredentialResolver")
-async_resolver_end = source.find("impl HttpAffinitySecretProvider")
-if async_resolver_start == -1 or async_resolver_end == -1:
-    errors.append("missing AsyncProxyCredentialResolver section")
-    async_resolver = ""
-else:
-    async_resolver = source[async_resolver_start:async_resolver_end]
-required = [
-    "prepare_streaming_http_request_async",
-    "AsyncSqliteStateStore::open",
-    "AsyncRepositoryBackedAccountSelector::new_with_runtime",
-    "AsyncProxyCredentialResolver::new(\n            state_store.clone(),\n            self.secret_store.clone(),",
-    "service.prepare_streaming_request_async(request).await",
-    "state_store: AsyncSqliteStateStore",
-    "secret_store: ProxyRuntimeSecretStore",
-    ".load_account(account_id)\n            .await",
-    ".activate_account_credential_generation_if_current_and_invalidate_quota(",
-]
-for needle in required:
-    if needle not in source:
-        errors.append(f"missing async HTTP/SSE release-path marker: {needle}")
-resolver_forbidden = [
-    "ProxyCredentialResolver::open",
-    "SqliteStateStore::open",
-    "state_database_path:",
-    "secret_store_root:",
-]
-for needle in resolver_forbidden:
-    if needle in async_resolver:
-        errors.append(f"async credential resolver still has sync/path marker: {needle}")
-forbidden = [
-    "prepare_context.prepare_streaming_http_request",
-    "fn prepare_streaming_http_request(",
-    "let prepared = tokio::task::spawn_blocking(move ||",
-    "ProxyCredentialResolver::open(",
-]
-for needle in forbidden:
-    if needle in source:
-        errors.append(f"sync HTTP/SSE request-time marker still present: {needle}")
-if errors:
-    for error in errors:
-        print(error)
-    raise SystemExit(1)
-PY
+      if node verification/tooling/proof-matrix-receipt.ts http
       then
         if cargo test -p codex-router-cli served_router_http_uses_persisted_quota_while_background_refresh_is_blocked -- --nocapture; then
           if ! ensure_guarded_source_paths_clean "$row_id"; then
@@ -1495,24 +809,7 @@ PY
             exit 1
           fi
           receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-          python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["touched_targets"] = [
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/http_sse.rs",
-    "crates/codex-router-cli/src/lib.rs",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Release HTTP/SSE request prep uses SQLx-backed AsyncSqliteStateStore, async selector, and async credential state access; served-router startup/nonblocking HTTP quota regression passed."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+          node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "I-21"
           printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
           exit 0
         fi
@@ -1528,280 +825,7 @@ PY
         exit 1
       fi
       receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-      if python3 - "$row_id" "$receipt" <<'PY'
-import json
-import re
-import subprocess
-import sys
-from pathlib import Path
-
-row_id = sys.argv[1]
-receipt_path = Path(sys.argv[2])
-repo = Path.cwd()
-errors: list[str] = []
-
-def read(path: str) -> str:
-    return (repo / path).read_text(encoding="utf-8")
-
-def test_list(crate: str) -> str:
-    result = subprocess.run(
-        ["cargo", "test", "-p", crate, "--", "--list"],
-        cwd=repo,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
-        errors.append(f"cargo test -p {crate} -- --list failed: {result.stderr.strip()}")
-    return result.stdout
-
-def require_contains(label: str, haystack: str, needle: str) -> None:
-    if needle not in haystack:
-        errors.append(f"{label} missing required marker: {needle}")
-
-if row_id == "G-06":
-    release_files = [
-        "crates/codex-router-proxy/src/server.rs",
-        "crates/codex-router-proxy/src/websocket.rs",
-        "crates/codex-router-proxy/src/upstream.rs",
-        "crates/codex-router-proxy/src/http_sse.rs",
-    ]
-    for relative in release_files:
-        source = read(relative)
-        if "rusqlite" in source or re.search(r"(?<!Async)SqliteStateStore::open", source):
-            errors.append(f"{relative} contains direct sync SQLite access marker")
-    require_contains("server runtime", read("crates/codex-router-proxy/src/server.rs"), "AsyncSqliteStateStore::open")
-elif row_id == "G-08":
-    server = read("crates/codex-router-proxy/src/server.rs")
-    for marker in ["tungstenite::accept", "accept_hdr_async", "derive_accept_key", "BlockingWebSocketTunnel"]:
-        if marker in server:
-            errors.append(f"release serve switchpoint still contains alternate parser/handshake marker: {marker}")
-    for marker in ["hyper_tungstenite::upgrade", "AsyncWebSocketTunnel", "handle_upgraded_connection"]:
-        require_contains("release serve switchpoint", server, marker)
-elif row_id == "G-09":
-    result = subprocess.run(
-        ["scripts/check-release-runtime-guardrails.py", "--print-release-source-paths"],
-        cwd=repo,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
-        errors.append(f"release source path resolver failed: {result.stderr.strip()}")
-        source_paths = []
-    else:
-        try:
-            source_paths = json.loads(result.stdout)
-        except json.JSONDecodeError as error:
-            errors.append(f"release source path resolver did not emit JSON: {error}")
-            source_paths = []
-    required_paths = {
-        "crates/codex-router-proxy/src/server.rs",
-        "crates/codex-router-proxy/src/websocket.rs",
-        "crates/codex-router-proxy/src/upstream.rs",
-        "crates/codex-router-proxy/src/http_sse.rs",
-    }
-    source_path_set = set(source_paths)
-    missing_paths = sorted(required_paths - source_path_set)
-    if missing_paths:
-        errors.append(f"release source path resolver missed required files: {missing_paths}")
-    forbidden_prefixes = ["crates/codex-router-test-support/"]
-    forbidden_paths = [
-        path
-        for path in source_paths
-        if any(path.startswith(prefix) for prefix in forbidden_prefixes)
-    ]
-    if forbidden_paths:
-        errors.append(f"release source path resolver included test-support files: {forbidden_paths[:5]}")
-elif row_id == "G-10":
-    root_manifest = read("Cargo.toml")
-    proxy_manifest = read("crates/codex-router-proxy/Cargo.toml")
-    require_contains("workspace manifest", root_manifest, "tokio-tungstenite")
-    require_contains("proxy manifest", proxy_manifest, "tokio-tungstenite.workspace = true")
-    if re.search(r'(?m)^\s*tungstenite\s*=', proxy_manifest):
-        errors.append("proxy production manifest declares blocking tungstenite directly")
-elif row_id == "G-11":
-    cli = read("crates/codex-router-cli/src/lib.rs")
-    server = read("crates/codex-router-proxy/src/server.rs")
-    websocket = read("crates/codex-router-proxy/src/websocket.rs")
-    require_contains("CLI serve path", cli, "LoopbackRouterRuntime::start")
-    require_contains("CLI serve path", cli, "serve_protocol_connections")
-    if "LoopbackHttpServer::bind" in cli or "LoopbackHttpAdapter::handle" in cli:
-        errors.append("CLI serve path still references legacy blocking loopback server")
-    if "pub struct BlockingWebSocketTunnel" in websocket and "#[cfg(test)]" not in websocket:
-        errors.append("blocking websocket tunnel is not visibly test-gated")
-    require_contains("server handler lifecycle", server, "JoinSet")
-    require_contains("server handler lifecycle", server, "handle_connection_join_result")
-elif row_id == "G-12":
-    websocket = read("crates/codex-router-proxy/src/websocket.rs")
-    server = read("crates/codex-router-proxy/src/server.rs")
-    for marker in ["unbounded_channel", "mpsc::unbounded"]:
-        if marker in websocket or marker in server:
-            errors.append(f"runtime contains unbounded channel marker: {marker}")
-    require_contains("affinity write tracker", websocket, "TaskTracker")
-    require_contains("affinity write tracker", server, "affinity_record_tasks.wait().await")
-    result = subprocess.run(
-        [
-            "cargo",
-            "test",
-            "-p",
-            "codex-router-proxy",
-            "async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder",
-            "--",
-            "--nocapture",
-        ],
-        cwd=repo,
-        check=False,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    if result.returncode != 0:
-        errors.append(
-            "slow affinity recorder behavioral proof failed: "
-            + (result.stderr.strip() or result.stdout.strip())
-        )
-elif row_id in {"G-13", "G-14", "G-15", "G-16", "G-19", "G-20"}:
-    proxy_tests = test_list("codex-router-proxy")
-    cli_tests = test_list("codex-router-cli") if row_id in {"G-16", "G-19"} else ""
-    required_by_row = {
-        "G-13": [
-            "runtime_shutdown_cancels_pending_first_frame_routing",
-            "runtime_shutdown_cancels_pending_upstream_connect",
-            "runtime_shutdown_cancels_active_duplex_pumps",
-        ],
-        "G-14": [
-            "async_websocket_tunnel_forwards_first_frame_and_second_local_frame",
-        ],
-        "G-15": [
-            "runtime_shutdown_cancels_active_duplex_pumps",
-        ],
-        "G-16": [
-            "loopback_router_runtime_accepts_http_while_websocket_is_blocked",
-            "served_router_http_uses_persisted_quota_while_background_refresh_is_blocked",
-            "served_router_websocket_uses_persisted_quota_while_background_refresh_is_blocked",
-        ],
-        "G-19": [
-            "served_router_websocket_uses_persisted_quota_while_background_refresh_is_blocked",
-        ],
-        "G-20": [
-            "async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder",
-        ],
-    }[row_id]
-    combined = proxy_tests + "\n" + cli_tests
-    for test_name in required_by_row:
-        require_contains("permanent test inventory", combined, test_name)
-elif row_id in {"G-17", "G-18"}:
-    harness_tests = test_list("codex-router-test-support")
-    script = read("tests/smoke/installed_codex_mock.sh")
-    required_by_row = {
-        "G-17": [
-            "three_codex_websocket_concurrent_e2e_shares_router_pid_and_overlaps",
-            'run_test_filter "three_codex_websocket_concurrent_e2e_"',
-        ],
-        "G-18": [
-            "three_codex_websocket_soak_holds_overlap_and_records_activity",
-            'run_three_websocket_soak_filter "three_codex_websocket_soak_"',
-            "PIPESTATUS[0]",
-        ],
-    }[row_id]
-    combined = harness_tests + "\n" + script
-    for marker in required_by_row:
-        require_contains("installed-Codex harness inventory", combined, marker)
-elif row_id == "G-22":
-    websocket = read("crates/codex-router-proxy/src/websocket.rs")
-    forbidden = ["unbounded_channel", "mpsc::unbounded", "std::sync::mpsc"]
-    for marker in forbidden:
-        if marker in websocket:
-            errors.append(f"WebSocket pump contains unbounded channel marker: {marker}")
-    require_contains("WebSocket pump", websocket, "tokio::select!")
-    require_contains("WebSocket pump", websocket, "forward_duplex_until_complete")
-elif row_id == "G-29":
-    request_time_paths = [
-        "crates/codex-router-proxy/src/server.rs",
-        "crates/codex-router-proxy/src/http_sse.rs",
-        "crates/codex-router-proxy/src/websocket.rs",
-        "crates/codex-router-proxy/src/upstream.rs",
-    ]
-    request_time_forbidden = [
-        "codex_router_secret_store::",
-        "SecretStore",
-        "OpenAiOAuthRefreshClient",
-        "CredentialRefreshClient",
-        "RouterCredentialResolver",
-        "AsyncRouterCredentialResolver",
-        "RefreshLeaseRegistry",
-        "AsyncRefreshLeaseRegistry",
-        "refresh_credentials",
-        "write_secret",
-        "read_secret",
-        "account_credential_bundle_key",
-        "activate_account_credential_generation_if_current_and_invalidate_quota",
-        "rusqlite",
-        "sqlx::",
-    ]
-    for relative_path in request_time_paths:
-        source = read(relative_path)
-        for marker in request_time_forbidden:
-            if marker in source:
-                errors.append(f"{relative_path} contains request-time auth/state boundary marker: {marker}")
-    proxy_production_forbidden = [
-        "refresh_credentials",
-        "write_secret",
-        "read_secret",
-        "account_credential_bundle_key",
-        "activate_account_credential_generation_if_current_and_invalidate_quota",
-        "rusqlite",
-        "sqlx::",
-    ]
-    for source_path in sorted((repo / "crates/codex-router-proxy/src").glob("*.rs")):
-        relative_path = source_path.relative_to(repo).as_posix()
-        if relative_path == "crates/codex-router-proxy/src/lib.rs":
-            continue
-        source = source_path.read_text(encoding="utf-8")
-        for marker in proxy_production_forbidden:
-            if marker in source:
-                errors.append(f"{relative_path} contains request-time auth/state boundary marker: {marker}")
-    server = read("crates/codex-router-proxy/src/server.rs")
-    for marker in [
-        "ProxyRuntimeCredentialResources::open",
-        "AsyncProxyCredentialResolverFactory",
-        ".resolver_for_state(",
-    ]:
-        require_contains("release serve auth/state boundary", server, marker)
-    auth_resolver = read("crates/codex-router-auth/src/resolver.rs")
-    for marker in [
-        "pub struct AsyncRouterCredentialResolver",
-        "pub struct AsyncRefreshLeaseRegistry",
-        "refresh_client.refresh_credentials",
-        ".write_secret(",
-        ".activate_account_credential_generation_if_current_and_invalidate_quota(",
-    ]:
-        require_contains("auth-owned credential resolver", auth_resolver, marker)
-
-payload = json.loads(receipt_path.read_text())
-payload["status_after"] = "[x] passed" if not errors else "[ ] pending"
-payload["result"] = "pass" if not errors else "fail"
-payload["exit_code"] = 0 if not errors else 1
-payload["touched_targets"] = [
-    "scripts/proof-matrix.sh",
-    "scripts/check-release-runtime-guardrails.py",
-    "crates/codex-router-proxy/src/websocket.rs",
-    "crates/codex-router-proxy/src/server.rs",
-    "crates/codex-router-proxy/src/credential_runtime.rs",
-    "crates/codex-router-test-support/src/installed_codex.rs",
-    "tests/smoke/installed_codex_mock.sh",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "Structural/inventory guard passed." if not errors else "; ".join(errors)
-receipt_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-if errors:
-    for error in errors:
-        print(error, file=sys.stderr)
-    raise SystemExit(1)
-PY
+      if node verification/tooling/proof-matrix-receipt.ts structural "$row_id" "$receipt"
       then
         printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
         exit 0
@@ -1811,33 +835,33 @@ PY
       ;;
     G-01|G-02|G-03|G-04|G-05|G-07|G-23|G-28)
       CODEX_ROUTER_PROOF_COMMAND="scripts/proof-matrix.sh $row_id" \
-        scripts/check-release-runtime-guardrails.py "$row_id"
+        node verification/tooling/check-release-runtime-guardrails.ts "$row_id"
       exit $?
       ;;
     G-24)
       mark_row_pass "$row_id" "$layer" "$owner" \
         "Structural guard and streaming behavior passed: release HTTP/SSE request bodies are forwarded as Hyper bodies without full collection before upstream egress, and routing metadata survives split DATA frames." \
-        "scripts/check-http-streaming-guard.py G-24" \
+        "node verification/tooling/check-http-streaming-guard.ts G-24" \
         "cargo test -p codex-router-proxy hyper_http_upstream_transport_streams_request_body_before_eof -- --nocapture" \
         "cargo test -p codex-router-proxy assembled_loopback_router_runtime_routes_split_frame_previous_response_affinity -- --nocapture"
       ;;
     G-25)
       mark_row_pass "$row_id" "$layer" "$owner" \
         "Structural guard and metadata behavior passed: HTTP/SSE affinity extraction is bounded, and WebSocket routing metadata is observed after frame forwarding without gating pass-through." \
-        "scripts/check-http-streaming-guard.py G-25" \
+        "node verification/tooling/check-http-streaming-guard.ts G-25" \
         "cargo test -p codex-router-proxy async_http_affinity_scan_stops_at_explicit_bounds_without_gating_body -- --nocapture" \
         "cargo test -p codex-router-proxy websocket_metadata_scan_extracts_oversized_late_affinity_and_completion_fields -- --nocapture"
       ;;
     G-26)
       mark_row_pass "$row_id" "$layer" "$owner" \
         "Structural guard and Hyper transport regression passed: /v1/models reaches upstream and no synthetic models payload remains in release code." \
-        "CODEX_ROUTER_PROOF_VERIFY_ONLY=1 scripts/check-release-runtime-guardrails.py G-26" \
+        "CODEX_ROUTER_PROOF_VERIFY_ONLY=1 node verification/tooling/check-release-runtime-guardrails.ts G-26" \
         "cargo test -p codex-router-proxy hyper_http_upstream_transport_passes_backend_api_models_upstream -- --nocapture"
       ;;
     G-27)
       mark_row_pass "$row_id" "$layer" "$owner" \
         "Structural guard and first-frame regression passed: WebSocket pre-upstream parsing does not require prompt-bearing input/stream payload shape." \
-        "CODEX_ROUTER_PROOF_VERIFY_ONLY=1 scripts/check-release-runtime-guardrails.py G-27" \
+        "CODEX_ROUTER_PROOF_VERIFY_ONLY=1 node verification/tooling/check-release-runtime-guardrails.ts G-27" \
         "cargo test -p codex-router-proxy websocket_first_future_json_payload_selects_and_forwards_unchanged -- --nocapture" \
         "cargo test -p codex-router-proxy websocket_first_frame_accepts_future_request_shape_without_prompt_policy -- --nocapture" \
         "cargo test -p codex-router-proxy websocket_first_frame_rejects_hostile_preselection_cases -- --nocapture"
@@ -1867,49 +891,7 @@ PY
         exit 1
       fi
       receipt=$(write_proof_receipt "$row_id" "$layer" "$owner" "pass" 0)
-      python3 - "$receipt" <<'PY'
-import json
-import sys
-from pathlib import Path
-path = Path(sys.argv[1])
-payload = json.loads(path.read_text())
-payload["status_after"] = "[x] passed"
-payload["result"] = "pass"
-payload["exit_code"] = 0
-payload["artifact_paths"] = [
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-01.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-02.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-03.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-04.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-05.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-06.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-07.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-08.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-09.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-10.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-11.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-12.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-13.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-14.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-15.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-16.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-17.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-18.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-19.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-20.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-22.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-23.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-24.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-25.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-26.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-27.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-28.json",
-    "tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-29.json",
-]
-payload["freshness_check"] = "guarded_source_paths_clean_at_git_head"
-payload["notes"] = "T6 aggregate guardrail row passed through proof-matrix."
-path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n")
-PY
+      node verification/tooling/proof-matrix-receipt.ts patch "$receipt" "G-21"
       printf 'proof row %s passed; receipt: %s\n' "$row_id" "$receipt"
       exit 0
       ;;

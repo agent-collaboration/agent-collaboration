@@ -1,0 +1,12 @@
+{
+  "exit": 0,
+  "stdout": "",
+  "stderr": "",
+  "request": "GET /v1/responses HTTP/1.1\r\nHost: 127.0.0.1:<PORT>\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: <KEY>\r\nSec-WebSocket-Version: 13\r\n\r\n",
+  "frame": {
+    "header": "81b3",
+    "maskBytes": 4,
+    "payload": "{\"type\":\"response.create\",\"input\":\"private-canary\"}",
+    "trailingBytes": 0
+  }
+}

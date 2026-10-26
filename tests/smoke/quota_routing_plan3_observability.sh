@@ -28,8 +28,8 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 127
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required" >&2
   exit 127
 fi
 
@@ -81,24 +81,7 @@ if [[ -z "${installed_codex_artifact}" || ! -f "${installed_codex_artifact}" ]];
   exit 1
 fi
 
-python3 - "${installed_codex_artifact}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-assert payload["router_process"]["spawned_real_serve_child"] is True
-assert payload["shared_router_pid"] == payload["router_process"]["pid"]
-assert payload["clients"]["count"] == 3
-assert payload["clients"]["all_success"] is True
-assert payload["upstream"]["active_high_water"] >= 3
-assert payload["upstream"]["overlap_proven"] is True
-assert payload["upstream"]["target_model_session_count"] == 3
-for status in payload["clients"]["statuses"]:
-    assert status["status"] == "exit status: 0"
-    assert status["stdout_contains_smoke_text"] is True
-PY
+node verification/tooling/quota-smoke-assertions.ts plan3-installed "${installed_codex_artifact}"
 
 "${cargo_command[@]}" run -q -p codex-router-cli -- \
   quota \
@@ -175,13 +158,7 @@ CODEX_ROUTER_OBSERVABILITY_MARKER="${marker}-setup" "${cargo_command[@]}" run -q
 server_stdout="${smoke_root}/reject-server.stdout"
 server_stderr="${smoke_root}/reject-server.stderr"
 reject_port="$(
-  python3 - <<'PY'
-import socket
-
-with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-    sock.bind(("127.0.0.1", 0))
-    print(sock.getsockname()[1])
-PY
+  node verification/tooling/smoke-network.ts free-port
 )"
 "${cargo_command[@]}" run -q -p codex-router-cli -- \
   serve \
@@ -222,18 +199,7 @@ if ! grep -q "listening:" "${server_stdout}"; then
 fi
 
 listener="$(
-  python3 - "${server_stdout}" <<'PY'
-import re
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    text = handle.read()
-
-match = re.search(r"listening:\s+(127\.0\.0\.1:\d+)", text)
-if not match:
-    raise SystemExit(1)
-print(match.group(1))
-PY
+  node verification/tooling/smoke-network.ts listener "${server_stdout}"
 )"
 
 reject_http_status="$(
@@ -252,42 +218,7 @@ if [[ "${reject_http_status}" != "503" ]]; then
   exit 1
 fi
 
-python3 - "${listener}" "${secret_canary}" <<'PY' || true
-import base64
-import os
-import socket
-import struct
-import sys
-
-host, port_text = sys.argv[1].split(":")
-port = int(port_text)
-key = base64.b64encode(os.urandom(16)).decode("ascii")
-payload = ('{"type":"response.create","input":"%s"}' % sys.argv[2]).encode("utf-8")
-header = bytearray()
-header.append(0x81)
-header.append(0x80 | len(payload))
-mask = os.urandom(4)
-header.extend(mask)
-header.extend(byte ^ mask[index % 4] for index, byte in enumerate(payload))
-
-with socket.create_connection((host, port), timeout=5) as sock:
-    request = (
-        "GET /v1/responses HTTP/1.1\r\n"
-        f"Host: {host}:{port}\r\n"
-        "Upgrade: websocket\r\n"
-        "Connection: Upgrade\r\n"
-        f"Sec-WebSocket-Key: {key}\r\n"
-        "Sec-WebSocket-Version: 13\r\n"
-        "\r\n"
-    )
-    sock.sendall(request.encode("ascii"))
-    sock.recv(4096)
-    sock.sendall(header)
-    try:
-        sock.recv(4096)
-    except TimeoutError:
-        pass
-PY
+node verification/tooling/smoke-network.ts websocket "${listener}" "${secret_canary}" || true
 
 for _attempt in $(seq 1 50); do
   if ! kill -0 "${server_pid}" >/dev/null 2>&1; then
@@ -328,15 +259,7 @@ wait_for_metric() {
       "${metrics_url}/api/v1/series" \
       --data-urlencode "match[]=${metric_query}" \
       >"${metric_series}"
-    if python3 - "$metric_series" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-raise SystemExit(0 if payload.get("data") else 1)
-PY
+    if node verification/tooling/quota-smoke-assertions.ts metric-present "$metric_series"
     then
       return 0
     fi
@@ -369,111 +292,7 @@ curl --silent --show-error --max-time 5 --get \
   --data-urlencode "match[]={__name__=~\"codex_router_.*\",agent.proof.marker=\"${marker}\"}" \
   >"${metric_series}"
 
-python3 - "${metric_series}" "${secret_canary}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-series_text = json.dumps(payload, sort_keys=True)
-for forbidden in [
-    sys.argv[2],
-    "acct_retire",
-    "acct_reserve",
-    "acct_ssdev",
-    "acct_unknown",
-    "reservation-retire-1",
-    "reservation-reserve-1",
-    "access-token",
-    "refresh-token",
-    "authorization",
-    "X-Codex-Router-Token",
-]:
-    assert forbidden not in series_text, forbidden
-
-required_by_metric = {
-    "codex_router_account_selections_total": {
-        "account.slot",
-        "agent.proof.marker",
-        "route_band",
-        "selection.reason",
-        "service.name",
-        "transport",
-    },
-    "codex_router_account_rejections_total": {
-        "account.slot",
-        "agent.proof.marker",
-        "route_band",
-        "selection.reason",
-        "service.name",
-        "transport",
-    },
-    "codex_router_active_clients": {
-        "account.slot",
-        "agent.proof.marker",
-        "route_band",
-        "service.name",
-        "transport",
-    },
-    "codex_router_quota_refresh_total": {
-        "agent.proof.marker",
-        "refresh.error_class",
-        "refresh.outcome",
-        "route_band",
-        "service.name",
-    },
-    "codex_router_websocket_events_total": {
-        "agent.proof.marker",
-        "event.kind",
-        "route_band",
-        "service.name",
-    },
-    "codex_router_quota_remaining_bucket": {
-        "account.slot",
-        "agent.proof.marker",
-        "quota.remaining_bucket",
-        "quota.window",
-        "route_band",
-        "service.name",
-    },
-    "codex_router_quota_pressure_bucket": {
-        "account.slot",
-        "agent.proof.marker",
-        "quota.pressure_bucket",
-        "quota.window",
-        "route_band",
-        "service.name",
-    },
-}
-
-seen_metrics = set()
-for series in payload.get("data", []):
-    name = series.get("__name__")
-    if name not in required_by_metric:
-        continue
-    seen_metrics.add(name)
-    missing = required_by_metric[name] - set(series)
-    assert not missing, f"{name} missing {sorted(missing)}"
-
-assert seen_metrics == set(required_by_metric), sorted(set(required_by_metric) - seen_metrics)
-
-label_keys = set()
-for series in payload.get("data", []):
-    label_keys.update(series)
-
-for forbidden_key in {
-    "account.id",
-    "account.label",
-    "reservation.id",
-    "route.path",
-    "prompt",
-    "payload",
-    "token",
-    "provider.body",
-}:
-    assert forbidden_key not in label_keys, forbidden_key
-PY
+node verification/tooling/quota-smoke-assertions.ts metrics "${metric_series}" "${secret_canary}"
 
 for _attempt in $(seq 1 20); do
   curl --silent --show-error --max-time 5 --get \
