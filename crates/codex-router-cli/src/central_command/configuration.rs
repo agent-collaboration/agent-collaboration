@@ -110,16 +110,12 @@ pub(super) fn initialize(
                     .clone()
                     .unwrap_or_else(|| "local-owner".into()),
             },
-            receiver: String::from(collaboration_service::new_service_uuid()?)
-                .try_into()
-                .map_err(|_| {
-                    CentralCommandError::InvalidInput("central receiver identity generation failed")
-                })?,
-            relay: String::from(collaboration_service::new_service_uuid()?)
-                .try_into()
-                .map_err(|_| {
-                    CentralCommandError::InvalidInput("central relay identity generation failed")
-                })?,
+            receiver: fleet_sync_protocol::ReceiverId::new(uuid::Uuid::now_v7()).map_err(|_| {
+                CentralCommandError::InvalidInput("central receiver identity generation failed")
+            })?,
+            relay: fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(|_| {
+                CentralCommandError::InvalidInput("central relay identity generation failed")
+            })?,
         };
         config.policy.validate()?;
         let url = reqwest::Url::parse(&config.policy.issuer)
@@ -178,4 +174,35 @@ pub(super) fn decode_issuer(
         .decode(encoded.expose_secret())
         .map_err(|_| CentralCommandError::InvalidInput("invalid central signing key"))?;
     Ok(SelfHostedIssuer::from_pkcs8(&bytes, config.policy.clone())?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    #[allow(clippy::panic_in_result_fn)]
+    fn initial_start_creates_valid_fleet_identities_and_reopens_the_same_signing_key()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let args = ServeArguments {
+            root: directory.path().to_owned(),
+            listen: "127.0.0.1:29843".parse()?,
+            public_url: None,
+            owner_identity: None,
+            #[cfg(debug_assertions)]
+            allow_plaintext_file_secrets: true,
+        };
+        let lock = lock_root(&args.root)?;
+        let (first, signer) = initialize(&args)?;
+        let keys = serde_json::to_string(&signer.jwks())?;
+        assert!(lock_root(&args.root).is_err());
+        drop(lock);
+        let _lock = lock_root(&args.root)?;
+        let (second, reopened) = initialize(&args)?;
+        assert_eq!(first.receiver, second.receiver);
+        assert_eq!(first.relay, second.relay);
+        assert_eq!(keys, serde_json::to_string(&reopened.jwks())?);
+        assert_eq!(first.policy.issuer, "http://127.0.0.1:29843");
+        Ok(())
+    }
 }
