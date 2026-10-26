@@ -10,12 +10,12 @@ pub(super) fn compact_session_details_poses(
     match (columns, rows) {
         (32, 24) => &[
             ("compact-sessions-details", 0),
-            ("compact-sessions-details-path", 4),
+            ("compact-sessions-details-path", 5),
             ("compact-sessions-details-title", 8),
         ],
         (40, 24) => &[
             ("compact-sessions-details", 0),
-            ("compact-sessions-details-path", 4),
+            ("compact-sessions-details-path", 5),
             ("compact-sessions-details-title", 8),
         ],
         (48, 12) => &[

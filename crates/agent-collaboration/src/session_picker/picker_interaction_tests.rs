@@ -3,6 +3,17 @@ use crate::presentation::session_picker::test_support::picker_action_selection;
 
 #[tokio::test]
 async fn provider_selection_shows_read_only_details_without_a_codex_outcome() {
+    assert_provider_details_notice(100, 0).await;
+}
+
+#[tokio::test]
+async fn narrow_provider_details_keep_the_complete_inspection_notice() {
+    for (width, height) in [(32, 24), (40, 24), (48, 24), (48, 12)] {
+        assert_provider_details_notice(width, height).await;
+    }
+}
+
+async fn assert_provider_details_notice(width: usize, height: usize) {
     let summary: collaboration_client::protocol::ProviderSessionSummary =
         serde_json::from_value(serde_json::json!({
             "origin":"hostedProvider",
@@ -23,7 +34,7 @@ async fn provider_selection_shows_read_only_details_without_a_codex_outcome() {
         let events = futures_util::stream::unfold(receiver, |mut receiver| async {
             receiver.recv().await.map(|event| (event, receiver))
         });
-        let mut ui = element!(SessionsPickerComponent(request,width:100usize,selected_outcome_out:&mut selected_outcome));
+        let mut ui = element!(SessionsPickerComponent(request,width,height,selected_outcome_out:&mut selected_outcome));
         let frames = ui.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
         let mut phase = 0;
@@ -41,8 +52,19 @@ async fn provider_selection_shows_read_only_details_without_a_codex_outcome() {
                     phase = 1;
                 } else if phase == 1
                     && frame.contains("Session details")
-                    && frame.contains("Client actions have not been checked")
+                    && frame.contains("Client actions have not")
                 {
+                    let body = dialog_text(&frame, dialog_bounds(&frame, "Session details"));
+                    let text = body
+                        .chars()
+                        .filter(|character| {
+                            !character.is_whitespace() && !matches!(character, '│' | '┃')
+                        })
+                        .collect::<String>();
+                    assert!(
+                        text.contains("Clientactionshavenotbeenchecked"),
+                        "complete inspection status must remain visible: {frame}"
+                    );
                     assert!(
                         frame.contains("Claude fixture"),
                         "dialog must identify its provider session: {frame}"

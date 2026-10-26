@@ -94,7 +94,7 @@ pub(super) fn render_details_dialog(
             presentation,
             margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 }, scroll_keys: codex_router_tui::DialogScrollKeys::Navigation, actions,action_hints:hints) {
             #(notice.map(|(content, role)| element!(UiText(content, role))))
-            #(dialog.inspection_notice().map(|notice|element!(UiText(content:notice.to_owned(),role:UiTextRole::Secondary))))
+            #(dialog.inspection_notice().map(|notice|element!(UiText(content:notice.to_owned(),role:UiTextRole::Secondary,wrap:TextWrap::Wrap))))
             #(content)
             #(super::super::source_action_view::source_error(model))
         }
