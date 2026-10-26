@@ -50,7 +50,10 @@ for (const name of readdirSync(directory)
           input: fixture.stdin.replaceAll("<ROOT>", root),
           encoding: "utf8",
           timeout: 5000,
-          maxBuffer: 4 * 1024 * 1024,
+          maxBuffer:
+            typeof fixture.expected.stdout === "string"
+              ? 4 * 1024 * 1024
+              : Math.max(4 * 1024 * 1024, fixture.expected.stdout.bytes + 1024),
         },
       );
       if (result.error !== undefined) throw result.error;

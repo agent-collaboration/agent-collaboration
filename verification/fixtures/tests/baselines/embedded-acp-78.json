@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime#two",
+  "originalSHA256": "ec1d31890d6a194153a4a1ec763e386f50a66e7d3df252fc483f21b290206531",
+  "target": "host-approval-dispatch-agent.ts",
+  "arguments": ["two"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {\"sessionId\": \"session-a\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"method\": \"session/prompt\", \"params\": {\"sessionId\": \"session-b\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"result\": {\"outcome\": {\"outcome\": \"selected\", \"optionId\": \"allow-a\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"two-session-permission-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"session-a\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"sessionId\": \"session-b\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"session-a\", \"toolCall\": {\"toolCallId\": \"permission-a\", \"title\": \"Run an approved command\", \"kind\": \"execute\"}, \"options\": [{\"optionId\": \"allow-a\", \"name\": \"Allow once\", \"kind\": \"allow_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"session-b\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"session-b-replied\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"$/cancel_request\", \"params\": {\"requestId\": 91}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"session-a\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"session-a-approved\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

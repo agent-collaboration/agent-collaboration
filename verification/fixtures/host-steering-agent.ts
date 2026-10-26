@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import { createConnection } from "node:net";
-import { once } from "node:events";
+import { sendSocketNotice } from "./fixture-socket-notice.ts";
 import { arrayField, field, textField } from "../exact-json.ts";
 import { requireArgument } from "./acp-stdio.ts";
 import { AcpExchange } from "./acp-exchange.ts";
@@ -13,9 +12,7 @@ agent.respond(await agent.read(), {
 });
 await agent.newSession();
 const prompt = await agent.read("session/prompt");
-const notice = createConnection(requireArgument(2));
-await once(notice, "connect");
-notice.end("prompt");
+await sendSocketNotice(requireArgument(2), "prompt");
 const steer = await agent.read("_session/steering");
 assert.equal(field(steer, "params", "sessionId"), "fixture-session");
 assert.equal(textField(arrayField(steer, "params", "prompt")[0], "text"), "follow-up");

@@ -12,6 +12,23 @@ const AGENT_SCRIPT: &str = concat!(
     "/../../verification/fixtures/scripted-acp-agent.ts"
 );
 
+pub(crate) fn launch_fixture_agent(
+    program: &str,
+    arguments: Vec<String>,
+) -> ExternalProviderLaunch {
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../verification/fixtures")
+        .join(program);
+    ExternalProviderLaunch {
+        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+        executable: PathBuf::from("node"),
+        arguments: std::iter::once(script.to_string_lossy().into_owned())
+            .chain(arguments)
+            .collect(),
+        environment: vec![],
+    }
+}
+
 #[derive(Default)]
 pub(crate) struct AcpFixtureScript {
     steps: Vec<Value>,

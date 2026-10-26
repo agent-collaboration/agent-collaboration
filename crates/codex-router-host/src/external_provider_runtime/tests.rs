@@ -1,20 +1,5 @@
 use super::*;
 
-#[cfg(unix)]
-fn node_fixture(program: &str, arguments: Vec<String>) -> ExternalProviderLaunch {
-    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../verification/fixtures")
-        .join(program);
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("node"),
-        arguments: std::iter::once(script.to_string_lossy().into_owned())
-            .chain(arguments)
-            .collect(),
-        environment: vec![],
-    }
-}
-
 #[test]
 fn provider_initialize_errors_expose_only_safe_metadata() {
     let account_sentinel = "synthetic-account-sentinel@example.invalid";
@@ -44,7 +29,7 @@ fn initialization_fixture(
     response_version: u16,
     process_id_path: Option<&std::path::Path>,
 ) -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-initialization-agent.ts",
         vec![
             response_version.to_string(),
@@ -78,7 +63,7 @@ async fn assert_process_reaped(process_id_path: &std::path::Path) {
 
 #[cfg(unix)]
 fn conversation_fixture() -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-basic-session-agent.ts",
         vec!["conversation".to_owned()],
     )
@@ -86,7 +71,7 @@ fn conversation_fixture() -> ExternalProviderLaunch {
 
 #[cfg(unix)]
 fn steering_fixture(observed_prompt_socket: &std::path::Path) -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-steering-agent.ts",
         vec![observed_prompt_socket.to_string_lossy().into_owned()],
     )
@@ -188,12 +173,18 @@ async fn steering_injects_during_prompt_and_returns_prompt_required_when_idle() 
 
 #[cfg(unix)]
 fn cancellation_fixture() -> ExternalProviderLaunch {
-    node_fixture("host-basic-session-agent.ts", vec!["cancel".to_owned()])
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-basic-session-agent.ts",
+        vec!["cancel".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn successor_prompt_fixture() -> ExternalProviderLaunch {
-    node_fixture("host-basic-session-agent.ts", vec!["successor".to_owned()])
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-basic-session-agent.ts",
+        vec!["successor".to_owned()],
+    )
 }
 
 #[cfg(unix)]
@@ -201,7 +192,7 @@ fn concurrent_admission_cancel_fixture(
     admission_method: &str,
     admission_observed: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-admission-agent.ts",
         vec![
             "concurrent".to_owned(),
@@ -216,7 +207,7 @@ fn saturated_load_admission_fixture(
     admission_log: &std::path::Path,
     process_id_path: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-admission-agent.ts",
         vec![
             "saturated".to_owned(),
@@ -228,7 +219,10 @@ fn saturated_load_admission_fixture(
 
 #[cfg(unix)]
 fn permission_request_fixture() -> ExternalProviderLaunch {
-    node_fixture("host-basic-session-agent.ts", vec!["permission".to_owned()])
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-basic-session-agent.ts",
+        vec!["permission".to_owned()],
+    )
 }
 
 #[cfg(unix)]
@@ -237,7 +231,7 @@ fn named_mcp_tool_call_fixture(
     response_text: &str,
     split_result_before_status: bool,
 ) -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-tool-output-agent.ts",
         vec![
             serde_json::to_string(&raw_output).expect("MCP result JSON"),
@@ -358,17 +352,23 @@ async fn resource_not_found_from_session_load_is_session_not_found() {
 
 #[cfg(unix)]
 fn aggregate_output_fixture() -> ExternalProviderLaunch {
-    node_fixture("host-basic-session-agent.ts", vec!["aggregate".to_owned()])
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-basic-session-agent.ts",
+        vec!["aggregate".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn load_replay_fixture() -> ExternalProviderLaunch {
-    node_fixture("host-basic-session-agent.ts", vec!["replay".to_owned()])
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-basic-session-agent.ts",
+        vec!["replay".to_owned()],
+    )
 }
 
 #[cfg(unix)]
 fn mcp_session_setup_fixture(method: &str) -> ExternalProviderLaunch {
-    node_fixture(
+    acp_scripted_fixture::launch_fixture_agent(
         "host-basic-session-agent.ts",
         vec!["mcp".to_owned(), method.to_owned()],
     )
