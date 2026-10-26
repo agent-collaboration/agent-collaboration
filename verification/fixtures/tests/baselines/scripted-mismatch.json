@@ -1,0 +1,19 @@
+{
+  "name": "mismatch",
+  "steps": [
+    {
+      "action": "expect_request",
+      "requestName": "init",
+      "method": "initialize",
+      "params": {}
+    }
+  ],
+  "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"wrong\",\"params\":{}}\n",
+  "expected": {
+    "status": 1,
+    "stdout": "",
+    "stderr": "ACP fixture step 1 mismatch\nexpected: {\"jsonrpc\": \"2.0\", \"method\": \"initialize\", \"params\": {}}\nactual:   {\"id\": 1, \"jsonrpc\": \"2.0\", \"method\": \"wrong\", \"params\": {}}\n",
+    "receipt": null,
+    "marker": false
+  }
+}

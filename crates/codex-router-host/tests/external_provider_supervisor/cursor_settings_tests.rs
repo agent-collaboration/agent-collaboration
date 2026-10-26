@@ -9,10 +9,18 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
     let receipt = root.path().join("wire.json");
     let provider_endpoint = endpoint("cursor-local")?;
     let creator = actor(provider_endpoint.clone(), "creator")?;
-    let mut provider_launch = launch(include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../acp-client-runtime/tests/cursor_model_settings/scripted_acp_agent.py"
-    )));
+    let mut provider_launch = ExternalProviderLaunch {
+        executable: PathBuf::from("node"),
+        arguments: vec![
+            concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../verification/fixtures/cursor-settings-agent.ts"
+            )
+            .into(),
+        ],
+        environment: Vec::new(),
+        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+    };
     provider_launch
         .arguments
         .extend(["adjusted".into(), receipt.to_string_lossy().into_owned()]);

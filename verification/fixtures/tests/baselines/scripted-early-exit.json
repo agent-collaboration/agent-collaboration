@@ -1,0 +1,22 @@
+{
+  "name": "early-exit",
+  "steps": [
+    {
+      "action": "send",
+      "message": {
+        "marker": "sent"
+      }
+    },
+    {
+      "action": "exit"
+    }
+  ],
+  "input": "",
+  "expected": {
+    "status": 0,
+    "stdout": "{\"marker\": \"sent\"}\n",
+    "stderr": "",
+    "receipt": null,
+    "marker": false
+  }
+}

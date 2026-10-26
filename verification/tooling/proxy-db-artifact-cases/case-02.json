@@ -1,0 +1,80 @@
+{
+  "name": "rejects_copied_db_pressure_without_approved_mechanism",
+  "expectedFailure": "copied_db_pressure_mechanism",
+  "payload": {
+    "runtime_roots": {
+      "mode": "copied-dev-state",
+      "router_root": "<repo>/tmp/dev-state/codex-router",
+      "router_db": "<repo>/tmp/dev-state/codex-router/state.sqlite",
+      "codex_home": "<repo>/tmp/dev-state/codex",
+      "codex_db": "<repo>/tmp/dev-state/codex/state_5.sqlite",
+      "process_home": "<repo>/tmp/dev-state/sentinel-home"
+    },
+    "pressure": {
+      "pressure_mechanism": "provider-error-observer-delay",
+      "copied_db_pressure_proven": true,
+      "provider_error_observer_delay": false,
+      "sqlite_lock_or_maintenance_pressure": false
+    },
+    "upstream": {
+      "active_high_water": 3,
+      "real_overlap_duration_ms": 750,
+      "overlap_started_unix_ms": 1000,
+      "overlap_completed_unix_ms": 2000
+    },
+    "router_websocket_registry": {
+      "quota_reconnect_signal_unix_ms": 1500
+    },
+    "quota_reconnect_progress": {
+      "signal_latency_ms": 750,
+      "router_signal_count": 1
+    },
+    "clients": {
+      "count": 3,
+      "all_success": true
+    },
+    "signal_ordering": {
+      "signal_before_persistence": true
+    },
+    "account_selection": {
+      "non_reselection": true
+    },
+    "source_artifacts": {
+      "three_websocket_soak": {
+        "artifact": "s8-overlap-quota.json",
+        "s8_run_id": "self-test-run",
+        "git_head": "abc123",
+        "mode": "s8-overlap-quota",
+        "runtime_roots": {
+          "mode": "copied-dev-state",
+          "router_root": "<repo>/tmp/dev-state/codex-router",
+          "router_db": "<repo>/tmp/dev-state/codex-router/state.sqlite",
+          "codex_home": "<repo>/tmp/dev-state/codex",
+          "codex_db": "<repo>/tmp/dev-state/codex/state_5.sqlite",
+          "process_home": "<repo>/tmp/dev-state/sentinel-home"
+        }
+      },
+      "quota_reconnect": {
+        "artifact": "s8-overlap-quota.json",
+        "s8_run_id": "self-test-run",
+        "git_head": "abc123",
+        "mode": "s8-overlap-quota",
+        "runtime_roots": {
+          "mode": "copied-dev-state",
+          "router_root": "<repo>/tmp/dev-state/codex-router",
+          "router_db": "<repo>/tmp/dev-state/codex-router/state.sqlite",
+          "codex_home": "<repo>/tmp/dev-state/codex",
+          "codex_db": "<repo>/tmp/dev-state/codex/state_5.sqlite",
+          "process_home": "<repo>/tmp/dev-state/sentinel-home"
+        }
+      }
+    }
+  },
+  "artifact": "s8-overlap-quota.json",
+  "root": "<root>",
+  "router": "<root>/tmp/dev-state/codex-router",
+  "codex": "<root>/tmp/dev-state/codex",
+  "home": "<root>/tmp/dev-state/sentinel-home",
+  "threshold": 750,
+  "expected": ["copied_db_pressure_mechanism"]
+}

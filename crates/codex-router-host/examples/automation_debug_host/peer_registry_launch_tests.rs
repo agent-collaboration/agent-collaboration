@@ -161,11 +161,11 @@ fn scripted_cursor_context_round_trip_fits_the_existing_read_limit() {
         {"action":"respond","requestName":"target-prompt-0","result":{"stopReason":"end_turn"}}
     ]);
     let command = ProviderCommand {
-        executable: "/usr/bin/python3".into(),
+        executable: "/usr/bin/env".into(),
         arguments: vec![
-            "-u".into(),
+            "node".into(),
             format!(
-                "{}/src/external_provider_runtime/acp_scripted_fixture.py",
+                "{}/../../verification/fixtures/scripted-acp-agent.ts",
                 env!("CARGO_MANIFEST_DIR")
             ),
             serde_json::to_string(&steps).expect("script steps"),

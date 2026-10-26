@@ -1,0 +1,467 @@
+{
+  "cargo": "[profile.worker-release]\ninherits = \"release\"\nlto = true\nopt-level = \"s\"\ncodegen-units = 1\n",
+  "readme": "worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features",
+  "config": "workersDev: false, previewUrls: false, vars: {type: \"text\", value: \"REPLACE_VALUE\"}",
+  "tooling": "noBundle: true",
+  "cases": [
+    {
+      "mode": "production",
+      "content": "release",
+      "expected": {
+        "status": 0,
+        "stdout": "Worker production bundle: conformance-control marker presence (False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 0,
+        "stdout": "Worker faults bundle: conformance-control marker presence (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker production bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "release",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "G18 conformance-only transaction panic",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "/__conformance/control",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "/__conformance/core-session",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "_cf_test_directory_updates",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker production bundle contains the test-only Fleet receiver\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "_cf_test_flag_",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "_cf_test_known",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "_cf_test_clock",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "_cf_test_held_dispatch",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "edge-probe-unknown",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "conformanceClose",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "LegacyConnectionObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "LegacyProjectCopyObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "LegacyLeaseRegistryObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "production",
+      "content": "LegacyFleetObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired central test path\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/runtime-control\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n_cf_composed_clock\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\nBootstrapObject",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "/admin/v1/conformance/bootstrap\n/admin/v1/conformance/runtime\ndropNextObjectReply\nawaitDroppedObjectReply\nresumeDispatchAndHoldNext\n/admin/v1/conformance/fleet-receipt\nreadClaimReservation\n/admin/v1/conformance/revocation\n/admin/v1/conformance/access\n/admin/v1/conformance/holder-call\n/admin/v1/conformance/holder-status\n/admin/v1/conformance/registry-dispatches\n/admin/v1/conformance/copy-call\n/admin/v1/conformance/copy-status\n/admin/v1/conformance/copy-wait\n/admin/v1/conformance/drive-tokens\n/test/admission-origins\n/test/schema-report\n/test/holder-frames\n/test/session-connections\n/test/session-attachment-codec\n/test/session-alarm\n/test/session-faults\n/test/session-finalize-barrier\n/test/session-finalize-journal\n/test/holder-session-identity\n/test/holder-observation\n/test/runtime-control\n_cf_composed_clock",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker faults bundle marker mismatch: (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False); expected (True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True)\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "ADMIN_CREDENTIAL_HASH",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired credential or key-source override\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "ACCESS_TEST_JWKS_URL",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains a retired credential or key-source override\n",
+        "stderr": ""
+      }
+    },
+    {
+      "mode": "faults",
+      "content": "central depth measurement",
+      "expected": {
+        "status": 1,
+        "stdout": "Worker bundle contains the temporary depth instrument\n",
+        "stderr": ""
+      }
+    }
+  ]
+}

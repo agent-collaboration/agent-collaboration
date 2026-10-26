@@ -16,7 +16,7 @@
   installation.
 - The release workflow's tap job waits for a second macOS runner. Once its
   build job has published the release asset, run
-  `python3 -m scripts.publish_homebrew_tap_local` from the repository root on
+  `node verification/tooling/publish-homebrew-tap-local.ts` from the repository root on
   an Apple Silicon Mac instead of waiting: it verifies the tag is on `main` and
   the asset matches the release digest, updates the formula, runs the tap
   job's Homebrew checks against a real install, and pushes the tap. The CI tap
