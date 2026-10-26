@@ -181,7 +181,7 @@ pub struct UiColumnHeadingProps {
 pub fn UiColumnHeading(props: &UiColumnHeadingProps) -> impl Into<AnyElement<'static>> {
     element! {
         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,
-            background_color:UiSurface::Header.color(),border_edges:Edges::Bottom,
+            border_edges:Edges::Bottom,
             border_style:BorderStyle::Single,border_color:UiTextRole::Rule.color()) {
             Text(content:props.content.clone(),color:UiTextRole::WeeklyWindow.color(),weight:Weight::Bold,wrap:TextWrap::Wrap)
         }

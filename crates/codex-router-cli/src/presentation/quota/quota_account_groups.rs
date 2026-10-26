@@ -1,7 +1,7 @@
 //! Interactive account composition; the static renderer keeps its own format.
 use super::quota_browse_rendering::reset_pace_color;
 use super::quota_status_view_model::{QuotaDisplayWindow, QuotaStatusAccountViewModel};
-use codex_router_tui::{SelectableRow, UiColumnHeading, UiSurface, UiText, UiTextRole};
+use codex_router_tui::{SelectableRow, UiColumnHeading, UiText, UiTextRole};
 use iocraft::prelude::*;
 
 /// The four useful minima decide folding, rather than fixed account percentages.
@@ -114,7 +114,6 @@ pub(super) fn render_interactive_account(
     row: &QuotaStatusAccountViewModel,
     width: usize,
     focused: bool,
-    alternate: bool,
 ) -> AnyElement<'static> {
     let widths = group_widths(width.saturating_sub(2));
     let groups=vec![
@@ -131,7 +130,7 @@ pub(super) fn render_interactive_account(
     ];
     element! {
         View(width:width as u32,flex_shrink:0.0_f32) {
-            SelectableRow(selected:focused,marker_offset:if widths.is_some() {0u16}else {2u16},surface:if alternate {UiSurface::Alternate}else {UiSurface::Base}) {
+            SelectableRow(selected:focused,marker_offset:if widths.is_some() {0u16}else {2u16}) {
                 View(flex_direction:if widths.is_some() {FlexDirection::Row}else {FlexDirection::Column},column_gap:1,flex_shrink:0.0_f32) {
                     #(groups.into_iter().enumerate().map(|(index,(label,group))|element! {
                         View(width:widths.and_then(|widths|widths.get(index).copied()).unwrap_or(width.saturating_sub(2)) as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {

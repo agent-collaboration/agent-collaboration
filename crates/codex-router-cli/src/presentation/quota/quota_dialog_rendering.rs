@@ -75,7 +75,24 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
             details_dialog,
         ));
     }
-    let presentation = DialogPresentation::default();
+    let presentation = if let Some(editor) = panel.weekly_floor_editor.filter(|_| height >= 18) {
+        DialogPresentation::Sized {
+            width: codex_router_tui::DialogAxisSize::Content { maximum: Some(68) },
+            // Status adds one row and one separator to the editing form.
+            height: codex_router_tui::DialogAxisSize::cells(
+                if matches!(
+                    editor.phase,
+                    super::quota_floor_editor::WeeklyFloorEditorPhase::Editing
+                ) {
+                    14
+                } else {
+                    16
+                },
+            ),
+        }
+    } else {
+        DialogPresentation::default()
+    };
     let margins = DialogMargins {
         top: 1,
         right: 2,
@@ -174,6 +191,7 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
                 editor,
                 panel.width,
                 panel.weekly_floor_editor_state,
+                u16::from(height >= 18),
             ),
         )
     } else if let (Some(snapshot), Some(target)) = (panel.reset_snapshot, panel.reset_target) {
@@ -221,6 +239,7 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
     };
     Some(element! {
         DialogFrame(width,height,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,title,presentation,margins,help_action,
+            padding:panel.weekly_floor_editor.filter(|_| height >= 18).map(|_| 1u16),
             context:identity.map(|identity|vec![identity.render(usize::from(frame_width.saturating_sub(4)))]).unwrap_or_default(),
             scroll_keys:if panel.account_options.and_then(|options|options.editor.as_ref()).is_some_and(|editor|editor.choice.is_open()) {codex_router_tui::DialogScrollKeys::Disabled}else if filter_modal_owns_input {codex_router_tui::DialogScrollKeys::Arrows}else {codex_router_tui::DialogScrollKeys::Navigation},
             actions:if filter_modal_owns_input {

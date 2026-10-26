@@ -301,3 +301,6 @@ async fn approved_visual_browse_has_four_groups_and_quiet_header() {
     );
     assert!(frame.contains("Pool details"), "{frame}");
 }
+
+#[path = "quota_compact_layout_test.rs"]
+mod quota_compact_layout_test;

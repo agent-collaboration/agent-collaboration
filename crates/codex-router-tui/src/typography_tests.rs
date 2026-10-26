@@ -249,18 +249,11 @@ fn visual_window_roles_and_row_surfaces_follow_the_adopted_palette() {
 }
 
 #[test]
-fn column_heading_has_literal_band_white_weight_and_teal_rule() {
+fn column_heading_has_plain_background_white_weight_and_teal_rule() {
     for width in [18u32, 28, 60] {
         let canvas = element!(View(width) {UiColumnHeading(content:"Account")}).render(None);
         let heading = canvas.cell(0, 0).unwrap();
-        assert_eq!(
-            heading.background_color,
-            Some(Color::Rgb {
-                r: 54,
-                g: 65,
-                b: 83
-            })
-        );
+        assert_eq!(heading.background_color, None);
         let style = heading.text_style().unwrap();
         assert_eq!(
             style.color,

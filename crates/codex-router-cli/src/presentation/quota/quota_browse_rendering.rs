@@ -127,7 +127,7 @@ fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyEleme
     let rows=props.rows.iter().enumerate().map(|(index,row)| {
         let account_id=row.account_id.clone();let state=props.focused_account_id;
         element! {View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else {2}) {
-            InteractiveQuotaAccountRow(row:Some(row.clone()),width:row_width,alternate:!index.is_multiple_of(2),compact_phone:props.compact_phone,focused:props.focused_row_index==Some(index),interaction_enabled:props.interaction_enabled,
+            InteractiveQuotaAccountRow(row:Some(row.clone()),width:row_width,compact_phone:props.compact_phone,focused:props.focused_row_index==Some(index),interaction_enabled:props.interaction_enabled,
                 click_handler:move |_|if let Some(mut state)=state {state.set(Some(account_id.clone()));})
         }}.into_any()
     });
@@ -144,7 +144,6 @@ fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyEleme
 
 #[derive(Default, Props)]
 struct InteractiveQuotaAccountRowProps {
-    alternate: bool,
     compact_phone: bool,
     row: Option<QuotaStatusAccountViewModel>,
     mode: super::quota_provider_filters::QuotaInteractionMode,
@@ -184,7 +183,6 @@ fn InteractiveQuotaAccountRow(
                     row,
                     props.width,
                     props.focused,
-                    props.alternate,
                 )
             } else {
                 render_account_row(
@@ -221,7 +219,7 @@ pub(super) fn render_account_row(
     compact_phone: bool,
 ) -> AnyElement<'static> {
     if mode == super::quota_provider_filters::QuotaInteractionMode::Interactive {
-        return super::quota_account_groups::render_interactive_account(row, width, focused, false);
+        return super::quota_account_groups::render_interactive_account(row, width, focused);
     }
     let row_padding = usize::from(!compact_phone);
     let body_width = width.saturating_sub(2 + 2 * row_padding);

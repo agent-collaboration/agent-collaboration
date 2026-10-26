@@ -8,11 +8,10 @@ fn folded_groups_wrap_full_unicode_identity_without_internal_blank_rows() {
         let mut model = quota_two_account_view_model();
         let row = &mut model.rows[0];
         row.account = "東京 Alpha Research Account Long Original Name".to_owned();
-        let frame = super::super::quota_account_groups::render_interactive_account(
-            row, width, false, false,
-        )
-        .render(None)
-        .to_string();
+        let frame =
+            super::super::quota_account_groups::render_interactive_account(row, width, false)
+                .render(None)
+                .to_string();
         let normalized = frame.split_whitespace().collect::<Vec<_>>().join(" ");
         assert!(
             normalized.contains("東京 Alpha Research Account Long Original Name"),
@@ -52,9 +51,8 @@ fn compact_windows_keep_known_amount_when_reset_is_unknown_and_missing_has_no_me
     row.display_short = QuotaDisplayWindow::Unknown;
     row.weekly_window = "DO NOT PARSE THIS".to_owned();
     row.short_window = "100% fabricated".to_owned();
-    let canvas =
-        super::super::quota_account_groups::render_interactive_account(row, 110, false, false)
-            .render(None);
+    let canvas = super::super::quota_account_groups::render_interactive_account(row, 110, false)
+        .render(None);
     let frame = canvas.to_string();
     assert!(frame.contains("92% · week · —"), "{frame}");
     assert!(frame.contains("No data · 5h"), "{frame}");
@@ -299,9 +297,8 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
         reset_in_seconds: Some(7800),
         stale: false,
     };
-    let canvas =
-        super::super::quota_account_groups::render_interactive_account(row, 110, false, false)
-            .render(None);
+    let canvas = super::super::quota_account_groups::render_interactive_account(row, 110, false)
+        .render(None);
     let frame = canvas.to_string();
     for (percent, label, expected) in [
         (
@@ -345,7 +342,7 @@ fn quota_caller_binds_week_and_short_amount_label_and_meter_to_distinct_tones() 
 }
 
 #[tokio::test]
-async fn mounted_quota_header_and_account_surfaces_keep_literal_roles_and_fixed_name_origin() {
+async fn mounted_quota_only_selection_is_filled_and_name_origin_stays_fixed() {
     let mut model = quota_many_account_view_model();
     model.rows.truncate(3);
     for (index, row) in model.rows.iter_mut().enumerate() {
@@ -367,14 +364,7 @@ async fn mounted_quota_header_and_account_surfaces_keep_literal_roles_and_fixed_
         .find(|(_, line)| line.contains("Account") && line.contains("Extra"))
         .unwrap();
     let column = unicode_width::UnicodeWidthStr::width(line.split_once("Account").unwrap().0);
-    assert_eq!(
-        canvas.cell(column, row).unwrap().background_color,
-        Some(Color::Rgb {
-            r: 54,
-            g: 65,
-            b: 83
-        })
-    );
+    assert_eq!(canvas.cell(column, row).unwrap().background_color, None);
     assert_eq!(
         canvas
             .cell(column, row)
@@ -390,29 +380,15 @@ async fn mounted_quota_header_and_account_surfaces_keep_literal_roles_and_fixed_
     );
     let mut origins = Vec::new();
     for (account, expected) in [
-        (
-            "acct00",
-            Color::Rgb {
-                r: 39,
-                g: 44,
-                b: 52,
-            },
-        ),
-        (
-            "acct01",
-            Color::Rgb {
-                r: 43,
-                g: 48,
-                b: 57,
-            },
-        ),
+        ("acct00", None),
+        ("acct01", None),
         (
             "acct02",
-            Color::Rgb {
+            Some(Color::Rgb {
                 r: 52,
                 g: 59,
                 b: 70,
-            },
+            }),
         ),
     ] {
         let (row, line) = frame
@@ -424,7 +400,7 @@ async fn mounted_quota_header_and_account_surfaces_keep_literal_roles_and_fixed_
         origins.push(column);
         assert_eq!(
             canvas.cell(column, row).unwrap().background_color,
-            Some(expected),
+            expected,
             "C4 actual account fill: {frame}"
         );
     }
@@ -432,6 +408,35 @@ async fn mounted_quota_header_and_account_surfaces_keep_literal_roles_and_fixed_
         origins.windows(2).all(|pair| pair[0] == pair[1]),
         "C4 selection keeps name origin: {frame}"
     );
+}
+
+#[test]
+fn quota_account_background_is_uniform_at_wide_and_folded_widths() {
+    let model = quota_two_account_view_model();
+    for width in [120, 76, 48, 40, 32] {
+        for selected in [false, true] {
+            let canvas = super::super::quota_account_groups::render_interactive_account(
+                &model.rows[0],
+                width,
+                selected,
+            )
+            .render(None);
+            let expected = selected.then_some(Color::Rgb {
+                r: 52,
+                g: 59,
+                b: 70,
+            });
+            for row in 0..canvas.height() {
+                for column in 0..canvas.width() {
+                    assert_eq!(
+                        canvas.cell(column, row).unwrap().background_color,
+                        expected,
+                        "No heading bands or alternating fills at {width}, selected={selected}, cell={column},{row}"
+                    );
+                }
+            }
+        }
+    }
 }
 
 const POOL_CENSUS_FACTS: [&str; 10] = [
@@ -688,10 +693,9 @@ fn unknown_reset_keeps_known_amount_and_staleness_in_actual_row() {
             reset_in_seconds,
             stale: true,
         };
-        let frame =
-            super::super::quota_account_groups::render_interactive_account(row, 120, false, false)
-                .render(None)
-                .to_string();
+        let frame = super::super::quota_account_groups::render_interactive_account(row, 120, false)
+            .render(None)
+            .to_string();
         assert!(frame.contains(expected), "{frame}");
         assert!(frame.contains("week stale"), "{frame}");
     }

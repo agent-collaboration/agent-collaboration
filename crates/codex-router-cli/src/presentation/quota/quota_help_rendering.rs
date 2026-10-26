@@ -342,9 +342,20 @@ pub(super) fn render_quota_browse_footer(
     weekly_floor_enabled: bool,
     on_details: impl FnMut(()) + Send + Sync + 'static,
 ) -> Vec<AnyElement<'static>> {
-    vec![
+    let mut commands = vec![
         element!(DialogAction(label:"F4 Details",enabled,handler:on_details)).into_any(),
-        element!(UiText(content:"F3 Filters · F5 Pool",role:UiTextRole::Label,wrap:TextWrap::Wrap)).into_any(),
-        element!(UiText(content:if weekly_floor_enabled {"F1 Help · Ctrl+R Options · Ctrl+E Floor"}else {"F1 Help · Ctrl+R Options"},role:UiTextRole::Label,wrap:TextWrap::Wrap)).into_any(),
-    ]
+        element!(UiText(content:"F3 Filters",role:UiTextRole::Label,wrap:TextWrap::NoWrap))
+            .into_any(),
+        element!(UiText(content:"F5 Pool",role:UiTextRole::Label,wrap:TextWrap::NoWrap)).into_any(),
+        element!(UiText(content:"F1 Help",role:UiTextRole::Label,wrap:TextWrap::NoWrap)).into_any(),
+        element!(UiText(content:"Ctrl+R Options",role:UiTextRole::Label,wrap:TextWrap::NoWrap))
+            .into_any(),
+    ];
+    if weekly_floor_enabled {
+        commands.push(
+            element!(UiText(content:"Ctrl+E Floor",role:UiTextRole::Label,wrap:TextWrap::NoWrap))
+                .into_any(),
+        );
+    }
+    commands
 }
