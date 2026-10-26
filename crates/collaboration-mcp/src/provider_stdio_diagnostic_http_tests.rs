@@ -1,4 +1,7 @@
 //! Real public MCP and ACP pipes; only the external provider response is a stand-in.
+#[path = "../../codex-router-test-support/src/node_fixture.rs"]
+#[allow(dead_code)]
+mod node_fixture;
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
     ExternalProviderStartup,
@@ -7,7 +10,6 @@ use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{Value, json};
 use std::{
     io::Write,
-    path::PathBuf,
     sync::{Arc, Mutex},
     time::Duration,
 };
@@ -16,45 +18,6 @@ const CREATE_OPERATION: &str = "019f0000-0000-7000-8000-000000000301";
 const PROMPT_OPERATION: &str = "019f0000-0000-7000-8000-000000000302";
 const CANCEL_OPERATION: &str = "019f0000-0000-7000-8000-000000000303";
 const FULL_INPUT: &str = "Complete the SQLite proof.\nKeep this exact second line PRIVATE_CANARY.";
-const PROVIDER_SCRIPT: &str = r#"
-import json,os,sys
-kind,receipt,expected_native_executable=sys.argv[1:]
-assert os.environ.get('CLAUDE_CODE_EXECUTABLE')==expected_native_executable
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-sys.stderr.write('PRIVATE_CANARY:'+('x'*131072));sys.stderr.flush()
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'stdio-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'stdio-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-# Independent literal oracle: never generated from the Router's renderer.
-assert prompt['params']['prompt']==[{'type':'text','text':'Complete the SQLite proof.\nKeep this exact second line PRIVATE_CANARY.'}]
-if kind=='approval':
-    method='session/request_permission'
-    params={'sessionId':'stdio-session','toolCall':{'toolCallId':'private-tool','title':'PRIVATE_CANARY','kind':'execute','rawInput':{'command':'PRIVATE_CANARY'}},'options':[{'optionId':'allow','name':'Allow once','kind':'allow_once'}]}
-else:
-    method='elicitation/create'
-    params={'mode':'form','sessionId':'stdio-session','message':'PRIVATE_CANARY','requestedSchema':{'type':'object','properties':{'answer':{'type':'string'}}}}
-send({'jsonrpc':'2.0','id':'callback','method':method,'params':params})
-seen_cancel=False
-seen_callback=False
-while not(seen_cancel and seen_callback):
-    message=read()
-    if message.get('method')=='session/cancel': seen_cancel=True
-    elif message.get('id')=='callback':
-        assert 'result' in message,message
-        expected={'outcome':{'outcome':'cancelled'}} if kind=='approval' else {'action':'cancel'}
-        assert message['result']==expected,message
-        seen_callback=True
-    else: raise AssertionError('unexpected wire input')
-with open(receipt,'w') as output: json.dump({'pid':os.getpid(),'fullInputMatched':True,'callbackCancelled':seen_callback,'cancelReceived':seen_cancel},output)
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-sys.stdin.read()
-"#;
 
 #[derive(Clone, Default)]
 struct DiagnosticCapture(Arc<Mutex<Vec<u8>>>);
@@ -137,11 +100,11 @@ async fn exercise_public_stdio(message_kind: &str, interaction_kind: &str) {
         .expect("canonical fixture executable");
     let receipt_path = root.path().join("wire-receipt.json");
     let mut binding = ExternalProviderLaunchBinding::claude(
-        PathBuf::from("/usr/bin/python3"),
+        node_fixture::node_executable().expect("Node"),
         vec![
-            "-u".into(),
-            "-c".into(),
-            PROVIDER_SCRIPT.into(),
+            node_fixture::fixture_program("provider-stdio-diagnostic-agent.ts")
+                .to_string_lossy()
+                .into_owned(),
             interaction_kind.into(),
             receipt_path.to_string_lossy().into_owned(),
             expected_native_executable

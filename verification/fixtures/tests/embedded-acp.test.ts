@@ -17,6 +17,7 @@ const baselineSchema = z.object({
   stdin: z.string(),
   initialFiles: z.record(z.string(), z.string()).optional(),
   pidFiles: z.array(z.string()).optional(),
+  jsonPidFiles: z.array(z.string()).optional(),
   environment: z.record(z.string(), z.string()).optional(),
   configuration: z.unknown().optional(),
   expected: z.object({
@@ -81,6 +82,13 @@ for (const name of readdirSync(directory)
         if (fixture.pidFiles?.includes(filename)) {
           assert.equal(content, String(result.pid));
           return "<OWN_PID>";
+        }
+        if (fixture.jsonPidFiles?.includes(filename)) {
+          const record = z
+            .object({ pid: z.number().or(z.bigint()).transform(Number) })
+            .parse(decodeEvidenceJson(content));
+          assert.equal(record.pid, result.pid);
+          return content.replace(`"pid": ${result.pid}`, '"pid": "<OWN_PID>"');
         }
         return content;
       };
