@@ -1,5 +1,4 @@
-#[path = "provider_fixture_launch.rs"]
-mod provider_fixture_launch;
+use super::provider_fixture_launch;
 use agent_automation::RouteEffectEvidence;
 use codex_router_host::{ExternalProviderLaunch, LiveSessionOwnership, LiveSessionOwnershipCheck};
 use collaboration_protocol::{

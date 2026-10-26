@@ -24,7 +24,7 @@ use collaboration_service::{
     ProviderSessionRecord, SessionDeliveryRoute,
     layer_zero::{DeliveryRequest, PreparedPush},
 };
-use std::{path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 struct NoLivePeer;
 

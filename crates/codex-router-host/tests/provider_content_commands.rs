@@ -1,6 +1,8 @@
 #![allow(clippy::expect_used)]
 //! Host content admission preserves actor authority and ACP block order.
 
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor, ProviderAcpDeliveryRoute, ProviderPromptContentsError,

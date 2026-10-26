@@ -25,10 +25,7 @@ export function mapFixtureRoot(value: unknown, root: string): unknown {
   return value;
 }
 
-export function runNativeExecutableFixture(
-  input: NativeCase,
-  programs?: Readonly<Record<string, string>>,
-): unknown {
+export function runNativeExecutableFixture(input: NativeCase): unknown {
   const root = createFixtureDirectory("native-wire");
   const entry = nativeCaseSchema.parse(mapFixtureRoot(input, root));
   try {
@@ -39,13 +36,10 @@ export function runNativeExecutableFixture(
     }
     for (const [name, program] of Object.entries(entry.programs)) {
       const file = join(root, name);
-      const original = programs?.[name];
       const module = new URL(`../${program.module}`, import.meta.url).pathname;
       writeFileSync(
         file,
-        original === undefined
-          ? `#!${process.execPath}\nimport { runFixture } from ${JSON.stringify(module)};\nawait runFixture(${encode(program.configuration)});\n`
-          : z.string().parse(mapFixtureRoot(original, root)),
+        `#!${process.execPath}\nimport { runFixture } from ${JSON.stringify(module)};\nawait runFixture(${encode(program.configuration)});\n`,
         { mode: 0o700 },
       );
     }

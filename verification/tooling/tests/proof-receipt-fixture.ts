@@ -14,7 +14,7 @@ export const proofCaseSchema = z.object({
   observed: z.array(z.string()),
 });
 export type ProofCase = z.infer<typeof proofCaseSchema>;
-export function runProofReceiptCase(input: ProofCase, original?: string): unknown {
+export function runProofReceiptCase(input: ProofCase): unknown {
   const root = createFixtureDirectory("proof-receipt");
   const map = (value: string): string => value.replaceAll("<ROOT>", root);
   try {
@@ -28,14 +28,12 @@ export function runProofReceiptCase(input: ProofCase, original?: string): unknow
     for (const [name, content] of Object.entries(input.commands))
       writeFileSync(join(bin, name), map(content), { mode: 0o700 });
     const result = spawnSync(
-      original === undefined ? process.execPath : "python3",
-      original === undefined
-        ? [
-            new URL("../proof-matrix-receipt.ts", import.meta.url).pathname,
-            input.operation,
-            ...input.arguments.map(map),
-          ]
-        : ["-c", original, ...input.originalArguments.map(map)],
+      process.execPath,
+      [
+        new URL("../proof-matrix-receipt.ts", import.meta.url).pathname,
+        input.operation,
+        ...input.arguments.map(map),
+      ],
       {
         cwd: root,
         env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },

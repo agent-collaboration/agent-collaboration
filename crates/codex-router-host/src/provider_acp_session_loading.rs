@@ -263,7 +263,7 @@ mod tests {
         ProviderWorkingDirectory, RouterAccess, SessionId, UuidIdentity,
     };
     use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
-    use std::{path::PathBuf, sync::Arc};
+    use std::sync::Arc;
 
     struct FixtureOwnership(LiveSessionOwnership);
 
