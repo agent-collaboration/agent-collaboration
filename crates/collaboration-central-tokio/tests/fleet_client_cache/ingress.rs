@@ -18,6 +18,7 @@ pub enum ReadPoint {
     SnapshotContinuation,
     FeedAfter(u64),
     FeedReplyThrough(u64),
+    EmptyFeedReply,
 }
 struct WaitingRead {
     point: ReadPoint,
@@ -41,6 +42,9 @@ impl HeldRead {
     pub fn release(self) -> TestResult {
         self.release.send(()).map_err(|_| "held read ended".into())
     }
+    pub fn is_held(&self) -> bool {
+        !self.release.is_closed()
+    }
 }
 impl Controls {
     pub fn corrupt_next_archive_outcome(&self) {
@@ -55,14 +59,22 @@ impl Controls {
             body:
                 OperationAnswer::Consumer(BoardConsumerAnswer::Read(
                     board_sync_protocol::BoardReadPage::FleetFeed(
-                        board_sync_protocol::FleetFeedRead::Page { through, .. },
+                        board_sync_protocol::FleetFeedRead::Page {
+                            records,
+                            through,
+                            head,
+                            ..
+                        },
                     ),
                 )),
             ..
         } = &answer
         {
-            self.wait_at(Some(ReadPoint::FeedReplyThrough(through.get())))
-                .await?;
+            let mut points = vec![ReadPoint::FeedReplyThrough(through.get())];
+            if records.is_empty() && through == head {
+                points.push(ReadPoint::EmptyFeedReply);
+            }
+            self.wait_at_matching(&points).await?;
         }
         if let ServerFrame::Answer {
             frame,
@@ -116,14 +128,17 @@ impl Controls {
             } => Some(ReadPoint::FeedAfter(position.get())),
             _ => None,
         };
-        self.wait_at(point).await
+        if let Some(point) = point {
+            self.wait_at_matching(&[point]).await?;
+        }
+        Ok(())
     }
-    async fn wait_at(&self, point: Option<ReadPoint>) -> TestResult {
+    async fn wait_at_matching(&self, points: &[ReadPoint]) -> TestResult {
         let waiting = {
             let mut reads = self.reads.lock().await;
             if reads
                 .front()
-                .is_some_and(|read| Some(&read.point) == point.as_ref())
+                .is_some_and(|read| points.contains(&read.point))
             {
                 reads.pop_front()
             } else {

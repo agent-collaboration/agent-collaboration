@@ -64,15 +64,17 @@ async fn trigger_during_resync_requires_another_fresh_read() -> TestResult {
     let syncing = tokio::spawn(async move { fleet.synchronize().await });
     first.entered().await?;
     live.commit(update("first overlapping change")?).await?;
-    let mut first_resync = Box::pin(reader.fleet.synchronize());
+    let fleet = reader.fleet.clone();
+    let mut first_resync = Box::pin(async move { fleet.synchronize().await });
     assert!(first_resync.as_mut().now_or_never().is_none());
+    let first_resync = tokio::spawn(first_resync);
     first.release()?;
     second.entered().await?;
     live.commit(update("change during the resync")?).await?;
     let mut second_resync = Box::pin(reader.fleet.synchronize());
     assert!(second_resync.as_mut().now_or_never().is_none());
     second.release()?;
-    tokio::time::timeout(BOUND, first_resync).await??;
+    tokio::time::timeout(BOUND, first_resync).await???;
     tokio::time::timeout(BOUND, second_resync).await??;
     tokio::time::timeout(BOUND, syncing).await???;
     assert_visible(&reader.fleet, &router_root, "change during the resync", 6).await?;
@@ -90,6 +92,73 @@ async fn trigger_during_submit_reads_changes_after_releasing_admission() -> Test
 #[tokio::test]
 async fn trigger_during_creation_reads_changes_after_releasing_admission() -> TestResult {
     trigger_during_submission(true).await
+}
+
+#[tokio::test]
+async fn completed_sync_and_queued_mutation_finish_before_a_later_generation() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let router_root = directory.path().join("router");
+    let jwks = JwksFixtureServer::start().await?;
+    let mut live = Live::start(&directory.path().join("central"), &jwks.url).await?;
+    live.commit(create()?).await?;
+    let reader = Reader::start(&router_root, live.server.base_url()).await?;
+    reader.fleet.synchronize().await?;
+    let mut first = reader
+        .ingress
+        .controls
+        .hold(ReadPoint::FeedReplyThrough(2))
+        .await;
+    let fleet = reader.fleet.clone();
+    let mut syncing = tokio::spawn(async move { fleet.synchronize().await });
+    first.entered().await?;
+
+    // Poll in order so mutation admission precedes the later generation's turn.
+    let fleet = reader.fleet.clone();
+    let request = update("queued mutation")?;
+    let origin = ActorOrigin {
+        installation: READER_SERVICE.to_owned().try_into()?,
+        machine: "cache reader".to_owned().try_into()?,
+    };
+    let mut submitting = Box::pin(async move { fleet.submit(&request, &origin).await });
+    assert!(submitting.as_mut().now_or_never().is_none());
+    let mut submitting = tokio::spawn(submitting);
+    let fleet = reader.fleet.clone();
+    let mut later = Box::pin(async move { fleet.synchronize().await });
+    assert!(later.as_mut().now_or_never().is_none());
+    let later = tokio::spawn(later);
+    // A mutation's cache refresh contains records; the later sync's reply is empty.
+    // The unfair implementation reaches this same gate before admitting the mutation.
+    let mut second = reader
+        .ingress
+        .controls
+        .hold(ReadPoint::EmptyFeedReply)
+        .await;
+    tokio::time::timeout(BOUND, async {
+        first.release()?;
+        second.entered().await?;
+        (&mut syncing).await??;
+        let submitted = (&mut submitting).await??;
+        assert!(matches!(
+            submitted.result,
+            RequestResult::Decided(RequestDecision::Accepted { .. })
+        ));
+        assert!(
+            second.is_held(),
+            "later generation's gate released before the first caller and mutation finished"
+        );
+        TestResult::Ok(())
+    })
+    .await
+    .map_err(
+        |_| "completed generation and queued mutation remained blocked by a later generation",
+    )??;
+    second.release()?;
+    tokio::time::timeout(BOUND, later).await???;
+    assert_visible(&reader.fleet, &router_root, "queued mutation", 4).await?;
+    reader.shutdown().await?;
+    live.shutdown().await?;
+    jwks.shutdown().await?;
+    Ok(())
 }
 
 async fn trigger_during_submission(creation: bool) -> TestResult {
