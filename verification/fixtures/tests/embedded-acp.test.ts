@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { z } from "zod";
 import { createFixtureDirectory } from "../../test-support/fixture-directory.ts";
 import { decodeEvidenceJson } from "../../evidence-json.ts";
+import { encode } from "../../exact-json.ts";
 
 const baselineSchema = z.object({
   original: z.string(),
@@ -17,6 +18,7 @@ const baselineSchema = z.object({
   initialFiles: z.record(z.string(), z.string()).optional(),
   pidFiles: z.array(z.string()).optional(),
   environment: z.record(z.string(), z.string()).optional(),
+  configuration: z.unknown().optional(),
   expected: z.object({
     exit: z.number().or(z.bigint()).transform(Number),
     stdout: z.union([
@@ -39,10 +41,17 @@ for (const name of readdirSync(directory)
     try {
       for (const [name, content] of Object.entries(fixture.initialFiles ?? {}))
         writeFileSync(join(root, name), content);
+      const program = new URL(`../${fixture.target}`, import.meta.url).pathname;
+      const entry = join(root, "__entry.ts");
+      if (fixture.configuration !== undefined)
+        writeFileSync(
+          entry,
+          `import { runFixture } from ${JSON.stringify(program)};\nawait runFixture(${encode(fixture.configuration)});\n`,
+        );
       const result = spawnSync(
         process.execPath,
         [
-          new URL(`../${fixture.target}`, import.meta.url).pathname,
+          fixture.configuration === undefined ? program : entry,
           ...fixture.arguments.map((argument) =>
             argument === "<RECEIPT>" ? receipt : argument.replaceAll("<ROOT>", root),
           ),
@@ -91,7 +100,9 @@ for (const name of readdirSync(directory)
             ? {}
             : {
                 files: Object.fromEntries(
-                  readdirSync(root).map((filename) => [filename, readRetainedFile(filename)]),
+                  readdirSync(root)
+                    .filter((filename) => filename !== "__entry.ts")
+                    .map((filename) => [filename, readRetainedFile(filename)]),
                 ),
               }),
         },
