@@ -259,5 +259,107 @@
       "stderr": "",
       "files": {}
     }
+  },
+  {
+    "input": {
+      "name": "configured-source-native-file",
+      "programs": {
+        "claude": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "file",
+            "output": {
+              "kind": "path",
+              "path": "<ROOT>/output"
+            }
+          }
+        }
+      },
+      "executable": "claude",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {
+        "output": "[]"
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": "",
+      "files": {
+        "output": "[]"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "configured-source-native-count-0",
+      "programs": {
+        "claude": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "file",
+            "output": {
+              "kind": "path",
+              "path": "<ROOT>/output"
+            },
+            "failAfterFirstCount": "<ROOT>/count"
+          }
+        }
+      },
+      "executable": "claude",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {
+        "output": "[]",
+        "count": "0"
+      }
+    },
+    "expected": {
+      "exit": 0,
+      "stdout": "[]\n",
+      "stderr": "",
+      "files": {
+        "count": "1",
+        "output": "[]"
+      }
+    }
+  },
+  {
+    "input": {
+      "name": "configured-source-native-count-1",
+      "programs": {
+        "claude": {
+          "module": "native-cli-catalogue-agent.ts",
+          "configuration": {
+            "kind": "file",
+            "output": {
+              "kind": "path",
+              "path": "<ROOT>/output"
+            },
+            "failAfterFirstCount": "<ROOT>/count"
+          }
+        }
+      },
+      "executable": "claude",
+      "arguments": ["agents", "--json", "--all"],
+      "input": "",
+      "environment": {},
+      "initialFiles": {
+        "output": "[]",
+        "count": "1"
+      }
+    },
+    "expected": {
+      "exit": 7,
+      "stdout": "",
+      "stderr": "",
+      "files": {
+        "count": "2",
+        "output": "[]"
+      }
+    }
   }
 ]

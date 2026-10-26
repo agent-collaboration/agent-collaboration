@@ -13,6 +13,7 @@ const configurationSchema = z.discriminatedUnion("kind", [
     kind: z.literal("file"),
     output: pathSourceSchema,
     readLog: pathSourceSchema.optional(),
+    failAfterFirstCount: z.string().optional(),
   }),
   z.object({ kind: z.literal("text"), text: z.string() }),
   z.object({ kind: z.literal("failure"), stderr: z.string(), exit: z.number().int() }),
@@ -31,6 +32,14 @@ export async function runFixture(configuration: unknown): Promise<void> {
   assert.deepEqual(process.argv.slice(2), ["agents", "--json", "--all"]);
   switch (input.kind) {
     case "file":
+      if (input.failAfterFirstCount !== undefined) {
+        const count = BigInt(readFileSync(input.failAfterFirstCount, "utf8").trim());
+        writeFileSync(input.failAfterFirstCount, String(count + 1n));
+        if (count !== 0n) {
+          process.exitCode = 7;
+          return;
+        }
+      }
       if (input.readLog !== undefined) appendFileSync(sourcePath(input.readLog), "read\n");
       console.log(readFileSync(sourcePath(input.output), "utf8").replace(/\r\n?/g, "\n"));
       return;
