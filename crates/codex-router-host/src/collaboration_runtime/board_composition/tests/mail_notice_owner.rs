@@ -365,6 +365,61 @@ impl MailOwner {
             })
             .await?)
     }
+    pub async fn pending_submissions(
+        &self,
+    ) -> Result<Vec<durable_steps::storage::OperationRecord>, TestError> {
+        use durable_steps::{Task as _, storage::JournalStorage as _};
+        Ok(self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    let mut submissions = Vec::new();
+                    // MAX includes running retry/drive deadlines without advancing a clock
+                    // or claiming an operation. Never admit from this observer.
+                    for id in scope
+                        .due(runtime_primitives::SyncTime::from_unix_millis(i64::MAX))
+                        .await?
+                    {
+                        let Some(record) = scope.operation(id).await? else {
+                            continue;
+                        };
+                        if record.kind != ArrangedSubmit::KIND {
+                            continue;
+                        }
+                        submissions.push(record);
+                    }
+                    Ok(submissions)
+                })
+            })
+            .await?)
+    }
+    pub async fn resolve_submit(
+        &self,
+        reference: fleet_sync_protocol::DeliveryItemRef,
+    ) -> Result<
+        fleet_sync_delivery::ResolvedSubmit<collaboration_service::RouterDeliveryTypes>,
+        TestError,
+    > {
+        let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+            64 * 1024 * 1024,
+            10_000,
+            64 * 1024 * 1024,
+            10_000,
+            64 * 1024 * 1024,
+            minimum_settlement_allowance::<collaboration_service::RouterDeliveryTypes>()?,
+        )?;
+        Ok(self
+            .store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    Outbox::<_, collaboration_service::RouterDeliveryTypes>::new(scope, limits)
+                        .resolve_submit(&reference)
+                        .await
+                        .map_err(delivery_rollback)
+                })
+            })
+            .await?)
+    }
     pub async fn status_cursor(&self) -> Result<u64, TestError> {
         let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
             64 * 1024 * 1024,
