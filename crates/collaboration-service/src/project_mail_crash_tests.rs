@@ -7,6 +7,7 @@ use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use serde::{Deserialize, Serialize};
 use std::{os::unix::process::ExitStatusExt as _, path::PathBuf, process::Stdio, sync::Arc};
 use tokio::{io::AsyncReadExt as _, net::UnixListener};
+use tracing::instrument::WithSubscriber;
 
 const CHILD_ROOT: &str = "CODEX_ROUTER_TEST_PROJECT_OUTBOX_CRASH_ROOT";
 const CHILD_TEST: &str = "mail_push_delivery::tests::remote_assembly::project_admission::crash::project_outbox_crash_child_entry";
@@ -81,7 +82,16 @@ async fn assert_atomic_project_admission(kind: ProjectCrashKind) {
         serde_json::from_slice(&std::fs::read(root.path().join("state.json")).unwrap()).unwrap();
     assert!(state.path.starts_with(root.path()));
 
-    let owner = Arc::new(InteractionStore::open(&state.path).await.unwrap());
+    let diagnostics = tracing_subscriber::fmt()
+        .with_max_level(tracing::Level::WARN)
+        .with_test_writer()
+        .finish();
+    let owner = Arc::new(
+        InteractionStore::open(&state.path)
+            .with_subscriber(diagnostics)
+            .await
+            .expect("cold reopen after owned crash; startup phase and driver code are logged"),
+    );
     assert!(
         owner
             .mail_submission_epoch(&mail_id(state.item))

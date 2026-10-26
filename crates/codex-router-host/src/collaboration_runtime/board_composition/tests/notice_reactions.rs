@@ -8,6 +8,9 @@ use fleet_sync_tokio_runner::SessionRequests;
 use message_board_storage::{FleetCache, FleetRecordSnapshot};
 use std::os::unix::fs::PermissionsExt;
 
+#[path = "archive_sync_barrier.rs"]
+mod archive_sync_barrier;
+
 #[cfg(feature = "runtime-test-support")]
 #[path = "central_read_copies.rs"]
 mod central_read_copies;

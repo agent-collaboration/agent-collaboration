@@ -8,8 +8,13 @@ on:
     inputs:
       tag:
         description: Existing semantic-version tag to publish
-        required: true
+        required: false
         type: string
+      dry_run:
+        description: Build, sign and verify this ref without publishing or updating the tap
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -19,6 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  RELEASE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   # Keychain approvals belong to a code identity; a fixed identifier and team keep
   # one identity across releases. Debug builds use "<identifier>.debug".
@@ -43,7 +49,7 @@ jobs:
           fetch-depth: 0
           path: release-source
           persist-credentials: false
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && github.sha || env.RELEASE_TAG }}
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
@@ -56,7 +62,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [[ ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if [[ "${RELEASE_DRY_RUN}" != "true" && ! "${RELEASE_TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "release tag must use v<major>.<minor>.<patch> syntax" >&2
             exit 1
           fi
@@ -69,20 +75,25 @@ jobs:
           fi
 
           source_commit="$(git rev-parse HEAD)"
-          tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
-          if [[ "${source_commit}" != "${tag_commit}" ]]; then
-            echo "checked-out source does not match the release tag" >&2
-            exit 1
-          fi
-          if [[ "$(git tag --points-at HEAD --list "${RELEASE_TAG}")" != "${RELEASE_TAG}" ]]; then
-            echo "release tag is not exact for the checked-out source" >&2
-            exit 1
+          if [[ "${RELEASE_DRY_RUN}" != "true" ]]; then
+            tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
+            if [[ "${source_commit}" != "${tag_commit}" ]]; then
+              echo "checked-out source does not match the release tag" >&2
+              exit 1
+            fi
+            if [[ "$(git tag --points-at HEAD --list "${RELEASE_TAG}")" != "${RELEASE_TAG}" ]]; then
+              echo "release tag is not exact for the checked-out source" >&2
+              exit 1
+            fi
           fi
 
           cargo_version="$(
             cargo metadata --locked --no-deps --format-version 1 |
               jq -r '.packages[] | select(.name == "codex-router-cli") | .version'
           )"
+          if [[ "${RELEASE_DRY_RUN}" == "true" ]]; then
+            release_version="${cargo_version}"
+          fi
           if [[ "${cargo_version}" != "${release_version}" ]]; then
             echo "release tag version does not match codex-router-cli" >&2
             exit 1
@@ -93,36 +104,100 @@ jobs:
             echo "source_commit=${source_commit}"
           } >> "${GITHUB_OUTPUT}"
 
-      - name: Build release binary
-        working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins
+      - name: Report cache save policy
+        env:
+          CACHE_SAVE_ALLOWED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          printf 'Cache save allowed: %s\n' "$CACHE_SAVE_ALLOWED"
+          if [[ "$GITHUB_EVENT_NAME" != push || "$GITHUB_REF" != refs/heads/main ]]; then
+            test "$CACHE_SAVE_ALLOWED" = false
+          fi
 
-      - name: Reject test Keychain support in the release dependency graph
+      - name: Cache release dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: release-source -> target
+          shared-key: release-arm64-background
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # Prepare small consumers serially: concurrent Cargo compiles would wait
+      # on the shared target lock rather than run independently.
+      - name: Prebuild optimized transport test and schema exporter
+        id: prebuild
         working-directory: release-source
         run: |
           set -euo pipefail
-          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features -i codex-router-secret-store)"
-          if grep -q 'keychain-test-guard' <<<"${dependency_features}"; then
-            echo "release dependency graph includes keychain-test-guard" >&2
-            exit 1
-          fi
+          cargo test --locked --release -p acp-client-runtime --test provider_transport_idle \
+            --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
+          transport_binary="$(jq -r 'select(.reason == "compiler-artifact" and .target.name == "provider_transport_idle" and .executable != null) | .executable' "$RUNNER_TEMP/transport-build.jsonl")"
+          test -x "$transport_binary"
+          echo "transport_binary=$transport_binary" >> "$GITHUB_OUTPUT"
+          cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
 
-      # Optimized macOS build only: debug code generation does not reproduce the
-      # FuturesUnordered waker-identity bug behind the 0.1.38 idle CPU loop.
-      - name: Test optimized idle provider transport
+      - name: Build release binaries
+        id: release_binaries
+        background: true
         working-directory: release-source
-        run: cargo test --locked --release -p codex-router-host --test provider_transport_idle
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins --timings
 
-      - name: Export collaboration schemas
+      # Optimized macOS code generation reproduces the FuturesUnordered
+      # waker-identity regression; a development-profile test cannot replace it.
+      - name: Test optimized provider transport
+        id: optimized_transport
+        background: true
+        env:
+          TRANSPORT_BINARY: ${{ steps.prebuild.outputs.transport_binary }}
+        run: |
+          set -euo pipefail
+          transport_tests="$("$TRANSPORT_BINARY" --list | sed -n 's/: test$//p')"
+          test -n "$transport_tests"
+          failed_tests=0
+          while IFS= read -r test_name; do
+            started_seconds="$(date +%s)"
+            if "$TRANSPORT_BINARY" --exact "$test_name" --nocapture; then
+              test_status=0
+            else
+              test_status=$?
+              failed_tests=$((failed_tests + 1))
+            fi
+            printf 'TRANSPORT_TEST\t%s\t%s\t%s\n' "$(( $(date +%s) - started_seconds ))" "$test_status" "$test_name"
+          done <<< "$transport_tests"
+          test "$failed_tests" -eq 0
+
+      - name: Export release protocol schemas
+        id: protocol_schemas
+        background: true
         working-directory: release-source
         run: |
           set -euo pipefail
           mkdir -p target/protocol-schemas/communication-control target/protocol-schemas/acp-protocol
-          cargo run --locked --release -p collaboration-protocol --example export_protocol_types \
-            > target/protocol-schemas/communication-control/protocol-types.json
-          cp protocol-schemas/acp-protocol/stable-schema.json protocol-schemas/acp-protocol/upstream-license.txt \
-            target/protocol-schemas/acp-protocol/
+          target/release/examples/export_protocol_types > target/protocol-schemas/communication-control/protocol-types.json
+          cp protocol-schemas/acp-protocol/stable-schema.json protocol-schemas/acp-protocol/upstream-license.txt target/protocol-schemas/acp-protocol/
           cp protocol-schemas/schema-packaging.md target/protocol-schemas/
+
+      - name: Reject test-only production features
+        id: production_features
+        background: true
+        working-directory: release-source
+        run: |
+          set -euo pipefail
+          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features -i codex-router-secret-store)"
+          if grep -q 'keychain-test-guard' <<< "$dependency_features"; then
+            echo 'release dependency graph includes keychain-test-guard' >&2
+            exit 1
+          fi
+
+      - name: Wait for release build and checks
+        wait-all:
+
+      - name: Retain release build and test timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-timing-inventory
+          path: |
+            ${{ runner.temp }}/transport-build.jsonl
+            release-source/target/cargo-timings/
 
       - name: Require the Developer ID certificate
         env:
@@ -249,6 +324,7 @@ jobs:
           } >> "${GITHUB_OUTPUT}"
 
       - name: Publish GitHub release asset
+        if: env.RELEASE_DRY_RUN != 'true'
         env:
           ASSET_NAME: ${{ steps.artifact.outputs.name }}
           ASSET_PATH: ${{ steps.artifact.outputs.path }}
@@ -330,6 +406,7 @@ jobs:
 
   publish-tap:
     name: Homebrew tap
+    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
     needs: release
     permissions:
       contents: read

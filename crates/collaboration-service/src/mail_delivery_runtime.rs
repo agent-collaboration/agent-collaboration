@@ -87,6 +87,23 @@ impl Clock for MailClock {
 }
 
 impl MailDeliveryRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub async fn runtime_test_has_local_cancel_delivery(
+        &self,
+        cancel: ItemId,
+    ) -> Result<bool, StoreError> {
+        let item = cancel
+            .as_uuid()
+            .to_string()
+            .try_into()
+            .map_err(StoreError::backend)?;
+        self.owner
+            .local_cancel_delivery(&item)
+            .await
+            .map(|delivery| delivery.is_some())
+            .map_err(StoreError::backend)
+    }
+
     #[cfg(feature = "runtime-test-support")]
     pub async fn runtime_test_install_mail_fault(
         &self,

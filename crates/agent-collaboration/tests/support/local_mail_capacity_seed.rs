@@ -140,6 +140,13 @@ pub(super) async fn seed_to_last_slot(
                 let mut last = None;
                 let mut first_body = None;
                 let mut last_body = None;
+                // IDs have a fixed UUID width and every seed uses this same
+                // timestamp and body. Serialize their full-size charge once;
+                // the last partial slot still measures its fitted envelope.
+                let mut prototype = prototype;
+                prototype.created_at = consumer.now;
+                let full_charge = wire_charge(&prototype, peer, ordinary_reserve_bytes)
+                    .map_err(|error| StoreError::backend(error.to_string()))?;
                 // Every seed has the same ordinary profile as the observed prototype.
                 let maximum_items = LOCAL_INBOX_BYTES / u64::from(ordinary_reserve_bytes);
                 for _ in 0..=maximum_items {
@@ -148,8 +155,7 @@ pub(super) async fn seed_to_last_slot(
                         .try_into()
                         .map_err(StoreError::backend)?;
                     draft.created_at = consumer.now;
-                    let mut charge = wire_charge(&draft, peer, ordinary_reserve_bytes)
-                        .map_err(|error| StoreError::backend(error.to_string()))?;
+                    let mut charge = full_charge;
                     let budget = LOCAL_INBOX_BYTES
                         .checked_sub(used)
                         .and_then(|remaining| remaining.checked_sub(final_charge))

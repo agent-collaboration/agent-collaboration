@@ -145,6 +145,20 @@ pub struct CollaborationRuntime {
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
 impl CollaborationRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    pub async fn runtime_test_has_local_cancel_delivery(
+        &self,
+        cancel: fleet_sync_protocol::ItemId,
+    ) -> io::Result<bool> {
+        self.runtime_test_mail
+            .as_ref()
+            .and_then(std::sync::Weak::upgrade)
+            .ok_or_else(|| io::Error::other("test mail runtime is unavailable"))?
+            .runtime_test_has_local_cancel_delivery(cancel)
+            .await
+            .map_err(io::Error::other)
+    }
+
     #[cfg(feature = "runtime-test-support")]
     pub const RUNTIME_TEST_MAIL_FAULT_FILE: &str = "messaging-test-fault.json";
 
