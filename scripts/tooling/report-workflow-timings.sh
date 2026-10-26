@@ -36,7 +36,7 @@ sort -u "$output_directory/tests.tsv" | sort -nr > "$output_directory/tests-sort
   head -20 "$output_directory/steps.tsv" | awk -F '\t' '{print "| " $1 " | " $2 " | " $3 " | " $4 " |"}'
   printf '\n## Slowest tests\n\n| Seconds | Result | Job | Test |\n| ---: | --- | --- | --- |\n'
   head -20 "$output_directory/tests-sorted.tsv" | awk -F '\t' '{print "| " $1 " | " $2 " | " $3 " | " $4 " |"}'
-  printf '\nFull step and test inventories are in the timing artifact. Test rows come from nextest statuses and unittest durations; skipped tests have no execution duration. Overlapping step durations must not be added.\n'
+  printf '\nFull step and test inventories are in the timing artifact. Test rows include nextest, unittest, optimized transport and timed workerd example invocations; skipped tests have no execution duration. Workerd example wall time includes Cargo startup and any compilation. Overlapping step durations must not be added.\n'
 } > "$output_directory/summary.md"
 cat "$output_directory/summary.md"
 if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then

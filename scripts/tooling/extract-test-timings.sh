@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Print test durations from nextest and unittest logs, including gh escaping.
+# Print runner and workerd example durations, including gh escaping.
 set -euo pipefail
 job_name="${1:?job name is required}"
 shift
 awk -v job="$job_name" '
-# Parse nextest statuses and Python unittest --durations 0 output.
+# Parse nextest, unittest --durations 0 and Bash TIMEFORMAT output.
 {
   gsub(/\033\[[0-9;]*m/, "")
   # Newer gh versions render ESC as the printable pair ^[.
@@ -24,6 +24,9 @@ awk -v job="$job_name" '
     split(substr($0, RSTART), fields, "\t")
     status = fields[3] == 0 ? "PASS" : "FAIL"
     print fields[2] "\t" status "\t" job "\t" fields[4]
+  } else if (match($0, /WORKERD_TEST\t[0-9]+\.[0-9]+\t/)) {
+    split(substr($0, RSTART), fields, "\t")
+    print fields[2] "\tMEASURED\t" job "\t" fields[3]
   } else if (match($0, /[0-9]+\.[0-9]+s[[:space:]]+test_[^ ]+/)) {
     result = substr($0, RSTART)
     duration = result

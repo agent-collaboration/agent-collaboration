@@ -360,20 +360,24 @@ jobs:
           worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
           python3 scripts/tooling/check-central-worker-bundle.py faults
           for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
-            cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
+            TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
           done
           for example in step_scope_workerd bootstrap_scope_workerd; do
-            cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
+            TIMEFORMAT=$'WORKERD_TEST\t%3R\t'"$example"
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
           done
       - name: Prove bounded normal Access and session cases
         run: |
           for scenario in access-sessions access-carryover session-carryover; do
-            cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+            TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
           done
       - name: Prove forwarding and mailbox rules on workerd
         run: |
           for scenario in forward-boundary forward-overlap forward-state forward-terminal forward-real-timer mailbox-identity mailbox-capacity mailbox-cancel mailbox-deadline mailbox-held-retention mailbox-report-terminal; do
-            cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+            TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
           done
       - name: Build the deployment candidate without test features
         run: |
