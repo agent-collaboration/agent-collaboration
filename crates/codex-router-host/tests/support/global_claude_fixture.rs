@@ -76,41 +76,13 @@ impl HarnessSelectionFixture {
             Self::write_native_executable(&global_executable, "globalHarness", GLOBAL_VERSION);
         }
         Self::write_native_executable(&bundled_executable, "bundledHarness", BUNDLED_VERSION);
-        let adapter_executable = private_root.path().join("claude-agent-acp.py");
-        fs::write(
+        let adapter_executable = private_root.path().join("claude-agent-acp.ts");
+        codex_router_test_support::node_fixture::write_node_fixture(
             &adapter_executable,
-            r#"#!/usr/bin/python3
-import json, os, pathlib, subprocess, sys
-
-request = json.loads(sys.stdin.readline())
-assert request['method'] == 'initialize'
-selected_executable = os.environ.get('CLAUDE_CODE_EXECUTABLE') or sys.argv[1]
-dispatch_path = pathlib.Path(os.environ['GLOBAL_HARNESS_FIXTURE_ADAPTER_RECEIPT'])
-dispatch_path.write_text(json.dumps({
-    'selected_executable': str(pathlib.Path(selected_executable).resolve()),
-    'version_stdout': '',
-}))
-native_output = subprocess.run(
-    [selected_executable, '--version'],
-    check=True, capture_output=True, text=True,
-)
-dispatch_path.write_text(json.dumps({
-    'selected_executable': str(pathlib.Path(selected_executable).resolve()),
-    'version_stdout': native_output.stdout.strip(),
-}))
-print(json.dumps({
-    'jsonrpc': '2.0', 'id': request['id'], 'result': {
-        'protocolVersion': 1,
-        'agentCapabilities': {},
-        'agentInfo': {'name': 'global-harness-selection-fixture', 'version': '1'},
-    },
-}), flush=True)
-sys.stdin.read()
-"#,
+            "global-claude-adapter-agent.ts",
+            &serde_json::Value::Null,
         )
         .expect("scripted external ACP adapter");
-        fs::set_permissions(&adapter_executable, fs::Permissions::from_mode(0o700))
-            .expect("executable ACP adapter fixture");
         let adapter_dispatch_receipt = private_root.path().join("adapter-dispatch.json");
         let native_execution_receipt = private_root.path().join("native-execution.json");
         Self {
@@ -126,22 +98,12 @@ sys.stdin.read()
     }
 
     fn write_native_executable(executable: &Path, identity: &str, version: &str) {
-        let script = format!(
-            r#"#!/usr/bin/python3
-import json, os, pathlib, sys
-assert sys.argv[1:] == ['--version']
-receipt = {{
-    'invoked_executable': str(pathlib.Path(sys.argv[0]).resolve()),
-    'identity': '{identity}',
-    'version': '{version}',
-}}
-pathlib.Path(os.environ['GLOBAL_HARNESS_FIXTURE_NATIVE_RECEIPT']).write_text(json.dumps(receipt))
-print('{version}', flush=True)
-"#,
-        );
-        fs::write(executable, script).expect("native fixture executable");
-        fs::set_permissions(executable, fs::Permissions::from_mode(0o700))
-            .expect("native fixture executable permissions");
+        codex_router_test_support::node_fixture::write_node_fixture(
+            executable,
+            "global-claude-native-agent.ts",
+            &serde_json::json!({"identity":identity,"version":version}),
+        )
+        .expect("native fixture executable");
     }
 
     pub async fn observe_startup(&self) -> StartupObservation {

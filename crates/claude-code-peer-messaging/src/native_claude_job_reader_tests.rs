@@ -1,17 +1,18 @@
 //! Vendor-shaped fixtures cross the actual child/decoder; no vendor is invoked.
 use super::*;
 use serde_json::{Value, json};
-use std::os::unix::fs::PermissionsExt;
+#[path = "../../codex-router-test-support/src/node_fixture.rs"]
+mod node_fixture;
 
 fn job(state: &str) -> Value {
     json!({"kind":"background","id":"job-handle-42","sessionId":"00000000-0000-4000-8000-000000000042","cwd":"/source/project","startedAt":1790162100123_i64,"state":state,"name":"Before first prompt"})
 }
 
-fn executable_fixture(body: &str) -> (tempfile::TempDir, NativeClaudeJobReader) {
+fn executable_fixture(configuration: Value) -> (tempfile::TempDir, NativeClaudeJobReader) {
     let root = tempfile::tempdir().unwrap();
     let executable = root.path().join("claude");
-    std::fs::write(&executable,format!("#!/usr/bin/python3\nimport json,sys\nassert sys.argv[1:]==['agents','--json','--all']\n{body}\n")).unwrap();
-    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    node_fixture::write_node_fixture(&executable, "native-cli-catalogue-agent.ts", &configuration)
+        .unwrap();
     let reader = NativeClaudeJobReader::for_executable(executable);
     (root, reader)
 }
@@ -31,8 +32,7 @@ async fn native_job_only_before_prompt_and_mixed_peer_rows_remain_distinct() {
             }
         }
         let text = serde_json::to_string(&list).unwrap();
-        let (_root, reader) =
-            executable_fixture(&format!("print({})", serde_json::to_string(&text).unwrap()));
+        let (_root, reader) = executable_fixture(json!({"kind":"text","text":text}));
         let observed = reader
             .read_background_jobs()
             .await
@@ -142,7 +142,7 @@ fn malformed_job_fields_and_conflicting_job_identities_reject_instead_of_becomin
 #[tokio::test]
 async fn native_read_failure_and_bounded_output_do_not_expose_private_diagnostics() {
     let (_root, reader) =
-        executable_fixture("sys.stderr.write('PRIVATE_JOB_DIAGNOSTIC'); sys.exit(7)");
+        executable_fixture(json!({"kind":"failure","stderr":"PRIVATE_JOB_DIAGNOSTIC","exit":7}));
     let error = reader.read_background_jobs().await.unwrap_err();
     assert_eq!(
         error,
@@ -150,12 +150,9 @@ async fn native_read_failure_and_bounded_output_do_not_expose_private_diagnostic
     );
     assert!(!error.to_string().contains("PRIVATE_JOB_DIAGNOSTIC"));
     for stderr in [true, false] {
-        let body = if stderr {
-            "sys.stderr.write('x'*256); print('[]')"
-        } else {
-            "print('x'*256)"
-        };
-        let (_root, mut reader) = executable_fixture(body);
+        let configuration =
+            json!({"kind":"overflow","stream":if stderr {"stderr"} else {"stdout"},"bytes":256});
+        let (_root, mut reader) = executable_fixture(configuration);
         reader.stderr_limit = 32;
         reader.stdout_limit = 32;
         assert_eq!(
@@ -212,13 +209,10 @@ async fn cancelling_or_timing_out_native_inventory_settles_only_its_owned_child(
         let socket_path = socket_root.path().join("ready.sock");
         let listener = tokio::net::UnixListener::bind(&socket_path).unwrap();
         let diagnostic = socket_root.path().join("fixture-error.txt");
-        let body = format!(
-            "import os,socket\ntry:\n s=socket.socket(socket.AF_UNIX)\n s.connect({})\n s.sendall((str(os.getpid())+'\\n').encode())\n s.recv(1)\nexcept Exception as error:\n open({},'w').write(repr(error))\n raise",
-            serde_json::to_string(&socket_path).unwrap(),
-            serde_json::to_string(&diagnostic).unwrap()
-        );
-        let (_root, mut reader) = executable_fixture(&body);
-        // Process startup is inside the read budget; concurrent cold Python startup exceeded 500ms.
+        let configuration =
+            json!({"kind":"socket","socketPath":socket_path,"diagnosticPath":diagnostic});
+        let (_root, mut reader) = executable_fixture(configuration);
+        // Process startup is inside the read budget; concurrent cold Node startup exceeded 500ms.
         reader.timeout = Duration::from_secs(2);
         let task = tokio::spawn(async move { reader.read_background_jobs().await });
         let accepted = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await;
