@@ -24,6 +24,7 @@ pub(super) fn checking_dialog(
     element! {
         DialogFrame(presentation: DialogPresentation::default(),
             width: u16::try_from(model.width).unwrap_or(u16::MAX), height: u16::try_from(height).unwrap_or(u16::MAX), title: "Checking source".to_owned(),
+            help_action: Some(super::picker_help_view::help_action(state)),
             actions: vec![element!(DialogAction(label: "Cancel", handler: move |_| state.write().cancel_source_action())).into_any()]) {
             UiText(content: format!("{} · {action}", request.profile.name.as_str()), role: UiTextRole::Body)
             #(request.source_directory.as_ref().map(|directory| element!(UiText(content: format!("Source directory: {directory}"), role: UiTextRole::Secondary))))

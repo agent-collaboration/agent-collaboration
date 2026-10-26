@@ -114,10 +114,12 @@ impl SessionsPickerModel {
     }
 
     pub(crate) fn handle_key(&mut self, key: SessionsPickerKey) {
-        if self.source_action.pending.is_some() {
+        if self.source_action.pending.is_some() && !matches!(key, SessionsPickerKey::ToggleHelp) {
             return;
         }
-        self.pointer_window_start = None;
+        if !matches!(key, SessionsPickerKey::ToggleHelp) {
+            self.pointer_window_start = None;
+        }
         match key {
             SessionsPickerKey::MoveDown => {
                 let visible_len = self.visible_len();

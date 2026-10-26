@@ -174,15 +174,15 @@ pub(super) fn render_picker_view(
     .into_any();
     let viewport_width = u16::try_from(model.width).unwrap_or(u16::MAX);
     let viewport_height = u16::try_from(picker_height).unwrap_or(u16::MAX);
-    let dialog = if let Some(pending) = &model.source_action.pending {
-        Some(super::super::source_action_view::checking_dialog(
-            pending,
+    let dialog = if model.show_help {
+        Some(super::super::picker_help_view::render_help(
+            model,
             model_state,
             picker_height,
         ))
-    } else if model.show_help {
-        Some(super::super::picker_help_view::render_help(
-            model,
+    } else if let Some(pending) = &model.source_action.pending {
+        Some(super::super::source_action_view::checking_dialog(
+            pending,
             model_state,
             picker_height,
         ))

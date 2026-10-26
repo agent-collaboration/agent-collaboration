@@ -53,10 +53,8 @@ async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body
                     phase = 1;
                 } else if phase == 1 && frame.contains("DETAIL_BODY 39") {
                     assert!(
-                        frame.contains("Enter/Space activate")
-                            && frame.contains("Ctrl+Enter Resume")
-                            && frame.contains("Ctrl+Shift+Enter Fork"),
-                        "C9 real focus/modified bindings remain usable after body scroll: {frame}"
+                        frame.contains("Tab Focus · Enter Select · Esc Close"),
+                        "the concise shortcut row remains visible after body scroll: {frame}"
                     );
                     // These must neither change the captured row nor invoke a
                     // background New/Fork action or modified arrow shortcut.
