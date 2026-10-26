@@ -72,12 +72,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 canonical_path() {
-  python3 - "$1" <<'PY'
-import os
-import sys
-
-print(os.path.realpath(sys.argv[1]))
-PY
+  node "${repo_root}/verification/tooling/path-inspection.ts" canonical "$1"
 }
 
 require_under_dev_state() {
@@ -96,24 +91,7 @@ require_under_dev_state() {
 
 receipt_path_value() {
   local raw_path="$1"
-  python3 - "${repo_root}" "$raw_path" <<'PY'
-import os
-import sys
-
-repo_root = os.path.realpath(sys.argv[1])
-resolved_path = os.path.realpath(sys.argv[2])
-try:
-    relative = os.path.relpath(resolved_path, repo_root)
-except ValueError:
-    print("<external>")
-    raise SystemExit(0)
-if relative == ".":
-    print("<repo>")
-elif relative.startswith(".."):
-    print("<external>")
-else:
-    print(f"<repo>/{relative}")
-PY
+  node "${repo_root}/verification/tooling/path-inspection.ts" receipt "${repo_root}" "$raw_path"
 }
 
 if [[ "${scenario}" != "websocket-sqlite-pressure" ]]; then
@@ -151,8 +129,8 @@ if [[ -z "${HOME:-}" ]]; then
   exit 2
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required for path validation" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required for path validation" >&2
   exit 127
 fi
 
@@ -241,7 +219,7 @@ artifact_validation_path="$(
   mktemp "${repo_root}/tmp/smoke/proxy-db-runtime-isolation-artifact-validation.XXXXXX"
 )"
 set +e
-python3 "${repo_root}/scripts/validate-proxy-db-runtime-isolation-artifact.py" \
+node "${repo_root}/verification/tooling/validate-proxy-db-runtime-isolation-artifact.ts" \
   "${artifact_path}" \
   "${repo_root}" \
   "${router_root_resolved}" \
