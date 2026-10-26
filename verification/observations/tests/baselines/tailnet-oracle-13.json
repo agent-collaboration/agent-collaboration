@@ -1,0 +1,19 @@
+{
+  "function": "curl_http_reply",
+  "args": [
+    {
+      "exit": 0,
+      "stdout": {
+        "repeatByte": 120,
+        "count": 4194305,
+        "suffixBase64": "CjIwMA=="
+      },
+      "stderr": {
+        "base64": ""
+      }
+    }
+  ],
+  "expected": {
+    "refused": true
+  }
+}

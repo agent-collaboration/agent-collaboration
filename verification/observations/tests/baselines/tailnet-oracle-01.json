@@ -1,0 +1,14 @@
+{
+  "function": "curl_post_arguments",
+  "args": [
+    {
+      "url": "https://node.tail.ts.net:8443/mcp"
+    },
+    {
+      "Origin": "https://foreign.invalid\r\nInjected: yes"
+    }
+  ],
+  "expected": {
+    "refused": true
+  }
+}

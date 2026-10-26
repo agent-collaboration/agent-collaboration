@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 use crate::bounded_command::require_continuing;
 use crate::driver_error::{DriverError, DriverResult};
-use crate::host_plan::HttpsEndpoint;
+use crate::host_plan::{HttpsEndpoint, literal_mcp_path};
 use crate::json_equality::same_json;
 
 #[derive(Clone, Debug)]
@@ -34,7 +34,7 @@ impl LoopbackEndpoint {
         if parsed.scheme() != "http"
             || !loopback
             || port.is_none_or(|value| value == 0)
-            || parsed.path() != "/mcp"
+            || parsed.path() != "/mcp" || !literal_mcp_path(&url)
             || parsed.query().is_some()
             || parsed.fragment().is_some()
             || !parsed.username().is_empty()

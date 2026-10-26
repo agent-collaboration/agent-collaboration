@@ -24,7 +24,7 @@ impl HttpsEndpoint {
             || parsed.password().is_some()
             || parsed.query().is_some()
             || parsed.fragment().is_some()
-            || parsed.path() != "/mcp"
+            || parsed.path() != "/mcp" || !literal_mcp_path(&self.url)
             || parsed.port() == Some(0)
         {
             return Err(DriverError::Invalid(
@@ -48,6 +48,12 @@ impl HttpsEndpoint {
     pub fn origin(&self) -> DriverResult<String> {
         Ok(format!("https://{}", self.authority()?))
     }
+}
+
+#[must_use]
+pub fn literal_mcp_path(value: &str) -> bool {
+    let normalized = value.replace(['\t', '\r', '\n'], "");
+    normalized.split_once("://").and_then(|(_, tail)| tail.find('/').and_then(|start| tail.get(start..))).and_then(|path| path.split(['?', '#']).next()) == Some("/mcp")
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]

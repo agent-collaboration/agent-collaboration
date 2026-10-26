@@ -2,7 +2,7 @@
 
 Use this journey when changing provider SessionItem projection or the Codex app-server face. Adopted outcome: the owner's ACP metadata repair requires useful metadata retained outside assistant prose, genuine transcript content preserved, and installed-client/provider proof. The same projection serves Claude, Cursor and other ACP providers; a passing provider run covers that declared provider, not every ACP implementation.
 
-The entry is installed Codex `--remote` → candidate Host's `router-sessions/<endpoint>.sock` → actual installed ACP provider. `scripts/verification/acp_metadata_observation.py` independently reads the same Session through public `events observe`, `thread/read` and `thread/resume`. It never creates a Session, sends model input, logs in or stops a Host. The operator owns the actual installed-client drive and exact cleanup.
+The entry is installed Codex `--remote` → candidate Host's `router-sessions/<endpoint>.sock` → actual installed ACP provider. `verification/observations/acp-metadata-observation.ts` independently reads the same Session through public `events observe`, `thread/read` and `thread/resume`. It never creates a Session, sends model input, logs in or stops a Host. The operator owns the actual installed-client drive and exact cleanup.
 
 ## Qualify the target
 
@@ -36,7 +36,7 @@ Require the ordinary reply in both captures and no raw command-catalogue JSON. O
 
 ## Read back the retained metadata
 
-Read `MetadataObservationPlan` in `scripts/verification/acp_metadata_observation.py`. Save its JSON in the task evidence with repository/source and `build_manifest`, candidate Host/Router hashes and Host PID, installed Codex path/hash, installed collaboration CLI, private service directory, exact endpoint/Session ID, both original PTY paths, expected reply and a fresh evidence output directory. The Host must still be running and the committed worktree clean. Set `require_usage` only when this run is required to demonstrate actual usage emission.
+Read `MetadataObservationPlan` in `verification/observations/acp-metadata-observation.ts`. Save its JSON in the task evidence with repository/source and `build_manifest`, candidate Host/Router hashes and Host PID, installed Codex path/hash, installed collaboration CLI, private service directory, exact endpoint/Session ID, both original PTY paths, expected reply and a fresh evidence output directory. The Host must still be running and the committed worktree clean. Set `require_usage` only when this run is required to demonstrate actual usage emission.
 
 ```sh
 uv run --no-project --with pydantic==2.14.1 --with websockets==17.3 --python 3.13 \
