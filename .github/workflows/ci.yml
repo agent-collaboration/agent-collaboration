@@ -67,6 +67,13 @@ jobs:
         uses: ./.github/actions/install-ci-tools
         with:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
+      # cargo-modules is not in install-action's managed prebuilt manifests;
+      # its cargo-binstall fallback installs this exact version without a cache.
+      - name: Install pinned cargo-modules
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        with:
+          tool: cargo-modules@0.28.0
+          fallback: cargo-binstall
       - name: Restore pinned SQLx tool
         id: sqlx_tools
         uses: actions/cache/restore@v4
@@ -97,6 +104,10 @@ jobs:
         id: format
         background: true
         run: cargo fmt --all -- --check
+      - name: Ratchet workspace module cycles
+        id: module_cycles
+        background: true
+        run: cargo nextest run -p workspace-architecture-check --run-ignored only
       - name: Test Homebrew release automation
         id: homebrew_release_automation
         background: true
