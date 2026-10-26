@@ -179,13 +179,15 @@ pub(super) fn decode_issuer(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::os::unix::fs::PermissionsExt;
     #[test]
     #[allow(clippy::panic_in_result_fn)]
     fn initial_start_creates_valid_fleet_identities_and_reopens_the_same_signing_key()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
+        std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o755))?;
         let args = ServeArguments {
-            root: directory.path().to_owned(),
+            root: directory.path().join("central"),
             listen: "127.0.0.1:29843".parse()?,
             public_url: None,
             owner_identity: None,
@@ -193,6 +195,10 @@ mod tests {
             allow_plaintext_file_secrets: true,
         };
         let lock = lock_root(&args.root)?;
+        assert_eq!(
+            std::fs::metadata(&args.root)?.permissions().mode() & 0o777,
+            0o700
+        );
         let (first, signer) = initialize(&args)?;
         let keys = serde_json::to_string(&signer.jwks())?;
         assert!(lock_root(&args.root).is_err());

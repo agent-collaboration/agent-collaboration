@@ -92,11 +92,23 @@ impl CentralCredential {
             return Err(CredentialFileError::Permissions);
         }
         let before = std::fs::symlink_metadata(path)?;
-        let mut file = File::open(path)?;
+        if !before.is_file() {
+            return Err(CredentialFileError::Permissions);
+        }
+        let mut file = File::from(
+            rustix::fs::open(
+                path,
+                rustix::fs::OFlags::RDONLY
+                    | rustix::fs::OFlags::CLOEXEC
+                    | rustix::fs::OFlags::NOFOLLOW
+                    | rustix::fs::OFlags::NONBLOCK,
+                rustix::fs::Mode::empty(),
+            )
+            .map_err(std::io::Error::from)?,
+        );
         let metadata = file.metadata()?;
         let account = rustix::process::geteuid().as_raw();
-        if !before.is_file()
-            || !metadata.is_file()
+        if !metadata.is_file()
             || before.ino() != metadata.ino()
             || before.dev() != metadata.dev()
             || metadata.mode() & 0o777 != 0o600

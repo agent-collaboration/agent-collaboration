@@ -73,6 +73,22 @@ pub(super) fn resolve(
             expires_at: future_expiry(&expires_at)?,
         });
     }
+    let expires_at = DateTime::parse_from_rfc3339(
+        args.expires_at
+            .as_deref()
+            .ok_or(FleetCommandError::InvalidInput("--expires-at is required"))?,
+    )
+    .map_err(|_| {
+        FleetCommandError::InvalidInput(
+            "--expires-at must be an RFC3339 timestamp matching the Access service token expiry",
+        )
+    })?
+    .with_timezone(&Utc);
+    if expires_at <= Utc::now() {
+        return Err(FleetCommandError::InvalidInput(
+            "--expires-at must be in the future",
+        ));
+    }
     if args.owner_token_env.is_empty()
         || args.owner_token_env.bytes().any(|b| matches!(b, 0 | b'='))
     {
@@ -99,11 +115,7 @@ pub(super) fn resolve(
                     "--access-client-secret-file is required",
                 ))?,
         )?),
-        expires_at: future_expiry(
-            args.expires_at
-                .as_deref()
-                .ok_or(FleetCommandError::InvalidInput("--expires-at is required"))?,
-        )?,
+        expires_at,
     })
 }
 

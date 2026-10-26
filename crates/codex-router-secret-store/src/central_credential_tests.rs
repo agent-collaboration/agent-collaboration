@@ -1,6 +1,12 @@
 #![allow(clippy::panic_in_result_fn)]
 use crate::central_credentials::{CentralCredential, CredentialFileError};
-use std::{error::Error, os::unix::fs::PermissionsExt};
+use std::{
+    error::Error,
+    os::unix::fs::PermissionsExt,
+    path::Path,
+    process::{Child, Command, Stdio},
+    time::{Duration, Instant},
+};
 type TestResult = Result<(), Box<dyn Error>>;
 fn owner() -> CentralCredential {
     CentralCredential::Owner {
@@ -65,5 +71,83 @@ fn shared_symlinked_hardlinked_oversized_and_malformed_handoffs_fail_closed() ->
     assert!(
         CentralCredential::consume_private_file(std::path::Path::new("relative.json")).is_err()
     );
+    Ok(())
+}
+
+#[test]
+fn fifo_handoff_is_refused_without_waiting_for_a_writer() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let fifo = directory.path().join("credential.fifo");
+    create_fifo(&fifo)?;
+    require_prompt_refusal(&fifo)?;
+    assert!(fifo.exists());
+    Ok(())
+}
+
+#[test]
+fn symlink_to_fifo_is_refused_without_waiting_for_a_writer() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let fifo = directory.path().join("credential.fifo");
+    create_fifo(&fifo)?;
+    let link = directory.path().join("credential.json");
+    std::os::unix::fs::symlink(&fifo, &link)?;
+    require_prompt_refusal(&link)?;
+    assert!(std::fs::symlink_metadata(&link)?.file_type().is_symlink());
+    assert!(fifo.exists());
+    Ok(())
+}
+
+struct HandoffChild(Child);
+
+fn create_fifo(path: &Path) -> TestResult {
+    if !Command::new("mkfifo").arg(path).status()?.success() {
+        return Err("owned FIFO fixture creation failed".into());
+    }
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))?;
+    Ok(())
+}
+
+impl Drop for HandoffChild {
+    fn drop(&mut self) {
+        let _killed = self.0.kill();
+        let _reaped = self.0.wait();
+    }
+}
+
+fn require_prompt_refusal(path: &Path) -> TestResult {
+    let mut child = HandoffChild(
+        Command::new(std::env::current_exe()?)
+            .args([
+                "--ignored",
+                "--exact",
+                "central_credential_tests::nonregular_handoff_child",
+            ])
+            .env("CODEX_ROUTER_CREDENTIAL_HANDOFF_TEST_PATH", path)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::inherit())
+            .spawn()?,
+    );
+    let deadline = Instant::now() + Duration::from_secs(5);
+    loop {
+        if let Some(status) = child.0.try_wait()? {
+            assert!(status.success(), "nonregular handoff was accepted");
+            return Ok(());
+        }
+        if Instant::now() >= deadline {
+            return Err("credential reader blocked on a nonregular handoff".into());
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+}
+
+#[test]
+#[ignore = "subprocess helper invoked by bounded FIFO handoff tests"]
+fn nonregular_handoff_child() -> TestResult {
+    let path = std::env::var_os("CODEX_ROUTER_CREDENTIAL_HANDOFF_TEST_PATH")
+        .ok_or("owned handoff fixture path missing")?;
+    if CentralCredential::consume_private_file(Path::new(&path)).is_ok() {
+        return Err("nonregular handoff must be refused".into());
+    }
     Ok(())
 }
