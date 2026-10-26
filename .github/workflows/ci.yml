@@ -22,15 +22,6 @@ permissions:
   contents: read
   actions: read
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN: 1.98.1
-  # CI never needs Rust debug info; it makes the test binaries outgrow the
-  # runner disk.
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_TEST_DEBUG: "0"
-  CARGO_INCREMENTAL: "0"
-
 # Four independent Linux jobs feed the existing validation gate. Light static
 # checks overlap serial Cargo work; feature-specific E2E binaries keep their
 # own target and runner instead of competing with workspace tests.
@@ -51,6 +42,13 @@ jobs:
     if: github.event_name != 'workflow_dispatch'
     name: Static validation
     runs-on: ubuntu-latest
+    # Keep Linux test profiles out of the macOS release cache environment.
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -210,6 +208,13 @@ jobs:
     name: Test Rust workspace
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    # Keep Linux test profiles out of the macOS release cache environment.
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       # The steps below build the workspace under several package selections and
       # feature sets, which together outgrow the runner's free disk. Remove
@@ -288,6 +293,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "4"
       TMPDIR: /tmp
       CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/examples/board-debug-runtime
@@ -361,6 +371,13 @@ jobs:
     name: Central Worker build and local workerd conformance
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Keep Linux test profiles out of the macOS release cache environment.
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -452,12 +469,7 @@ jobs:
       (github.event_name == 'workflow_dispatch' && inputs.release_cache_probe && github.ref == 'refs/heads/fix/release-cache-warm')
     runs-on: macos-15
     timeout-minutes: 45
-    # Match release.yml's hashed Cargo/Rust environment, not Linux test profiles.
-    env:
-      CARGO_TERM_COLOR: ""
-      RUST_TOOLCHAIN: ""
-      CARGO_PROFILE_DEV_DEBUG: ""
-      CARGO_PROFILE_TEST_DEBUG: ""
+    # No Linux test-profile env: match release.yml's hashed Rust environment.
     steps:
       - name: Checkout release source
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
