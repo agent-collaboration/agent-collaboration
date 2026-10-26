@@ -6,19 +6,27 @@ fn key(code: KeyCode) -> TerminalEvent {
     TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, code))
 }
 
-fn is_source_label(line: &str) -> bool {
+fn is_field_label(line: &str, label: &str) -> bool {
     line.trim_matches(|character: char| character.is_whitespace() || matches!(character, '│' | '┃'))
-        == "Source"
+        == label
 }
 
 #[tokio::test]
 async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_frame() {
+    assert_source_choice_frame(48, 24).await;
+}
+
+#[tokio::test]
+async fn source_choice_48x12_keeps_query_reasons_and_selection_in_settled_frame() {
+    assert_source_choice_frame(48, 12).await;
+}
+
+async fn assert_source_choice_frame(width: usize, height: usize) {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
         receiver.recv().await.map(|event| (event, receiver))
     });
-    let mut picker =
-        element!(SessionsPickerComponent(request:mixed_request(),width:48usize,height:24usize));
+    let mut picker = element!(SessionsPickerComponent(request:mixed_request(),width,height));
     let canvases = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(canvases);
     let mut phase = 0;
@@ -70,6 +78,38 @@ async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_f
                     phase = 7;
                 }
                 7 if body.contains("Search:") => {
+                    let lines = body.lines().collect::<Vec<_>>();
+                    let folder = lines.iter().position(|line| is_field_label(line, "Folder"));
+                    let search = lines.iter().position(|line| line.contains("Search:"));
+                    let selected = lines
+                        .iter()
+                        .position(|line| line.contains('❯') && line.contains("Any folder"));
+                    assert!(
+                        folder.is_some() && search.is_some() && selected.is_some(),
+                        "{frame}"
+                    );
+                    assert!(folder < search && search < selected, "{frame}");
+                    assert!(
+                        body.contains("Current directory")
+                            && body.contains("Repository / linked worktrees"),
+                        "{frame}"
+                    );
+                    // Wrapping may split the literal --checkout token; require
+                    // every non-space character in order across rendered rows.
+                    let normalized = body
+                        .chars()
+                        .filter(|character| {
+                            !character.is_whitespace() && !matches!(character, '│' | '┃')
+                        })
+                        .collect::<String>();
+                    assert!(
+                        normalized.contains("CheckoutscopeissupportedbyCLI--checkout--listonly"),
+                        "{frame}"
+                    );
+                    assert!(
+                        body.contains("Cancel") && body.contains("Select"),
+                        "{frame}"
+                    );
                     send(TerminalEvent::BracketedPaste("Checkout".to_owned()));
                     // Checkout is unavailable. Enter must leave its choice open.
                     send(key(KeyCode::Enter));
@@ -88,7 +128,7 @@ async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_f
                 }
                 10 if body.contains("All sources ▾") && !body.contains("Search:") => {
                     assert!(
-                        body.lines().any(is_source_label),
+                        body.lines().any(|line| is_field_label(line, "Source")),
                         "closed Source field must be visible before expansion: {frame}"
                     );
                     send(key(KeyCode::Enter));
@@ -98,9 +138,12 @@ async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_f
                     .lines()
                     .any(|line| line.contains('❯') && line.contains("All sources")) =>
                 {
-                    println!("SOURCE48x24 SETTLED ORIGINAL:\n{frame}");
+                    println!("SOURCE{width}x{height} SETTLED ORIGINAL:\n{frame}");
                     let lines = body.lines().collect::<Vec<_>>();
-                    let source = lines.iter().position(|line| is_source_label(line));
+                    let source = lines.iter().position(|line| {
+                        is_field_label(line, "Source")
+                            || (height < 16 && line.contains("Source") && line.contains("Search:"))
+                    });
                     let search = lines.iter().position(|line| line.contains("Search:"));
                     let selected = lines
                         .iter()
@@ -114,9 +157,13 @@ async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_f
                         "expanded Source query disappeared: {frame}"
                     );
                     assert!(
-                        source < search && search < selected,
+                        (source < search || (height < 16 && source == search)) && search < selected,
                         "field/query/selection must remain associated in this same dialog: {frame}"
                     );
+                    if source == search {
+                        let line = lines[source.unwrap()];
+                        assert!(line.find("Source") < line.find("Search:"), "{frame}");
+                    }
                     assert_eq!(
                         body.matches("External provider inventories").count(),
                         2,
@@ -126,10 +173,23 @@ async fn source_choice_48x24_keeps_field_label_with_selected_option_in_settled_f
                         body.contains("Interactive") && body.contains("Subagents"),
                         "{frame}"
                     );
+                    assert_eq!(body.matches("require All sources").count(), 2, "{frame}");
                     assert!(
                         body.lines()
                             .any(|line| line.contains("Cancel") && line.contains("Select")),
                         "choice actions must remain fixed and reachable: {frame}"
+                    );
+                    send(TerminalEvent::BracketedPaste("All".to_owned()));
+                    phase = 15;
+                }
+                15 if body.contains("Search: All") => {
+                    assert!(
+                        body.contains("Source") && body.contains("All sources"),
+                        "{frame}"
+                    );
+                    assert!(
+                        !body.contains("Interactive") && !body.contains("Subagents"),
+                        "{frame}"
                     );
                     send(key(KeyCode::Esc));
                     phase = 12;
