@@ -90,7 +90,7 @@ fn oversized_context_is_refused_without_replacing_the_prior_marker() {
     let original = std::fs::read(&marker).expect("original bytes");
     let mut context = read_existing_context(&run.0).expect("context");
     context.cursor_provider = Some(ProviderCommand {
-        executable: "/usr/bin/python3".into(),
+        executable: "/usr/bin/node".into(),
         arguments: vec!["x".repeat(4096)],
     });
     assert!(replace_resumed_context(&context).is_err());

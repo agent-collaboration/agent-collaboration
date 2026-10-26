@@ -1,6 +1,6 @@
 //! Builds a fresh native Turso schema database from migration directories
 //!
-//! `scripts/tooling/prepare-sqlx-turso.py` runs this to get the database that checked queries
+//! `node verification/tooling/prepare-sqlx-turso.ts` runs this to get the database that checked queries
 //! are described against, so offline metadata reflects the Turso engine rather than SQLite:
 //!
 //! ```text

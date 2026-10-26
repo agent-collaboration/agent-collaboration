@@ -15,6 +15,16 @@ export async function requireConnectionDenied(
     | { readonly kind: "tcp"; readonly port: number },
   marker: string,
 ): Promise<void> {
+  await assertConnectionDenied(endpoint, marker);
+  console.log(marker);
+}
+
+export async function assertConnectionDenied(
+  endpoint:
+    | { readonly kind: "unix"; readonly path: string }
+    | { readonly kind: "tcp"; readonly port: number },
+  marker: string,
+): Promise<void> {
   await new Promise<void>((resolve, reject): void => {
     const connection =
       endpoint.kind === "unix"
@@ -29,8 +39,11 @@ export async function requireConnectionDenied(
         reject(error);
         return;
       }
-      console.log(marker);
       resolve();
+    });
+    connection.setTimeout(2000, (): void => {
+      connection.destroy();
+      reject(new Error("connection timed out"));
     });
   });
 }

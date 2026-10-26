@@ -35,6 +35,26 @@ test("a live owned socket the caller can connect to cannot produce a denied-boun
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "");
   assert.match(result.stderr, /Sandbox unexpectedly allowed SOCKET_BOUNDARY_OK/);
+  const narrow = spawnSync(
+    process.execPath,
+    [
+      new URL("../../fixtures/narrow-access-probe.ts", import.meta.url).pathname,
+      path,
+      "1",
+      "NARROW_ACCESS_DENIED",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(narrow.status, 1);
+  assert.equal(narrow.stdout, "");
+  assert.match(narrow.stderr, /Sandbox unexpectedly allowed NARROW_ACCESS_DENIED/);
+  const allowed = spawnSync(
+    process.execPath,
+    [new URL("../../fixtures/unix-access-probe.ts", import.meta.url).pathname, path],
+    { encoding: "utf8" },
+  );
+  assert.equal(allowed.status, 0, allowed.stderr);
+  assert.equal(allowed.stdout, "");
 });
 
 test("real Unix access denial advances to the TCP probe while an allowed TCP connection still refuses", async (context): Promise<void> => {
@@ -74,4 +94,24 @@ test("real Unix access denial advances to the TCP probe while an allowed TCP con
   assert.equal(result.status, 1);
   assert.equal(result.stdout, "SOCKET_BOUNDARY_OK\n");
   assert.match(result.stderr, /Sandbox unexpectedly allowed TCP_BOUNDARY_OK/);
+  const denied = spawnSync(
+    process.execPath,
+    [new URL("../../fixtures/unix-access-probe.ts", import.meta.url).pathname, path],
+    { encoding: "utf8" },
+  );
+  assert.equal(denied.status, 1);
+  assert.equal(denied.stderr, "PermissionError\n");
+  const narrow = spawnSync(
+    process.execPath,
+    [
+      new URL("../../fixtures/narrow-access-probe.ts", import.meta.url).pathname,
+      path,
+      String(address.port),
+      "NARROW_ACCESS_DENIED",
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(narrow.status, 1);
+  assert.equal(narrow.stdout, "");
+  assert.match(narrow.stderr, /Sandbox unexpectedly allowed NARROW_ACCESS_DENIED/);
 });

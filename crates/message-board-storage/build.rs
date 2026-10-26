@@ -5,7 +5,7 @@ fn main() {
     println!("cargo:rerun-if-env-changed=DATABASE_URL");
     // Stock SQLx preparation supplies a SQLite URL to its whole dependency graph.
     // This package has only Turso queries, independently described and checked by
-    // prepare-sqlx-turso.py; use their native cache during the stock preparation.
+    // verification/tooling/prepare-sqlx-turso.ts; use their native cache during the stock preparation.
     if std::env::var("DATABASE_URL").is_ok_and(|url| url.starts_with("sqlite:")) {
         println!("cargo:rustc-env=SQLX_OFFLINE=true");
     }
