@@ -31,7 +31,7 @@ fn build(
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::none())
         .default_headers(headers)
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(std::time::Duration::from_secs(600))
         .build()?;
     Ok(UpgradePublisher::new(endpoint, client))
 }
