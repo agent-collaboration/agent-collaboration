@@ -1,0 +1,78 @@
+{
+  "name": "projects.\"/another/repository\".views",
+  "before": "[[projects.\"/another/repository\".views]]\nname = \"first\"\n[projects.\"/another/repository\".views.details]\nvalue = \"PRIVATE_VALUE_CANARY\"\n[[projects.\"/another/repository\".views]]\nname = \"second\"\n",
+  "after": "[[projects.\"/another/repository\".views]]\nname = \"first\"\n[[projects.\"/another/repository\".views]]\nname = \"second\"\n[projects.\"/another/repository\".views.details]\nvalue = \"PRIVATE_VALUE_CANARY\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[projects.\"/another/repository\".views]]",
+        "table": ["projects", "/another/repository", "views"],
+        "occurrence": 0,
+        "sha256": "6612f92fd909473259102240edc02b5dc356f11f0c39355e750736914691b665",
+        "names_run": false
+      },
+      {
+        "header": "[projects.\"/another/repository\".views.details]",
+        "table": ["projects", "/another/repository", "views", "details"],
+        "occurrence": 0,
+        "sha256": "7b6b6a6d0ebeb7ca1ccca9dcd93876aa71506516ad0e47e45f2b1a98018f49fb",
+        "names_run": false
+      },
+      {
+        "header": "[[projects.\"/another/repository\".views]]",
+        "table": ["projects", "/another/repository", "views"],
+        "occurrence": 1,
+        "sha256": "df689ae6538184755e1221d2edc567e33ac699ed20879c56362da21de0d8859c",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[projects.\"/another/repository\".views]]",
+        "table": ["projects", "/another/repository", "views"],
+        "occurrence": 0,
+        "sha256": "6612f92fd909473259102240edc02b5dc356f11f0c39355e750736914691b665",
+        "names_run": false
+      },
+      {
+        "header": "[[projects.\"/another/repository\".views]]",
+        "table": ["projects", "/another/repository", "views"],
+        "occurrence": 1,
+        "sha256": "df689ae6538184755e1221d2edc567e33ac699ed20879c56362da21de0d8859c",
+        "names_run": false
+      },
+      {
+        "header": "[projects.\"/another/repository\".views.details]",
+        "table": ["projects", "/another/repository", "views", "details"],
+        "occurrence": 0,
+        "sha256": "7b6b6a6d0ebeb7ca1ccca9dcd93876aa71506516ad0e47e45f2b1a98018f49fb",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[projects.\"/another/repository\".views.details]",
+        "occurrence": 0,
+        "before_sha256": "7b6b6a6d0ebeb7ca1ccca9dcd93876aa71506516ad0e47e45f2b1a98018f49fb",
+        "after_sha256": "7b6b6a6d0ebeb7ca1ccca9dcd93876aa71506516ad0e47e45f2b1a98018f49fb",
+        "classification": "externalProjectSection"
+      }
+    ],
+    "allowed": true
+  }
+}

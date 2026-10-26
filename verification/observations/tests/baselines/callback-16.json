@@ -1,0 +1,10 @@
+{
+  "function": "read_snapshot",
+  "name": "test_scoped_sqlite_decoder_retains_raw_metadata_and_creation_precision",
+  "args": ["<database>", ["question"]],
+  "databasePresent": true,
+  "databaseFile": "callback-db-16.sqlite",
+  "expected": {
+    "validationError": true
+  }
+}

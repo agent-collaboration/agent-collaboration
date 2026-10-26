@@ -1,0 +1,43 @@
+{
+  "name": "unknown-table",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[unknown]\nvalue = true\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[unknown]",
+        "table": ["unknown"],
+        "occurrence": 0,
+        "sha256": "ca6c5a613117a12ebdd28badaaf2dc7cc5bf6ac5c2bca70a3226ea38530cf9ea",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[unknown]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "ca6c5a613117a12ebdd28badaaf2dc7cc5bf6ac5c2bca70a3226ea38530cf9ea",
+        "classification": "unexpected"
+      }
+    ],
+    "allowed": false
+  }
+}

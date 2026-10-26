@@ -1,0 +1,15 @@
+{
+  "function": "callback_prompt",
+  "name": "test_prompt_uses_explicit_qualified_tools_without_claude_defaults",
+  "args": [
+    {
+      "question_tool": "qualified_question_tool",
+      "execution_tool": "qualified_execute_tool",
+      "question_method": "cursor/ask_question"
+    },
+    "exact-private-marker-command"
+  ],
+  "expected": {
+    "result": "This is labelled test automation for typed Question and Approval callbacks. First call the actual qualified_question_tool tool on its supported cursor/ask_question route with exactly one single-select question: Which color should this test acknowledge in its final text? Offer exactly Blue and Green. The answer is only a text label; the marker command and its literal contents stay exactly as given below. Wait for the actual tool answer; do not merely ask in prose. After receiving Blue, call qualified_execute_tool exactly once with this exact command: exact-private-marker-command\nThe actual Session approver will select allow once for that private marker action. Do not call any other tools, delegate, retry, change permissions, or use another path. After the tool result, reply exactly QUESTION_BLUE_APPROVAL_CALLBACK_COMPLETE and end the turn."
+  }
+}

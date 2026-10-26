@@ -1,0 +1,97 @@
+{
+  "name": "test_incomplete_observation_and_wrong_threads_are_rejected",
+  "observation": {
+    "target": {
+      "endpoint": {
+        "serviceId": "service",
+        "endpointId": "cursor-local"
+      },
+      "sessionId": "thread"
+    },
+    "events": [
+      {
+        "sequence": 1,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "commands",
+            "kind": {
+              "kind": "notice"
+            },
+            "text": "{\"availableCommands\":[{\"name\":\"compact\",\"description\":\"Compact context\"}]}"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 2,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "assistant",
+            "kind": {
+              "kind": "agentMessage"
+            },
+            "text": "ACP_OK"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 3,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "usage",
+            "kind": {
+              "kind": "usage"
+            },
+            "text": "{\"used\":12,\"size\":100}"
+          },
+          "turnId": null
+        }
+      }
+    ],
+    "epoch": 0,
+    "endReason": "deadlineReached"
+  },
+  "views": [
+    {
+      "id": "other",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "other",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "terminal": "ACP_OK",
+  "resumedTerminal": "ACP_OK",
+  "expectedReply": "ACP_OK",
+  "requireUsage": false,
+  "expected": {
+    "error": "both read and resume views of the same thread are required"
+  }
+}

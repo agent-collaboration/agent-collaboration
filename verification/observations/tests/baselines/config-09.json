@@ -1,0 +1,43 @@
+{
+  "name": "parent-project",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[projects.\"/\"]\ntrust_level = \"trusted\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[projects.\"/\"]",
+        "table": ["projects", "/"],
+        "occurrence": 0,
+        "sha256": "bbbaf37140c76e529245bb96cb3543bd171fce37822d9cc9dad0e9e334111470",
+        "names_run": true
+      }
+    ],
+    "changes": [
+      {
+        "header": "[projects.\"/\"]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "bbbaf37140c76e529245bb96cb3543bd171fce37822d9cc9dad0e9e334111470",
+        "classification": "runReference"
+      }
+    ],
+    "allowed": false
+  }
+}
