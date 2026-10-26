@@ -65,8 +65,33 @@ extension VerifyScreenImage {
     failures.append(contentsOf: splitQueries.failures)
     let stackedChooser = checkStackedChooserFieldControls()
     failures.append(contentsOf: stackedChooser.failures)
+    let resultConsumption = checkResultConsumptionControls()
+    failures.append(contentsOf: resultConsumption.failures)
     return (cases.count + 5 + creditChoices.count + accountGutters.count + splitQueries.count
-      + stackedChooser.count, failures)
+      + stackedChooser.count + resultConsumption.count, failures)
+  }
+
+  static func checkResultConsumptionControls() -> (count: Int, failures: [String]) {
+    let base = ["Reset result", "[alpha-tag]", "Provider confirmed 1 quota window reset.",
+      "One reset credit was consumed.", "Close"]
+    let cases: [(String, [String], Bool)] = [
+      ("result-consumption-complete", base, true),
+      ("result-consumption-wrapped", ["Reset result", "[alpha-tag]",
+        "Provider confirmed 1 quota window", "reset.", "One reset credit", "was consumed.", "Close"], true),
+      ("result-consumption-missing", base.filter { !$0.hasPrefix("One") }, false),
+      ("result-consumption-not-consumed", base.map { $0.hasPrefix("One") ? "One reset credit was not consumed." : $0 }, false),
+      ("result-consumption-wrong-count", base.map { $0.hasPrefix("One") ? "Two reset credits were consumed." : $0 }, false),
+      ("result-consumption-provider-tail-missing", base.map { $0.hasPrefix("Provider") ? "Provider confirmed 1 quota window" : $0 }, false),
+      ("result-consumption-provider-missing", base.filter { !$0.hasPrefix("Provider") }, false),
+      ("result-consumption-wrong-target", base.map { $0 == "[alpha-tag]" ? "[beta-tag]" : $0 }, false),
+      ("result-consumption-wrong-dialog", base.map { $0 == "Reset result" ? "Confirm reset" : $0 }, false),
+      ("result-consumption-no-close", base.filter { $0 != "Close" }, false),
+    ]
+    return (cases.count, cases.compactMap { name, lines, expected in
+      let observed = observe(checkpoint: .componentQuotaResetResultConsumption, recognizedLines: lines)
+      let passed = observed.missingMarkers.isEmpty && observed.unexpectedMarkers.isEmpty
+      return passed == expected ? nil : name
+    })
   }
 
   static func checkStackedChooserFieldControls() -> (count: Int, failures: [String]) {

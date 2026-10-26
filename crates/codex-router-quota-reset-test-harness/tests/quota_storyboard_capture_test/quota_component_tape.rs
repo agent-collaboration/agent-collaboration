@@ -1,7 +1,7 @@
 //! Real-input tour of the existing component fixture; external ports stay synthetic.
 use super::{FONT_FAMILY, TestResult, ensure};
 
-pub(super) const NORMAL_CHECKPOINTS: [&str; 42] = [
+pub(super) const NORMAL_CHECKPOINTS: [&str; 43] = [
     "component-quota-browse",
     "component-quota-browse-credit-window",
     "component-quota-browse-pace-heading",
@@ -42,6 +42,7 @@ pub(super) const NORMAL_CHECKPOINTS: [&str; 42] = [
     "component-quota-confirm-help-identity",
     "component-quota-confirm-help-returned",
     "component-quota-reset-result",
+    "component-quota-reset-result-consumption",
     "component-quota-reset-result-bottom",
     "component-quota-returned",
 ];
@@ -481,6 +482,16 @@ pub(super) fn build_normal_component_tape(columns: u16, rows: u16) -> TestResult
         "component-quota-reset-result",
         RESET_SUCCESS_READY,
     );
+    // The permanent mounted result proof measures exactly two Down events at
+    // 48x12; every other declared grid shows consumption in the top pose.
+    if (columns, rows) == (48, 12) {
+        tape.push_str("Down\nDown\n");
+    }
+    checkpoint(
+        &mut tape,
+        "component-quota-reset-result-consumption",
+        r"Reset result.*alpha-tag.*[\s│┃]One[\s│┃]{1,1000}reset[\s│┃]{1,1000}credit[\s│┃]{1,1000}was[\s│┃]{1,1000}consumed\.(?:[\s│┃]|$)",
+    );
     tape.push_str("Down@1ms 256\n");
     checkpoint(
         &mut tape,
@@ -758,3 +769,7 @@ mod tests;
 #[cfg(test)]
 #[path = "quota_component_observation_wait_test.rs"]
 mod observation_wait_tests;
+
+#[cfg(test)]
+#[path = "quota_component_result_tape_test.rs"]
+mod result_tape_tests;

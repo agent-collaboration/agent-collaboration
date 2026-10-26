@@ -247,6 +247,9 @@ fn clarity_control_key(character: char) -> KeyEvent {
 #[path = "quota_ux_reset_test.rs"]
 mod quota_ux_reset_test;
 
+#[path = "quota_reset_result_pose_test.rs"]
+mod quota_reset_result_pose_test;
+
 #[path = "quota_ux_form_test.rs"]
 mod quota_ux_form_test;
 

@@ -82,11 +82,12 @@ test.each(['none', 'source', 'artifact'])(
 test('complete_protocol_and_finite_budget', () => {
 	const plan = prepareComponentReceipts(rootDirectory());
 	const images = collectComponentImages(plan);
-	expect(images).toHaveLength(42);
+	expect(images).toHaveLength(43);
 	for (const [scene, dialog] of [
 		['confirm-no', 'Confirm reset'],
 		['confirm-no-returned', 'Options · Resets'],
 		['reset-result-bottom', 'Reset result'],
+		['reset-result-consumption', 'Reset result'],
 		['policy-saved', 'Credit usage'],
 	])
 		expect(images.find((image) => image.journey === `component-quota-${scene}`)?.dialog).toBe(
@@ -98,7 +99,7 @@ test('complete_protocol_and_finite_budget', () => {
 	expect(limits).toContain('Personal original-image inspection');
 	expect(limits).toContain('literal tag brackets');
 	expect(limits).toContain('raw OCR is unchanged');
-	expect(componentWorkSeconds(plan)).toBe(1900);
+	expect(componentWorkSeconds(plan)).toBe(1960);
 	expect(
 		componentWorkSeconds({
 			...plan,
@@ -111,7 +112,7 @@ test('complete_protocol_and_finite_budget', () => {
 				{ columns: 32, rows: 24 },
 			],
 		}) + 90,
-	).toBe(11490);
+	).toBe(11850);
 	for (const grids of [
 		[],
 		[{ columns: 48, rows: 13 }],
@@ -188,7 +189,7 @@ test.each([40, 32])(
 	(columns) => {
 		const plan = prepareComponentReceipts(rootDirectory(), { columns, rows: 24 });
 		const images = collectComponentImages(plan);
-		expect(images).toHaveLength(42);
+		expect(images).toHaveLength(43);
 		expect(
 			images.every((image) => image.viewport.columns === columns && image.viewport.rows === 24),
 		).toBe(true);
@@ -207,6 +208,8 @@ const failures = [
 	'missing-help-bottom-negative',
 	'missing-details-bottom-negative',
 	'missing-result-bottom-negative',
+	'missing-consumption-positive',
+	'missing-consumption-negative',
 	'missing-compact-credit-negative',
 	'missing-short-window-negative',
 	'missing-lower-pace-negative',
@@ -241,6 +244,8 @@ test.each(failures)(
 				'changed markers',
 			);
 		else if (failure === 'extra-image') writeFileSync(join(folder, 'extra.png'), 'stale');
+		else if (failure === 'missing-consumption-positive')
+			rmSync(join(folder, 'component-quota-reset-result-consumption.png'));
 		else if (failure.startsWith('missing-') && failure !== 'missing-source') {
 			const paths: Record<string, string> = {
 				'missing-floor-draft-negative': 'floor-saved-component-quota-floor-draft',
@@ -251,6 +256,7 @@ test.each(failures)(
 				'missing-help-bottom-negative': 'help-bottom-component-quota-help-top',
 				'missing-details-bottom-negative': 'details-bottom-component-quota-details-top',
 				'missing-result-bottom-negative': 'reset-result-bottom-component-quota-confirm-yes',
+				'missing-consumption-negative': 'reset-result-consumption-component-quota-confirm-yes',
 				'missing-compact-credit-negative': 'browse-credit-window-component-quota-next-account',
 				'missing-short-window-negative': 'browse-pace-heading-component-quota-next-account',
 				'missing-lower-pace-negative': 'browse-pace-value-component-quota-reset-result',

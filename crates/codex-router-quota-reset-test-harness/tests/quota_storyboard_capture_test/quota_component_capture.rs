@@ -463,7 +463,7 @@ async fn run_component_capture(
         let image = output.join("component-quota-browse.png");
         validate_png(&image)?;
         // Deliberately no full-image oracle: the original is for investigating
-        // the phone layout. The normal receipt and its42+12 checks stay below.
+        // the phone layout. The normal receipt and its43+13 checks stay below.
         fs::write(
             output.join("first-frame-diagnostic-receipt.json"),
             format!(
@@ -568,6 +568,10 @@ async fn run_component_capture(
         ),
         (
             "component-quota-reset-result-bottom",
+            "component-quota-confirm-yes",
+        ),
+        (
+            "component-quota-reset-result-consumption",
             "component-quota-confirm-yes",
         ),
     ] {

@@ -162,6 +162,7 @@ export const normalComponentStates = [
 	'confirm-help-identity',
 	'confirm-help-returned',
 	'reset-result',
+	'reset-result-consumption',
 	'reset-result-bottom',
 	'returned',
 ];
@@ -224,6 +225,7 @@ export const normalComponentNegatives: readonly (readonly [string, string])[] = 
 	['help-bottom', 'component-quota-help-top'],
 	['details-bottom', 'component-quota-details-top'],
 	['reset-result-bottom', 'component-quota-confirm-yes'],
+	['reset-result-consumption', 'component-quota-confirm-yes'],
 	['browse-credit-window', 'component-quota-next-account'],
 	['browse-pace-heading', 'component-quota-next-account'],
 	['browse-pace-value', 'component-quota-reset-result'],

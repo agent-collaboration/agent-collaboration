@@ -1,6 +1,14 @@
 import { ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { closeSync, openSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
+import {
+	closeSync,
+	openSync,
+	readFileSync,
+	rmSync,
+	writeFileSync,
+	existsSync,
+	watch,
+} from 'node:fs';
 import { join } from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vitest';
@@ -24,6 +32,7 @@ function rootDirectory(): string {
 	return root;
 }
 afterEach(async () => {
+	vi.useRealTimers();
 	await Promise.all(
 		children.splice(0).map(async (child) => {
 			if (child.process.exitCode === null && child.process.signalCode === null)
@@ -72,13 +81,43 @@ test('capture_discovery_bounds_and_reaps_its_exact_child', async () => {
 	const executable = controlledExecutable(
 		root,
 		'held-discovery',
-		`process.stdout.write('partial list\\n');process.stderr.write('partial error\\n');setInterval(()=>{},1000);`,
+		`const fs=require('node:fs');process.stdout.write('partial list\\n');process.stderr.write('partial error\\n');fs.writeFileSync(process.argv[2]+'/discovery-ready','ready\\n');setInterval(()=>{},1000);`,
 	);
-	let failure = '';
+	const readySignal = AbortSignal.timeout(5000);
+	const watcher = watch(root, { signal: readySignal });
+	let readinessInterval: ReturnType<typeof setInterval> | undefined;
+	const ready = new Promise<void>((resolve, reject) => {
+		const observeReady = (): void => {
+			const marker = join(root, 'discovery-ready');
+			if (existsSync(marker) && readFileSync(marker, 'utf8') === 'ready\n') resolve();
+		};
+		// Exact marker state owns readiness; filesystem events only accelerate it.
+		readinessInterval = setInterval(observeReady, 10);
+		watcher.on('change', observeReady);
+		watcher.once('error', reject);
+		watcher.once('close', () => reject(new Error('discovery readiness closed before ready')));
+		observeReady();
+	});
+	// The child must emit real output before this unit advances the deadline.
+	// Its process, raw descriptors and exact-child SIGKILL remain real.
+	vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+	const discovery = discoverCaptureTest([executable, root], root, 0.2).then(
+		() => '',
+		(error: unknown) => String(error),
+	);
+	let failure: string;
 	try {
-		await discoverCaptureTest([executable], root, 0.2);
-	} catch (error) {
-		failure = String(error);
+		await ready;
+		expect(readFileSync(join(root, 'discovery-ready'), 'utf8')).toBe('ready\n');
+	} finally {
+		try {
+			await vi.advanceTimersByTimeAsync(200);
+			failure = await discovery;
+		} finally {
+			clearInterval(readinessInterval);
+			watcher.close();
+			vi.useRealTimers();
+		}
 	}
 	expect(failure).toContain('"timeout":true');
 	expect(failure).toContain('"exit":-9');

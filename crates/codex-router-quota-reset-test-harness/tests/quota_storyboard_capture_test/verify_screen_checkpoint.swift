@@ -119,6 +119,7 @@ enum ScreenCheckpoint: String {
   case componentQuotaConfirmHelpIdentity = "component-quota-confirm-help-identity"
   case componentQuotaConfirmHelpReturned = "component-quota-confirm-help-returned"
   case componentQuotaResetResult = "component-quota-reset-result"
+  case componentQuotaResetResultConsumption = "component-quota-reset-result-consumption"
   case componentQuotaResetResultBottom = "component-quota-reset-result-bottom"
   case componentQuotaReturned = "component-quota-returned"
 
@@ -309,6 +310,9 @@ enum ScreenCheckpoint: String {
       ["Quota Help", "東京 OpenAI Research Account Alpha Long Name [alpha-tag]", "Close"]
     case .componentQuotaResetResult:
       ["Reset result", "alpha-tag", "Success", "reset completed", "Close"]
+    case .componentQuotaResetResultConsumption:
+      ["Reset result", "alpha-tag", "Provider confirmed 1 quota window reset.",
+        "One reset credit was consumed.", "Close"]
     case .componentQuotaResetResultBottom:
       ["Reset result", "alpha-tag", "Return to quota status.", "Close"]
     case .componentQuotaReturned:
@@ -596,7 +600,8 @@ enum ScreenCheckpoint: String {
       .componentQuotaCreditsBalance, .componentQuotaPolicyOriginal, .componentQuotaPolicyChoice,
       .componentQuotaPolicyDraft, .componentQuotaPolicyCancelled, .componentQuotaPolicySaved,
       .componentQuotaRefreshResult, .componentQuotaResetReview, .componentQuotaConfirmNo,
-      .componentQuotaConfirmYes, .componentQuotaResetResult, .componentQuotaResetResultBottom:
+      .componentQuotaConfirmYes, .componentQuotaResetResult,
+      .componentQuotaResetResultConsumption, .componentQuotaResetResultBottom:
       hiddenShortcutMarkers
     case .componentQuotaConfirmHelpReturned:
       hiddenShortcutMarkers + ["Quota Help"]

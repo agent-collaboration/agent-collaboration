@@ -68,7 +68,7 @@ export const literalSessionFields = [
 	'details state idle',
 ];
 export const literalNormalStates =
-	'browse browse-credit-window browse-pace-heading browse-pace-value browse-page-returned next-account restored-account details-top details-bottom help-top help-bottom floor-original floor-draft floor-cancelled floor-saved options-identity reset-inventory reset-last-page credits-identity credits-balance policy-original policy-choice policy-no-match policy-choice-returned policy-draft policy-cancelled policy-saved refresh-result credits-refreshed-balance credits-refreshed-freshness credits-refreshed-observation credits-policy-boundary reset-review confirm-no confirm-no-returned confirm-yes confirm-help-top confirm-help-identity confirm-help-returned reset-result reset-result-bottom returned'.split(
+	'browse browse-credit-window browse-pace-heading browse-pace-value browse-page-returned next-account restored-account details-top details-bottom help-top help-bottom floor-original floor-draft floor-cancelled floor-saved options-identity reset-inventory reset-last-page credits-identity credits-balance policy-original policy-choice policy-no-match policy-choice-returned policy-draft policy-cancelled policy-saved refresh-result credits-refreshed-balance credits-refreshed-freshness credits-refreshed-observation credits-policy-boundary reset-review confirm-no confirm-no-returned confirm-yes confirm-help-top confirm-help-identity confirm-help-returned reset-result reset-result-consumption reset-result-bottom returned'.split(
 		' ',
 	);
 export const literalHardStates =
@@ -85,6 +85,7 @@ export const literalNormalNegatives: readonly (readonly [string, string])[] = [
 	['help-bottom', 'component-quota-help-top'],
 	['details-bottom', 'component-quota-details-top'],
 	['reset-result-bottom', 'component-quota-confirm-yes'],
+	['reset-result-consumption', 'component-quota-confirm-yes'],
 	['browse-credit-window', 'component-quota-next-account'],
 	['browse-pace-heading', 'component-quota-next-account'],
 	['browse-pace-value', 'component-quota-reset-result'],

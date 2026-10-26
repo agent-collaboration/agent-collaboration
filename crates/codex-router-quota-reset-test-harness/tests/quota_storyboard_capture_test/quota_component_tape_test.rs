@@ -4,7 +4,7 @@ use super::*;
 
 #[test]
 fn added_observations_preserve_every_original_scene_and_require_full_help_return() {
-    assert_eq!(NORMAL_CHECKPOINTS.len(), 42);
+    assert_eq!(NORMAL_CHECKPOINTS.len(), 43);
     for grid in [(32, 24), (48, 12), (40, 24), (48, 24), (76, 30), (120, 36)] {
         let tape = build_normal_component_tape(grid.0, grid.1).expect("declared viewport");
         assert!(tape.ends_with("Type \"q\"\nWait+Line /^QUOTA_STORYBOARD_CHILD_EXIT=0$/\n"));
