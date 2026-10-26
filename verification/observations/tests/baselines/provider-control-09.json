@@ -1,0 +1,240 @@
+{
+  "input": {
+    "name": "call-once-rejected",
+    "action": "call-once",
+    "plan": {
+      "cli": "<CLI>",
+      "evidence": "<ROOT>/evidence",
+      "service_directory": "<ROOT>/service",
+      "caller_session_id": "caller",
+      "endpoint_id": "claude-local",
+      "settings": {
+        "mode": "manual-mode",
+        "model": "provider-model",
+        "effort": "low"
+      },
+      "tools": null,
+      "approver": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "approver"
+      }
+    },
+    "manifest": {
+      "serviceId": "00000000-0000-7000-8000-000000000001",
+      "serviceEpoch": "epoch",
+      "serviceVersion": "test",
+      "machineLabel": "synthetic",
+      "routerProxyEndpoint": "http://127.0.0.1:1",
+      "mcp": {
+        "url": "<RPC>"
+      }
+    },
+    "files": {
+      "target-binding": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      },
+      "session-inspect": {
+        "record": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "state": "idle",
+          "capabilities": {
+            "elicitation": true
+          },
+          "settingsCatalog": {
+            "currentMode": "manual-mode",
+            "modes": [
+              {
+                "value": "manual-mode",
+                "label": "Manual"
+              }
+            ],
+            "configOptions": [
+              {
+                "id": "model",
+                "category": "model",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "provider-model"
+                },
+                "choices": [
+                  {
+                    "value": "provider-model",
+                    "label": "Actual provider model"
+                  }
+                ]
+              },
+              {
+                "id": "effort",
+                "category": "effort",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "low"
+                },
+                "choices": [
+                  {
+                    "value": "low",
+                    "label": "Low"
+                  }
+                ]
+              },
+              {
+                "id": "thinking",
+                "category": null,
+                "currentValue": {
+                  "kind": "boolean",
+                  "value": true
+                },
+                "choices": []
+              }
+            ]
+          },
+          "retainedExtension": {
+            "precision": "2026-10-26T01:02:03.123456789Z"
+          }
+        }
+      },
+      "create-intent": {
+        "operationId": "00000000-0000-7000-8000-000000000002"
+      }
+    },
+    "responses": {
+      "test_mutation": [
+        {
+          "mcpResult": "error",
+          "kind": "notAdmitted"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "calls": [
+      {
+        "name": "test_mutation",
+        "arguments": {
+          "operationId": "<OPERATION>",
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          }
+        }
+      }
+    ],
+    "files": {
+      "create-intent.json": {
+        "operationId": "<OPERATION>"
+      },
+      "session-inspect.json": {
+        "record": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "state": "idle",
+          "capabilities": {
+            "elicitation": true
+          },
+          "settingsCatalog": {
+            "currentMode": "manual-mode",
+            "modes": [
+              {
+                "value": "manual-mode",
+                "label": "Manual"
+              }
+            ],
+            "configOptions": [
+              {
+                "id": "model",
+                "category": "model",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "provider-model"
+                },
+                "choices": [
+                  {
+                    "value": "provider-model",
+                    "label": "Actual provider model"
+                  }
+                ]
+              },
+              {
+                "id": "effort",
+                "category": "effort",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "low"
+                },
+                "choices": [
+                  {
+                    "value": "low",
+                    "label": "Low"
+                  }
+                ]
+              },
+              {
+                "id": "thinking",
+                "category": null,
+                "currentValue": {
+                  "kind": "boolean",
+                  "value": true
+                },
+                "choices": []
+              }
+            ]
+          },
+          "retainedExtension": {
+            "precision": "2026-10-26T01:02:03.123456789Z"
+          }
+        }
+      },
+      "target-binding.json": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      },
+      "test_mutation-intent.json": {
+        "at": "<TIMESTAMP>",
+        "arguments": {
+          "operationId": "<OPERATION>",
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          }
+        },
+        "testAutomation": true
+      },
+      "test_mutation-unknown.json": {
+        "error": "RuntimeError",
+        "doNotReplay": true
+      }
+    },
+    "stdout": [],
+    "failure": {
+      "category": "RuntimeError",
+      "message": "Tool test_mutation rejected: notAdmitted; no replay"
+    }
+  }
+}

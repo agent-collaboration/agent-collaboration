@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { decode, objectSchema } from "../exact-json.ts";
+import { objectSchema } from "../exact-json.ts";
+import { decodeEvidenceJson } from "../evidence-json.ts";
 
 export const exactIntegerSchema = z.bigint();
 export const jsonObjectSchema = objectSchema;
@@ -9,7 +10,7 @@ export function observedObject(value: unknown): JsonObject {
   return jsonObjectSchema.parse(value);
 }
 export function readObservedJson(value: string | Buffer): JsonObject {
-  return observedObject(decode(value.toString()));
+  return observedObject(decodeEvidenceJson(value));
 }
 
 export const endpointViewSchema = z.looseObject({ serviceId: z.string(), endpointId: z.string() });
