@@ -104,11 +104,21 @@ jobs:
             echo "source_commit=${source_commit}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Report cache save policy
+        env:
+          CACHE_SAVE_ALLOWED: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        run: |
+          printf 'Cache save allowed: %s\n' "$CACHE_SAVE_ALLOWED"
+          if [[ "$GITHUB_EVENT_NAME" != push || "$GITHUB_REF" != refs/heads/main ]]; then
+            test "$CACHE_SAVE_ALLOWED" = false
+          fi
+
       - name: Cache release dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: release-source -> target
           shared-key: release-arm64-background
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
 
       # Prepare small consumers serially: concurrent Cargo compiles would wait
       # on the shared target lock rather than run independently.

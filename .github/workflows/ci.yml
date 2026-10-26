@@ -49,8 +49,9 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy,rustfmt,rust-src
-      - name: Cache pinned Rust tools
-        uses: actions/cache@v4
+      - name: Restore pinned Rust tools
+        id: rust_tools
+        uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
           key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
@@ -108,6 +109,12 @@ jobs:
         run: cargo audit
       - name: Wait for checks
         wait-all:
+      - name: Save pinned Rust tools
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tmp/rust-tools
+          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
 
   lint:
     name: Lint and SQLx metadata
@@ -133,9 +140,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: lint
-          cache-on-failure: true
-      - name: Cache pinned Rust tools
-        uses: actions/cache@v4
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Restore pinned Rust tools
+        id: rust_tools
+        uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
           key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-sqlx-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
@@ -155,6 +163,12 @@ jobs:
         run: |
           python3 -m unittest scripts.tests.test_prepare_sqlx_turso -v --durations 0
           python3 scripts/tooling/prepare-sqlx-turso.py --check
+      - name: Save pinned Rust tools
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tmp/rust-tools
+          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
 
   build:
     name: Build codex-router variants and quota-reset harness
@@ -168,7 +182,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: build
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Build codex-router variants and quota-reset harness
         run: |
           cargo build -p codex-router-cli --bin codex-router
@@ -201,13 +215,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # The dependency-structure tests use offline Cargo metadata for all
       # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
         run: cargo fetch --locked
-      - name: Cache pinned Rust tools
-        uses: actions/cache@v4
+      - name: Restore pinned Rust tools
+        id: rust_tools
+        uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
           key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
@@ -239,6 +254,12 @@ jobs:
         # Keep the same opt-in case, with a per-test elapsed status as well as
         # its uncaptured CLI proof. The default profile adds no CI deadline.
         run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test default_router_port_cutover --run-ignored only --no-capture
+      - name: Save pinned Rust tools
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tmp/rust-tools
+          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
 
   board-e2e:
     name: Rust local end-to-end
@@ -258,11 +279,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: board-e2e
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # The baseline spent over nine minutes rebuilding these pinned tools.
       # Reuse the same verified cache as checks/test before bootstrapping.
-      - name: Cache pinned Rust tools
-        uses: actions/cache@v4
+      - name: Restore pinned Rust tools
+        id: rust_tools
+        uses: actions/cache/restore@v4
         with:
           path: tmp/rust-tools
           key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', 'rust-toolchain.toml') }}
@@ -286,6 +308,12 @@ jobs:
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1
           fi
+      - name: Save pinned Rust tools
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: tmp/rust-tools
+          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
       - name: Retain failed process evidence
         if: failure()
         uses: actions/upload-artifact@v4
@@ -307,7 +335,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: central-core
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: Check the shared asynchronous core on native and wasm
         run: |
           cargo check --locked -p collaboration-central-core
@@ -330,7 +358,7 @@ jobs:
           shared-key: central-cloudflare
           workspaces: |
             . -> target
-          cache-on-failure: true
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@v4
         with:
           node-version: 22
