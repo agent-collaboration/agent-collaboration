@@ -8,6 +8,7 @@ use crate::native_file_facts::same_path;
 use crate::verification_models::{FixtureRecord, OperationRow, ProviderItem, ProviderObservation};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use session_event_model::StopReason;
 use std::{collections::BTreeMap, path::Path};
 
 /// Router-owned operation kinds an explicit unloaded resume may add (C4, R7).
@@ -323,7 +324,7 @@ pub(crate) fn check_ordinary_completion(
         return Err("ordinary turn has no single end".to_owned());
     };
     let normal = ending.event.outcome.as_ref().is_some_and(|outcome| {
-        outcome.kind == "ended" && outcome.stop_reason.as_deref() == Some("endTurn")
+        outcome.kind == "ended" && outcome.stop_reason == Some(StopReason::EndTurn)
     });
     if !normal {
         return Err("ordinary turn did not end normally".to_owned());

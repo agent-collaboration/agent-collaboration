@@ -36,7 +36,7 @@ fn installed_plugin_skill_must_appear_by_its_own_path() {
             &present,
             &setup.workspace,
             &row,
-            &[skill_file.clone()]
+            std::slice::from_ref(&skill_file)
         )
         .unwrap(),
         skill_file.display().to_string()
@@ -67,7 +67,7 @@ fn installed_plugin_skill_must_appear_by_its_own_path() {
                 &reply,
                 &setup.workspace,
                 &row,
-                &[skill_file.clone()]
+                std::slice::from_ref(&skill_file)
             )
             .is_err()
         );

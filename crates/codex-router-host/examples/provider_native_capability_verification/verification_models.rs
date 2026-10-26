@@ -395,11 +395,13 @@ pub(crate) struct ProviderItem {
 }
 
 /// How a turn ended (`turnEnded.outcome`), e.g. `{kind: ended, stop_reason: endTurn}`.
+/// The stop reason is the canonical one, so a supported replay's
+/// `{unknown: "replayed"}` decodes instead of failing the whole observation.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]
 pub(crate) struct TurnOutcomeView {
     pub(crate) kind: String,
     #[serde(default)]
-    pub(crate) stop_reason: Option<String>,
+    pub(crate) stop_reason: Option<session_event_model::StopReason>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq)]

@@ -104,3 +104,41 @@ fn ordinary_turn_completion_is_judged_from_public_events() {
         "deadlineReached"
     )));
 }
+
+/// A turn end whose canonical stop reason is `Unknown(reason)`, serialized as the
+/// public observation carries it: `{"unknown": reason}`.
+fn unknown_turn_ended(turn_id: &str, reason: &str) -> Value {
+    json!({"kind": "turnEnded", "turnId": turn_id,
+        "outcome": {"kind": "ended", "stop_reason": {"unknown": reason}, "local_cause": null}})
+}
+
+#[test]
+fn a_replayed_turn_end_decodes_and_is_never_an_ordinary_completion() {
+    // The shape Cursor's supported session/load replay emitted for each history turn.
+    let replayed = observation(
+        vec![
+            turn_started("history"),
+            item("reply", "agentMessage", "STEER_BASE_OK"),
+            unknown_turn_ended("history", "replayed"),
+        ],
+        "deadlineReached",
+    );
+    assert!(any_turn_ended(&replayed));
+    expect_error(
+        check_ordinary_completion(&replayed, "STEER_BASE_OK"),
+        "did not end normally",
+    );
+    // An unknown reason that merely spells the normal one is still not EndTurn.
+    let spelled = observation(
+        vec![
+            turn_started("ordinary"),
+            item("reply", "agentMessage", "STEER_BASE_OK"),
+            unknown_turn_ended("ordinary", "endTurn"),
+        ],
+        "deadlineReached",
+    );
+    expect_error(
+        check_ordinary_completion(&spelled, "STEER_BASE_OK"),
+        "did not end normally",
+    );
+}

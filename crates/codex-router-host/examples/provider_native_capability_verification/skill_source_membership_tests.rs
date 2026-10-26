@@ -30,7 +30,7 @@ fn ordinary_entries_are_immediate_folders_or_symlinks_with_a_skill_file() {
     let stray = write_skill(&root.join("group/nested"), "deep", "");
     fs::create_dir_all(root.join("empty-folder")).unwrap();
     fs::write(root.join("notes.md"), "notes").unwrap();
-    let sources = claude_source_candidates(&[root.clone()], &[], &[]);
+    let sources = claude_source_candidates(std::slice::from_ref(&root), &[], &[]);
     // The direct folder and file forms.
     assert!(sources.is_skill(&direct));
     assert!(sources.is_skill(direct.parent().unwrap()));
@@ -62,7 +62,11 @@ fn legacy_commands_are_found_recursively_through_symlinks_and_cycles_end() {
     let skill_root = base.join("skills");
     fs::create_dir_all(&skill_root).unwrap();
     fs::write(skill_root.join("not-a-command.md"), "x").unwrap();
-    let sources = claude_source_candidates(&[skill_root.clone()], &[commands.clone()], &[]);
+    let sources = claude_source_candidates(
+        std::slice::from_ref(&skill_root),
+        std::slice::from_ref(&commands),
+        &[],
+    );
     assert!(sources.is_command(&nested));
     assert!(sources.is_command(&commands.join("linked/shared.md")));
     assert!(sources.is_command(&outside.join("shared.md")));
@@ -78,7 +82,7 @@ fn plugin_skill_sources_are_the_declared_files_only() {
     let declared = write_skill(&plugin.join("skills"), "review", "");
     let arbitrary = write_skill(&plugin.join("docs"), "not-declared", "");
     fs::write(plugin.join("README.md"), "readme").unwrap();
-    let sources = claude_source_candidates(&[], &[], &[declared.clone()]);
+    let sources = claude_source_candidates(&[], &[], std::slice::from_ref(&declared));
     assert!(sources.is_skill(&declared));
     assert!(sources.is_skill(declared.parent().unwrap()));
     assert!(!sources.is_skill(&arbitrary));
@@ -95,7 +99,7 @@ fn claude_rows_and_errors_are_judged_by_native_membership() {
     symlink(outside.parent().unwrap(), skills.join("linked-skill")).unwrap();
     // A symlinked skill whose physical origin lies outside every root is a native
     // source under either spelling.
-    for path in [skills.join("linked-skill/SKILL.md"), outside.clone()] {
+    for path in [skills.join("linked-skill/SKILL.md"), outside] {
         let reply = skills_reply(
             &setup.workspace,
             vec![
@@ -146,7 +150,7 @@ fn reserved_synced_entry_is_never_an_ordinary_skill() {
     let synced = write_skill(&root, "synced", "");
     let mixed_case = write_skill(&root, "Synced", "");
     let ordinary = write_skill(&root, "ordinary", "");
-    let sources = claude_source_candidates(&[root.clone()], &[], &[]);
+    let sources = claude_source_candidates(std::slice::from_ref(&root), &[], &[]);
     assert!(sources.is_skill(&ordinary));
     for reserved in [&synced, &mixed_case] {
         assert!(!sources.is_skill(reserved), "{}", reserved.display());
