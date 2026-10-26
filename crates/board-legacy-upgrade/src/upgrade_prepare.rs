@@ -354,10 +354,13 @@ mod preparation_tests {
     #[tokio::test]
     async fn empty_legacy_project_roundtrips_unknown_metadata_without_a_creation_fact()
     -> Result<(), Box<dyn std::error::Error>> {
-        let source = read_legacy(
+        let directory = tempfile::tempdir()?;
+        let source_path = directory.path().join("role-history.sqlite");
+        std::fs::copy(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/role-history.sqlite"),
-        )
-        .await?;
+            &source_path,
+        )?;
+        let source = read_legacy(source_path).await?;
         let project = source
             .projects
             .iter()
@@ -368,7 +371,6 @@ mod preparation_tests {
             machine: MachineLabel::try_from("offline import".to_owned())?,
         };
         let owner = HumanId::try_from("explicit-owner".to_owned())?;
-        let directory = tempfile::tempdir()?;
         let (prepared, report) = prepare_project(
             &source,
             project,
@@ -416,9 +418,13 @@ mod preparation_tests {
     async fn collision_detection_keeps_both_ids_and_never_renames()
     -> Result<(), Box<dyn std::error::Error>> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+        let directory = tempfile::tempdir()?;
+        for name in ["legacy-complete.sqlite", "collision.sqlite"] {
+            std::fs::copy(root.join(name), directory.path().join(name))?;
+        }
         let sources = vec![
-            read_legacy(root.join("legacy-complete.sqlite")).await?,
-            read_legacy(root.join("collision.sqlite")).await?,
+            read_legacy(directory.path().join("legacy-complete.sqlite")).await?,
+            read_legacy(directory.path().join("collision.sqlite")).await?,
         ];
         let collisions = find_collisions(&sources);
         assert!(collisions.iter().any(|collision| matches!(
