@@ -18,66 +18,15 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const LIFECYCLE_FIXTURE: &str = r#"
-import json,sys
-mode,cwd,receipt=sys.argv[1:]
-seen=[]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{'sessionCapabilities':{'list':{},'resume':{},'close':{}}},
-    'agentInfo':{'name':'lifecycle-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/list',request
-assert request['params']['cwd']==cwd,request
-seen.append('list')
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'sessions':[{'sessionId':'fixture-session','cwd':cwd,'title':'Fixture session'}]}})
-request=read()
-assert request['method']=='session/resume',request
-seen.append('resume')
-send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-prompt=read()
-assert prompt['method']=='session/prompt',prompt
-seen.append('prompt')
-if mode=='running-close':
-    cancel=read()
-    assert cancel['method']=='session/cancel',cancel
-    seen.append('cancel')
-    send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-else:
-    send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-if mode=='aborted-close':
-    prompt=read()
-    assert prompt['method']=='session/prompt',prompt
-    seen.append('prompt')
-    send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-close=read()
-assert close['method']=='session/close',close
-seen.append('close')
-if mode=='held-close':
-    with open(receipt+'.ready','wb',buffering=0) as ready:
-        ready.write(b'R')
-    with open(receipt+'.go','rb',buffering=0) as release:
-        assert release.read(1)==b'G'
-with open(receipt,'w') as output: json.dump(seen,output)
-send({'jsonrpc':'2.0','id':close['id'],'result':{}})
-sys.stdin.read()
-"#;
+const LIFECYCLE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-lifecycle-agent.ts"
+);
 
-const UNADVERTISED_FIXTURE: &str = r#"
-import json,sys
-marker=sys.argv[1]
-request=json.loads(sys.stdin.readline())
-assert request['method']=='initialize'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'no-lifecycle-fixture','version':'1'}}}),flush=True)
-if sys.stdin.readline():
-    with open(marker,'w') as output: output.write('unexpected lifecycle request')
-"#;
+const UNADVERTISED_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-unadvertised-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -145,10 +94,8 @@ fn fixture_launch(
     receipt: &std::path::Path,
 ) -> ExternalProviderLaunch {
     ExternalProviderLaunch {
-        executable: PathBuf::from("python3"),
+        executable: PathBuf::from("node"),
         arguments: vec![
-            "-u".to_owned(),
-            "-c".to_owned(),
             LIFECYCLE_FIXTURE.to_owned(),
             mode.to_owned(),
             cwd.to_string_lossy().into_owned(),
@@ -478,10 +425,8 @@ async fn unadvertised_lifecycle_methods_send_no_acp_request() {
     let marker = root.path().join("unexpected.txt");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 UNADVERTISED_FIXTURE.to_owned(),
                 marker.to_string_lossy().into_owned(),
             ],

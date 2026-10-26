@@ -18,55 +18,10 @@ use std::{
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 
-const CANCELLED_PROMPT_ORDER_FIXTURE: &str = r#"
-import json,pathlib,queue,socket,sys,threading
-requests=queue.Queue()
-prompt_texts=[]
-stdin_closed=threading.Event()
-receipt_path=pathlib.Path(sys.argv[2])
-def receive_wire():
-    try:
-        for line in sys.stdin:
-            message=json.loads(line)
-            if message.get('method')=='session/prompt':
-                prompt_texts.append(message['params']['prompt'][0]['text'])
-                receipt_path.write_text(json.dumps({'promptCount':len(prompt_texts),'promptTexts':prompt_texts}))
-            requests.put(message)
-    finally:
-        stdin_closed.set()
-threading.Thread(target=receive_wire,daemon=True).start()
-def read(): return requests.get(timeout=5)
-def send(value): print(json.dumps(value),flush=True)
-def update(text):
-    send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-        'update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':text}}}})
-control=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-control.settimeout(15)
-control.connect(sys.argv[1])
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{},'agentInfo':{'name':'cancel-order-fixture','version':'1'}}})
-request=read()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-first=read()
-assert first['method']=='session/prompt'
-update('x'*(1024*1024+1))
-cancel=read()
-assert cancel['method']=='session/cancel'
-send({'jsonrpc':'2.0','id':first['id'],'result':{'stopReason':'cancelled'}})
-# The test holds terminal publication while the successor Prompt is queued.
-assert control.recv(1)==b'g'
-update('LATE_OUTPUT')
-send({'jsonrpc':'2.0','id':99,'method':'probe/unknown','params':{}})
-barrier=read()
-assert barrier['id']==99 and 'error' in barrier,barrier
-control.sendall(b'r')
-second=read()
-assert second['method']=='session/prompt'
-update('CURRENT_OUTPUT')
-send({'jsonrpc':'2.0','id':second['id'],'result':{'stopReason':'end_turn'}})
-assert stdin_closed.wait(timeout=15),'owner did not close fixture stdin'
-"#;
+const CANCELLED_PROMPT_ORDER_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-failed-turn-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -176,11 +131,10 @@ async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
     let client = Arc::new(
         AgentSessionClient::initialize(
             ExternalProviderLaunch {
-                executable: PathBuf::from("python3"),
+                executable: PathBuf::from("node"),
                 arguments: vec![
-                    "-u".into(),
-                    "-c".into(),
                     CANCELLED_PROMPT_ORDER_FIXTURE.into(),
+                    "cancel".into(),
                     control_path.to_string_lossy().into_owned(),
                     receipt_path.to_string_lossy().into_owned(),
                 ],

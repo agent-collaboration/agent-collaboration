@@ -52,11 +52,10 @@ async fn malformed_legacy_set_mode_response_is_outcome_unknown() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 LEGACY_SETTING_RESPONSE_FIXTURE.to_owned(),
+                "legacy".to_owned(),
             ],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,

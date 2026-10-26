@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { z } from "zod";
@@ -14,6 +14,7 @@ const baselineSchema = z.object({
   target: z.string(),
   arguments: z.array(z.string()),
   stdin: z.string(),
+  initialFiles: z.record(z.string(), z.string()).optional(),
   expected: z.object({
     exit: z.number().or(z.bigint()).transform(Number),
     stdout: z.union([
@@ -22,6 +23,7 @@ const baselineSchema = z.object({
     ]),
     stderr: z.string(),
     receipt: z.string().nullable(),
+    files: z.record(z.string(), z.string()).optional(),
   }),
 });
 const directory = new URL("baselines/", import.meta.url);
@@ -33,13 +35,22 @@ for (const name of readdirSync(directory)
     const root = createFixtureDirectory("embedded-acp");
     const receipt = join(root, "receipt.json");
     try {
+      for (const [name, content] of Object.entries(fixture.initialFiles ?? {}))
+        writeFileSync(join(root, name), content);
       const result = spawnSync(
         process.execPath,
         [
           new URL(`../${fixture.target}`, import.meta.url).pathname,
-          ...fixture.arguments.map((argument) => (argument === "<RECEIPT>" ? receipt : argument)),
+          ...fixture.arguments.map((argument) =>
+            argument === "<RECEIPT>" ? receipt : argument.replaceAll("<ROOT>", root),
+          ),
         ],
-        { input: fixture.stdin, encoding: "utf8", timeout: 5000, maxBuffer: 4 * 1024 * 1024 },
+        {
+          input: fixture.stdin.replaceAll("<ROOT>", root),
+          encoding: "utf8",
+          timeout: 5000,
+          maxBuffer: 4 * 1024 * 1024,
+        },
       );
       if (result.error !== undefined) throw result.error;
       assert.deepEqual(
@@ -47,13 +58,23 @@ for (const name of readdirSync(directory)
           exit: result.status,
           stdout:
             typeof fixture.expected.stdout === "string"
-              ? result.stdout
+              ? result.stdout.replaceAll(root, "<ROOT>")
               : {
                   sha256: createHash("sha256").update(result.stdout).digest("hex"),
                   bytes: Buffer.byteLength(result.stdout),
                 },
           stderr: result.stderr,
           receipt: existsSync(receipt) ? readFileSync(receipt, "utf8") : null,
+          ...(fixture.expected.files === undefined
+            ? {}
+            : {
+                files: Object.fromEntries(
+                  readdirSync(root).map((filename) => [
+                    filename,
+                    readFileSync(join(root, filename), "utf8"),
+                  ]),
+                ),
+              }),
         },
         fixture.expected,
       );

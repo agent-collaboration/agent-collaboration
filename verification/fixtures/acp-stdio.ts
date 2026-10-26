@@ -16,9 +16,10 @@ export class AcpStdio {
   private waiter: ((line: string | undefined) => void) | undefined;
   private readonly inputObservers = new Set<(line: string | undefined) => void>();
 
-  constructor() {
+  constructor(onRequest?: (request: Record<string, unknown>) => void) {
     this.lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
     this.lines.on("line", (line: string): void => {
+      if (onRequest !== undefined) onRequest(objectSchema.parse(decode(line)));
       const waiter = this.waiter;
       this.waiter = undefined;
       if (waiter === undefined) this.queue.push(line);
