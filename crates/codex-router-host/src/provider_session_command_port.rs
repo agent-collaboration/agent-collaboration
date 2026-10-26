@@ -18,18 +18,14 @@ use collaboration_protocol::{
 use collaboration_service::{
     CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
     ProviderConversationBackend, ProviderOperationStore, ProviderSessionEventHub,
-    QueueInputCommand, QueuedSessionInput, SelectedPromptCommand, SelectedPromptPreparation,
-    SelectionFailure, SessionCommandPort, SessionEventAttachment, SessionEventHub,
-    SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand,
-    SteerSessionCommand,
+    QueueInputCommand, QueuedSessionInput, SessionCommandPort, SessionEventAttachment,
+    SessionEventHub, SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle,
+    SetSessionSettingCommand, SteerSessionCommand,
 };
 use message_board::{Identity, SessionEndpointRef};
 use session_event_model::{InputId, SessionEvent};
 use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
-
-#[path = "provider_selected_input.rs"]
-mod selected_input;
 
 const OPERATION_WAIT_SECONDS: u32 = 30;
 const TURN_START_DEADLINE: Duration = Duration::from_secs(30);
@@ -72,12 +68,6 @@ impl HostSessionCommandPort {
 }
 
 impl SessionCommandPort for HostSessionCommandPort {
-    fn prepare_selected_prompt(
-        &self,
-        command: SelectedPromptCommand,
-    ) -> CommandFuture<'_, SelectedPromptPreparation> {
-        Box::pin(self.prepare_native_selection(command))
-    }
     fn create(
         &self,
         command: CreateSessionCommand,

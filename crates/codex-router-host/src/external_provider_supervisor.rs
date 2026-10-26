@@ -1,6 +1,5 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
-mod provider_native_catalogue;
 mod provider_operation_failure;
 mod provider_prompt_contents;
 pub use provider_prompt_contents::ProviderPromptContentsRequest;

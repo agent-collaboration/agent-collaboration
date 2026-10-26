@@ -46,7 +46,6 @@ It checks recorded PID/UID/birth/group/executable, binary hash, health version a
 | Journey | Driver and deciding evidence |
 | --- | --- |
 | ACP metadata presentation | [ACP metadata](references/acp-metadata.md): installed Codex live/reopened PTYs, real Claude/Cursor ACP, original metadata through bounded public observation, and independent `thread/read`/resume. `acp_metadata_observation.py` checks exact declared target/build and retained-metadata versus visible-prose controls. Qualify each provider separately; unemitted usage remains an explicit gap. |
-| Provider-native skills, plugins and commands J1-J4 (partial; per-provider status lives in the run evidence) | [Native capabilities](references/native-capabilities.md), `scripts/verification/native-capabilities.sh --help` (the Rust example `verify-provider-native-capabilities`): on a candidate the Lead started through the ordinary `codex-router serve`/`host` lifetimes, drive the installed Codex `$` picker in a private PTY with the client's own session recorder, a controlled canary skill fixture in a genuine linked worktree, and the provider's own export as references. Covers discovery, explicit rejection of invalid selections, Router `/` invocation, command list replacement, canonical history and display operation counts, and the ACP metadata oracle. Plugin selection stays explicitly unsupported; native operation counters are a named gap. |
 | Board upgrade (lasting; local CLI/Tokio route) | [Board upgrade](references/board-upgrade.md): `board_upgrade_journey.py --publication-plan` drives dry-run, upload, interruption, owning central reopen and reruns. `--observe-plan` checks preparation/legacy selection. The retained `importer_claim` Host tests cover real import, Claim, first epoch-two write and post-claim import replay. Real copies need a commission; cross-machine and staging remain separate. |
 | Message cutover and first-attempt Auto policy (lasting; local store/service cases) | [Cutover checks](references/board-upgrade.md#message-cutover-and-delivery-policy): retained importer tests cover copy-before-drop, owning reopen, activity ranges, expiry origins, strict released receipts, unmapped identity refusal and crash/retry (1049–1052). Service tests cover fresh Auto, attempted replay and readiness-released Held nonloading (1057/1062). These are synthetic/local boundaries; live-source cutover and vendor behavior require their own commission. |
 | Board journey wire setup | `board_request_shapes.py --decoder scripts/verification/board_upgrade_native/target/debug/board-request-shapes` checks shared builders against current Rust DTOs and rejects retired fields across board scripts. It starts no Host and supplies no G3 behavior credit. |
@@ -84,15 +83,6 @@ uv run --offline --no-project --with pydantic==2.14.1 --with websockets==17.3 --
 uv run --offline --no-project --with pydantic==2.14.1 --with websockets==17.3 --with pytest --with basedpyright==1.40.2 --python 3.13 basedpyright --pythonversion 3.13 --pythonplatform All scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
 uv run --offline --no-project --with ruff==0.17.0 ruff check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
 uv run --offline --no-project --with ruff==0.17.0 ruff format --check scripts/verification scripts/tests/test_verification_observations.py scripts/tests/test_verification_lifecycle.py scripts/tests/test_acp_metadata_observation.py scripts/tests/verification_controller_fixture.py
-```
-
-The native-capabilities verifier is Rust. Its gates, from the repository root:
-
-```sh
-cargo test --locked -p codex-router-host --example verify-provider-native-capabilities
-cargo clippy --locked -p codex-router-host --example verify-provider-native-capabilities --tests -- -D warnings
-rustfmt --edition 2024 --check crates/codex-router-host/examples/verify-provider-native-capabilities.rs
-scripts/verification/native-capabilities.sh --help
 ```
 
 These are apparatus checks, not product proof. Return machine/build/source/root/client, genuine IDs, actual callbacks/tool/turn, public/SQLite row/revision/creation-time readbacks, owning reopen, screenshot kind, commands/exits and cleanup. Mark every claim supported, unsupported or unknown, naming harness defects and unreachable routes separately. Acceptance remains with the Lead.

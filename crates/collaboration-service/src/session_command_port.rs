@@ -34,48 +34,6 @@ pub struct PromptSessionCommand {
     pub actor: Identity,
 }
 
-/// Ephemeral selected input; native resolution never becomes stored selection state.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SelectedItem {
-    Skill {
-        submitted_name: crate::provider_capabilities::CapabilityName,
-        submitted_path: crate::provider_capabilities::CapabilityPath,
-    },
-    Plugin {
-        submitted_name: crate::provider_capabilities::CapabilityName,
-        submitted_id: crate::provider_capabilities::NativePluginId,
-    },
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SelectedPromptCommand {
-    pub target: SessionRef,
-    pub input_id: session_event_model::InputId,
-    pub actor: Identity,
-    pub content: Vec<CommandContent>,
-    pub selections: Vec<SelectedItem>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
-pub enum SelectionFailure {
-    #[error("selection belongs to another provider or workspace")]
-    WrongContext,
-    #[error("selected native capability is disabled")]
-    Disabled,
-    #[error("selected native capability could not be resolved")]
-    Unresolved,
-    #[error("selected native capability is ambiguous")]
-    Ambiguous,
-    #[error("selected input form is unsupported")]
-    UnsupportedForm,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum SelectedPromptPreparation {
-    Ready { content: Vec<CommandContent> },
-    Rejected { reason: SelectionFailure },
-}
-
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SteerSessionCommand {
     pub target: SessionRef,
@@ -158,10 +116,6 @@ pub trait SessionCommandPort: Send + Sync {
     fn load_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()>;
     /// Activates a stored Session without historical replay.
     fn resume_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()>;
-    fn prepare_selected_prompt(
-        &self,
-        command: SelectedPromptCommand,
-    ) -> CommandFuture<'_, SelectedPromptPreparation>;
     fn prompt(&self, command: PromptSessionCommand) -> CommandFuture<'_, SessionTurnHandle>;
     fn steer(&self, command: SteerSessionCommand) -> CommandFuture<'_, SessionSteerOutcome>;
     fn queue_add(&self, command: QueueInputCommand) -> CommandFuture<'_, QueuedSessionInput>;
@@ -190,7 +144,6 @@ mod tests {
         Load(SessionTargetCommand),
         Resume(SessionTargetCommand),
         Prompt(PromptSessionCommand),
-        SelectedPrompt(SelectedPromptCommand),
         Steer(SteerSessionCommand),
         QueueAdd(QueueInputCommand),
         QueueList(SessionTargetCommand),
@@ -226,14 +179,6 @@ mod tests {
         fn resume_session(&self, command: SessionTargetCommand) -> CommandFuture<'_, ()> {
             self.record(RecordedCommand::Resume(command));
             Box::pin(async { Ok(()) })
-        }
-        fn prepare_selected_prompt(
-            &self,
-            command: SelectedPromptCommand,
-        ) -> CommandFuture<'_, SelectedPromptPreparation> {
-            let content = command.content.clone();
-            self.record(RecordedCommand::SelectedPrompt(command));
-            Box::pin(async move { Ok(SelectedPromptPreparation::Ready { content }) })
         }
         fn prompt(&self, command: PromptSessionCommand) -> CommandFuture<'_, SessionTurnHandle> {
             self.record(RecordedCommand::Prompt(command));
@@ -314,16 +259,6 @@ mod tests {
             actor: actor.clone(),
         };
         let content = vec![CommandContent::text("hello".into()).expect("test content")];
-        port.prepare_selected_prompt(SelectedPromptCommand {
-            target: session.clone(),
-            input_id: session_event_model::InputId::new("input-selected")
-                .expect("selected input id"),
-            actor: actor.clone(),
-            content: content.clone(),
-            selections: Vec::new(),
-        })
-        .await
-        .expect("selected preparation");
 
         assert_eq!(
             port.create(CreateSessionCommand {
@@ -369,7 +304,7 @@ mod tests {
         port.cancel(target.clone()).await.expect("cancel");
         port.close(target.clone()).await.expect("close");
         port.set_setting(SetSessionSettingCommand {
-            target: session.clone(),
+            target: session,
             setting_id: "model".into(),
             value: "default".into(),
             actor: actor.clone(),
@@ -378,9 +313,7 @@ mod tests {
         .expect("set setting");
 
         let recorded = recorded.lock().expect("test lock");
-        assert_eq!(recorded.len(), 12);
-        assert!(recorded.iter().any(|command| matches!(command,
-            RecordedCommand::SelectedPrompt(selected) if selected.input_id.as_str() == "input-selected" && selected.target == session)));
+        assert_eq!(recorded.len(), 11);
         assert!(recorded.iter().any(|command| matches!(command,
             RecordedCommand::Prompt(prompt) if prompt.input_id.as_str() == "input-prompt")));
         assert!(recorded.iter().any(|command| matches!(command,
@@ -388,7 +321,6 @@ mod tests {
         assert!(recorded.iter().all(|command| match command {
             RecordedCommand::Create(command) => command.actor == actor,
             RecordedCommand::Prompt(command) => command.actor == actor,
-            RecordedCommand::SelectedPrompt(command) => command.actor == actor,
             RecordedCommand::Steer(command) => command.actor == actor,
             RecordedCommand::QueueAdd(command) => command.actor == actor,
             RecordedCommand::Load(command)

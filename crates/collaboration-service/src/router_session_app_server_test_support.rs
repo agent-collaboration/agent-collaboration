@@ -1,10 +1,9 @@
 use super::*;
 use crate::{
     CommandFailure, CommandFuture, CreateSessionCommand, HubFuture, HubSessionSummary,
-    PromptSessionCommand, QueueInputCommand, QueuedSessionInput, SelectedPromptCommand,
-    SelectedPromptPreparation, SelectionFailure, SessionCommandPort, SessionEventAttachment,
-    SessionEventHub, SessionEventHubError, SessionSteerOutcome, SessionTargetCommand,
-    SessionTurnHandle, SetSessionSettingCommand, SteerSessionCommand,
+    PromptSessionCommand, QueueInputCommand, QueuedSessionInput, SessionCommandPort,
+    SessionEventAttachment, SessionEventHub, SessionEventHubError, SessionSteerOutcome,
+    SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand, SteerSessionCommand,
 };
 use message_board::{Identity, SessionEndpointRef, SessionRef};
 use session_event_model::{SessionEvent, SessionState, StopReason, TurnOutcome};
@@ -26,8 +25,6 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) create_commands: Mutex<Vec<CreateSessionCommand>>,
     pub(super) load_commands: Mutex<Vec<SessionTargetCommand>>,
     pub(super) prompt_commands: Mutex<Vec<PromptSessionCommand>>,
-    pub(super) selected_commands: Mutex<Vec<SelectedPromptCommand>>,
-    pub(super) selected_preparation: Mutex<SelectedPromptPreparation>,
     pub(super) steer_commands: Mutex<Vec<SteerSessionCommand>>,
     pub(super) steer_gate: Mutex<Option<Arc<Notify>>>,
     pub(super) steer_started: Notify,
@@ -65,10 +62,6 @@ impl ScriptedSessionBackend {
             create_commands: Mutex::new(Vec::new()),
             load_commands: Mutex::new(Vec::new()),
             prompt_commands: Mutex::new(Vec::new()),
-            selected_commands: Mutex::new(Vec::new()),
-            selected_preparation: Mutex::new(SelectedPromptPreparation::Rejected {
-                reason: SelectionFailure::UnsupportedForm,
-            }),
             steer_commands: Mutex::new(Vec::new()),
             steer_gate: Mutex::new(None),
             steer_started: Notify::new(),
@@ -92,21 +85,6 @@ impl ScriptedSessionBackend {
 }
 
 impl SessionCommandPort for ScriptedSessionBackend {
-    fn prepare_selected_prompt(
-        &self,
-        command: SelectedPromptCommand,
-    ) -> CommandFuture<'_, SelectedPromptPreparation> {
-        self.selected_commands
-            .lock()
-            .expect("test lock")
-            .push(command);
-        self.turn_command_order
-            .lock()
-            .expect("test lock")
-            .push("prepare-selected");
-        let prepared = self.selected_preparation.lock().expect("test lock").clone();
-        Box::pin(async move { Ok(prepared) })
-    }
     fn create(&self, command: CreateSessionCommand) -> CommandFuture<'_, SessionRef> {
         self.create_commands
             .lock()

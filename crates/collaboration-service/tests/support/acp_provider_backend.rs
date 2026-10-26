@@ -1,10 +1,9 @@
 //! Test-only provider command and event stand-in for the ACP socket journey.
 use collaboration_service::{
     CommandFailure, CommandFuture, CreateSessionCommand, HubEvent, HubFuture, HubSessionSummary,
-    PromptSessionCommand, QueueInputCommand, QueuedSessionInput, SelectedPromptCommand,
-    SelectedPromptPreparation, SelectionFailure, SessionCommandPort, SessionEventAttachment,
-    SessionEventHub, SessionEventHubError, SessionSteerOutcome, SessionTargetCommand,
-    SessionTurnHandle, SetSessionSettingCommand, SteerSessionCommand,
+    PromptSessionCommand, QueueInputCommand, QueuedSessionInput, SessionCommandPort,
+    SessionEventAttachment, SessionEventHub, SessionEventHubError, SessionSteerOutcome,
+    SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand, SteerSessionCommand,
 };
 use message_board::{Identity, SessionEndpointRef, SessionRef};
 use session_event_model::{
@@ -60,16 +59,6 @@ impl ScriptedProviderBackend {
 }
 
 impl SessionCommandPort for ScriptedProviderBackend {
-    fn prepare_selected_prompt(
-        &self,
-        _command: SelectedPromptCommand,
-    ) -> CommandFuture<'_, SelectedPromptPreparation> {
-        Box::pin(async {
-            Ok(SelectedPromptPreparation::Rejected {
-                reason: SelectionFailure::UnsupportedForm,
-            })
-        })
-    }
     fn create(&self, command: CreateSessionCommand) -> CommandFuture<'_, SessionRef> {
         self.created_by
             .lock()

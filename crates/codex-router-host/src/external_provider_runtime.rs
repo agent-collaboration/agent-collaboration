@@ -116,8 +116,6 @@ mod prompt_projection_tests {
 }
 
 pub struct ExternalProviderRuntime {
-    pub(crate) native_read_context:
-        Option<crate::provider_native_capabilities::ProviderNativeReadContext>,
     client: AgentSessionClient<HostInteractionPort>,
     interaction_port: Arc<HostInteractionPort>,
     event_sink: Option<Arc<HubSessionEventSink>>,
@@ -144,7 +142,6 @@ impl ExternalProviderRuntime {
         )
         .await?;
         Ok(Self {
-            native_read_context: None,
             client,
             interaction_port,
             event_sink: None,
@@ -168,7 +165,6 @@ impl ExternalProviderRuntime {
         )
         .await?;
         Ok(Self {
-            native_read_context: None,
             client,
             interaction_port,
             event_sink: None,
@@ -206,7 +202,6 @@ impl ExternalProviderRuntime {
             }
         };
         Ok(Self {
-            native_read_context: None,
             client,
             interaction_port,
             event_sink: Some(event_sink),
@@ -227,7 +222,6 @@ impl ExternalProviderRuntime {
         )
         .await?;
         Ok(Self {
-            native_read_context: None,
             client,
             interaction_port,
             event_sink: None,

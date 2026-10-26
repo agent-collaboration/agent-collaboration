@@ -20,7 +20,6 @@ mod external_provider_runtime;
 mod provider_acp_delivery_route;
 mod provider_acp_message_fifo;
 mod provider_acp_route_claim;
-mod provider_native_capabilities;
 mod provider_queue_operation_registry;
 mod provider_session_command_port;
 pub use provider_queue_operation_registry::{ProviderQueueCancellationError, ProviderQueuedInput};

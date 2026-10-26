@@ -37,7 +37,6 @@ mod agent_session_client;
 mod approval_presentation;
 mod external_permission_options;
 mod interaction_port;
-pub mod native_capabilities;
 mod provider_capability_report;
 mod provider_connection_activity;
 mod provider_item_projection;

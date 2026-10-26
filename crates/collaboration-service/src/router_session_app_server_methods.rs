@@ -76,7 +76,9 @@ pub(super) fn handle_app_server_request(
         "config/batchWrite" | "config/write" => {
             return json!({"id":id,"error":{"code":-32000,"message":"Provider session trust is read-only here; trust this project in Codex itself"}});
         }
-        "collaborationMode/list" | "hooks/list" => Some(json!({"data":[],"nextCursor":null})),
+        "collaborationMode/list" | "hooks/list" | "skills/list" => {
+            Some(json!({"data":[],"nextCursor":null}))
+        }
         _ => None,
     };
     match result {
@@ -317,20 +319,7 @@ pub(super) async fn handle_app_server_turn_request(
         .ok_or(ThreadMethodError::NotFound)?;
     match method {
         "turn/start" => {
-            let input_id = session_event_model::InputId::generate();
-            let content = if let Some(content) = super::selected_input::prepare(
-                &params,
-                &session,
-                &input_id,
-                &actor,
-                commands.as_ref(),
-            )
-            .await?
-            {
-                content
-            } else {
-                parse_turn_input(&params).await?
-            };
+            let content = parse_turn_input(&params).await?;
             if let Some(model) =
                 provider_model_override(params.get("model").and_then(Value::as_str), catalog)
             {
@@ -347,7 +336,7 @@ pub(super) async fn handle_app_server_turn_request(
             let handle = commands
                 .prompt(PromptSessionCommand {
                     target: session,
-                    input_id,
+                    input_id: session_event_model::InputId::generate(),
                     content,
                     actor,
                 })
@@ -359,11 +348,6 @@ pub(super) async fn handle_app_server_turn_request(
             }}))
         }
         "turn/steer" => {
-            if super::selected_input::contains_selection(&params) {
-                return Err(ThreadMethodError::SelectionRejected(
-                    crate::SelectionFailure::UnsupportedForm,
-                ));
-            }
             let expected_turn_id = params
                 .get("expectedTurnId")
                 .and_then(Value::as_str)

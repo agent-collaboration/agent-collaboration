@@ -69,7 +69,6 @@ pub use codex_acp_adapter::ConversationOperationRecorder;
 pub use codex_conversation_operation_recorder::{
     CodexConversationOperationRecorder, UnavailableConversationOperationRecorder,
 };
-pub mod provider_capabilities;
 mod provider_session_event_hub;
 mod provider_session_record;
 mod session_event_hub;
@@ -83,7 +82,6 @@ pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, r
 pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
 mod app_server_item_metadata;
-pub use app_server_item_metadata::retained_available_command_names;
 mod app_server_item_translation;
 mod app_server_model_catalog;
 pub use app_server_item_translation::{
@@ -145,8 +143,7 @@ pub use scheduled_run_contract::{
 };
 pub use session_command_port::{
     CommandContent, CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
-    QueueInputCommand, QueuedSessionInput, SelectedItem, SelectedPromptCommand,
-    SelectedPromptPreparation, SelectionFailure, SessionCommandPort, SessionSettingsCommand,
+    QueueInputCommand, QueuedSessionInput, SessionCommandPort, SessionSettingsCommand,
     SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand,
     SteerSessionCommand,
 };
