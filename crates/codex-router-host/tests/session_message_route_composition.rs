@@ -54,7 +54,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     .expect("real route central enrollment");
     let registry = root.path().join("peer-registry");
     std::fs::create_dir(&registry).expect("peer registry");
-    let executable = root.path().join("provider.py");
+    let executable = root.path().join("provider.ts");
     provider_fixture(&executable);
     let claude_loads = root.path().join("claude-loads.log");
     let cursor_loads = root.path().join("cursor-loads.log");
@@ -310,7 +310,7 @@ async fn host_composed_permission_push_preserves_selected_option_through_provide
     let root = tempfile::tempdir().expect("Host permission root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
-    let executable = root.path().join("permission-provider.py");
+    let executable = root.path().join("permission-provider.ts");
     provider_fixture(&executable);
     let requester_prompts = root.path().join("requester-prompts.log");
     let approver_prompts = root.path().join("approver-prompts.log");

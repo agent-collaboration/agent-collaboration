@@ -1,0 +1,14 @@
+{
+  "original": "crates/agent-collaboration/tests/provider_load_error_e2e.rs#ACP_PROVIDER_PRIVATE_MARKER_8F39B1",
+  "originalSHA256": "836b00f0582c4a6d22e532b319ccd92df80d02358696822a16980707df65fec9",
+  "target": "provider-load-error-agent.ts",
+  "arguments": ["ACP_PROVIDER_PRIVATE_MARKER_8F39B1"],
+  "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/load\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"exit\",\"params\":{}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"error-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"error\": {\"code\": -32600, \"message\": \"ACP_PROVIDER_PRIVATE_MARKER_8F39B1\", \"data\": {\"privateText\": \"ACP_PROVIDER_PRIVATE_MARKER_8F39B1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}
