@@ -1,0 +1,17 @@
+{
+  "original": "Host provider owner#close-load",
+  "originalSHA256": "85ef4f5dc989d6642712500ce41d169deb86bd93c067641d1ea7ce01963fe638",
+  "target": "host-fifo-load-agent.ts",
+  "arguments": ["close", "<ROOT>/closed", "<ROOT>/loaded"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/close\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"close\": {}}}, \"agentInfo\": {\"name\": \"fifo-close-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fifo-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "loaded": "loaded",
+      "closed": "closed"
+    }
+  }
+}

@@ -84,38 +84,14 @@ fn close_and_load_fixture(
     close_marker: &std::path::Path,
     load_marker: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,
- 'agentCapabilities':{{'loadSession':True,'sessionCapabilities':{{'close':{{}}}}}},
- 'agentInfo':{{'name':'fifo-close-fixture','version':'1'}}}}}})
-request=read()
-assert request['method']=='session/new'
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fifo-session'}}}})
-for line in sys.stdin:
- request=json.loads(line)
- if request['method']=='session/close':
-  with open({:?},'w') as marker: marker.write('closed')
- elif request['method']=='session/load':
-  with open({:?},'w') as marker: marker.write('loaded')
- else:
-  raise AssertionError(request['method'])
- send({{'jsonrpc':'2.0','id':request['id'],'result':{{}}}})
-"#,
-        close_marker.display().to_string(),
-        load_marker.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-fifo-load-agent.ts",
+        vec![
+            "close".to_owned(),
+            close_marker.to_string_lossy().into_owned(),
+            load_marker.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 #[tokio::test]
