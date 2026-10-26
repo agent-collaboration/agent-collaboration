@@ -10,9 +10,11 @@ use super::{
     takeover_recipients::{self as recipients, Recipients},
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
-use board_sync_protocol::BoardDeliveryTypes;
+use board_sync_protocol::{BoardAnnotation, BoardDeliveryTypes};
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::DeliveryItem;
+use fleet_sync_protocol::{DeliveryItem, ReplicationPosition, ReplicationRequest};
+use fleet_sync_writer::CapturedTransaction;
+use message_board_storage::CapturedProjectChanges;
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy)]
@@ -86,6 +88,7 @@ async fn prove_prefix(
         .post(fixture, "one literal takeover owed post")
         .await?;
     let expected = acknowledged_cut(fixture, &follow, &range, &baseline, prefix).await?;
+    let copy_before_crash = controls::copy_ack(fixture).await?;
     let stopped = fixture
         .host
         .take()
@@ -110,7 +113,15 @@ async fn prove_prefix(
             Some(item)
         }
     };
-    assert_copy_cut(fixture, &stopped, &range, prefix, original.as_ref()).await?;
+    assert_copy_cut(
+        fixture,
+        &stopped,
+        &range,
+        prefix,
+        original.as_ref(),
+        copy_before_crash,
+    )
+    .await?;
     drop(stopped);
     transfer_to_second(fixture, second, TransferKind::Takeover).await?;
     match prefix {
@@ -131,7 +142,7 @@ async fn acknowledged_cut(
 ) -> FixtureResult<Option<DeliveryItem<BoardDeliveryTypes>>> {
     Ok(match prefix {
         ReplicatedPrefix::Neither => {
-            controls::held(fixture, controls::connection(fixture)?).await?;
+            hold_post_capture(fixture, range).await?;
             let observed = work_view(fixture.host()?, &fixture.project).await?;
             assert_eq!(
                 observed.get("replicatedThrough"),
@@ -179,14 +190,61 @@ async fn acknowledged_cut(
     })
 }
 
+async fn hold_post_capture(fixture: &BoardFixture, range: &Value) -> FixtureResult {
+    let cursor: message_board::FeedCursor = serde_json::from_value(at(range, "/through")?.clone())?;
+    tokio::time::timeout(BOUND, async {
+        loop {
+            let held = controls::held(fixture, controls::connection(fixture)?).await?;
+            let request: ReplicationRequest<BoardAnnotation> =
+                serde_json::from_value(at(&held, "/request/request")?.clone())?;
+            let ReplicationRequest::Piece(piece) = request else {
+                return Err("post capture gate requires a real Copy Piece".into());
+            };
+            for transaction in &piece.transactions {
+                let changes = CapturedProjectChanges::decode(&CapturedTransaction {
+                    position: ReplicationPosition {
+                        epoch: piece.epoch,
+                        sequence: transaction.commit_id(),
+                    },
+                    transaction,
+                })?;
+                if changes
+                    .first_feed_position
+                    .is_some_and(|first| first <= cursor.position)
+                    && changes.latest_feed.is_some_and(|latest| {
+                        latest.cursor.epoch == cursor.epoch
+                            && latest.cursor.position >= cursor.position
+                    })
+                {
+                    // The writer commits capture_feed_marks before transport.
+                    // Keep this Piece held; assert_copy_cut reads the real mark
+                    // and unchanged Copy ACK after the owning Host is joined.
+                    return Ok(());
+                }
+            }
+            // A settled feed can still leave an auxiliary WAL capture in flight.
+            // Release only that earlier Piece, atomically holding the next one.
+            controls::advance_hold(
+                fixture,
+                controls::connection(fixture)?,
+                controls::copy(fixture)?,
+            )
+            .await?;
+        }
+    })
+    .await?
+}
+
 async fn assert_copy_cut(
     fixture: &BoardFixture,
     stopped: &super::owned_host::StoppedHost,
     range: &Value,
     prefix: ReplicatedPrefix,
     original: Option<&DeliveryItem<BoardDeliveryTypes>>,
+    copy_before_crash: ReplicationPosition,
 ) -> FixtureResult {
     let cursor = serde_json::from_value(at(range, "/through")?.clone())?;
+    assert!(readbacks::contains_post_at(stopped, &fixture.project, 1, cursor).await?);
     let cause = readbacks::cause_capture(stopped, &fixture.project, cursor).await?;
     let handoff = match (prefix, original) {
         (ReplicatedPrefix::Neither, _) => None,
@@ -210,9 +268,13 @@ async fn assert_copy_cut(
             .await?,
         ),
     };
-    assert_eq!(copy.epoch, cause.epoch);
+    assert_eq!(copy.epoch.value(), cursor.epoch.get());
     match prefix {
-        ReplicatedPrefix::Neither => assert!(copy.sequence < cause.sequence),
+        ReplicatedPrefix::Neither => {
+            // The held Piece contains the post, so its owning capture must
+            // have committed before transport. Neither ACK includes it.
+            assert!(discarded_copy_excludes_cause(Some(cause), copy));
+        }
         ReplicatedPrefix::CauseOnly => {
             assert!(copy.sequence >= cause.sequence);
             assert!(
@@ -228,8 +290,28 @@ async fn assert_copy_cut(
     }
     eprintln!(
         "T native prefix evidence: {}",
-        json!({"prefix":name,"cause":cause,"handoff":handoff,"copyAck":copy})
+        json!({"prefix":name,"cause":cause,"handoff":handoff,"copyAck":copy,"copyBeforeCrash":copy_before_crash})
     );
+    Ok(())
+}
+
+fn discarded_copy_excludes_cause(
+    cause: Option<ReplicationPosition>,
+    copy: ReplicationPosition,
+) -> bool {
+    cause.is_some_and(|cause| copy.epoch == cause.epoch && copy.sequence < cause.sequence)
+}
+
+#[test]
+fn discarded_copy_rejects_a_missing_cause_capture() -> FixtureResult {
+    let ack_before_crash = serde_json::from_value(json!({"epoch":1,"sequence":99}))?;
+    let advanced_ack = serde_json::from_value(json!({"epoch":1,"sequence":100}))?;
+    let regressed_ack = serde_json::from_value(json!({"epoch":1,"sequence":98}))?;
+    let ack_in_other_epoch = serde_json::from_value(json!({"epoch":2,"sequence":99}))?;
+    assert!(!discarded_copy_excludes_cause(None, ack_before_crash));
+    assert!(!discarded_copy_excludes_cause(None, advanced_ack));
+    assert!(!discarded_copy_excludes_cause(None, regressed_ack));
+    assert!(!discarded_copy_excludes_cause(None, ack_in_other_epoch));
     Ok(())
 }
 
@@ -256,6 +338,13 @@ async fn assert_successor(
     let stopped = second.stop_for_readback().await?;
     let actual = readbacks::deliveries(readbacks::handoffs(&stopped, &fixture.project, 2).await?);
     readbacks::assert_no_wake(&stopped).await?;
+    if matches!(prefix, ReplicatedPrefix::Neither) {
+        let cursor = serde_json::from_value(at(range, "/through")?.clone())?;
+        assert!(
+            !readbacks::contains_post_at(&stopped, &fixture.project, 2, cursor).await?,
+            "discarded source post reached the successor"
+        );
+    }
     drop(stopped);
     match prefix {
         ReplicatedPrefix::Neither => {
