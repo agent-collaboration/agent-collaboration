@@ -12,17 +12,13 @@ use message_board_storage::{
     RouterLocalStorageError,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    path::Path,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-};
+use std::{path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
 #[path = "fleet_client/cache_refresh.rs"]
 mod cache_refresh;
+mod synchronization;
+use synchronization::SynchronizationRequests;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -32,6 +28,10 @@ pub struct FleetReply {
 
 #[derive(Debug, thiserror::Error)]
 pub enum FleetClientError {
+    #[error(transparent)]
+    Synchronization(Arc<FleetClientError>),
+    #[error("Fleet synchronization generation exhausted")]
+    SynchronizationGenerationExhausted,
     #[error("fleet directory is unavailable: {0}")]
     Directory(#[from] std::io::Error),
     #[error(transparent)]
@@ -57,7 +57,7 @@ pub struct FleetClient {
     outbox: FleetOutbox,
     cache: FleetCache,
     admission_mutex: Mutex<()>,
-    pending_resync: AtomicBool,
+    synchronization: SynchronizationRequests,
     registration: Arc<dyn crate::ProjectRegistration>,
 }
 
@@ -113,7 +113,7 @@ impl FleetClient {
             outbox,
             cache,
             admission_mutex: Mutex::new(()),
-            pending_resync: AtomicBool::new(false),
+            synchronization: SynchronizationRequests::default(),
             registration,
         })
     }
@@ -184,8 +184,9 @@ impl FleetClient {
     ) -> Result<FleetReply, FleetClientError> {
         let guard = self.admission_mutex.lock().await;
         let result = self.submit_admitted(request).await;
+        self.finish_submission_sync().await;
         drop(guard);
-        self.finish_submission(result).await
+        result
     }
 
     async fn submit_admitted(
@@ -223,8 +224,9 @@ impl FleetClient {
     ) -> Result<FleetReply, FleetClientError> {
         let guard = self.admission_mutex.lock().await;
         let result = self.submit_creation_admitted(input, directory).await;
+        self.finish_submission_sync().await;
         drop(guard);
-        self.finish_submission(result).await
+        result
     }
 
     async fn submit_creation_admitted(
@@ -255,15 +257,11 @@ impl FleetClient {
         Ok(reply)
     }
 
-    async fn finish_submission(
-        &self,
-        result: Result<FleetReply, FleetClientError>,
-    ) -> Result<FleetReply, FleetClientError> {
+    async fn finish_submission_sync(&self) {
         // A deferred sync must not replace the submitted request's own result.
-        if let Err(error) = self.synchronize_pending().await {
+        if let Err(error) = self.synchronize_pending_admitted().await {
             tracing::warn!(%error, "Fleet synchronization after submission failed");
         }
-        result
     }
 
     pub async fn creation_input(
@@ -279,31 +277,6 @@ impl FleetClient {
         limit: u64,
     ) -> Result<Vec<message_board::ProjectCreateRequest>, FleetClientError> {
         Ok(self.outbox.accepted_creation_page(after, limit).await?)
-    }
-
-    /// Welcome, feed hints and the connected refresh timer all enter this owner.
-    /// Concurrent triggers require a fresh run after the current one, since its
-    /// Fleet read can predate the notice. The connected timer retries failures.
-    pub async fn synchronize(&self) -> Result<(), FleetClientError> {
-        self.pending_resync.store(true, Ordering::SeqCst);
-        self.synchronize_pending().await
-    }
-
-    async fn synchronize_pending(&self) -> Result<(), FleetClientError> {
-        loop {
-            let Ok(guard) = self.admission_mutex.try_lock() else {
-                return Ok(());
-            };
-            while self.pending_resync.swap(false, Ordering::SeqCst) {
-                self.synchronize_admitted().await?;
-            }
-            drop(guard);
-            // A trigger can set pending after the last swap but fail admission
-            // before unlock. Recheck after unlock so it always has a holder.
-            if !self.pending_resync.load(Ordering::SeqCst) {
-                return Ok(());
-            }
-        }
     }
 
     async fn synchronize_admitted(&self) -> Result<(), FleetClientError> {

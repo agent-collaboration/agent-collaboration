@@ -1,5 +1,6 @@
 use super::*;
 use fixture::{Live, Reader, assert_visible, create, update};
+use futures_util::FutureExt;
 use ingress::ReadPoint;
 
 #[tokio::test]
@@ -22,11 +23,16 @@ async fn trigger_during_sync_reads_changes_committed_after_its_first_read() -> T
     let syncing = tokio::spawn(async move { fleet.synchronize().await });
     reply.entered().await?;
     live.commit(update("committed after first read")?).await?;
-    // Concurrent triggers return promptly; the admission holder must drain them.
+    let mut waiting = Vec::new();
     for _ in 0..3 {
-        tokio::time::timeout(BOUND, reader.fleet.synchronize()).await??;
+        let mut resync = Box::pin(reader.fleet.synchronize());
+        assert!(resync.as_mut().now_or_never().is_none());
+        waiting.push(resync);
     }
     reply.release()?;
+    for resync in waiting {
+        tokio::time::timeout(BOUND, resync).await??;
+    }
     tokio::time::timeout(BOUND, syncing).await???;
     assert_visible(&reader.fleet, &router_root, "committed after first read", 4).await?;
     reader.shutdown().await?;
@@ -58,12 +64,16 @@ async fn trigger_during_resync_requires_another_fresh_read() -> TestResult {
     let syncing = tokio::spawn(async move { fleet.synchronize().await });
     first.entered().await?;
     live.commit(update("first overlapping change")?).await?;
-    tokio::time::timeout(BOUND, reader.fleet.synchronize()).await??;
+    let mut first_resync = Box::pin(reader.fleet.synchronize());
+    assert!(first_resync.as_mut().now_or_never().is_none());
     first.release()?;
     second.entered().await?;
     live.commit(update("change during the resync")?).await?;
-    tokio::time::timeout(BOUND, reader.fleet.synchronize()).await??;
+    let mut second_resync = Box::pin(reader.fleet.synchronize());
+    assert!(second_resync.as_mut().now_or_never().is_none());
     second.release()?;
+    tokio::time::timeout(BOUND, first_resync).await??;
+    tokio::time::timeout(BOUND, second_resync).await??;
     tokio::time::timeout(BOUND, syncing).await???;
     assert_visible(&reader.fleet, &router_root, "change during the resync", 6).await?;
     reader.shutdown().await?;
@@ -140,8 +150,10 @@ async fn trigger_during_submission(creation: bool) -> TestResult {
     });
     reply.entered().await?;
     live.commit(update("committed during submission")?).await?;
-    tokio::time::timeout(BOUND, reader.fleet.synchronize()).await??;
+    let mut resync = Box::pin(reader.fleet.synchronize());
+    assert!(resync.as_mut().now_or_never().is_none());
     reply.release()?;
+    tokio::time::timeout(BOUND, resync).await??;
     tokio::time::timeout(BOUND, submitting).await???;
     assert_visible(
         &reader.fleet,
