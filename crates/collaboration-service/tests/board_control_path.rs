@@ -122,6 +122,8 @@ async fn control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats
 -> Result<(), TestError> {
     let (fixture, client, project) = start().await?;
     let owner: Identity = serde_json::from_value(fixture.actor.clone())?;
+    // The subject stays fixed while holder identities and admitted writes vary.
+    let discussion_subject = fixture.discussion_subject(&project).await?;
     let mut expected = Vec::new();
     let mut write_latencies = Vec::new();
     let creation_started = std::time::Instant::now();
@@ -130,7 +132,7 @@ async fn control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats
         let actor = session(format!("{prefix}{}", "\u{1}".repeat(4_096 - prefix.len())))?;
         let post_id = PostId::generate();
         let write_started = std::time::Instant::now();
-        accepted(&client.thread_create(request(&actor,json!({"postId":post_id,"projectId":project,"about":fixture.discussion_subject(&project).await?,"text":"Root","references":[],"addressees":[],"role":"orchestrator","watch":false}))?).await?);
+        accepted(&client.thread_create(request(&actor,json!({"postId":post_id,"projectId":project,"about":discussion_subject,"text":"Root","references":[],"addressees":[],"role":"orchestrator","watch":false}))?).await?);
         write_latencies.push(write_started.elapsed().as_micros());
         expected.push(ThreadId::from(post_id));
     }

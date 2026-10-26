@@ -11,7 +11,7 @@ use std::{
     time::Duration,
 };
 use tokio::{
-    io::{AsyncBufReadExt, AsyncReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::{Child, ChildStdout, Command},
 };
 
@@ -153,7 +153,7 @@ impl BoardHost {
         }
         command
             .env_remove("CODEX_ROUTER_HOST_INHERITED_LOCK")
-            .stdin(Stdio::null())
+            .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::from(stderr))
             .kill_on_drop(true);
@@ -195,6 +195,35 @@ impl BoardHost {
         require_listener_identity(&ready.mcp_url, &manifest.mcp.url)?;
         self.mcp_url = ready.mcp_url;
         Ok(())
+    }
+
+    #[allow(dead_code)] // Only takeover targets need the private replay observation.
+    pub async fn local_cancel_delivery_recorded(
+        &mut self,
+        cancel: fleet_sync_protocol::ItemId,
+    ) -> FixtureResult<bool> {
+        let mut request = serde_json::to_vec(&json!({"cancel": cancel}))?;
+        request.push(b'\n');
+        self.child
+            .stdin
+            .as_mut()
+            .ok_or("owned Host observation input is absent")?
+            .write_all(&request)
+            .await?;
+        let mut line = String::new();
+        if self.output.read_line(&mut line).await? == 0 {
+            return Err("owned Host exited before Local cancel observation".into());
+        }
+        let reply: Value = serde_json::from_str(&line)?;
+        if reply.get("kind") != Some(&json!("localCancelDelivery"))
+            || reply.get("cancel") != Some(&json!(cancel))
+        {
+            return Err("owned Host Local cancel observation identity mismatch".into());
+        }
+        reply
+            .get("recorded")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| "owned Host omitted Local cancel observation".into())
     }
 
     pub async fn cli_output(&self, arguments: &[&OsStr]) -> FixtureResult<std::process::Output> {
@@ -359,6 +388,8 @@ impl BoardHost {
     }
 
     pub async fn stop(mut self) -> FixtureResult {
+        // Release the debug example's stdin reader before joining its runtime.
+        drop(self.child.stdin.take());
         if self.child.try_wait()?.is_none() {
             let pid = self.child.id().ok_or("owned Host PID absent before stop")?;
             let mut signal = Command::new("kill");
@@ -398,7 +429,14 @@ pub(super) fn require_listener_identity(ready_url: &str, manifest_url: &str) -> 
         || url.scheme() != "http"
         || matches!(url.port(), None | Some(8787 | 8788))
     {
-        return Err("Host ready/manifest/listener identity mismatch".into());
+        return Err(format!(
+            "Host ready/manifest/listener identity mismatch: same_url={}, http={}, loopback={}, port={:?}",
+            ready_url == manifest_url,
+            url.scheme() == "http",
+            url.host_str() == Some("127.0.0.1"),
+            url.port()
+        )
+        .into());
     }
     Ok(())
 }
