@@ -43,15 +43,17 @@ Falsifiers that would reopen the choice:
 
 ```text
 collaboration-service        L4 composition: builds the Router's collaboration graph at startup
-  │  owns: CollaborationComposition (what ServiceIdentity's builders become),
-  │        project_admission, notification_publisher, project_commit_publication, manifest_publication
+  │  owns: CollaborationComposition (what ServiceIdentity's builders become): constructs every
+  │        component with its own handles, returns what the Host and MCP server need; never passed down
   ▼
 collaboration-application    L3 the API surface the MCP server and Host call
   │  owns: collaboration_application (the operations), board_views,
   │        central_project_reads, project_read_handle, the read projections
   ▼
 collaboration-runtime        L2 workers, delivery routes, provider integration
-  │  owns: mail_* / push_* delivery, schedule / run / summary / wake workers,
+  │  owns: project_admission, notification_publisher, project_commit_publication, manifest_publication
+  │        (services the application CALLS, so they sit below it),
+  │        mail_* / push_* delivery, schedule / run / summary / wake workers,
   │        provider_* / acp_* / codex_* / native_* / app_server_* routes, interaction broker,
   │        fleet_client, project_claim*, and any projection a runtime writes or reads
   ▼
@@ -69,7 +71,7 @@ Allowed edges: down only (L4→L3→L2→L1/L0, and skipping is allowed). Forbid
 | Concept | Owner | Home | Shape across boundaries | Kind |
 |---|---|---|---|---|
 | Router identity (service id, epoch, machine identity, installation peer, endpoints) | collaboration-contracts | `RouterIdentity` (new; the identity fields of today's `ServiceIdentity`) | Plain value, `Clone`; no collaborators inside | derived at startup |
-| Runtime collaborators (mail runtime, admission, publisher, workers, stores, hubs, broker, journal) | collaboration-service | `CollaborationComposition` (modified; today's `ServiceIdentity` builders) | Not passed downward. Each component receives only the handles it uses, through its constructor. | composed at startup |
+| Runtime collaborators (mail runtime, admission, publisher, workers, stores, hubs, broker, journal) | collaboration-service | `CollaborationComposition` (modified; today's `ServiceIdentity` builders) | Never passed downward. Each component, and each application operation family (`BoardOperations`, `MessageOperations`, `SessionOperations`…), receives only the handles it uses as constructor arguments. No aggregate "services" struct: that would be a smaller locator. | composed at startup |
 | Upward call: mail runtime applying remote wakes | collaboration-runtime defines; collaboration-application implements | trait `RemoteWakeControl` (new) in runtime, injected by composition | `async fn apply(&self, request: RemoteWakeRequest) -> RemoteWakeResult` (existing request and result types) | interface |
 | Shared failures and budgets (`NativeSessionFailure*`, `ProviderInventoryFailure*`, `ScheduleOperationFailure`, `CollaborationRejection`, `MessageFailureKind`, `WakeWaitFailure`, `ResultByteBudget`) | collaboration-contracts | existing types, moved | unchanged shapes | type |
 | In-crate module cycle baseline | workspace | `architecture/module-cycle-baseline.json` (new) | `{ "<package>": [[module, …], …] }`: sorted SCCs of top-level modules | persisted (repo file) |
@@ -101,6 +103,27 @@ Not adopted, with reasons:
 - `wildcard_enum_match_arm` (531): needed for non-exhaustive foreign enums; a follow-up for our own domain enums;
 - `too_many_lines`: needs a measured threshold;
 - `needless_pass_by_value`, `future_not_send`, `cognitive_complexity`: noisy.
+
+## Principles applied (read in full, 2026-10-26)
+
+- **justify-the-complexity:**
+  - "a home-grown container or service locator where passing dependencies as arguments would do" is today's `ServiceIdentity`, and the defect this design removes.
+  - "a constructor argument beats a home-grown dependency-injection container", so the injection is plain constructor arguments, with no framework and no services struct.
+  - Cut over completely: every caller is migrated in the same change, and there is no re-export shim from `collaboration-service`. The caller inventory is the field map: 30 `pub(crate)` fields, with each reader listed by file.
+- **separate-the-concerns:**
+  - "Hand each part only what it uses": constructor arguments come from the field map.
+  - "Inject at real seams": a trait exists only where a lower crate must call a higher one (`RemoteWakeControl`, plus admission's read of board views if it isn't a pure read that can move down). Downward collaborators with one implementation stay concrete types, never traits made for symmetry.
+  - Interfaces are defined from the consumer's side.
+- **one-owner-per-truth:**
+  - The Router identity is owned by `RouterIdentity` in contracts.
+  - Wiring is owned by composition.
+  - Each collaborator is owned by the crate that implements it.
+  - No component writes another's state through a shared bag.
+- **types-are-communication:** `RouterIdentity` keeps its typed ids. Moved failure types keep their closed variants, and nothing becomes a string.
+- **domain-rust:**
+  - New modules get two- or three-word responsibility names, never `types.rs`, `util.rs` or `common.rs`. The contracts crate's modules are named for their contract (`delivery_contract`, `router_identity`…).
+  - Errors stay `thiserror` enums at each crate's edge.
+  - No production `unwrap`.
 
 ## Failure and behaviour
 
