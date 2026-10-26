@@ -316,9 +316,9 @@ jobs:
           cargo build --locked -p board-legacy-upgrade --bin codex-router-board-upgrade
       - name: Build E2E test binaries
         run: |
-          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --color never --status-level all --final-status-level all --no-run
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
