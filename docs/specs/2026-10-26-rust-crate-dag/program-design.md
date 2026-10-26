@@ -1,6 +1,6 @@
 # Program Design: crates form the dependency DAG, a ratchet guards the inside, lints set the baseline
 
-Date: 2026-10-26. Author: 🦁 Fleet Lead. Mechanical structural change; the owner set the requirements directly (below), so there is no separate Requirements or Specification document.
+Date: 2026-10-26 (revised the same night after the independent design review and the Advisor). Author: 🦁 Fleet Lead. Mechanical structural change; the owner set the requirements directly (below), so there is no separate Requirements or Specification document.
 
 ## What the owner decided (the requirements this design realizes)
 
@@ -24,58 +24,82 @@ Date: 2026-10-26. Author: 🦁 Fleet Lead. Mechanical structural change; the own
   - `cargo modules --acyclic` checks items, not modules, and ignores filters.
   - arch-lint sees body paths but drops re-export edges and ignores `cfg`.
 
-## Alternatives and selection
+## Alternatives and selection (revised after the design review and the Advisor, 2026-10-26)
 
 | Option | Gains | Costs | Verdict |
 |---|---|---|---|
-| A. In-crate checker only | Small change | Cargo enforces nothing; the checker has measured blind spots (body and `super::` paths) | Rejected (U2) |
-| B. Split into many small crates | Maximum compiler enforcement | Large `pub` surface; more cross-crate generic copies (the compile-time doc, Finding 5); churn | Rejected (U2: "big bucket crates") |
-| **C. Four bucket crates for `collaboration-service`, plus a ratchet test for in-crate cycles everywhere, plus a lint baseline** | The compiler enforces the main layering. The ratchet stops new cycles anywhere. Existing cycles shrink over time. | Dissolving the service locator is real refactoring across about 25 files | **Selected** |
+| A. In-crate checker only | Small change | Cargo enforces nothing; the checker has measured blind spots | Rejected (U2) |
+| B. Many small crates | Maximum compiler enforcement | Large `pub` surface; more cross-crate generic copies; churn | Rejected (U2: big buckets) |
+| C1. Four crates, including a separate composition crate | An extra boundary | The review found it puts live policy (admission, publication) above its callers, so it can't compile as a DAG. The composition role already lives in the Host's `startup_composition`, so a fourth crate is a pass-through layer (justify-the-complexity). | Rejected |
+| **C2. Three crates: `collaboration-contracts` ← `collaboration-runtime` ← `collaboration-service` (the application), with composition staying in `codex-router-host`, plus the ratchet and the lints** | The compiler enforces the main layering, with fewer moved APIs. The application crate keeps its name, so the import churn for the Host, MCP and CLI is small. | Admission, publication, subscriptions and mail coordination stay together in the application crate, and the ratchet and module discipline guard inside it | **Selected** |
 
-Falsifiers that would reopen the choice:
-- The four buckets don't compile without an upward edge the plan can't invert. Bring it back with the edge.
-- The ratchet test's runtime exceeds 3 minutes in CI.
-- A bucket crate's own release compile time grows by more than 20%, measured with Cargo `--timings` against today's.
+Falsifiers:
+- A placed module needs an upward edge beyond the 3 handled in `module-placement.md`.
+- A family constructor can't be written without passing a services bag.
+- The ratchet takes more than 3 minutes in CI.
 
 ## Target structure
 
-### Bucket crates (replacing today's single `collaboration-service`)
-
 ```text
-collaboration-service        L4 composition: builds the Router's collaboration graph at startup
-  │  owns: CollaborationComposition (what ServiceIdentity's builders become): constructs every
-  │        component with its own handles, returns what the Host and MCP server need; never passed down
+codex-router-host            COMPOSITION (existing startup_composition.rs): builds every component once and
+  │                          injects handles. The only place that sees everything.
   ▼
-collaboration-application    L3 the API surface the MCP server and Host call
-  │  owns: collaboration_application (the operations), board_views,
-  │        central_project_reads, project_read_handle, the read projections
+collaboration-service        APPLICATION: the operations the MCP server and Host call, and the policies they decide.
+  │  owns: collaboration_application/* operation families, board_views, project_admission, notification_publisher,
+  │        project_commit_publication, subscription_delivery (hoisted out of service_identity), mail coordination
+  │        (mail_delivery_runtime, mail_push_delivery, mail_push_outcome), session and provider inventories,
+  │        schedule preparation and activation, push-record resolution and delivery, public projections
   ▼
-collaboration-runtime        L2 workers, delivery routes, provider integration
-  │  owns: project_admission, notification_publisher, project_commit_publication, manifest_publication
-  │        (services the application CALLS, so they sit below it),
-  │        mail_* / push_* delivery, schedule / run / summary / wake workers,
-  │        provider_* / acp_* / codex_* / native_* / app_server_* routes, interaction broker,
-  │        fleet_client, project_claim*, and any projection a runtime writes or reads
+collaboration-runtime        EXECUTION: resource-backed capabilities and the workers that own them.
+  │  owns: the project store family (registry, paths, claim store, read handles, central reads), endpoint_directory,
+  │        fleet_client, provider and ACP/app-server/native adapters and stores, delivery routing, workers (schedule
+  │        timing, scheduled runs, summary, wake timing, retention, push handoff), mail sessions and persistence
+  │        hooks, persisted receipt codecs, service identity storage
   ▼
-collaboration-contracts      L0–1 shared vocabulary and stores
-     owns: RouterIdentity (the identity half of ServiceIdentity), router_delivery_types,
-           session_delivery_contract, native_delivery_result, scheduled_run_contract,
-           machine_identity, message_effect_state, stored_*_receipt, endpoint_directory,
-           project_store_registry/paths, the failure and result-budget types moved out of the application
+collaboration-contracts      VOCABULARY and PORTS: values and capability interfaces shared across the layers. No mutable owners.
+     owns: RouterIdentity, machine_identity, session_delivery_contract, native_route_claim, native_delivery_result,
+           router_delivery_types, scheduled_run_contract, session_command_port, provider_conversation_backend (port),
+           project_claim and project_registration (Host-implemented ports), the project_replication_position port
 ```
 
-Allowed edges: down only (L4→L3→L2→L1/L0, and skipping is allowed). Forbidden: anything upward. **Enforcement: Cargo**, because a crate cannot depend on a crate that depends on it. Existing external dependents (`codex-router-host`, `codex-router-cli`, `collaboration-mcp`, `board-legacy-upgrade`, `board-central-test-support`) import each item from the crate that owns it. This is a hard cutover: no re-export shim from `collaboration-service`.
+The full per-module placement for all 117 modules is in `module-placement.md`. Cargo enforces: contracts depends on neither runtime nor application; runtime doesn't depend on the application; nothing in the collaboration crates depends on the Host.
+
+## Dependency injection (justify-the-complexity, separate-the-concerns)
+
+- **`RouterIdentity`** (contracts) holds only immutable identity facts: service id, service epoch, installation peer and machine identity. The live `EndpointDirectory` is shared mutable state, a separate runtime handle that's injected where it's used.
+- **`ServiceIdentity` is deleted.** The Host's `startup_composition` constructs each component and each application operation family with exactly the handles it uses, as constructor arguments. There's no services struct and no composition object passed down. A component with one behaviour and several inputs (for example `SubscriptionDeliveryServiceProps`) is fine. The rule is: no exposed bag from which a consumer picks unrelated services.
+- **Large families are split into behavioural components, not bags.** Board and Sessions honestly need about ten inputs. Board's session-context reader receives a session-inspection component, not the session runtime's raw inputs.
+- Per-family inputs, from the review's source reading:
+  - Board needs admission, claim, publication/subscription, presence/clock, the interaction store, and the session-context component.
+  - ViewSnapshot needs the registry and replication.
+  - Message needs the interaction store, mail coordination, the display-name cache, identity, and the registry for activity expansion.
+  - Conversation needs the provider conversation backend, the provider operation store, the conversation recorder, the endpoint directory and identity.
+  - Observation needs the session event hub, the endpoint directory and identity.
+  - Session and Codex inventory need the endpoint directory, the native control backend and gate, the broker, the display-name cache and the lifecycle journal.
+  - Provider inventory needs the endpoint directory, the provider operation store, the event hub, the display-name cache, identity, and the Claude readers for the native catalogue only.
+  - Automation needs the automation store, configuration handle and backend, session message delivery, the interaction store, scheduled-run execution, an optional native control backend and identity.
+  - Wake needs identity, the automation store and the ONE shared wait semaphore; outbound remote routing additionally gets mail coordination.
+  - Interaction needs the broker.
+  - Journal needs the lifecycle store, the endpoint directory and identity.
+- **Startup contracts that today live as hidden builder side effects must be kept, and tested where they aren't already:**
+  - mail attachment checks physical `InteractionStore` identity with `Arc::ptr_eq` (`mail_delivery_runtime.rs:281`), and attaches the same wake store, permits, readiness and replication (`service_identity.rs:48–70`);
+  - follow admission holds `Weak` handles to admission and the publisher (`service_identity.rs:141`);
+  - the approval broker wiring installs display names and push context on the physical interaction store (`service_identity.rs:331`);
+  - optional and degraded subsystems stay optional; an `Option` must not turn into a new mandatory dependency.
+  Nothing creates a second semaphore, cache or store per family.
+- **No new traits.** `RemoteWakeControl` is dropped: mail coordination and wake operations share the application crate, so the existing call stays a direct call, and the review's deletion test passes. `CollaborationRejection` and its foreign-type implementations stay in the application; only data types lower layers truly need move down.
 
 ### Binding table
 
-| Concept | Owner | Home | Shape across boundaries | Kind |
+| Concept | Owner | Home | Shape | Kind |
 |---|---|---|---|---|
-| Router identity (service id, epoch, machine identity, installation peer, endpoints) | collaboration-contracts | `RouterIdentity` (new; the identity fields of today's `ServiceIdentity`) | Plain value, `Clone`; no collaborators inside | derived at startup |
-| Runtime collaborators (mail runtime, admission, publisher, workers, stores, hubs, broker, journal) | collaboration-service | `CollaborationComposition` (modified; today's `ServiceIdentity` builders) | Never passed downward. Each component, and each application operation family (`BoardOperations`, `MessageOperations`, `SessionOperations`…), receives only the handles it uses as constructor arguments. No aggregate "services" struct: that would be a smaller locator. | composed at startup |
-| Upward call: mail runtime applying remote wakes | collaboration-runtime defines; collaboration-application implements | trait `RemoteWakeControl` (new) in runtime, injected by composition | `async fn apply(&self, request: RemoteWakeRequest) -> RemoteWakeResult` (existing request and result types) | interface |
-| Shared failures and budgets (`NativeSessionFailure*`, `ProviderInventoryFailure*`, `ScheduleOperationFailure`, `CollaborationRejection`, `MessageFailureKind`, `WakeWaitFailure`, `ResultByteBudget`) | collaboration-contracts | existing types, moved | unchanged shapes | type |
-| In-crate module cycle baseline | workspace | `architecture/module-cycle-baseline.json` (new) | `{ "<package>": [[module, …], …] }`: sorted SCCs of top-level modules | persisted (repo file) |
-| Lint baseline | workspace | `[workspace.lints.clippy]` in `Cargo.toml` plus `clippy.toml` | lint = "deny"; thresholds | config |
+| Router identity | collaboration-contracts | `RouterIdentity` (new, `router_identity.rs`) | Validated values; `Clone` | derived at startup |
+| Live endpoint inventory | collaboration-runtime | `EndpointDirectory` (existing) | Shared handle, injected separately | live state |
+| Wiring | codex-router-host | `startup_composition.rs` (existing, extended) | Constructs and injects; never passed down | composed at startup |
+| Operation families | collaboration-service | the existing `*Operations` types | Each constructed with its own handles | components |
+| Module-cycle baseline | workspace | `architecture/module-cycle-baseline.json` | Per package: SCC module sets plus their concrete module edges | repo file |
+| Crate layer policy | workspace | a declared table in the `workspace-architecture-check` test | allowed normal and build edges between the collaboration crates and the Host | test |
+| Lint baseline | workspace | `[workspace.lints.clippy]` plus `clippy.toml` | deny | config |
 
 ### The ratchet test (U3)
 
