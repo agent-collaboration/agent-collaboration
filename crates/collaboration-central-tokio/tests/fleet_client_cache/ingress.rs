@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 pub enum ReadPoint {
     SnapshotContinuation,
     FeedAfter(u64),
+    FeedReplyThrough(u64),
 }
 struct WaitingRead {
     point: ReadPoint,
@@ -46,10 +47,23 @@ impl Controls {
         self.malformed_archive
             .store(true, std::sync::atomic::Ordering::SeqCst);
     }
-    fn after_response(&self, bytes: &[u8]) -> TestResult<Option<Vec<u8>>> {
+    async fn after_response(&self, bytes: &[u8]) -> TestResult<Option<Vec<u8>>> {
         use board_sync_protocol::{BoardConsumerAnswer, BoardPayload};
         use fleet_sync_protocol::{OperationAnswer, ServerFrame};
         let answer: ServerFrame<BoardConsumerProtocol> = serde_json::from_slice(bytes)?;
+        if let ServerFrame::Answer {
+            body:
+                OperationAnswer::Consumer(BoardConsumerAnswer::Read(
+                    board_sync_protocol::BoardReadPage::FleetFeed(
+                        board_sync_protocol::FleetFeedRead::Page { through, .. },
+                    ),
+                )),
+            ..
+        } = &answer
+        {
+            self.wait_at(Some(ReadPoint::FeedReplyThrough(through.get())))
+                .await?;
+        }
         if let ServerFrame::Answer {
             frame,
             body: OperationAnswer::Consumer(BoardConsumerAnswer::ArchiveSeen(_)),
@@ -102,6 +116,9 @@ impl Controls {
             } => Some(ReadPoint::FeedAfter(position.get())),
             _ => None,
         };
+        self.wait_at(point).await
+    }
+    async fn wait_at(&self, point: Option<ReadPoint>) -> TestResult {
         let waiting = {
             let mut reads = self.reads.lock().await;
             if reads
@@ -233,7 +250,7 @@ async fn bridge(mut downstream: axum::extract::ws::WebSocket, state: EdgeState) 
                     Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
                     _ => break,
                 };
-                let bytes = state.controls.after_response(&bytes)?.map_or(bytes, Into::into);
+                let bytes = state.controls.after_response(&bytes).await?.map_or(bytes, Into::into);
                 downstream.send(EdgeMessage::Binary(bytes)).await?;
             }
         }

@@ -12,7 +12,13 @@ use message_board_storage::{
     RouterLocalStorageError,
 };
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
 use tokio::sync::Mutex;
 
 #[path = "fleet_client/cache_refresh.rs"]
@@ -51,6 +57,7 @@ pub struct FleetClient {
     outbox: FleetOutbox,
     cache: FleetCache,
     admission_mutex: Mutex<()>,
+    pending_resync: AtomicBool,
     registration: Arc<dyn crate::ProjectRegistration>,
 }
 
@@ -106,6 +113,7 @@ impl FleetClient {
             outbox,
             cache,
             admission_mutex: Mutex::new(()),
+            pending_resync: AtomicBool::new(false),
             registration,
         })
     }
@@ -174,7 +182,16 @@ impl FleetClient {
         request: &FleetRequest,
         _origin: &message_board::ActorOrigin,
     ) -> Result<FleetReply, FleetClientError> {
-        let _guard = self.admission_mutex.lock().await;
+        let guard = self.admission_mutex.lock().await;
+        let result = self.submit_admitted(request).await;
+        drop(guard);
+        self.finish_submission(result).await
+    }
+
+    async fn submit_admitted(
+        &self,
+        request: &FleetRequest,
+    ) -> Result<FleetReply, FleetClientError> {
         let queued = match self.outbox.enqueue(request).await {
             Ok(queued) => queued,
             Err(RouterLocalStorageError::ConflictingRequest) => {
@@ -204,7 +221,17 @@ impl FleetClient {
         directory: &FleetRequest,
         _origin: &message_board::ActorOrigin,
     ) -> Result<FleetReply, FleetClientError> {
-        let _guard = self.admission_mutex.lock().await;
+        let guard = self.admission_mutex.lock().await;
+        let result = self.submit_creation_admitted(input, directory).await;
+        drop(guard);
+        self.finish_submission(result).await
+    }
+
+    async fn submit_creation_admitted(
+        &self,
+        input: &message_board::ProjectCreateRequest,
+        directory: &FleetRequest,
+    ) -> Result<FleetReply, FleetClientError> {
         let queued = match self.outbox.enqueue_creation(directory, input).await {
             Ok(queued) => queued,
             Err(RouterLocalStorageError::ConflictingRequest) => {
@@ -228,6 +255,17 @@ impl FleetClient {
         Ok(reply)
     }
 
+    async fn finish_submission(
+        &self,
+        result: Result<FleetReply, FleetClientError>,
+    ) -> Result<FleetReply, FleetClientError> {
+        // A deferred sync must not replace the submitted request's own result.
+        if let Err(error) = self.synchronize_pending().await {
+            tracing::warn!(%error, "Fleet synchronization after submission failed");
+        }
+        result
+    }
+
     pub async fn creation_input(
         &self,
         request: &RequestId,
@@ -244,13 +282,31 @@ impl FleetClient {
     }
 
     /// Welcome, feed hints and the connected refresh timer all enter this owner.
-    /// Concurrent reactions coalesce into the synchronization already holding
-    /// admission. Its Fleet read is newer than notices pruned after seven days;
-    /// the connected refresh timer retries if that synchronization fails.
+    /// Concurrent triggers require a fresh run after the current one, since its
+    /// Fleet read can predate the notice. The connected timer retries failures.
     pub async fn synchronize(&self) -> Result<(), FleetClientError> {
-        let Ok(_guard) = self.admission_mutex.try_lock() else {
-            return Ok(());
-        };
+        self.pending_resync.store(true, Ordering::SeqCst);
+        self.synchronize_pending().await
+    }
+
+    async fn synchronize_pending(&self) -> Result<(), FleetClientError> {
+        loop {
+            let Ok(guard) = self.admission_mutex.try_lock() else {
+                return Ok(());
+            };
+            while self.pending_resync.swap(false, Ordering::SeqCst) {
+                self.synchronize_admitted().await?;
+            }
+            drop(guard);
+            // A trigger can set pending after the last swap but fail admission
+            // before unlock. Recheck after unlock so it always has a holder.
+            if !self.pending_resync.load(Ordering::SeqCst) {
+                return Ok(());
+            }
+        }
+    }
+
+    async fn synchronize_admitted(&self) -> Result<(), FleetClientError> {
         // Durable Accepted decisions can resume without a remote metadata read.
         self.recover_project_registrations().await?;
         for queued in self.outbox.pending().await? {

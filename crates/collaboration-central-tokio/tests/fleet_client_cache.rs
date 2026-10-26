@@ -33,6 +33,8 @@ mod ingress;
 mod outbox;
 #[path = "fleet_client_cache/rebuild.rs"]
 mod rebuild;
+#[path = "fleet_client_cache/resync.rs"]
+mod resync;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(20);
 const READER_SERVICE: &str = "550e8400-e29b-41d4-a716-446655440ca1";
