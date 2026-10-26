@@ -82,6 +82,13 @@ impl SecondHost {
             .ok_or_else(|| "second Host is stopped".into())
     }
 
+    #[allow(dead_code)] // Private observation requests are needed only by takeover targets.
+    pub fn host_mut(&mut self) -> FixtureResult<&mut BoardHost> {
+        self.host
+            .as_mut()
+            .ok_or_else(|| "second Host is stopped".into())
+    }
+
     pub async fn stop_host(&mut self) -> FixtureResult {
         if let Some(host) = self.host.take() {
             host.stop().await?;

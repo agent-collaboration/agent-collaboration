@@ -10,9 +10,11 @@ use super::{
     takeover_recipients::{self as recipients, Recipients},
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
-use board_sync_protocol::BoardDeliveryTypes;
+use board_sync_protocol::{BoardAnnotation, BoardDeliveryTypes};
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{DeliveryItem, ReplicationPosition};
+use fleet_sync_protocol::{DeliveryItem, ReplicationPosition, ReplicationRequest};
+use fleet_sync_writer::CapturedTransaction;
+use message_board_storage::CapturedProjectChanges;
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy)]
@@ -140,7 +142,7 @@ async fn acknowledged_cut(
 ) -> FixtureResult<Option<DeliveryItem<BoardDeliveryTypes>>> {
     Ok(match prefix {
         ReplicatedPrefix::Neither => {
-            controls::held(fixture, controls::connection(fixture)?).await?;
+            hold_post_capture(fixture, range).await?;
             let observed = work_view(fixture.host()?, &fixture.project).await?;
             assert_eq!(
                 observed.get("replicatedThrough"),
@@ -186,6 +188,51 @@ async fn acknowledged_cut(
             Some(original)
         }
     })
+}
+
+async fn hold_post_capture(fixture: &BoardFixture, range: &Value) -> FixtureResult {
+    let cursor: message_board::FeedCursor = serde_json::from_value(at(range, "/through")?.clone())?;
+    tokio::time::timeout(BOUND, async {
+        loop {
+            let held = controls::held(fixture, controls::connection(fixture)?).await?;
+            let request: ReplicationRequest<BoardAnnotation> =
+                serde_json::from_value(at(&held, "/request/request")?.clone())?;
+            let ReplicationRequest::Piece(piece) = request else {
+                return Err("post capture gate requires a real Copy Piece".into());
+            };
+            for transaction in &piece.transactions {
+                let changes = CapturedProjectChanges::decode(&CapturedTransaction {
+                    position: ReplicationPosition {
+                        epoch: piece.epoch,
+                        sequence: transaction.commit_id(),
+                    },
+                    transaction,
+                })?;
+                if changes
+                    .first_feed_position
+                    .is_some_and(|first| first <= cursor.position)
+                    && changes.latest_feed.is_some_and(|latest| {
+                        latest.cursor.epoch == cursor.epoch
+                            && latest.cursor.position >= cursor.position
+                    })
+                {
+                    // The writer commits capture_feed_marks before transport.
+                    // Keep this Piece held; assert_copy_cut reads the real mark
+                    // and unchanged Copy ACK after the owning Host is joined.
+                    return Ok(());
+                }
+            }
+            // A settled feed can still leave an auxiliary WAL capture in flight.
+            // Release only that earlier Piece, atomically holding the next one.
+            controls::advance_hold(
+                fixture,
+                controls::connection(fixture)?,
+                controls::copy(fixture)?,
+            )
+            .await?;
+        }
+    })
+    .await?
 }
 
 async fn assert_copy_cut(

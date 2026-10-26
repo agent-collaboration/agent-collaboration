@@ -318,13 +318,13 @@ jobs:
         run: |
           cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
           cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --color never --status-level all --final-status-level all --no-run
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test fleet_client_cache --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --color never --status-level all --final-status-level all --no-run
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
-          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test fleet_client_cache --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e --test local_mail_e2e --test board_takeover_e2e --test messaging_rules_e2e --test installation_directory_e2e --test mail_reconcile_e2e --test mail_retirement_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           cargo nextest run --locked --profile ci -p board-legacy-upgrade --test upgrade_binary_e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test forwarded_posts --test forwarding_real_timer --test mailbox_rules --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1

@@ -476,6 +476,10 @@ impl TestFleet {
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         self.fleet_reads.freeze(snapshot).await
     }
+
+    pub async fn hold_next_fleet_read(&self) -> (oneshot::Receiver<()>, oneshot::Sender<()>) {
+        self.fleet_reads.hold_next_reply().await
+    }
     pub async fn install_delivery_requests(
         &self,
         requests: SessionRequests<BoardConsumerProtocol>,

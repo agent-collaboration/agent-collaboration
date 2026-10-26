@@ -17,6 +17,8 @@ use tokio_util::sync::CancellationToken;
 pub enum ReadPoint {
     SnapshotContinuation,
     FeedAfter(u64),
+    FeedReplyThrough(u64),
+    EmptyFeedReply,
 }
 struct WaitingRead {
     point: ReadPoint,
@@ -40,16 +42,40 @@ impl HeldRead {
     pub fn release(self) -> TestResult {
         self.release.send(()).map_err(|_| "held read ended".into())
     }
+    pub fn is_held(&self) -> bool {
+        !self.release.is_closed()
+    }
 }
 impl Controls {
     pub fn corrupt_next_archive_outcome(&self) {
         self.malformed_archive
             .store(true, std::sync::atomic::Ordering::SeqCst);
     }
-    fn after_response(&self, bytes: &[u8]) -> TestResult<Option<Vec<u8>>> {
+    async fn after_response(&self, bytes: &[u8]) -> TestResult<Option<Vec<u8>>> {
         use board_sync_protocol::{BoardConsumerAnswer, BoardPayload};
         use fleet_sync_protocol::{OperationAnswer, ServerFrame};
         let answer: ServerFrame<BoardConsumerProtocol> = serde_json::from_slice(bytes)?;
+        if let ServerFrame::Answer {
+            body:
+                OperationAnswer::Consumer(BoardConsumerAnswer::Read(
+                    board_sync_protocol::BoardReadPage::FleetFeed(
+                        board_sync_protocol::FleetFeedRead::Page {
+                            records,
+                            through,
+                            head,
+                            ..
+                        },
+                    ),
+                )),
+            ..
+        } = &answer
+        {
+            let mut points = vec![ReadPoint::FeedReplyThrough(through.get())];
+            if records.is_empty() && through == head {
+                points.push(ReadPoint::EmptyFeedReply);
+            }
+            self.wait_at_matching(&points).await?;
+        }
         if let ServerFrame::Answer {
             frame,
             body: OperationAnswer::Consumer(BoardConsumerAnswer::ArchiveSeen(_)),
@@ -102,11 +128,17 @@ impl Controls {
             } => Some(ReadPoint::FeedAfter(position.get())),
             _ => None,
         };
+        if let Some(point) = point {
+            self.wait_at_matching(&[point]).await?;
+        }
+        Ok(())
+    }
+    async fn wait_at_matching(&self, points: &[ReadPoint]) -> TestResult {
         let waiting = {
             let mut reads = self.reads.lock().await;
             if reads
                 .front()
-                .is_some_and(|read| Some(&read.point) == point.as_ref())
+                .is_some_and(|read| points.contains(&read.point))
             {
                 reads.pop_front()
             } else {
@@ -233,7 +265,7 @@ async fn bridge(mut downstream: axum::extract::ws::WebSocket, state: EdgeState) 
                     Some(Ok(Message::Ping(_) | Message::Pong(_))) => continue,
                     _ => break,
                 };
-                let bytes = state.controls.after_response(&bytes)?.map_or(bytes, Into::into);
+                let bytes = state.controls.after_response(&bytes).await?.map_or(bytes, Into::into);
                 downstream.send(EdgeMessage::Binary(bytes)).await?;
             }
         }
