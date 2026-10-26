@@ -54,13 +54,19 @@ pub(crate) struct EnrollArguments {
     pub endpoint: String,
     #[arg(long)]
     pub label: String,
-    #[arg(long)]
-    pub access_client_id: String,
-    #[arg(long)]
-    pub access_client_secret_file: PathBuf,
+    #[arg(long, required_unless_present_any = ["self_hosted_root", "enrollment_credential_file"], conflicts_with_all = ["self_hosted_root", "enrollment_credential_file"])]
+    pub access_client_id: Option<String>,
+    #[arg(long, required_unless_present_any = ["self_hosted_root", "enrollment_credential_file"], conflicts_with_all = ["self_hosted_root", "enrollment_credential_file"])]
+    pub access_client_secret_file: Option<PathBuf>,
     /// RFC3339 expiration matching the Access service token. No default and no renewal.
+    #[arg(long, required_unless_present_any = ["self_hosted_root", "enrollment_credential_file"], conflicts_with_all = ["self_hosted_root", "enrollment_credential_file"])]
+    pub expires_at: Option<String>,
+    /// Central root on this machine; credential is read through its protected secret store.
+    #[arg(long, conflicts_with = "enrollment_credential_file")]
+    pub self_hosted_root: Option<PathBuf>,
+    /// Private handoff from `central mint`; consumed and removed before the request.
     #[arg(long)]
-    pub expires_at: String,
+    pub enrollment_credential_file: Option<PathBuf>,
     /// Environment variable holding the owner's Access token; never a command or token value.
     #[arg(long, default_value = "CODEX_ROUTER_FLEET_OWNER_TOKEN")]
     pub owner_token_env: String,

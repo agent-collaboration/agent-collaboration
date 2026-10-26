@@ -17,6 +17,17 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::sync::Arc;
 
+/// Public issuer material is mounted separately from the authenticated routes.
+pub fn central_jwks_router(keys: crate::AccessJwks) -> Router {
+    Router::new().route(
+        "/.well-known/jwks.json",
+        get(move || {
+            let keys = keys.clone();
+            async move { ([("cache-control", "public, max-age=3600")], Json(keys)) }
+        }),
+    )
+}
+
 pub fn central_router<Platform: CentralPlatform>(
     application: CentralApplication<Platform>,
 ) -> Router {

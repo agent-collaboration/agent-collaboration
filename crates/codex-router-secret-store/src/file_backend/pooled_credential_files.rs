@@ -357,6 +357,7 @@ impl FileSecretStore {
 
 fn require_credential_key(key: &SecretKey) -> Result<(), SecretStoreError> {
     if crate::fleet_secret_key::FleetSecretKey::parse(key)?.is_some()
+        || crate::central_credentials::CentralSecretKind::parse(key)?.is_some()
         || has_credential_bundle_marker(key)
     {
         return Ok(());

@@ -35,6 +35,12 @@ pub struct ImportCommand {
     dry_run: bool,
     #[arg(long, required_unless_present = "dry_run")]
     central_url: Option<reqwest::Url>,
+    /// Read the short-lived owner credential minted on this machine.
+    #[arg(long, conflicts_with = "owner_credential_file")]
+    self_hosted_root: Option<PathBuf>,
+    /// Private owner credential handoff; consumed and removed before publication.
+    #[arg(long)]
+    owner_credential_file: Option<PathBuf>,
 }
 
 #[derive(Serialize)]
@@ -154,7 +160,12 @@ impl ImportCommand {
             .central_url
             .clone()
             .ok_or_else(|| io::Error::other("--central-url is required for publication"))?;
-        let publisher = crate::import_access::publisher(endpoint).await?;
+        let publisher = crate::import_access::publisher(
+            endpoint,
+            self.self_hosted_root.clone(),
+            self.owner_credential_file.clone(),
+        )
+        .await?;
         Ok(publisher.publish(prepared).await?)
     }
 

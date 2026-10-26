@@ -39,6 +39,10 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 codex-router-state = { path = "../codex-router-state", version = "0.1.4" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.96" }
 collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.96" }
+collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.102" }
+fleet-sync-protocol.workspace = true
+fleet-sync-lease.workspace = true
+fs2.workspace = true
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
 message-board = { path = "../message-board", version = "0.1.20" }
 clap.workspace = true

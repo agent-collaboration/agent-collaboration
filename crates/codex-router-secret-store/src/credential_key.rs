@@ -12,12 +12,14 @@ use crate::model::SecretStoreError;
 pub(crate) enum SecretStorageClass {
     GeneralSecret,
     AccountCredential,
-    FleetCredential,
+    ProtectedCredential,
 }
 
 pub(crate) fn classify_secret_key(key: &SecretKey) -> Result<SecretStorageClass, SecretStoreError> {
-    if FleetSecretKey::parse(key)?.is_some() {
-        return Ok(SecretStorageClass::FleetCredential);
+    if FleetSecretKey::parse(key)?.is_some()
+        || crate::central_credentials::CentralSecretKind::parse(key)?.is_some()
+    {
+        return Ok(SecretStorageClass::ProtectedCredential);
     }
     Ok(match AccountCredentialKey::parse(key)? {
         Some(_) => SecretStorageClass::AccountCredential,
@@ -27,7 +29,7 @@ pub(crate) fn classify_secret_key(key: &SecretKey) -> Result<SecretStorageClass,
 
 pub(crate) fn require_encrypted_secret_key(key: &SecretKey) -> Result<(), SecretStoreError> {
     match classify_secret_key(key)? {
-        SecretStorageClass::AccountCredential | SecretStorageClass::FleetCredential => Ok(()),
+        SecretStorageClass::AccountCredential | SecretStorageClass::ProtectedCredential => Ok(()),
         SecretStorageClass::GeneralSecret => Err(SecretStoreError::InvalidCredentialKey {
             key: key.as_str().to_owned(),
         }),

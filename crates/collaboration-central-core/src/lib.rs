@@ -218,7 +218,7 @@ mod owner_operation_calls;
 pub use conformance_drive_tokens::DriveTokenObserver;
 #[cfg(feature = "conformance")]
 mod conformance_holder;
-pub use central_router::central_router;
+pub use central_router::{central_jwks_router, central_router};
 mod edge_contract;
 pub use edge_contract::*;
 mod access_rules;

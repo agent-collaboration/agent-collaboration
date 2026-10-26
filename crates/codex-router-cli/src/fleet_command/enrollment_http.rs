@@ -25,7 +25,7 @@ pub(super) async fn enroll(
         })?;
     let mut response = client
         .post(prepared.admin_url.clone())
-        .header("cf-access-token", prepared.owner_token.clone())
+        .header(prepared.owner_header, prepared.owner_token.clone())
         .json(&EnrollmentBody::EnrollMachine(&prepared.request))
         .send()
         .await
