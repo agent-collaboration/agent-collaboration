@@ -185,3 +185,8 @@ debug = 0
 # Keep full content verification fast enough for native TUI reconnect deadlines.
 [profile.dev.package.sha2]
 opt-level = 3
+
+# The native database executes large real-store test workloads in this profile.
+# Optimize its interpreter while retaining debug assertions and checked arithmetic.
+[profile.dev.package.turso_core]
+opt-level = 3
