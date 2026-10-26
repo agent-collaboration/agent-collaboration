@@ -1,8 +1,8 @@
 # Python removal: disposition and proof
 
-Base: `be7e61e8bca32ebac172eb743e8064d2c7d6ffe7`. Inventory:61 tracked files,43 ported,7 deleted,11 unchanged for PR #161. Embedded Rust/shell programs and active instructions are included. Workflow cutover waits for explicit Lead confirmation that #165 merged; this report does not claim merge readiness.
+Base: `be7e61e8bca32ebac172eb743e8064d2c7d6ffe7`. Inventory:61 tracked files,43 ported,7 deleted,11 unchanged for PR #161. Embedded Rust/shell programs and active instructions are included. PR #165 is merged and the workflow cutover is implemented on top of main; final-head CI and release dry-run results are reported in PR #169. This report does not claim merge readiness.
 
-This is the direct unpaired Worker assignment. The Lead verifies the diff/logs and arranges independent review before merge. No production Router, tag, actual Homebrew/tap operation, provider model or deployment was touched. Version stays0.1.102 until the Lead assigns the next unused version at merge time.
+This is the direct unpaired Worker assignment. The Lead verifies the diff/logs and arranges independent review before merge. No production Router, tag, actual Homebrew/tap operation, provider model or deployment was touched. The workspace inherits main’s0.1.103; the next version remains the Lead’s merge-time assignment.
 
 ## Per-file dispositions
 
@@ -129,6 +129,6 @@ The five board/mail helpers form an unreachable closure after their journey entr
 - Type check, lint and formatter pass. Focused fixture-cutover rerun:91 passed,0 failed.
 - `cargo clippy -p acp-client-runtime -p agent-collaboration -p codex-router-host -p codex-router-test-support -p collaboration-mcp -p codex-router-tailnet-verification-host --all-targets -- -D warnings`: exit0 with narrow debug profiles.
 - Cargo formatting, Git whitespace and the Rust1000-line guard pass. Existing generated Cargo.lock/pnpm-lock.yaml exceed1000 lines; authored files remain within the cap.
-- CI, workflow cutover and the release dry dispatch are pending. The old workflows still call removed files under the explicit sequencing instruction. Merge main without rebase only after the Lead confirms #165 merged, then change those steps and run the requested dispatch.
+- Main atb4881497 is merged without rebase. The four validation jobs, background/wait-all structure and main-only cache policy are preserved. Static validation runs the TypeScript suite; Rust fixture consumers install pinned Node/dependencies, and SQLx/size/Worker checks call the ports. The release dry run generates an idempotent formula preview from its packaged digest and retains it while publication/tap steps remain disabled. Final-head CI and release dry-run links/results belong to PR #169 and the handback.
 - Version bump awaits the Lead's merge-time reservation. Independent review and merge remain outside this Worker's acceptance authority.
 - Fake-command/apparatus evidence does not establish real Homebrew publication, provider behavior, hosted delivery, production replacement or a real Tailnet journey.
