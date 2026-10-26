@@ -152,17 +152,25 @@ jobs:
       - name: Test Rust file size checker
         run: python3 -m unittest scripts.tests.test_rust_file_size -v --durations 0
       - name: Lint Rust workspace
+        id: rust_lint
+        background: true
         run: cargo clippy --workspace --all-targets -- -D warnings
-      # Runs after clippy so it reuses the checked dependencies instead of
-      # racing clippy for the same target directory.
+      # Each native background step keeps its own log and exit status. Cargo
+      # coordinates access to the shared target; wait-all requires all three.
       - name: Check SQLx query metadata against native migrations
+        id: sqlite_metadata
+        background: true
         run: |
           scripts/tooling/bootstrap-tools.sh sqlx
           python3 scripts/tooling/prepare-sqlx.py --check
       - name: Check Turso SQLx metadata against native migrations
+        id: turso_metadata
+        background: true
         run: |
           python3 -m unittest scripts.tests.test_prepare_sqlx_turso -v --durations 0
           python3 scripts/tooling/prepare-sqlx-turso.py --check
+      - name: Wait for lint and metadata checks
+        wait-all:
       - name: Save pinned Rust tools
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
