@@ -252,7 +252,8 @@ impl ProjectStoreRegistry {
             .entry(project.clone())
             .or_insert_with(|| Arc::new(OnceCell::new()))
             .clone();
-        slot.get_or_try_init(|| async {
+        // Keep cold initialization state out of cached project lookups' future layouts.
+        slot.get_or_try_init(|| Box::pin(async {
             let directory = self.projects_directory.join(project.as_str());
             let existing = crate::project_store_paths::live_file_with_epoch(&directory).await?;
             let bootstrap_origin = if let Some((epoch, path)) = &existing {
@@ -318,7 +319,7 @@ impl ProjectStoreRegistry {
             Ok::<_, ProjectRegistryError>(Arc::new(RwLock::new(ProjectRuntime::Writable {
                 store, database,
             })))
-        }).await.cloned()
+        })).await.cloned()
     }
 
     pub async fn open_project(
