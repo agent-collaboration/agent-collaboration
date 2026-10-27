@@ -140,7 +140,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
         loop {
             let answer = claim.claim(&request).await?;
             if !matches!(answer, ProjectClaimReply::Pending { .. }) {
-                return Ok::<_, collaboration_service::ProjectClaimError>(answer);
+                return Ok::<_, collaboration_contracts::ProjectClaimError>(answer);
             }
         }
     })

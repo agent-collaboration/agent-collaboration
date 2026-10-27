@@ -1,8 +1,12 @@
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::QuestionResponse;
-use collaboration_service::{
-    HubEvent, NativeControlBackend, NativeGenerationGate, RouterSessionAppServerContext,
-    RouterSessionAppServerListener, ServiceInteractionBroker, SessionCommandPort, SessionEventHub,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::RouterSessionAppServerContext;
+use collaboration_runtime::RouterSessionAppServerListener;
+use collaboration_runtime::ServiceInteractionBroker;
 use futures_util::{SinkExt, StreamExt};
 use message_board::Identity;
 use serde_json::{Value, json};

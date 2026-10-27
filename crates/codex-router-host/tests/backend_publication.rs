@@ -2,7 +2,7 @@ use codex_router_host::BackendPublication;
 use collaboration_protocol::{
     ChannelDescription, EndpointAvailability, EndpointRef, ObservationTimestamp,
 };
-use collaboration_service::EndpointDirectory;
+use collaboration_runtime::EndpointDirectory;
 
 #[tokio::test]
 async fn replacement_clears_advertised_generation_before_new_readiness() {

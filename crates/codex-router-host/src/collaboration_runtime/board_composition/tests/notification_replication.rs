@@ -3,7 +3,7 @@ use super::*;
 use super::notification_owner::ProjectNotificationFixture;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
 use std::num::NonZeroUsize;
 use super::split_transport::SplitTransport;

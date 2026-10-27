@@ -1,7 +1,15 @@
 //! Project operations retain their declared input and pass once into admission.
 use super::{BoardOperations, admission_error};
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    AcknowledgementOutcome, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage,
+    BoardOperation, InboxAcknowledgeReply, InboxAcknowledgeRequest, PostReferences, PostTarget,
+    ProjectId, ProjectRequest, ProjectWatchRequest, ProjectWriteCallResult, ProtocolVersion,
+    ReadScope, ReadScopeRef, RecordRef, ReferenceTarget, Refusal, RequestEffectsScope,
+    ScopeRefusal, ThreadCreateRequest, ThreadJoinRequest, ThreadLeaveRequest, ThreadPostRequest,
+    ThreadRef, ThreadRefileRequest, ThreadResolveRequest, ThreadUnresolveRequest,
+    ThreadUnwatchRequest, ThreadWatchRequest,
+};
 
 impl BoardOperations<'_> {
     pub async fn project_claim(

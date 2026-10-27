@@ -2,11 +2,13 @@
 //! Real Control proofs for off-board DMs and retained conversation views.
 use super::*;
 use chrono::{DateTime, Duration, Utc};
+use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::PushRecordNotice;
-use collaboration_service::{
-    AutomationRetentionWorker, BoardAvailability, MachineIdentity, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
-};
+use collaboration_runtime::AutomationRetentionWorker;
+use collaboration_service::BoardAvailability;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
 use sqlx::{ConnectOptions, Connection};
 use std::path::PathBuf;

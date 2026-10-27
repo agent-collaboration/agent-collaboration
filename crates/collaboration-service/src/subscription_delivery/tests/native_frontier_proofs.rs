@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod activation_history;
 
 struct FrontierMarks(AtomicU64);
-impl crate::ProjectReplicationPosition for FrontierMarks {
+impl collaboration_contracts::ProjectReplicationPosition for FrontierMarks {
     fn acknowledged_mail_changes<'a>(
         &'a self,
         _: &'a ProjectId,
-    ) -> crate::AcknowledgedMailChangesFuture<'a> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'a> {
         Box::pin(async {
             Ok(message_board_storage::AcknowledgedProjectChanges {
                 settled_through: Some(self.0.load(Ordering::SeqCst)),
@@ -24,7 +24,7 @@ impl crate::ProjectReplicationPosition for FrontierMarks {
         &'a self,
         _: &'a ProjectId,
         epoch: EpochNumber,
-    ) -> crate::ReplicatedPositionFuture<'a> {
+    ) -> collaboration_contracts::ReplicatedPositionFuture<'a> {
         Box::pin(async move {
             Ok(FeedCursor {
                 epoch,

@@ -6,9 +6,9 @@ use collaboration_protocol::{
     ProviderPromptStopReason, ProviderReconciliationState, ProviderRequestedPolicy,
     ProviderSettingName, ProviderSettingsMappingStatus, ProviderWorkingDirectory, SessionRef,
 };
-use collaboration_service::{
-    ProviderOperationStore, ProviderOperationStoreError, ProviderSessionRecord,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderOperationStoreError;
+use collaboration_runtime::ProviderSessionRecord;
 
 pub(crate) enum ProviderOperationCompletion {
     Success {

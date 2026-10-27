@@ -1,11 +1,16 @@
 //! Native sender acknowledgements must prompt publication without another board write.
 use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
 use super::*;
-use collaboration_service::{
-    BoardAvailability, CollaborationApplication, IntentHandoffInput, IntentRecipientEnrollment,
-    MailPushDeliveryProps, ServiceIdentity, SessionDeliveryRouter, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
-};
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::IntentHandoffInput;
+use collaboration_service::IntentRecipientEnrollment;
+use collaboration_service::MailPushDeliveryProps;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use fleet_sync_protocol::{ItemId, PeerId};
 use interaction_storage::InteractionStore;
 use tokio::sync::Mutex;

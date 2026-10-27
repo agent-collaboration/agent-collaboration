@@ -1,6 +1,8 @@
 //! A native metadata stand-in; project routing and project reads stay real.
 use super::TestError;
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ServiceIdentity;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -64,7 +66,7 @@ impl BoardContextBackend {
                 codex_home: root.to_owned(),
             })?;
         let identity = identity.with_provider_operation_store(Arc::new(tokio::sync::Mutex::new(
-            collaboration_service::ProviderOperationStore::open(
+            collaboration_runtime::ProviderOperationStore::open(
                 &root.join("context-providers.sqlite"),
             )
             .await?,

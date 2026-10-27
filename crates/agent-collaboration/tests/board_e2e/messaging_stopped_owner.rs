@@ -6,7 +6,7 @@ use fleet_sync_delivery::test_support::DeliveryObservation;
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::os::unix::fs::OpenOptionsExt as _;
 
-pub use collaboration_service::MailStoreTestFault as MailFault;
+pub use interaction_storage::MailStoreTestFault as MailFault;
 
 pub async fn install_fault(stopped: &StoppedHost, fault: MailFault) -> FixtureResult {
     let path = stopped

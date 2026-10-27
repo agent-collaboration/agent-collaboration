@@ -5,11 +5,13 @@ mod writer_registration;
 use super::project_writer::ProjectWriter;
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
 use board_sync_protocol::BoardConsumerProtocol;
-use collaboration_service::{
-    ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
-    ProjectRegistrationState, ProjectReplicationPosition, ProjectStoreRegistry,
-    ReplicatedPositionFuture,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationError;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
+use collaboration_contracts::ProjectReplicationPosition;
+use collaboration_contracts::ReplicatedPositionFuture;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_protocol::{CopyRole, ReceiverId, RegistrationRefusal};
 use fleet_sync_tokio_runner::{SessionRequests, WriterSessionCalls};
 use fleet_sync_writer::{ReplicationSender, SenderOptions, WriterRegistrationOutcome};
@@ -35,7 +37,7 @@ pub(super) enum ProjectWriterSlot {
 pub(super) enum ProjectLifecycleSignal {
     Superseded {
         project: ProjectId,
-        source: Weak<collaboration_service::NativeProjectStore>,
+        source: Weak<collaboration_runtime::NativeProjectStore>,
     },
     RegistrationReady(ProjectId),
     Acknowledged(ProjectId),
@@ -256,7 +258,7 @@ impl ProjectWriters {
     pub async fn supersede_project(
         &self,
         project: &ProjectId,
-        source: Weak<collaboration_service::NativeProjectStore>,
+        source: Weak<collaboration_runtime::NativeProjectStore>,
     ) -> io::Result<()> {
         let slot = self.writer_slot(project).await;
         let mut owner = slot.lock().await;
@@ -402,7 +404,7 @@ impl ProjectWriters {
         project: &ProjectId,
     ) -> Result<
         (
-            Arc<collaboration_service::NativeProjectStore>,
+            Arc<collaboration_runtime::NativeProjectStore>,
             Option<fleet_sync_protocol::ReplicationPosition>,
         ),
         BoardError,
@@ -486,7 +488,7 @@ impl ProjectReplicationPosition for ProjectWriters {
             let (store, position) = self.acknowledged_project_copy(project).await?;
             match position {
                 Some(position) => {
-                    collaboration_service::project_replication_cursor(&store, position, epoch).await
+                    collaboration_runtime::project_replication_cursor(&store, position, epoch).await
                 }
                 None => Ok(FeedCursor {
                     epoch,
@@ -499,7 +501,7 @@ impl ProjectReplicationPosition for ProjectWriters {
     fn acknowledged_mail_changes<'port>(
         &'port self,
         project: &'port ProjectId,
-    ) -> collaboration_service::AcknowledgedMailChangesFuture<'port> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'port> {
         Box::pin(async move {
             let (store, position) = self.acknowledged_project_copy(project).await?;
             match position {

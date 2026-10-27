@@ -5,9 +5,9 @@ pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
-use collaboration_service::{
-    NativeProjectStore, ProjectReplicationPosition, ReplicatedPositionFuture,
-};
+use collaboration_contracts::ProjectReplicationPosition;
+use collaboration_contracts::ReplicatedPositionFuture;
+use collaboration_runtime::NativeProjectStore;
 use fleet_sync_protocol::ReplicationPosition;
 use message_board::*;
 use serde_json::{Value, json};
@@ -36,7 +36,7 @@ impl ProjectReplicationPosition for ProgressPort {
     fn acknowledged_mail_changes<'port>(
         &'port self,
         _: &'port ProjectId,
-    ) -> collaboration_service::AcknowledgedMailChangesFuture<'port> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'port> {
         Box::pin(async move {
             match self.source.lock().await.clone() {
                 Some(Source::Native { store, through }) => store
@@ -64,7 +64,7 @@ impl ProjectReplicationPosition for ProgressPort {
             match self.source.lock().await.clone() {
                 Some(Source::Fixed(cursor)) => Ok(cursor),
                 Some(Source::Native { store, through }) => {
-                    collaboration_service::project_replication_cursor(&store, through, epoch).await
+                    collaboration_runtime::project_replication_cursor(&store, through, epoch).await
                 }
                 None => Ok(FeedCursor {
                     epoch,

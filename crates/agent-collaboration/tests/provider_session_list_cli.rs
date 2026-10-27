@@ -5,7 +5,9 @@ use collaboration_client::protocol::{
     EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord, ServiceIdentity};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ServiceIdentity;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 

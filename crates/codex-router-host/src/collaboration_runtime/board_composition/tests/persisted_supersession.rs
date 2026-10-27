@@ -112,7 +112,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
                 }
                 Ok(_) => {}
                 Err(collaboration_service::ProjectAdmissionError::Registry(
-                    collaboration_service::ProjectRegistryError::Unavailable { project },
+                    collaboration_runtime::ProjectRegistryError::Unavailable { project },
                 )) if project == creation.project_id => {}
                 Err(error) => return Err(error.into()),
             }
@@ -125,7 +125,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
     })??;
     assert!(q_directory.join("e1.sqlite").exists());
     assert_eq!(
-        collaboration_service::ProjectRegistration::start(projects.as_ref(), &project).await?,
+        collaboration_contracts::ProjectRegistration::start(projects.as_ref(), &project).await?,
         ProjectRegistrationState::Superseded
     );
 

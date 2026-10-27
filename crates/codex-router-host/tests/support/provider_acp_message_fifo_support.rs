@@ -1,5 +1,10 @@
 use agent_automation::RouteEffectEvidence;
 use codex_router_host::{ExternalProviderLaunch, LiveSessionOwnership, LiveSessionOwnershipCheck};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, DeliveryCorrelationId, EndpointAvailability,
     EndpointDescription, EndpointId, EndpointRef, GenerationNumber, MessageDelivery, MessageText,
@@ -8,10 +13,7 @@ use collaboration_protocol::{
     ProviderCapabilityStatus, ProviderKind, ProviderRuntimeIdentity, ProviderTransport, PushId,
     SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryFuture, DeliveryPrecondition, EndpointDirectory,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::EndpointDirectory;
 use std::path::{Path, PathBuf};
 
 pub(super) struct NoLivePeer;
@@ -253,7 +255,7 @@ pub(super) fn request(target: SessionRef, text: &str) -> DeliveryRequest {
         payload: PreparedPush {
             push_id,
             line,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target,
         mode: MessageDelivery::Auto,

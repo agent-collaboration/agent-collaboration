@@ -1,7 +1,7 @@
 //! Public project status and requested controls use current roles and native SDK custody.
 use super::*;
+use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::ProjectReplicationPosition;
 use fleet_sync_delivery::OutboxStatusState;
 use fleet_sync_protocol::DeliveryStatus;
 use serde_json::{Value, json};

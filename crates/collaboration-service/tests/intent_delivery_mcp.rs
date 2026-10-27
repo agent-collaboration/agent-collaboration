@@ -4,11 +4,21 @@ pub mod board_fixture;
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 use board_fixture::native_mail_owner;
+use collaboration_contracts::{
+    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
+    DeliveryContractError, DeliveryFuture, LoadPolicy, MachineIdentity, RoutePresence,
+    SessionDeliveryRoute, layer_zero,
+};
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushKind, RouterOriginRef, SessionReachability,
 };
-use collaboration_service::*;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::{
+    BoardAvailability, CollaborationApplication, IntentReply, MailPushDeliveryProps,
+    NotificationPublisher, ProjectAdmission, ProjectAdmissionProps, ServiceIdentity,
+    SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
+};
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
@@ -25,8 +35,8 @@ impl SessionDeliveryRoute for CapturingEndpoint {
     fn claim(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
-        Box::pin(async { Ok(collaboration_service::NativeRouteClaim::holds()) })
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
+        Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
     fn presence(
         &self,
@@ -38,7 +48,7 @@ impl SessionDeliveryRoute for CapturingEndpoint {
         &'a self,
         request: layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let outcome = self
                 .outcomes

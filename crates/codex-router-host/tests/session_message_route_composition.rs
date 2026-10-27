@@ -13,7 +13,8 @@ use collaboration_protocol::{
     DeliveryOutcome, DeliveryRejectionReason, EndpointId, EndpointRef, ProviderRequestedPolicy,
     ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use registered_route_project::route_project_requests;
 use route_fixture::{
     create_provider_target, load_provider_target, message, post_thread_activity_for_sessions,
@@ -30,8 +31,8 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
     let route_project = route_project_requests();
-    let identity = collaboration_service::MachineIdentity::new(
-        collaboration_service::load_service_identity(root.path()).expect("Host service identity"),
+    let identity = collaboration_contracts::MachineIdentity::new(
+        collaboration_runtime::load_service_identity(root.path()).expect("Host service identity"),
         None,
     )
     .expect("Host machine label");
@@ -48,7 +49,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                 .try_into()
                 .expect("origin label"),
         },
-        collaboration_service::load_installation_peer(root.path()).expect("installation peer"),
+        collaboration_runtime::load_installation_peer(root.path()).expect("installation peer"),
     )
     .await
     .expect("real route central enrollment");

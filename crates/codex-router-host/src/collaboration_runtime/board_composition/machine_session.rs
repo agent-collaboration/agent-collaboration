@@ -9,9 +9,11 @@ use board_fleet_sync::{
     BoardProjectSchema, BoardSessionInputs, MachineSessionStore, ReqwestSessionTransport,
 };
 use board_sync_protocol::BoardConsumerProtocol;
-use collaboration_service::{
-    FleetClient, MailDeliveryRuntime, NotificationPublisher, ProjectAdmission, ProjectStoreRegistry,
-};
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_service::MailDeliveryRuntime;
+use collaboration_service::NotificationPublisher;
+use collaboration_service::ProjectAdmission;
 use fleet_sync_protocol::{DatabaseStatus, Notice, NoticePosition, PeerId, SchemaSupport};
 use fleet_sync_session::{ClientEvent, SessionClient};
 use fleet_sync_tokio_runner::{SessionPump, SessionRequests};

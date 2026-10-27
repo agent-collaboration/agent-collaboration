@@ -1,4 +1,4 @@
-use collaboration_service::FleetClient;
+use collaboration_runtime::FleetClient;
 #[path = "support/native_registry.rs"]
 pub mod native_registry;
 use fleet_admission::{FleetOperation, FleetRequest};
@@ -7,28 +7,28 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Default)]
 struct RegistrationCalls(Mutex<Vec<ProjectId>>);
-impl collaboration_service::ProjectRegistration for RegistrationCalls {
+impl collaboration_contracts::ProjectRegistration for RegistrationCalls {
     fn wait_ready<'runtime>(
         &'runtime self,
         _: &'runtime ProjectId,
-    ) -> collaboration_service::ProjectRegistrationFuture<'runtime> {
-        Box::pin(async { Ok(collaboration_service::ProjectRegistrationState::Pending) })
+    ) -> collaboration_contracts::ProjectRegistrationFuture<'runtime> {
+        Box::pin(async { Ok(collaboration_contracts::ProjectRegistrationState::Pending) })
     }
 
     fn start<'runtime>(
         &'runtime self,
         project: &'runtime ProjectId,
-    ) -> collaboration_service::ProjectRegistrationFuture<'runtime> {
+    ) -> collaboration_contracts::ProjectRegistrationFuture<'runtime> {
         Box::pin(async move {
             self.0
                 .lock()
                 .map_err(
-                    |_| collaboration_service::ProjectRegistrationError::Runtime {
+                    |_| collaboration_contracts::ProjectRegistrationError::Runtime {
                         message: "registration observation poisoned".into(),
                     },
                 )?
                 .push(project.clone());
-            Ok(collaboration_service::ProjectRegistrationState::Pending)
+            Ok(collaboration_contracts::ProjectRegistrationState::Pending)
         })
     }
 }

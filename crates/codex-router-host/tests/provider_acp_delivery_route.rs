@@ -10,6 +10,12 @@ use codex_router_host::{
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::{
+    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
+    DeliveryPrecondition, LoadPolicy, NOT_LOADED_REASON, RoutePresence, SessionDeliveryRoute,
+    SessionMessageDelivery,
+    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
+};
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId,
     DeliveryOutcome, DeliveryRejectionReason, EndpointAvailability, EndpointDescription,
@@ -21,12 +27,9 @@ use collaboration_protocol::{
     ProviderTransport, ProviderWorkingDirectory, PushId, RouterAccess, SessionId, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NOT_LOADED_REASON,
-    ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord, RoutePresence,
-    SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
+use collaboration_runtime::{
+    EndpointDirectory, ProviderOperationAdmission, ProviderOperationStore, ProviderSessionRecord,
+    SessionDeliveryRouter,
 };
 use serde_json::Value;
 use std::{
@@ -73,8 +76,11 @@ impl SessionDeliveryRoute for StaleRunningClaimRoute {
         collaboration_protocol::SessionReachability::ProviderAcp
     }
 
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
-        Box::pin(async { Ok(collaboration_service::NativeRouteClaim::holds()) })
+    fn claim(
+        &self,
+        _: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
+        Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
 
     fn presence(&self, target: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
@@ -85,7 +91,7 @@ impl SessionDeliveryRoute for StaleRunningClaimRoute {
         &'a self,
         request: PreparedDeliveryRequest,
         evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         self.0.deliver(request, evidence)
     }
 
@@ -816,8 +822,8 @@ async fn unadvertised_load_settles_not_submitted_without_sending_load() {
     .expect("delivery receipt");
     assert_eq!(
         receipt.unsent_cause(),
-        Some(collaboration_service::UnsentCause::Refused(
-            collaboration_service::NativeRefusalCode::Rejection(
+        Some(collaboration_contracts::UnsentCause::Refused(
+            collaboration_contracts::NativeRefusalCode::Rejection(
                 DeliveryRejectionReason::UnsupportedCapability
             )
         ))

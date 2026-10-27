@@ -1,5 +1,5 @@
 //! Explicit fixture enrollment and the real native registry, shared by surface tests.
-use collaboration_service::ProjectStoreRegistry;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::ProjectId;
 use std::sync::Arc;
 
@@ -28,26 +28,26 @@ pub fn fixture_peer() -> Result<fleet_sync_protocol::PeerId, FixtureError> {
 
 /// Local fleet policy is a stand-in; A3c separately observes native registration.
 pub struct PendingRegistration;
-impl collaboration_service::ProjectRegistration for PendingRegistration {
+impl collaboration_contracts::ProjectRegistration for PendingRegistration {
     fn wait_ready<'runtime>(
         &'runtime self,
         _: &'runtime ProjectId,
-    ) -> collaboration_service::ProjectRegistrationFuture<'runtime> {
-        Box::pin(async { Ok(collaboration_service::ProjectRegistrationState::Pending) })
+    ) -> collaboration_contracts::ProjectRegistrationFuture<'runtime> {
+        Box::pin(async { Ok(collaboration_contracts::ProjectRegistrationState::Pending) })
     }
 
     fn start<'runtime>(
         &'runtime self,
         _: &'runtime ProjectId,
-    ) -> collaboration_service::ProjectRegistrationFuture<'runtime> {
-        Box::pin(async { Ok(collaboration_service::ProjectRegistrationState::Pending) })
+    ) -> collaboration_contracts::ProjectRegistrationFuture<'runtime> {
+        Box::pin(async { Ok(collaboration_contracts::ProjectRegistrationState::Pending) })
     }
 }
 
 /// MCP component fixtures supply accepted directory policy and a real persisted grant.
 #[allow(dead_code)] // This source module is also shared by integration targets that do not use this arranger.
 pub async fn prepare_registered_creation(
-    fleet: &collaboration_service::FleetClient,
+    fleet: &collaboration_runtime::FleetClient,
     registry: &ProjectStoreRegistry,
     input: &message_board::ProjectCreateRequest,
     origin: &message_board::ActorOrigin,
@@ -56,7 +56,7 @@ pub async fn prepare_registered_creation(
 }
 
 pub async fn prepare_registered_creation_for_peer(
-    fleet: &collaboration_service::FleetClient,
+    fleet: &collaboration_runtime::FleetClient,
     registry: &ProjectStoreRegistry,
     input: &message_board::ProjectCreateRequest,
     origin: &message_board::ActorOrigin,

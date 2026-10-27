@@ -49,7 +49,7 @@ async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestRes
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),
@@ -119,7 +119,7 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),
@@ -234,7 +234,7 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
         .decide_typed_interaction(
             "persistent-retry",
             &owner,
-            collaboration_service::TypedInteractionDecision::SelectApproval {
+            collaboration_runtime::TypedInteractionDecision::SelectApproval {
                 option_id: "reject-once".into(),
                 acknowledge_persistent: false,
                 note: None,
@@ -267,7 +267,7 @@ async fn busy_acp_prompt_does_not_reach_provider_command_port() -> TestResult {
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),

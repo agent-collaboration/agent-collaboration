@@ -91,8 +91,8 @@ impl RuntimeCleanupFixture {
     }
 
     pub(super) async fn start(&mut self) -> ProofResult<()> {
-        let service = collaboration_service::load_service_identity(&self.directory)?;
-        let identity = collaboration_service::MachineIdentity::new(service.clone(), None)?;
+        let service = collaboration_runtime::load_service_identity(&self.directory)?;
+        let identity = collaboration_contracts::MachineIdentity::new(service.clone(), None)?;
         let origin = message_board::ActorOrigin {
             installation: String::from(service).try_into()?,
             machine: identity.machine_label().as_str().to_owned().try_into()?,
@@ -100,7 +100,7 @@ impl RuntimeCleanupFixture {
         let central = TestCentral::start_with_peer(
             &self.directory.join("test-central"),
             &origin,
-            collaboration_service::load_installation_peer(&self.directory)?,
+            collaboration_runtime::load_installation_peer(&self.directory)?,
         )
         .await?;
         let board_session = central.session_inputs()?;

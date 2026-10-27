@@ -1,6 +1,6 @@
 //! StatusFetch's actual relay answer is held while the native apply transaction is blocked.
 use super::*;
-use collaboration_service::RouterDeliveryTypes;
+use collaboration_contracts::RouterDeliveryTypes;
 use fleet_sync_delivery::{
     DeliveryLimits, Outbox, delivery_rollback, minimum_settlement_allowance,
 };

@@ -1,7 +1,10 @@
 //! Interval pagination chooses native keys before bodies and current-holder anchors.
 use super::board_paging::{fingerprint, invalid_cursor};
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, ImplementerHolder, OrchestratorHolder, Page, Participant, ParticipantRole,
+    RecordedParticipantRole, ThreadParticipantListRequest, ThreadParticipantListResult,
+};
 use message_board_storage::{
     ParticipantIntervalBatch, ParticipantIntervalKey, decode_board_cursor, encode_board_cursor,
 };

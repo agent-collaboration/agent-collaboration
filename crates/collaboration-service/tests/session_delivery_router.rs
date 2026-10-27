@@ -1,16 +1,26 @@
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::RouteClaim;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::RouteUnavailableReason;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_contracts::layer_zero;
+use collaboration_protocol::DeliveryReceipt;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MessageDelivery, MessageText, PushId,
     SessionReachability, SessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    DeliveryPrecondition, DeliveryReceipt, LoadPolicy, RouteClaim, RoutePresence,
-    RouteUnavailableReason, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-    TargetPresence, TargetPresenceProbe, layer_zero,
-};
+use collaboration_runtime::SessionDeliveryRouter;
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -28,7 +38,10 @@ impl SessionDeliveryRoute for FakeRoute {
     fn reachability(&self) -> SessionReachability {
         self.reachability
     }
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
+    fn claim(
+        &self,
+        _: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
         Box::pin(async { Ok(scripted_claim(self.claim.clone())) })
     }
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, RoutePresence> {
@@ -39,7 +52,7 @@ impl SessionDeliveryRoute for FakeRoute {
         &self,
         _: layer_zero::DeliveryRequest,
         _: &dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'_, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeDeliveryResult> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async {
             Ok(native_delivery::scripted(DeliveryReceipt {
@@ -58,9 +71,11 @@ impl SessionDeliveryRoute for FakeRoute {
 }
 
 // Scripted route selection is a fixture seam; production emitters classify their own failures.
-fn scripted_claim(claim: RouteClaim) -> collaboration_service::NativeRouteClaim {
+fn scripted_claim(claim: RouteClaim) -> collaboration_contracts::NativeRouteClaim {
+    use collaboration_contracts::NativeRefusalCode;
+    use collaboration_contracts::NativeRouteClaim;
+    use collaboration_contracts::UnsentCause;
     use collaboration_protocol::DeliveryRejectionReason;
-    use collaboration_service::{NativeRefusalCode, NativeRouteClaim, UnsentCause};
     match claim {
         RouteClaim::NotMine => NativeRouteClaim::not_mine(),
         RouteClaim::Holds => NativeRouteClaim::holds(),

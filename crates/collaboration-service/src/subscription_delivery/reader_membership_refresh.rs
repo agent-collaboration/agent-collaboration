@@ -1,5 +1,10 @@
 //! Refresh one explicit project set while retaining unaffected delivery records.
-use super::*;
+#[cfg(test)]
+use super::OwnerObservation;
+use super::{
+    BoardAvailability, BoardError, ProjectSubscriptionRecord, ReaderDeliveryOwner, ReaderScanScope,
+    ReaderSubscriptionSnapshot, target_session,
+};
 
 impl ReaderDeliveryOwner {
     pub(super) fn request_scan(&mut self, requested: ReaderScanScope) {

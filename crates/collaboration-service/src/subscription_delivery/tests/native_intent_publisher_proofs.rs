@@ -49,7 +49,7 @@ fn installation_peer() -> PeerId {
 pub(super) async fn frozen_item(
     fixture: &OwnerFixture,
     intent: &NotifyIntent,
-) -> fleet_sync_protocol::DeliveryItem<crate::RouterDeliveryTypes> {
+) -> fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes> {
     let store = fixture
         .registry
         .existing_project(&fixture.project)

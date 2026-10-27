@@ -8,7 +8,8 @@
 use collaboration_mcp::{
     COLLABORATION_API_PATH, CollaborationApiConfig, CollaborationApiListener, LoopbackBindAddress,
 };
-use collaboration_service::{OwnerOnlySocket, SocketCleanup};
+use collaboration_runtime::OwnerOnlySocket;
+use collaboration_runtime::SocketCleanup;
 use std::{io, net::SocketAddr, path::Path};
 use tokio::{
     net::{TcpListener, UnixListener},

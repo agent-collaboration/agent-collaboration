@@ -13,7 +13,10 @@ mod cancellation;
 #[path = "project_mail_crash_tests.rs"]
 mod crash;
 
-fn project_item(runtime: &Runtime, project: ProjectId) -> DeliveryItem<crate::RouterDeliveryTypes> {
+fn project_item(
+    runtime: &Runtime,
+    project: ProjectId,
+) -> DeliveryItem<collaboration_contracts::RouterDeliveryTypes> {
     let template = runtime.fixture.item(&runtime.fixture.draft());
     let mut recipient = template.recipient().clone();
     recipient.peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
@@ -54,8 +57,8 @@ fn mail_id(item: ItemId) -> MailItemId {
 }
 
 fn replay_item(
-    item: &DeliveryItem<crate::RouterDeliveryTypes>,
-) -> DeliveryItem<crate::RouterDeliveryTypes> {
+    item: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
+) -> DeliveryItem<collaboration_contracts::RouterDeliveryTypes> {
     // SDK items expose no Clone operation. Replay the identical encoded input.
     serde_json::from_slice(&serde_json::to_vec(item).unwrap()).unwrap()
 }
@@ -199,10 +202,12 @@ async fn outbox_is_unknown(runtime: &Runtime, item: ItemId) -> bool {
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
-                    .status(item)
-                    .await
-                    .map_err(durable_steps::StoreError::backend)
+                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
+                    scope, limits,
+                )
+                .status(item)
+                .await
+                .map_err(durable_steps::StoreError::backend)
             })
         })
         .await

@@ -1,9 +1,10 @@
 //! Fleet metadata uses the public MCP/client path and a real central/session/cache.
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
-    ServiceIdentity,
-};
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};

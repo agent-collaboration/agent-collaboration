@@ -11,9 +11,10 @@ use collaboration_protocol::{
     ApiSelector, ApiSocketPath, ApiTransport, McpSelector, McpTransport, NonEmptyText,
     RouterExecutableRelation, SERVICE_MANIFEST_VERSION, ServiceManifest,
 };
-use collaboration_service::{
-    CollaborationApplication, ManifestPublication, OwnerOnlySocket, SocketCleanup,
-};
+use collaboration_runtime::ManifestPublication;
+use collaboration_runtime::OwnerOnlySocket;
+use collaboration_runtime::SocketCleanup;
+use collaboration_service::CollaborationApplication;
 use futures_util::StreamExt;
 use rmcp::{
     model::{

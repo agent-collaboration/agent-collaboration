@@ -7,7 +7,7 @@
 //! reachability probe, are skipped.
 #![allow(dead_code)]
 
-use collaboration_service::ManifestPublication;
+use collaboration_runtime::ManifestPublication;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::{

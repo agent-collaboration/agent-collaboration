@@ -4,23 +4,24 @@ use collaboration_protocol::{CodexGeneration, EndpointId, EndpointRef};
 struct FakeApprovalDelivery(DeliveryOutcome);
 
 struct CapturingInteractionDelivery {
-    notices: Arc<Mutex<Vec<crate::layer_zero::DeliveryRequest>>>,
+    notices: Arc<Mutex<Vec<collaboration_contracts::layer_zero::DeliveryRequest>>>,
     delivered: Arc<tokio::sync::Notify>,
     push_store: Option<Arc<interaction_storage::InteractionStore>>,
     prepared_pushes_at_delivery: Arc<Mutex<Vec<CapturedInteractionPush>>>,
 }
 
 struct CapturedInteractionPush {
-    request: crate::layer_zero::DeliveryRequest,
+    request: collaboration_contracts::layer_zero::DeliveryRequest,
     record_at_delivery: Option<collaboration_protocol::PushRecord>,
 }
 
-impl crate::SessionMessageDelivery for CapturingInteractionDelivery {
+impl collaboration_contracts::SessionMessageDelivery for CapturingInteractionDelivery {
     fn deliver<'a>(
         &'a self,
-        request: crate::layer_zero::DeliveryRequest,
-        _: &'a dyn crate::AttemptEvidenceSink,
-    ) -> crate::DeliveryFuture<'a, crate::NativeDeliveryResult> {
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
+    {
         Box::pin(async move {
             let record_at_delivery = match &self.push_store {
                 Some(push_store) => push_store
@@ -39,7 +40,7 @@ impl crate::SessionMessageDelivery for CapturingInteractionDelivery {
                 });
             self.notices.lock().await.push(request);
             self.delivered.notify_one();
-            Ok(crate::native_delivery_result::scripted_delivery_result(
+            Ok(collaboration_contracts::scripted_delivery_result(
                 collaboration_protocol::DeliveryReceipt {
                     outcome: DeliveryOutcome::Started,
                     reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
@@ -51,9 +52,10 @@ impl crate::SessionMessageDelivery for CapturingInteractionDelivery {
 
     fn reconcile_attempt(
         &self,
-        _: crate::AttemptReconciliationContext,
-    ) -> crate::DeliveryFuture<'_, crate::AttemptReconciliation> {
-        Box::pin(async { Ok(crate::AttemptReconciliation::StillUnknown) })
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
+    {
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
@@ -132,7 +134,10 @@ async fn typed_approval_and_question_notify_their_session_approver() {
         assert_eq!(prepared.correlation.as_str(), record.push_id.as_str());
         assert_eq!(prepared.target, record.target);
         assert_eq!(prepared.mode, collaboration_protocol::MessageDelivery::Auto);
-        assert_eq!(prepared.payload.load_policy, crate::LoadPolicy::MayLoad);
+        assert_eq!(
+            prepared.payload.load_policy,
+            collaboration_contracts::LoadPolicy::MayLoad
+        );
         assert_eq!(
             String::from(record.target.endpoint.service_id.clone()),
             approver.endpoint.service_id.as_str()
@@ -293,12 +298,14 @@ async fn provider_session_approval_legacy_projection_survives_restart_without_du
             typed_approval_request("projected-approval"),
             tokio_util::sync::CancellationToken::new(),
             tokio_util::sync::CancellationToken::new(),
-            Some(crate::interaction_broker::TypedApprovalLegacyContext {
-                operation_id: collaboration_protocol::OperationId::generate(),
-                target: target.clone(),
-                generation: generation.clone(),
-                requested_by: prompting_requester.clone().into(),
-            }),
+            Some(
+                collaboration_runtime::interaction_broker::TypedApprovalLegacyContext {
+                    operation_id: collaboration_protocol::OperationId::generate(),
+                    target: target.clone(),
+                    generation: generation.clone(),
+                    requested_by: prompting_requester.clone().into(),
+                },
+            ),
         )
         .await
         .expect("pending approval");
@@ -320,7 +327,7 @@ async fn provider_session_approval_legacy_projection_survives_restart_without_du
     drop(receiver);
     drop(broker);
     let service_id = target.endpoint.service_id.clone();
-    let gate = crate::NativeGenerationGate::default();
+    let gate = collaboration_runtime::NativeGenerationGate::default();
     let endpoint = target.endpoint.clone();
     let reloaded = ServiceInteractionBroker::load(
         service_id,
@@ -384,12 +391,14 @@ async fn human_and_old_provider_approval_rows_stay_detailed_only() {
                 typed_approval_request(request_id),
                 tokio_util::sync::CancellationToken::new(),
                 tokio_util::sync::CancellationToken::new(),
-                Some(crate::interaction_broker::TypedApprovalLegacyContext {
-                    operation_id: collaboration_protocol::OperationId::generate(),
-                    target: target.clone(),
-                    generation: generation.clone(),
-                    requested_by,
-                }),
+                Some(
+                    collaboration_runtime::interaction_broker::TypedApprovalLegacyContext {
+                        operation_id: collaboration_protocol::OperationId::generate(),
+                        target: target.clone(),
+                        generation: generation.clone(),
+                        requested_by,
+                    },
+                ),
             )
             .await
             .expect("pending approval");
@@ -433,7 +442,7 @@ async fn human_and_old_provider_approval_rows_stay_detailed_only() {
         target.endpoint.service_id.clone(),
         NativeControlBackend {
             endpoint: target.endpoint,
-            gate: crate::NativeGenerationGate::default(),
+            gate: collaboration_runtime::NativeGenerationGate::default(),
             codex_home: directory.clone(),
         },
         directory.join("approval-routes.json"),
@@ -474,12 +483,14 @@ async fn unreachable_approver_cancellation_keeps_its_typed_state_in_both_lists()
             typed_approval_request("unreachable-approver"),
             tokio_util::sync::CancellationToken::new(),
             tokio_util::sync::CancellationToken::new(),
-            Some(crate::interaction_broker::TypedApprovalLegacyContext {
-                operation_id: collaboration_protocol::OperationId::generate(),
-                target: session(&broker.service_id, "provider-session"),
-                generation,
-                requested_by: session(&broker.service_id, "provider-session").into(),
-            }),
+            Some(
+                collaboration_runtime::interaction_broker::TypedApprovalLegacyContext {
+                    operation_id: collaboration_protocol::OperationId::generate(),
+                    target: session(&broker.service_id, "provider-session"),
+                    generation,
+                    requested_by: session(&broker.service_id, "provider-session").into(),
+                },
+            ),
         )
         .await
         .expect("pending approval");
@@ -501,14 +512,15 @@ async fn unreachable_approver_cancellation_keeps_its_typed_state_in_both_lists()
     assert_eq!(detailed[0].reason.as_deref(), Some("approverUnreachable"));
 }
 
-impl crate::SessionMessageDelivery for FakeApprovalDelivery {
+impl collaboration_contracts::SessionMessageDelivery for FakeApprovalDelivery {
     fn deliver<'a>(
         &'a self,
-        _: crate::layer_zero::DeliveryRequest,
-        _: &'a dyn crate::AttemptEvidenceSink,
-    ) -> crate::DeliveryFuture<'a, crate::NativeDeliveryResult> {
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
+    {
         Box::pin(async move {
-            Ok(crate::native_delivery_result::scripted_delivery_result(
+            Ok(collaboration_contracts::scripted_delivery_result(
                 collaboration_protocol::DeliveryReceipt {
                     outcome: self.0.clone(),
                     reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
@@ -520,9 +532,10 @@ impl crate::SessionMessageDelivery for FakeApprovalDelivery {
 
     fn reconcile_attempt(
         &self,
-        _: crate::AttemptReconciliationContext,
-    ) -> crate::DeliveryFuture<'_, crate::AttemptReconciliation> {
-        Box::pin(async { Ok(crate::AttemptReconciliation::StillUnknown) })
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
+    {
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
@@ -766,8 +779,10 @@ fn legacy_presentation_maps_only_fields_retained_by_typed_subjects() {
 mod history_fixtures;
 use history_fixtures::stored_interaction_records;
 
-fn select_typed(option_id: &str) -> crate::interaction_broker::TypedInteractionDecision {
-    crate::interaction_broker::TypedInteractionDecision::SelectApproval {
+fn select_typed(
+    option_id: &str,
+) -> collaboration_runtime::interaction_broker::TypedInteractionDecision {
+    collaboration_runtime::interaction_broker::TypedInteractionDecision::SelectApproval {
         option_id: option_id.to_owned(),
         acknowledge_persistent: false,
         note: None,
@@ -775,12 +790,13 @@ fn select_typed(option_id: &str) -> crate::interaction_broker::TypedInteractionD
 }
 
 pub(super) async fn fixture_broker() -> (Arc<ServiceInteractionBroker>, CodexGeneration, PathBuf) {
-    let service_id = crate::new_service_uuid().unwrap_or_else(|error| panic!("service: {error}"));
+    let service_id = collaboration_runtime::new_service_uuid()
+        .unwrap_or_else(|error| panic!("service: {error}"));
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
     .unwrap_or_else(|error| panic!("generation: {error}"));
-    let gate = crate::NativeGenerationGate::default();
+    let gate = collaboration_runtime::NativeGenerationGate::default();
     gate.activate(
         generation.clone(),
         PathBuf::from("/tmp/approval-backend.sock"),
@@ -796,7 +812,10 @@ pub(super) async fn fixture_broker() -> (Arc<ServiceInteractionBroker>, CodexGen
     };
     let directory = std::env::temp_dir().join(format!(
         "approval-broker-{}",
-        String::from(crate::new_service_uuid().unwrap_or_else(|error| panic!("path: {error}")))
+        String::from(
+            collaboration_runtime::new_service_uuid()
+                .unwrap_or_else(|error| panic!("path: {error}"))
+        )
     ));
     tokio::fs::create_dir_all(&directory)
         .await
@@ -822,7 +841,7 @@ pub(super) async fn fixture_broker() -> (Arc<ServiceInteractionBroker>, CodexGen
         .unwrap_or_else(|error| panic!("service identity: {error}"))
         .with_automation_store(automation_store)
         .with_machine_identity(
-            crate::MachineIdentity::new(service_id, Some("Approval Fixture"))
+            collaboration_contracts::MachineIdentity::new(service_id, Some("Approval Fixture"))
                 .unwrap_or_else(|error| panic!("machine identity: {error}")),
         )
         .unwrap_or_else(|error| panic!("machine identity ownership: {error}"))

@@ -4,12 +4,12 @@ use tokio_util::sync::CancellationToken;
 
 struct AcceptedNoticeDelivery;
 
-impl collaboration_service::SessionMessageDelivery for AcceptedNoticeDelivery {
+impl collaboration_contracts::SessionMessageDelivery for AcceptedNoticeDelivery {
     fn deliver<'a>(
         &'a self,
-        _: collaboration_service::layer_zero::DeliveryRequest,
-        _: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_service::NativeDeliveryResult>
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
     {
         Box::pin(async {
             Ok({
@@ -18,8 +18,8 @@ impl collaboration_service::SessionMessageDelivery for AcceptedNoticeDelivery {
                     reachability: Some(collaboration_protocol::SessionReachability::CodexAppServer),
                     client: None,
                 };
-                collaboration_service::NativeDeliveryResult::observed(
-                    collaboration_service::NativeObservedOutcome::Started,
+                collaboration_contracts::NativeDeliveryResult::observed(
+                    collaboration_contracts::NativeObservedOutcome::Started,
                     receipt.reachability,
                     receipt.client,
                 )
@@ -29,10 +29,10 @@ impl collaboration_service::SessionMessageDelivery for AcceptedNoticeDelivery {
 
     fn reconcile_attempt(
         &self,
-        _: collaboration_service::AttemptReconciliationContext,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
     {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
@@ -50,11 +50,11 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         service_id: typed_service_id.clone(),
         endpoint_id: "claude-local".to_owned().try_into().expect("endpoint ID"),
     };
-    let broker = collaboration_service::ServiceInteractionBroker::load(
+    let broker = collaboration_runtime::ServiceInteractionBroker::load(
         typed_service_id,
-        collaboration_service::NativeControlBackend {
+        collaboration_runtime::NativeControlBackend {
             endpoint: endpoint.clone(),
-            gate: collaboration_service::NativeGenerationGate::default(),
+            gate: collaboration_runtime::NativeGenerationGate::default(),
             codex_home: directory.path().to_owned(),
         },
         directory.path().join("approval-routes.json"),
@@ -101,7 +101,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
             request,
             CancellationToken::new(),
             CancellationToken::new(),
-            Some(collaboration_service::TypedApprovalLegacyContext {
+            Some(collaboration_runtime::TypedApprovalLegacyContext {
                 operation_id: collaboration_protocol::OperationId::generate(),
                 target: serde_json::from_value(
                     json!({"endpoint":endpoint,"sessionId":"provider-session"}),
@@ -170,7 +170,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         String::from_utf8_lossy(&decided.stderr)
     );
     assert!(matches!(receiver.await.expect("agent resolution"),
-        collaboration_service::TypedApprovalResolution::Selected(selected)
+        collaboration_runtime::TypedApprovalResolution::Selected(selected)
             if selected.option_id.as_str() == "allow-once"));
     served.stop().await.expect("collaboration API stops");
 }

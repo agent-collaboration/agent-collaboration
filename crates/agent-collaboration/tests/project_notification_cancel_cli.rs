@@ -109,7 +109,7 @@ async fn project_notification_cancel_cli_preserves_pending_authority_and_request
         return Err("frozen control".into());
     };
     let envelope: fleet_sync_protocol::DeliveryEnvelope<
-        collaboration_service::RouterDeliveryTypes,
+        collaboration_contracts::RouterDeliveryTypes,
     > = serde_json::from_slice(&serde_json::to_vec(&*envelope)?)?;
     let fleet_sync_protocol::DeliveryEnvelope::Item(item) = envelope else {
         return Err("frozen cancel".into());

@@ -1,6 +1,8 @@
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::UuidIdentity;
-use collaboration_service::{CollaborationApplication, MachineIdentity, ServiceIdentity};
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt;
 
@@ -20,7 +22,7 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
         Some("Sunbook-Pro-M4"),
     )
     .expect("machine label");
-    let peer = collaboration_service::load_installation_peer(root.path())
+    let peer = collaboration_runtime::load_installation_peer(root.path())
         .expect("persisted installation peer");
     let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("service identity")
@@ -58,7 +60,7 @@ async fn whoami_refuses_an_installation_rpc_from_a_different_service_identity() 
     let root = tempfile::tempdir().expect("mismatched service fixture");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private service fixture");
-    let peer = collaboration_service::load_installation_peer(root.path()).expect("owned peer");
+    let peer = collaboration_runtime::load_installation_peer(root.path()).expect("owned peer");
     let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("identity")
         .with_installation_peer(peer)

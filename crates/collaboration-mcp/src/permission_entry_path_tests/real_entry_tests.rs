@@ -168,7 +168,7 @@ async fn provider_session_approval_uses_legacy_default_list_and_safe_decision() 
             request,
             CancellationToken::new(),
             CancellationToken::new(),
-            Some(collaboration_service::TypedApprovalLegacyContext {
+            Some(collaboration_runtime::TypedApprovalLegacyContext {
                 operation_id: collaboration_protocol::OperationId::generate(),
                 target: fixture.requester.clone(),
                 generation: fixture.generation.clone(),
@@ -210,7 +210,7 @@ async fn provider_session_approval_uses_legacy_default_list_and_safe_decision() 
     assert_eq!(decided["result"]["isError"], false);
     assert_eq!(decided["result"]["structuredContent"]["state"], "decided");
     assert!(matches!(receiver.await.expect("agent resolution"),
-        collaboration_service::TypedApprovalResolution::Selected(selected)
+        collaboration_runtime::TypedApprovalResolution::Selected(selected)
             if selected.option_id.as_str() == "allow-once"));
     listener.stop().await;
     fixture.shutdown().await;

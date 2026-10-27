@@ -1,10 +1,15 @@
 //! One carrier call and its existing route reconciliation, without a custody or push write.
 use super::subscription_push::SubscriptionPushStore;
-use crate::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    LoadPolicy, NativeDeliveryResult, NativeRefusalCode, UnsentCause, layer_zero::DeliveryRequest,
-};
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::UnsentCause;
+use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryRejection,
     DeliveryRejectionReason, MessageDelivery, PushKind, SessionReachability, SessionRef,
@@ -28,7 +33,10 @@ impl SubscriptionPushStore {
         let mode = request.mode;
         let prepared = request.payload.clone();
         let allow_hold = mode != MessageDelivery::Steer
-            && matches!(request.precondition, crate::DeliveryPrecondition::Unpinned);
+            && matches!(
+                request.precondition,
+                collaboration_contracts::DeliveryPrecondition::Unpinned
+            );
         let sink = CapturedAttemptEvidence::default();
         let mut delivery = tokio::select! {
             () = self.shutdown.cancelled() => return Err(BoardError::board_unavailable()),
@@ -75,7 +83,7 @@ impl SubscriptionPushStore {
     async fn reconcile_queued(
         &self,
         target: &SessionRef,
-        prepared: &crate::layer_zero::PreparedPush,
+        prepared: &collaboration_contracts::layer_zero::PreparedPush,
         sink: &CapturedAttemptEvidence,
     ) -> NativeDeliveryResult {
         let Some(recorded) = sink.recorded.lock().await.clone() else {

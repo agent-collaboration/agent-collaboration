@@ -9,8 +9,8 @@ pub(crate) use acp_client_runtime::ProviderPromptDispatchObservation;
 use collaboration_protocol::{
     CodexGeneration, OperationId, ProviderIdentity, ProviderPromptStopReason, SessionRef,
 };
-use collaboration_service::ProviderSessionEventHub;
-use collaboration_service::ServiceInteractionBroker;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ServiceInteractionBroker;
 use message_board::SessionEndpointRef;
 use tokio_util::sync::CancellationToken;
 

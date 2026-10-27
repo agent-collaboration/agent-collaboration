@@ -6,13 +6,14 @@ mod native_delivery;
 pub mod board_fixture;
 
 use automation_storage::AutomationStore;
+use collaboration_contracts::DeliveryPrecondition;
 use collaboration_protocol::{
     DeliveryOutcome, EndpointId, EndpointRef, MessageContent, MessageDelivery, PushActivityRange,
     PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
     PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{DeliveryPrecondition, ServiceIdentity};
+use collaboration_service::ServiceIdentity;
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::Ordering};
 use tokio::sync::Mutex as TokioMutex;
@@ -107,7 +108,7 @@ async fn message_send_persists_before_delivery_and_submits_one_linked_line() {
         assert_eq!(prepared.payload.push_id, push_id);
         assert_eq!(
             prepared.payload.load_policy,
-            collaboration_service::LoadPolicy::MayLoad
+            collaboration_contracts::LoadPolicy::MayLoad
         );
         assert_eq!(prepared.correlation.as_str(), push_id.as_str());
         let text = &prepared.payload.line;

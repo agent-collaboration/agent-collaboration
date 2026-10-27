@@ -1,6 +1,6 @@
 //! Fleet keysets keep selection, body validation and response budgeting in that order.
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{BoardError, Page, PageRequest, Record};
 use message_board_storage::FleetListFilter;
 
 impl BoardOperations<'_> {
@@ -23,26 +23,26 @@ impl BoardOperations<'_> {
         let mut keys = fleet
             .list_page_keys(selection, &after, u64::from(page.limit.get()) + 1)
             .await
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
+            .map_err(|error| {
+                admission_error(collaboration_runtime::FleetClientError::from(error).into())
+            })?;
         let mut has_more = keys.len() > limit;
         keys.truncate(limit);
-        let stored = fleet
-            .record_batch(&keys)
-            .await
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
-        fleet
-            .finish()
-            .await
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
+        let stored = fleet.record_batch(&keys).await.map_err(|error| {
+            admission_error(collaboration_runtime::FleetClientError::from(error).into())
+        })?;
+        fleet.finish().await.map_err(|error| {
+            admission_error(collaboration_runtime::FleetClientError::from(error).into())
+        })?;
         if stored.len() != keys.len() {
             return Err(BoardError::board_unavailable());
         }
         let mut records = Vec::new();
         let mut bytes = 2_usize;
         for stored in stored {
-            let record = stored
-                .decode()
-                .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
+            let record = stored.decode().map_err(|error| {
+                admission_error(collaboration_runtime::FleetClientError::from(error).into())
+            })?;
             let size = serde_json::to_vec(&record)
                 .map_err(|_| BoardError::board_unavailable())?
                 .len();

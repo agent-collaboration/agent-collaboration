@@ -1,9 +1,8 @@
 //! Durable direct-message work carried by the same target actor as subscription notices.
 use super::subscription_push::SubscriptionPushStore;
-use crate::{
-    DeliveryPrecondition,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
     MessageText, PushId, PushKind, PushLineInput, PushRecord, RouterLink, SessionRef,
@@ -114,7 +113,7 @@ impl SubscriptionPushStore {
         let prepared = PreparedPush {
             push_id: record.push_id.clone(),
             line: MessageText::try_from(line).map_err(|_| BoardError::board_unavailable())?,
-            load_policy: crate::mail_push_preparation::direct_message_load_policy(
+            load_policy: collaboration_runtime::mail_push_preparation::direct_message_load_policy(
                 record.mode,
                 record.guard.as_ref(),
                 record.delivery_state,

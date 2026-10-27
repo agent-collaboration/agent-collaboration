@@ -9,7 +9,8 @@ use collaboration_protocol::{
     EndpointId, EndpointRef, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionId, SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use serde_json::{Value, json};
 use sqlx::Connection;
 use sqlx_turso::{TursoConnectOptions, TursoConnection};

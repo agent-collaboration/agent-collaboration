@@ -4,13 +4,19 @@ pub use owner_clock::{RuntimeTimerClock, TestClock};
 #[path = "scripted_delivery.rs"]
 mod scripted_delivery;
 use super::super::*;
-use crate::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    FleetClient, ProjectAdmission, ProjectAdmissionProps, ProjectStoreRegistry,
-    SessionMessageDelivery, TargetPresence, TargetPresenceProbe,
-};
+use crate::ProjectAdmission;
+use crate::ProjectAdmissionProps;
 use chrono::{DateTime, Utc};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, SessionRef};
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::*;
 use scripted_delivery::{PreparedRecordingRoute, ScriptedDelivery};
 #[path = "owner_native_lifecycle.rs"]
@@ -313,18 +319,21 @@ impl OwnerFixture {
             completions: Mutex::new(completion_receiver),
             reconciliations,
         });
-        let route: Arc<dyn crate::SessionDeliveryRoute> = Arc::new(PreparedRecordingRoute {
-            delivery,
-            reachability,
-        });
-        let router = Arc::new(crate::SessionDeliveryRouter::new(vec![route]));
+        let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
+            Arc::new(PreparedRecordingRoute {
+                delivery,
+                reachability,
+            });
+        let router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
+            route,
+        ]));
         let service = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability,
             push_store: self.interactions.clone(),
             delivery: router,
             presence: self.presence.clone(),
             clock,
-            machine_identity: crate::MachineIdentity::new(
+            machine_identity: collaboration_contracts::MachineIdentity::new(
                 collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
                 Some("Owner-test-machine"),
             )
@@ -394,7 +403,8 @@ pub struct OwnerRuntime {
     pub publisher: Arc<crate::NotificationPublisher>,
     pub completed_native_calls: Arc<std::sync::atomic::AtomicUsize>,
     pub service: SubscriptionDeliveryService,
-    pub requests: Mutex<mpsc::UnboundedReceiver<crate::layer_zero::DeliveryRequest>>,
+    pub requests:
+        Mutex<mpsc::UnboundedReceiver<collaboration_contracts::layer_zero::DeliveryRequest>>,
     pub completions: mpsc::UnboundedSender<DeliveryOutcome>,
     pub observations: Mutex<
         tokio::sync::broadcast::Receiver<super::super::subscription_service::OwnerObservation>,

@@ -1,11 +1,12 @@
 //! Compose client-specific message routes behind one Host-owned router.
 use crate::{ClaudeCodePeerDeliveryRoute, ExternalProviderSupervisor, ProviderAcpDeliveryRoute};
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
+use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_protocol::{EndpointId, EndpointRef};
-use collaboration_service::{
-    EndpointDirectory, NativeControlBackend, ProviderOperationStore, SessionDeliveryRoute,
-    SessionDeliveryRouter,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::SessionDeliveryRouter;
 use std::{collections::HashSet, io, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -18,8 +19,8 @@ pub(crate) struct SessionMessageRouteInputs {
     pub(crate) provider_endpoints: HashSet<EndpointRef>,
     pub(crate) directory: EndpointDirectory,
     pub(crate) native_backend: NativeControlBackend,
-    pub(crate) approval_broker: Arc<collaboration_service::ServiceInteractionBroker>,
-    pub(crate) unmaterialized_threads: Arc<collaboration_service::UnmaterializedThreadHolder>,
+    pub(crate) approval_broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
+    pub(crate) unmaterialized_threads: Arc<collaboration_runtime::UnmaterializedThreadHolder>,
     pub(crate) provider_supervisor: Option<Arc<ExternalProviderSupervisor>>,
     pub(crate) provider_store: Option<Arc<Mutex<ProviderOperationStore>>>,
     pub(crate) peer_registry_directory: PathBuf,
@@ -40,7 +41,7 @@ pub(crate) fn compose_session_message_routes(
     } = inputs;
     let service_id = native_backend.endpoint.service_id.clone();
     let codex_route: Arc<dyn SessionDeliveryRoute> = Arc::new(
-        collaboration_service::CodexAppServerDeliveryRoute::new(
+        collaboration_runtime::CodexAppServerDeliveryRoute::new(
             service_id.clone(),
             directory.clone(),
             native_backend,

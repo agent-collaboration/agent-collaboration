@@ -1,14 +1,14 @@
 //! Approvals and questions: decisions a person or agent owes a waiting session.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
 use crate::ServiceIdentity;
-use crate::interaction_broker::{
-    InteractionHistoryError, InteractionHistoryRecord, QuestionHistoryState,
-};
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams, ApprovalListResponse,
     QuestionAnswerParams, QuestionAnswerResult, QuestionListParams, QuestionListResult,
     QuestionRecord, QuestionResponse, QuestionState,
 };
+use collaboration_runtime::InteractionHistoryError;
+use collaboration_runtime::InteractionHistoryRecord;
+use collaboration_runtime::QuestionHistoryState;
 use serde_json::{Map, Value, json};
 
 /// Approval and question operations over the Router's interaction broker.
@@ -21,7 +21,9 @@ impl<'service> InteractionOperations<'service> {
         Self { identity }
     }
 
-    fn broker(&self) -> Result<&'service crate::ServiceInteractionBroker, InteractionFailure> {
+    fn broker(
+        &self,
+    ) -> Result<&'service collaboration_runtime::ServiceInteractionBroker, InteractionFailure> {
         self.identity
             .approval_broker
             .as_deref()
@@ -104,7 +106,7 @@ pub enum InteractionFailure {
     ApprovalListUnavailable,
     /// The broker refused the decision.
     #[error("Approval decision rejected")]
-    ApprovalRejected(crate::interaction_broker::ApprovalDecisionError),
+    ApprovalRejected(collaboration_runtime::ApprovalDecisionError),
     /// A stored question could not be projected.
     #[error("Question service unavailable")]
     QuestionListUnavailable,

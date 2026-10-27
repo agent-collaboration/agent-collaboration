@@ -18,6 +18,8 @@ members = [
     "crates/collaboration-client",
     "crates/collaboration-mcp",
     "crates/collaboration-service",
+    "crates/collaboration-contracts",
+    "crates/collaboration-runtime",
     "crates/collaboration-protocol",
     "crates/collaboration-central-admin-protocol",
     "crates/collaboration-central-core",

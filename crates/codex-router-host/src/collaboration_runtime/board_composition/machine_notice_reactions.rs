@@ -5,7 +5,9 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardNotice, BoardReadCursor,
     BoardReadPage, BoardReadScope, NoticeRead, PositionedBoardNotice,
 };
-use collaboration_service::{FleetClient, MailDeliveryRuntime, ProjectAdmission};
+use collaboration_runtime::FleetClient;
+use collaboration_service::MailDeliveryRuntime;
+use collaboration_service::ProjectAdmission;
 use fleet_sync_protocol::{NoticePosition, OperationAnswer, OperationRequest};
 use fleet_sync_tokio_runner::SessionRequests;
 use std::{

@@ -19,7 +19,7 @@ pub(in crate::service_identity::subscription_delivery) async fn follow_applicati
 pub(super) async fn follow_application_with_session(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
-    session: Option<crate::MailDeliverySession>,
+    session: Option<collaboration_runtime::MailDeliverySession>,
 ) -> (
     Arc<CollaborationApplication>,
     NativeMailOwner,
@@ -29,7 +29,7 @@ pub(super) async fn follow_application_with_session(
         fixture,
         runtime,
         session,
-        Arc::new(crate::UnacknowledgedProjectReplication),
+        Arc::new(collaboration_contracts::UnacknowledgedProjectReplication),
     )
     .await
 }
@@ -37,8 +37,8 @@ pub(super) async fn follow_application_with_session(
 pub(super) async fn follow_application_with_replication(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
-    session: Option<crate::MailDeliverySession>,
-    replication: Arc<dyn crate::ProjectReplicationPosition>,
+    session: Option<collaboration_runtime::MailDeliverySession>,
+    replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
 ) -> (
     Arc<CollaborationApplication>,
     NativeMailOwner,
@@ -59,8 +59,11 @@ pub(super) async fn follow_application_with_replication(
             interactions,
             actors: runtime.service.clone(),
             presence: fixture.presence.clone(),
-            machine: crate::MachineIdentity::new(SERVICE_ID.to_owned().try_into().unwrap(), None)
-                .unwrap(),
+            machine: collaboration_contracts::MachineIdentity::new(
+                SERVICE_ID.to_owned().try_into().unwrap(),
+                None,
+            )
+            .unwrap(),
             clock: runtime.service.subscription_clock(),
         },
         session,

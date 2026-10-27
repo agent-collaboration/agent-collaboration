@@ -1,10 +1,13 @@
 //! Actual Inbox, journal, native actors and physical push/retry owner; native client and timer stand in.
 use super::*;
-use crate::mail_delivery_projection::tests::fixture;
-use crate::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, BoardAvailability,
-    DeliveryFuture, SessionMessageDelivery, SubscriptionDeliveryServiceProps,
-};
+use crate::BoardAvailability;
+use crate::SubscriptionDeliveryServiceProps;
+use crate::mail_delivery_projection_tests::fixture;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_mail_protocol::{
     FollowDeliveryPolicy, MailSender, NotificationBody, NotificationSource, RecordPointer,
     RootRange,
@@ -41,8 +44,8 @@ pub(super) struct PausedNativeAttempt {
 
 #[derive(Default)]
 pub(super) struct NativeClient {
-    scripts: Mutex<HashMap<PushId, VecDeque<crate::NativeDeliveryResult>>>,
-    calls: Mutex<Vec<crate::layer_zero::DeliveryRequest>>,
+    scripts: Mutex<HashMap<PushId, VecDeque<collaboration_contracts::NativeDeliveryResult>>>,
+    calls: Mutex<Vec<collaboration_contracts::layer_zero::DeliveryRequest>>,
     gates: Mutex<HashMap<PushId, NativeAttemptGate>>,
 }
 impl NativeClient {
@@ -69,11 +72,15 @@ impl NativeClient {
             item,
             receipts
                 .into_iter()
-                .map(crate::native_delivery_result::scripted_delivery_result)
+                .map(collaboration_contracts::scripted_delivery_result)
                 .collect(),
         );
     }
-    pub(super) fn script_results(&self, item: ItemId, results: Vec<crate::NativeDeliveryResult>) {
+    pub(super) fn script_results(
+        &self,
+        item: ItemId,
+        results: Vec<collaboration_contracts::NativeDeliveryResult>,
+    ) {
         self.scripts.lock().unwrap().insert(
             item.as_uuid().to_string().try_into().unwrap(),
             results.into(),
@@ -91,9 +98,9 @@ impl NativeClient {
 impl SessionMessageDelivery for NativeClient {
     fn deliver<'a>(
         &'a self,
-        request: crate::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let push_id = request.payload.push_id.clone();
             self.calls.lock().unwrap().push(request);
@@ -217,7 +224,7 @@ impl Runtime {
         });
         // This recipient has no sender project. Its real check must establish
         // that absence before dispatch, instead of omitting the check port.
-        let registry = Arc::new(crate::ProjectStoreRegistry::new(
+        let registry = Arc::new(collaboration_runtime::ProjectStoreRegistry::new(
             directory,
             Some(fixture.host.config.local.owner),
             Arc::new(runtime_primitives::SystemClock),
@@ -234,7 +241,7 @@ impl Runtime {
                 .await
                 .unwrap();
         let fleet = Arc::new(
-            crate::FleetClient::open(
+            collaboration_runtime::FleetClient::open(
                 directory,
                 Arc::new(crate::test_project_runtime::PendingRegistration),
                 Some(requests),

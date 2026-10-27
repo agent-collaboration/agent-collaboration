@@ -1,6 +1,6 @@
 //! A real renewal restores quiet publication; typed NotWriter keeps SDK custody.
 use super::*;
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_delivery::OutboxStatusState;
 use fleet_sync_protocol::{
     CommitSequence, DeliveryStatus, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer,

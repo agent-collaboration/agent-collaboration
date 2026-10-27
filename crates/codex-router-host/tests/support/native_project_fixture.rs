@@ -1,8 +1,9 @@
 //! Explicit fixture enrollment and unsettled directory registration for native local tests.
 use board_fleet_sync::{AccessServiceToken, BoardSessionInputs};
-use collaboration_service::{
-    ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState, ProjectStoreRegistry,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_protocol::{PeerId, ReceiverId};
 use fleet_sync_session::{Endpoint, PeerCredential};
 use runtime_primitives::SystemClock;
@@ -28,7 +29,7 @@ impl ProjectRegistration for UnsettledRegistration {
 pub fn registry(directory: &Path) -> io::Result<Arc<ProjectStoreRegistry>> {
     Ok(Arc::new(ProjectStoreRegistry::new(
         directory,
-        Some(collaboration_service::load_installation_peer(directory)?),
+        Some(collaboration_runtime::load_installation_peer(directory)?),
         Arc::new(SystemClock),
     )))
 }

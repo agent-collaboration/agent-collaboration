@@ -12,21 +12,21 @@ use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use runtime_primitives::{CallId, SyncTime};
 use std::sync::Arc;
 
-type RouterTypes = collaboration_service::RouterDeliveryTypes;
+type RouterTypes = collaboration_contracts::RouterDeliveryTypes;
 
 struct PendingSeedConsumer {
     now: chrono::DateTime<chrono::Utc>,
 }
 
 impl DeliveryConsumer<TursoScope<'_, SqlHost>> for PendingSeedConsumer {
-    type Protocol = collaboration_service::RouterConsumerProtocol;
+    type Protocol = collaboration_contracts::RouterConsumerProtocol;
 
     async fn on_received(
         &self,
         scope: &mut TursoScope<'_, SqlHost>,
         item: &DeliveryItem<RouterTypes>,
     ) -> Result<(), DeliveryError> {
-        collaboration_service::project_received_mail(scope, item, self.now).await
+        collaboration_runtime::project_received_mail(scope, item, self.now).await
     }
 
     async fn release_gate(
@@ -220,7 +220,7 @@ pub(super) async fn seed_to_last_slot(
                                 .ok_or_else(|| StoreError::backend("last seed body absent"))?,
                         });
                     }
-                    let item = collaboration_service::outgoing_mail_message(&draft, &service, peer)
+                    let item = collaboration_runtime::outgoing_mail_message(&draft, &service, peer)
                         .map_err(StoreError::backend)?;
                     let reference = DeliveryItemRef {
                         item: item.id(),

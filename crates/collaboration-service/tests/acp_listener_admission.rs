@@ -1,8 +1,10 @@
 use codex_acp_adapter::NativeStoredSessions;
-use collaboration_service::{
-    AcpChannelListener, HubEvent, NativeGenerationGate, SessionCommandPort, SessionEventHub,
-    UnmaterializedThreadHolder,
-};
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
+use collaboration_runtime::AcpChannelListener;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::UnmaterializedThreadHolder;
 use message_board::Identity;
 use session_event_model::{
     SessionEvent, SessionItem, SessionItemKind, SessionState, ToolCallStatus,

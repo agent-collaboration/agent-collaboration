@@ -1,8 +1,9 @@
 //! Real runtime construction and Local intake need no welcomed remote carrier.
 use super::*;
-use crate::{MailDeliveryRuntime, MailDeliverySession};
+use crate::MailDeliveryRuntime;
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
+use collaboration_runtime::MailDeliverySession;
 use fleet_sync_protocol::{PeerId, SchemaSupport};
 use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
 use fleet_sync_tokio_runner::SessionPump;

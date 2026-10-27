@@ -1,11 +1,13 @@
 //! Private store-backed approval composition and native notice capture.
 
 use automation_storage::AutomationStore;
+use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
     MachineId, PushKind, PushLineInput, PushOrigin, PushRecord, RouterLink, SessionRef,
     UuidIdentity, render_push_line,
 };
-use collaboration_service::{MachineIdentity, ServiceIdentity, ServiceInteractionBroker};
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ServiceIdentity;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     path::{Path, PathBuf},

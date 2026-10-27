@@ -1,6 +1,9 @@
 //! Real SDK outcomes and native actors feed the public view; only the carrier answers stand in.
 use super::super::owner_fixture::*;
-use crate::{CollaborationApplication, ServiceIdentity, SubscriptionClock, TargetPresence};
+use crate::CollaborationApplication;
+use crate::ServiceIdentity;
+use crate::SubscriptionClock;
+use collaboration_contracts::TargetPresence;
 use collaboration_protocol::{DeliveryOutcome, PushId, ThreadSubscriptionsRequest};
 use interaction_storage::MailDeliveryObservation;
 use message_board::SubscriptionDeliveryOutcome;

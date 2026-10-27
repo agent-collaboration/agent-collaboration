@@ -9,10 +9,11 @@ use collaboration_protocol::{
     EndpointDescription, OBSERVATION_EVENT_NOTIFICATION, ProviderRequestedPolicy,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    CollaborationApplication, ProviderOperationStore, ProviderSessionEventHub,
-    ProviderSessionRecord, ServiceIdentity,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use rmcp::{
     ClientHandler, RoleClient,
     model::{CallToolRequestParams, CustomNotification},

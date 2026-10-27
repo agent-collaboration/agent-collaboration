@@ -1,5 +1,7 @@
 //! A provider backend that answers each operation from a script and records every request,
 //! standing in for the Host's provider work behind the collaboration application.
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::ProviderConversationFuture;
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationCloseRequest, ConversationCreateRequest,
     ConversationLoadRequest, ConversationOperationReconcileRequest,
@@ -8,7 +10,6 @@ use collaboration_protocol::{
     ConversationOperationWaitResult, ConversationPromptRequest, ConversationResumeRequest,
     EndpointRef, ProviderBindingIdentity,
 };
-use collaboration_service::{ProviderConversationBackend, ProviderConversationFuture};
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 use std::{

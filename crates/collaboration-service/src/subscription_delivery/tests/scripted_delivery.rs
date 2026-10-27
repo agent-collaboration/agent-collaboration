@@ -5,21 +5,27 @@ pub(super) struct PreparedRecordingRoute {
     pub(super) delivery: Arc<ScriptedDelivery>,
     pub(super) reachability: collaboration_protocol::SessionReachability,
 }
-impl crate::SessionDeliveryRoute for PreparedRecordingRoute {
+impl collaboration_contracts::SessionDeliveryRoute for PreparedRecordingRoute {
     fn reachability(&self) -> collaboration_protocol::SessionReachability {
         self.reachability
     }
-    fn claim(&self, _: &SessionRef) -> DeliveryFuture<'_, crate::NativeRouteClaim> {
-        Box::pin(async { Ok(crate::NativeRouteClaim::holds()) })
+    fn claim(
+        &self,
+        _: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
+        Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
-    fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, crate::RoutePresence> {
-        Box::pin(async { Ok(crate::RoutePresence::Running) })
+    fn presence(
+        &self,
+        _: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::RoutePresence> {
+        Box::pin(async { Ok(collaboration_contracts::RoutePresence::Running) })
     }
     fn deliver<'a>(
         &'a self,
-        request: crate::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         self.delivery.deliver(request, sink)
     }
     fn reconcile_attempt(
@@ -33,7 +39,8 @@ impl crate::SessionDeliveryRoute for PreparedRecordingRoute {
 pub(super) struct ScriptedDelivery {
     pub(super) sent_pushes: Arc<StdMutex<Vec<collaboration_protocol::PushId>>>,
     pub(super) completed_native_calls: Arc<std::sync::atomic::AtomicUsize>,
-    pub(super) requests: mpsc::UnboundedSender<crate::layer_zero::DeliveryRequest>,
+    pub(super) requests:
+        mpsc::UnboundedSender<collaboration_contracts::layer_zero::DeliveryRequest>,
     pub(super) completions: Mutex<mpsc::UnboundedReceiver<DeliveryOutcome>>,
     pub(super) reconciliations: mpsc::UnboundedSender<(
         AttemptReconciliationContext,
@@ -43,9 +50,9 @@ pub(super) struct ScriptedDelivery {
 impl SessionMessageDelivery for ScriptedDelivery {
     fn deliver<'a>(
         &'a self,
-        request: crate::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let target = request.target.clone();
             let attempt_id = request.attempt.clone();
@@ -84,7 +91,7 @@ impl SessionMessageDelivery for ScriptedDelivery {
             };
             self.completed_native_calls
                 .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-            Ok(crate::native_delivery_result::scripted_delivery_result(
+            Ok(collaboration_contracts::scripted_delivery_result(
                 DeliveryReceipt {
                     outcome,
                     reachability: Some(reachability),

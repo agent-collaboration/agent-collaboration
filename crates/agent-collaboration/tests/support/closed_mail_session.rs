@@ -1,7 +1,7 @@
 //! Actual SDK session handle with no pump, socket or welcomed carrier.
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
-use collaboration_service::MailDeliverySession;
+use collaboration_runtime::MailDeliverySession;
 use fleet_sync_protocol::{PeerId, SchemaSupport};
 use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
 use fleet_sync_tokio_runner::SessionPump;

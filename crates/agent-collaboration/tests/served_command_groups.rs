@@ -32,11 +32,11 @@ impl ServedFixture {
             SERVICE_ID.to_owned().try_into().expect("service ID");
         let endpoint: collaboration_protocol::EndpointRef =
             serde_json::from_value(codex_endpoint()).expect("endpoint");
-        let broker = collaboration_service::ServiceInteractionBroker::load(
+        let broker = collaboration_runtime::ServiceInteractionBroker::load(
             service_id,
-            collaboration_service::NativeControlBackend {
+            collaboration_runtime::NativeControlBackend {
                 endpoint,
-                gate: collaboration_service::NativeGenerationGate::default(),
+                gate: collaboration_runtime::NativeGenerationGate::default(),
                 codex_home: directory.path().to_owned(),
             },
             directory.path().join("approval-routes.json"),

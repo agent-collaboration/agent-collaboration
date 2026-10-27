@@ -179,7 +179,7 @@ async fn context_reads_roles_and_scope_facts_without_decoding_posts_or_feed()
 async fn provider_context_uses_existing_durable_session_worktrees() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, lane) = fixture.project().await?;
-    let mut providers = collaboration_service::ProviderOperationStore::open(
+    let mut providers = collaboration_runtime::ProviderOperationStore::open(
         &fixture._directory.path().join("context-providers.sqlite"),
     )
     .await?;
@@ -188,7 +188,7 @@ async fn provider_context_uses_existing_durable_session_worktrees() -> Result<()
             json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":endpoint},"sessionId":endpoint}),
         )?;
         providers
-            .record_session(&collaboration_service::ProviderSessionRecord {
+            .record_session(&collaboration_runtime::ProviderSessionRecord {
                 target: target.clone(),
                 working_directory: fixture
                     ._directory

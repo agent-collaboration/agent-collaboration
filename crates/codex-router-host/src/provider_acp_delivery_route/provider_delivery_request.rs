@@ -1,9 +1,11 @@
 //! Provider route input without collapsing prepared push content into a legacy message.
 
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{
     DeliveryCorrelationId, MessageDelivery, MessageText, PushId, SessionRef,
 };
-use collaboration_service::{DeliveryContractError, DeliveryPrecondition, LoadPolicy};
 
 pub(super) enum ProviderDeliveryContent {
     PreparedPush { push_id: PushId, line: MessageText },
@@ -19,8 +21,8 @@ pub(super) struct ProviderDeliveryRequest {
     pub attempt: agent_automation::AttemptId,
 }
 
-impl From<collaboration_service::layer_zero::DeliveryRequest> for ProviderDeliveryRequest {
-    fn from(request: collaboration_service::layer_zero::DeliveryRequest) -> Self {
+impl From<collaboration_contracts::layer_zero::DeliveryRequest> for ProviderDeliveryRequest {
+    fn from(request: collaboration_contracts::layer_zero::DeliveryRequest) -> Self {
         Self {
             target: request.target,
             content: ProviderDeliveryContent::PreparedPush {

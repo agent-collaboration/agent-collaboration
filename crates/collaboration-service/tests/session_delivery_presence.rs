@@ -2,17 +2,25 @@
 //! Target presence and load-policy behavior through the session delivery routes.
 
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
     MessageText, PushId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, CodexAppServerDeliveryRoute, DeliveryContractError, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NativeControlBackend,
-    NativeGenerationGate, RoutePresence, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::SessionDeliveryRouter;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -98,7 +106,7 @@ fn codex_route_fixture(
             gate,
             codex_home: root.path().to_owned(),
         },
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     Ok(CodexRouteFixture {
         _root: root,

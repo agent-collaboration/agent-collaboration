@@ -133,7 +133,7 @@ pub(super) async fn handle_notice(
     owner: &mut MachineNoticeReactions,
     projects: &std::sync::Arc<super::ProjectWriters>,
     admission: &std::sync::Weak<collaboration_service::ProjectAdmission>,
-    fleet: &std::sync::Weak<collaboration_service::FleetClient>,
+    fleet: &std::sync::Weak<collaboration_runtime::FleetClient>,
     mail: &std::sync::Weak<collaboration_service::MailDeliveryRuntime>,
     requests: &SessionRequests<BoardConsumerProtocol>,
     body: Notice<BoardConsumerProtocol>,

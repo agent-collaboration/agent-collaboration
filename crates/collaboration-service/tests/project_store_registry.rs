@@ -1,7 +1,7 @@
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;
 use board_fixture::fixture_peer;
-use collaboration_service::ProjectStoreRegistry;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::ProjectId;
 use std::sync::Arc;
 

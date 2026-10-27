@@ -13,6 +13,7 @@ use collaboration_client::{
     ScheduleClientError, WakeClientError, WakeWaitError, operation_failure_from_client_error,
     resolve_public_native,
 };
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_protocol::{
     AutomationInspectionFailureKind, ConfigurationFailureKind, ConfigurationNextAction, EndpointId,
@@ -20,8 +21,9 @@ use collaboration_protocol::{
     RunFailureKind, RunNextAction, ScheduleFailureKind, ScheduleNextAction, WakeFailureReason,
     WakeNextAction, WakeShowRequest,
 };
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use collaboration_service::{CollaborationApplication, ServiceIdentity};
-use collaboration_service::{MachineIdentity, ProjectAdmission, ProjectAdmissionProps};
 use message_board::{BoardFailureKind, BoardNextAction};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};

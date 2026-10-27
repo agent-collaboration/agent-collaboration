@@ -3,7 +3,13 @@ use super::{
     ProjectAdmissionError,
     operation_context::{ConversationMutation, OperationContext, OperationPlan},
 };
-use message_board::*;
+use message_board::{
+    BoardOperation, EndReason, Identity, ImplementerHolder, LeaveFollowUp, MembershipEnd,
+    OrchestratorHolder, Participant, ParticipantClosedReason, ParticipantNote, ParticipantProps,
+    ParticipantRole, Record, RecordedParticipantRole, Refusal, SubscriptionMembership,
+    SubscriptionMembershipProps, SubscriptionPolicyPatch, SubscriptionScope, Thread, ThreadId,
+    ThreadRefusal, ThreadState,
+};
 use message_board_storage::ProjectWriteTransaction;
 
 impl OperationContext<'_> {

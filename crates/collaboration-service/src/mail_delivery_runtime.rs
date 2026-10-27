@@ -1,11 +1,17 @@
 //! One SDK engine owns local mail custody and native outcome projection.
-use crate::{
-    LoadPolicy, MailDeliverySession, MailPushDelivery, MailPushDeliveryProps,
-    RouterConsumerProtocol, RouterDeliveryTypes, SubscriptionClock, outgoing_mail_message,
-    project_mail_cancel_outcome, project_mail_outcome, project_received_mail,
-};
+use crate::MailPushDelivery;
+use crate::MailPushDeliveryProps;
+use crate::SubscriptionClock;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::RouterConsumerProtocol;
+use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{CarrierAcceptance, MailSender};
 use collaboration_protocol::{DeliveryReceipt, PushMessageSendResult, PushRecordDraft};
+use collaboration_runtime::MailDeliverySession;
+use collaboration_runtime::outgoing_mail_message;
+use collaboration_runtime::project_mail_cancel_outcome;
+use collaboration_runtime::project_mail_outcome;
+use collaboration_runtime::project_received_mail;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, NotSentReason, OperationState,
     StoreError, storage::TransactionScope, turso_store::TursoScope,
@@ -66,7 +72,8 @@ pub struct MailDeliveryRuntime {
     #[cfg(test)]
     pub(crate) project_admission_probe: Option<std::path::PathBuf>,
     settlement_drives: Arc<std::sync::Mutex<TaskTracker>>,
-    project_replication: Arc<OnceLock<Arc<dyn crate::ProjectReplicationPosition>>>,
+    project_replication:
+        Arc<OnceLock<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>>,
     owner: Arc<InteractionStore>,
     store: Arc<MailStore>,
     host: Arc<MailHost>,
@@ -348,7 +355,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         item: &DeliveryItem<RouterDeliveryTypes>,
     ) -> Result<(), DeliveryError> {
         project_received_mail(scope, item, self.clock.now()).await?;
-        if crate::received_mail_push::is_poll_mail(item) {
+        if collaboration_runtime::received_mail_push::is_poll_mail(item) {
             let target = item.recipient().address.clone().try_into().map_err(|_| {
                 DeliveryError::Corrupt {
                     field: "Poll recipient",
@@ -365,7 +372,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         scope: &mut TursoScope<'_, MailHost>,
         item: ItemId,
         outcome: &RecipientOutcome<CarrierAcceptance>,
-        observation: Option<&crate::RouterLocalObservation>,
+        observation: Option<&collaboration_contracts::RouterLocalObservation>,
     ) -> Result<(), DeliveryError> {
         let pending_poll = interaction_storage::read_pending_poll_in_scope(scope, item)
             .await
@@ -483,7 +490,8 @@ impl MailConsumer {
 }
 
 struct MailCallRouter {
-    project_replication: Arc<OnceLock<Arc<dyn crate::ProjectReplicationPosition>>>,
+    project_replication:
+        Arc<OnceLock<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>>,
     store: OnceLock<Weak<MailStore>>,
     consumer: Arc<MailConsumer>,
     config: LocalDeliveryConfig,
@@ -528,20 +536,20 @@ impl CallRouter for MailCallRouter {
                         .try_into()
                         .map_err(StoreError::backend)?;
                     let mut direct_load_policy = LoadPolicy::LoadedOnly;
-                    if !crate::received_mail_push::is_poll_mail(item)
+                    if !collaboration_runtime::received_mail_push::is_poll_mail(item)
                         && !matches!(item.body(), board_sync_protocol::BoardDeliveryBody::Wake(_))
                     {
                         let current = read_mail_push_in_scope(scope, &push_id)
                             .await
                             .map_err(StoreError::backend)?
                             .ok_or_else(|| StoreError::backend("mail push is missing"))?;
-                        let draft = crate::received_mail_push(item, current.created_at)
+                        let draft = collaboration_runtime::received_mail_push(item, current.created_at)
                             .map_err(StoreError::backend)?
                             .ok_or_else(|| StoreError::backend("native mail has no push"))?;
                         // The envelope freezes mode/guard. Only the pre-attempt state
                         // authorizes this call to load; no value survives a replay.
                         direct_load_policy = if first_attempt {
-                            crate::mail_push_preparation::direct_message_load_policy(
+                            collaboration_runtime::mail_push_preparation::direct_message_load_policy(
                                 draft.mode,
                                 draft.guard.as_ref(),
                                 current.delivery_state,
@@ -561,7 +569,7 @@ impl CallRouter for MailCallRouter {
         let item = resolved.item();
         let delivery = if let board_sync_protocol::BoardDeliveryBody::Wake(body) = item.body() {
             self.consumer.deliver_wake(item, body).await
-        } else if crate::received_mail_push::is_poll_mail(item) {
+        } else if collaboration_runtime::received_mail_push::is_poll_mail(item) {
             // The reader actor owns its input; retain the resolved custody value
             // here so its stored receipt bound still validates the returned answer.
             let poll_item = fleet_sync_protocol::DeliveryItem::new(

@@ -1,9 +1,11 @@
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::RouteClaim;
+use collaboration_contracts::RouteUnavailableReason;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::RunSummarySource;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryPeerClaim, DeliveryRejection, DeliveryRejectionReason,
-};
-use collaboration_service::{
-    DeliveryPrecondition, RouteClaim, RouteUnavailableReason, RunSettlement, RunSubmission,
-    RunSummarySource,
 };
 use serde_json::{json, to_value};
 

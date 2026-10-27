@@ -3,8 +3,9 @@ use crate::{
     ExternalProviderRuntime, ExternalProviderRuntimeError, ExternalProviderSupervisor,
     LiveSessionOwnership, LiveSessionOwnershipCheck, ProviderSessionActivity,
 };
+use collaboration_contracts::LoadPolicy;
 use collaboration_protocol::{DeliveryCorrelationId, SessionRef};
-use collaboration_service::{LoadPolicy, ProviderOperationStore};
+use collaboration_runtime::ProviderOperationStore;
 use std::{path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -262,7 +263,8 @@ mod tests {
         ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport,
         ProviderWorkingDirectory, RouterAccess, SessionId, UuidIdentity,
     };
-    use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+    use collaboration_runtime::ProviderOperationStore;
+    use collaboration_runtime::ProviderSessionRecord;
     use std::{path::PathBuf, sync::Arc};
 
     struct FixtureOwnership(LiveSessionOwnership);
@@ -271,7 +273,7 @@ mod tests {
         fn check<'a>(
             &'a self,
             _target: &'a SessionRef,
-        ) -> collaboration_service::DeliveryFuture<'a, LiveSessionOwnership> {
+        ) -> collaboration_contracts::DeliveryFuture<'a, LiveSessionOwnership> {
             let result = self.0;
             Box::pin(async move { Ok(result) })
         }

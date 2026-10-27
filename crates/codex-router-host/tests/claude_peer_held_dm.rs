@@ -3,16 +3,19 @@
 
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
 use codex_router_host::ClaudeCodePeerDeliveryRoute;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, DeliveryRejectionReason, EndpointId, EndpointRef,
     MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
     PushRecordDraft, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, SessionDeliveryRouter, SessionMessageDelivery,
-    SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
-    TargetPresenceProbe,
-};
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};

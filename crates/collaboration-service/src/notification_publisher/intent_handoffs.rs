@@ -1,5 +1,5 @@
 //! Admission freezes notifications; this owner publishes their native handoffs.
-use super::*;
+use super::{BoardError, IntentHandling, ProjectId, PublisherInner, publication_epoch};
 use crate::IntentReply;
 use message_board::{
     FeedCursor, Identity, IntentClaim, IntentRecipient, IntentState, NotifyIntent, Record,

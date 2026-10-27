@@ -2,7 +2,14 @@ use super::{
     ProjectAdmissionError,
     operation_context::{ConversationMutation, OperationContext, OperationPlan},
 };
-use message_board::*;
+use message_board::{
+    BoardOperation, FeedCursor, FeedPosition, Identity, ImplementerHolder, LifecycleFact,
+    NotifyTarget, OrchestratorHolder, Participant, ParticipantClosedReason, ParticipantProps,
+    ParticipantRole, Placement, Post, PostCooldownSeconds, PostId, PostReferences, PostText,
+    ReadMark, ReadScope, Record, RecordId, RecordKind, RecordPlacement, RecordRef,
+    RecordedParticipantRole, ReferenceTarget, Refusal, SubscriptionPolicyPatch, SubscriptionScope,
+    Thread, ThreadId, ThreadRefusal, ThreadResolutionReason, ThreadState, ThreadSubject,
+};
 use message_board_storage::ProjectWriteTransaction;
 
 impl OperationContext<'_> {
@@ -404,7 +411,7 @@ impl OperationContext<'_> {
             ReadScope::Thread { thread_id } => {
                 self.thread(thread_id)?;
             }
-            _ => {}
+            ReadScope::Project { .. } => {}
         }
         Ok(())
     }

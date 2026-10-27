@@ -72,7 +72,7 @@ async fn production_host_discovers_enrollment_and_creates_a_central_project() ->
                 "central did not accept a machine connection",
             )?;
             require(
-                collaboration_service::load_installation_peer(directory)? == peer,
+                collaboration_runtime::load_installation_peer(directory)? == peer,
                 "startup changed the persisted installation peer",
             )?;
             Ok::<_, Box<dyn Error>>(())
@@ -103,7 +103,7 @@ async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable
                 "Host read enrollment from the wrong root",
             )?;
             require(
-                collaboration_service::load_installation_peer(directory)? == peer,
+                collaboration_runtime::load_installation_peer(directory)? == peer,
                 "startup changed the persisted installation peer",
             )?;
             Ok::<_, Box<dyn Error>>(())
@@ -141,7 +141,7 @@ async fn production_host_refuses_dangling_enrollment_link_instead_of_falling_bac
 #[tokio::test]
 async fn production_host_preserves_the_installation_peer_mismatch_refusal() -> TestResult {
     let root = fixture_root()?;
-    collaboration_service::load_installation_peer(&root.path().join("collaboration"))?;
+    collaboration_runtime::load_installation_peer(&root.path().join("collaboration"))?;
     write_private_enrollment(root.path())?;
     require_startup_refusal(
         root.path(),
@@ -243,7 +243,7 @@ fn fixture_root() -> TestResult<tempfile::TempDir> {
 
 fn fixture_origin(directory: &Path) -> TestResult<message_board::ActorOrigin> {
     Ok(message_board::ActorOrigin {
-        installation: String::from(collaboration_service::load_service_identity(directory)?)
+        installation: String::from(collaboration_runtime::load_service_identity(directory)?)
             .try_into()?,
         machine: "production enrollment fixture".to_owned().try_into()?,
     })

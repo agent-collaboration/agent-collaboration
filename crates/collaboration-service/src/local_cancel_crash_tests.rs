@@ -91,7 +91,7 @@ async fn crash_between_attribution_and_sdk_admission_leaves_neither_after_reopen
     );
     // Use the public SDK with the same ID and changed target. A committed earlier
     // custody row would refuse ItemConflict instead of accepting this fresh control.
-    let fixture = crate::mail_delivery_projection::tests::fixture::Fixture::new().await;
+    let fixture = crate::mail_delivery_projection_tests::fixture::Fixture::new().await;
     let store = InteractionAtomicStore::new(owner.clone(), fixture.host.clone());
     let mut config = fixture.host.config.local;
     config.owner = state.owner;

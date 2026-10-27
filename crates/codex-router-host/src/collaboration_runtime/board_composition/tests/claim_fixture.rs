@@ -2,7 +2,7 @@
 use super::*;
 use board_central_test_support::TestCentral;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::ProjectClaim;
+use collaboration_contracts::ProjectClaim;
 
 pub(super) struct ClaimFixture {
     pub directory: tempfile::TempDir,
@@ -10,7 +10,7 @@ pub(super) struct ClaimFixture {
     pub projects: Arc<project_writers::ProjectWriters>,
     pub registry: Arc<ProjectStoreRegistry>,
     pub admission: Arc<ProjectAdmission>,
-    pub fleet: Weak<collaboration_service::FleetClient>,
+    pub fleet: Weak<collaboration_runtime::FleetClient>,
     #[cfg(feature = "runtime-test-support")]
     pub notifications: Option<super::forwarded_notification_fixture::HolderNotifications>,
     running: Option<super::super::machine_session::RunningMachineSession>,

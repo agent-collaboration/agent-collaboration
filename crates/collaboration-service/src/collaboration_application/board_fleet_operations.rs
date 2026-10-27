@@ -2,7 +2,13 @@
 use super::{BoardOperations, admission_error};
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    ActingForIdentity, BoardArchiveRequest, BoardCloseRequest, BoardCreateRequest, BoardError,
+    BoardUpdateRequest, Identity, ProjectCreateRequest, ProjectUpdateRequest, ProtocolVersion,
+    Record, RecordRef, RecordedActor, RepositoryAttachRequest, RepositoryDetachRequest,
+    RepositoryRef, RequestEffectsScope, RequestId, WorkspaceArchiveRequest, WorkspaceCreateRequest,
+    WorkspaceId, WorkspaceUpdateRequest,
+};
 
 impl BoardOperations<'_> {
     pub(super) async fn fleet_write(

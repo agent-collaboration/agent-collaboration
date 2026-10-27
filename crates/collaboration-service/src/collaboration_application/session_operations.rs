@@ -360,7 +360,7 @@ impl<'service> SessionOperations<'service> {
 struct NativeRoute<'service> {
     advertised_digest: Option<String>,
     advertised_generation: Option<CodexGeneration>,
-    backend: &'service crate::NativeControlBackend,
+    backend: &'service collaboration_runtime::NativeControlBackend,
 }
 
 struct NativeCall {
@@ -416,7 +416,7 @@ pub(crate) fn valid_session_rename_name(name: &str) -> bool {
 
 /// The access Router recorded for this thread, if the broker holds one.
 async fn recorded_access(
-    routes: &crate::ServiceInteractionBroker,
+    routes: &collaboration_runtime::ServiceInteractionBroker,
     thread_id: &str,
 ) -> Option<RouterAccess> {
     use codex_acp_adapter::ApprovalBroker;
@@ -446,7 +446,9 @@ pub(crate) fn classify_native_call_failure(
         }
         NativeConnectionError::Rejected { code } => {
             let (reason, next_action) =
-                crate::message_effect_state::classify_native_rejection(*code, native);
+                collaboration_runtime::message_effect_state::classify_native_rejection(
+                    *code, native,
+                );
             let message = native
                 .and_then(|value| value.get("message"))
                 .and_then(Value::as_str)

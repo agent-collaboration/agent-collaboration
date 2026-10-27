@@ -1,11 +1,12 @@
 //! Real wake intent and reconciliation; native endpoint replies/schema are stand-ins.
 use super::*;
-use crate::{SessionDeliveryRouter, SessionMessageDelivery};
 use agent_automation::{ExpiryRule, PreparationEffect, TimingRule};
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, OperationId, RouterOriginRef, SavedMessage,
 };
+use collaboration_runtime::SessionDeliveryRouter;
 
 struct QueueObservation {
     intent: Option<PreparationEffect>,
@@ -63,14 +64,14 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         .evaluate_wakeup::<SavedMessage>(
             &wake.definition.wakeup_id,
             anchor_ms + 1000,
-            crate::wakeup_delivery_sender::build_wake_push_draft,
+            collaboration_runtime::wakeup_delivery_sender::build_wake_push_draft,
         )
         .await?
     else {
         return Err("wake not fired".into());
     };
     let interactions = fixture.broker.interaction_store();
-    crate::PushHandoffWorker::new(Arc::clone(&store), Arc::clone(&interactions))
+    collaboration_runtime::PushHandoffWorker::new(Arc::clone(&store), Arc::clone(&interactions))
         .apply_pending()
         .await?;
     let push = interactions
@@ -80,24 +81,25 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         })
         .await?
         .ok_or("push missing")?;
-    let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
+    let directory =
+        collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
     let route = Arc::new(
-        crate::CodexAppServerDeliveryRoute::new(
+        collaboration_runtime::CodexAppServerDeliveryRoute::new(
             fixture.backend.endpoint.service_id.clone(),
             directory,
             fixture.backend.clone(),
-            Arc::new(crate::UnmaterializedThreadHolder::new()),
+            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
         )
         .with_approval_broker(&fixture.broker),
     );
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
-    let sender = crate::wakeup_delivery_sender::WakeDeliverySender {
+    let sender = collaboration_runtime::wakeup_delivery_sender::WakeDeliverySender {
         interactions,
         delivery: delivery.clone(),
-        configuration: crate::AutomationConfigurationHandle::default(),
-        machine_identity: crate::MachineIdentity::new(
+        configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
+        machine_identity: collaboration_contracts::MachineIdentity::new(
             fixture.backend.endpoint.service_id.clone(),
             Some("Policy fixture"),
         )?,
@@ -149,7 +151,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                     json!({"thread":{"id":THREAD,"cwd":cwd,"status":{"type":"idle"}}})
                 }
                 "thread/resume" => {
-                    let record=native_store.lock().await.read_delivery::<SessionRef,CodexGeneration,crate::stored_delivery_receipt::StoredDeliveryReceipt>(&native_id).await?;
+                    let record=native_store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&native_id).await?;
                     let RouteEffectEvidence::CodexAppServer(effects) = record
                         .attempt
                         .ok_or("intent missing")?
@@ -218,7 +220,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         sender.dispatch(store.clone(), delivery_id.clone()),
     )
     .await??;
-    let record=store.lock().await.read_delivery::<SessionRef,CodexGeneration,crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
+    let record=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
     let RouteEffectEvidence::CodexAppServer(effects) = record
         .attempt
         .as_ref()
@@ -244,14 +246,14 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                 "public uncertain effect evidence must retain the report"
             );
         }
-        crate::delivery_reconciliation::reconcile(
+        collaboration_runtime::delivery_reconciliation::reconcile(
             &store,
             &sender.interactions,
             delivery.as_ref(),
             record,
         )
         .await?;
-        let settled=store.lock().await.read_delivery::<SessionRef,CodexGeneration,crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
+        let settled=store.lock().await.read_delivery::<SessionRef,CodexGeneration,collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id).await?;
         let inspection = crate::delivery_projection::snapshot(settled)
             .map_err(|_| "settled public inspection failed")?;
         match inspection.evidence {
@@ -295,7 +297,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let mut reopened =
         AutomationStore::open(&fixture.directory.path().join("automation.sqlite")).await?;
     let reopened_record = reopened
-        .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id)
+        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&delivery_id)
         .await?;
     if matches!(case, QueueProbeCase::MatchingItem) {
         let effects = reopened_record
@@ -304,7 +306,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
             .and_then(|attempt| attempt.effects.as_ref())
             .ok_or("reopened effect evidence missing")?;
         let public = serde_json::to_value(
-            crate::delivery_route_projection::project(effects)
+            collaboration_runtime::delivery_route_projection::project(effects)
                 .map_err(|_| "reopened effects projection failed")?,
         )?;
         assert_eq!(
@@ -497,7 +499,7 @@ async fn policy_queue_invalid_effects_never_inspect_or_accept_a_queue_item() {
         if missing_generation {
             effects.generation = None;
         }
-        let context = crate::AttemptReconciliationContext {
+        let context = collaboration_contracts::AttemptReconciliationContext {
             target: target(),
             prepared_push_id: push.clone(),
             mode: MessageDelivery::Queue,
@@ -506,11 +508,11 @@ async fn policy_queue_invalid_effects_never_inspect_or_accept_a_queue_item() {
         let observed = tokio::select! {
             biased;
             _=listener.accept()=>panic!("invalid evidence reached queue inspection"),
-            result=crate::codex_queue_reconciliation::reconcile(&fixture.backend,context)=>result,
+            result=collaboration_runtime::codex_queue_reconciliation::reconcile(&fixture.backend,context)=>result,
         };
         assert!(matches!(
             observed,
-            crate::AttemptReconciliation::StillUnknown
+            collaboration_contracts::AttemptReconciliation::StillUnknown
         ));
     }
 }

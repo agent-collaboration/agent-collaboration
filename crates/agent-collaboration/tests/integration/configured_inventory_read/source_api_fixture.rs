@@ -3,9 +3,10 @@ use super::router_connection_registry::RouterConnectionRegistry;
 use crate::presentation::session_picker::{PickerSourceContext, SourceInventoryRequest};
 use crate::sessions::*;
 use collaboration_client::protocol::{EndpointRef, RouterExecutableRelation};
-use collaboration_service::{
-    CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use std::{
     io::ErrorKind,
     os::unix::{fs::PermissionsExt, net::UnixListener},
@@ -119,9 +120,9 @@ impl SourceApiFixture {
             use collaboration_client::protocol::{
                 ProviderRequestedPolicy, RouterAccess, SessionRef,
             };
-            use collaboration_service::{
-                ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord,
-            };
+            use collaboration_runtime::ProviderOperationStore;
+            use collaboration_runtime::ProviderSessionEventHub;
+            use collaboration_runtime::ProviderSessionRecord;
             let target: SessionRef = serde_json::from_value(serde_json::json!({
                 "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"shared-source-id"
             })).unwrap();

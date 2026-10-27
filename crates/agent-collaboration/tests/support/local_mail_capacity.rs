@@ -14,7 +14,7 @@ fn wire_charge(
     peer: fleet_sync_protocol::PeerId,
     ordinary_reserve_bytes: u32,
 ) -> TestResult<u64> {
-    let item = collaboration_service::outgoing_mail_message(
+    let item = collaboration_runtime::outgoing_mail_message(
         draft,
         &super::local_mail_surfaces::SERVICE.to_owned().try_into()?,
         peer,

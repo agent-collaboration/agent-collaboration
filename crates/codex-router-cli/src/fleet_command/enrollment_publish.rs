@@ -40,7 +40,7 @@ pub(super) fn publish(
         crate::secret_store_factory::initialize_plaintext_debug_root(&secret_root)?;
     }
     let store = crate::secret_store_factory::open_cli_secret_store(&secret_root)?;
-    let generation = String::from(collaboration_service::new_service_uuid()?);
+    let generation = String::from(collaboration_runtime::new_service_uuid()?);
     let installation = prepared.request.installation.as_str();
     let access_key = FleetSecretKey::new(
         FleetSecretKind::AccessClientSecret,

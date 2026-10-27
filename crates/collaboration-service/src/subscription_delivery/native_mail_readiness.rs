@@ -1,5 +1,8 @@
 //! Volatile reader prompts bridge native outcomes to the existing readiness loop.
-use super::*;
+use super::{
+    BoardError, ReaderReconcilePurpose, ReaderScanScope, ServiceHandleLifetime, SessionRef,
+    SubscriptionDeliveryService, reader_for_target,
+};
 
 impl SubscriptionDeliveryService {
     pub(crate) fn prompt_project_mail_outcome(&self, item: fleet_sync_protocol::ItemId) {

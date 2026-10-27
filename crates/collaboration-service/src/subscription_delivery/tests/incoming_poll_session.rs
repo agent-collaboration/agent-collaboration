@@ -17,7 +17,7 @@ use tokio::{net::TcpListener, sync::watch, task::JoinSet};
 type ReportedOutcome = (ItemId, RecipientOutcome<CarrierAcceptance>);
 
 pub(super) struct IncomingPollSession {
-    pub session: crate::MailDeliverySession,
+    pub session: collaboration_runtime::MailDeliverySession,
     pub reports: Arc<Mutex<Vec<ReportedOutcome>>>,
     stop: watch::Sender<bool>,
     tasks: JoinSet<()>,
@@ -112,7 +112,7 @@ impl IncomingPollSession {
         .await
         .unwrap();
         Self {
-            session: crate::MailDeliverySession {
+            session: collaboration_runtime::MailDeliverySession {
                 requests,
                 welcomed: readiness,
                 peer,

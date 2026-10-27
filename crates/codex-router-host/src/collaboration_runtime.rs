@@ -5,10 +5,11 @@ use collaboration_protocol::{
     CodexGeneration, EndpointAvailability, EndpointId, EndpointRef, NonEmptyText,
     ObservationTimestamp, ProviderKind, RouterExecutableRelation, SchemaDigest, UuidIdentity,
 };
-use collaboration_service::{
-    NativeRelayListener, ServiceIdentity, load_installation_peer, load_service_identity,
-    new_service_uuid,
-};
+use collaboration_runtime::NativeRelayListener;
+use collaboration_runtime::load_installation_peer;
+use collaboration_runtime::load_service_identity;
+use collaboration_runtime::new_service_uuid;
+use collaboration_service::ServiceIdentity;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
@@ -117,7 +118,7 @@ pub struct CollaborationRuntime {
     project_admission: Option<std::sync::Arc<collaboration_service::ProjectAdmission>>,
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
     provider_store:
-        Option<std::sync::Arc<tokio::sync::Mutex<collaboration_service::ProviderOperationStore>>>,
+        Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
     external_provider_supervisor: Option<std::sync::Arc<crate::ExternalProviderSupervisor>>,
     provider_delivery_route: Option<std::sync::Arc<crate::ProviderAcpDeliveryRoute>>,
     provider_retention: Option<tokio::task::JoinHandle<()>>,
@@ -140,7 +141,7 @@ pub struct CollaborationRuntime {
     automation_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
-    manifest: Option<collaboration_service::ManifestPublication>,
+    manifest: Option<collaboration_runtime::ManifestPublication>,
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
@@ -165,7 +166,7 @@ impl CollaborationRuntime {
     #[cfg(feature = "runtime-test-support")]
     pub async fn runtime_test_install_mail_fault(
         &self,
-        fault: collaboration_service::MailStoreTestFault,
+        fault: interaction_storage::MailStoreTestFault,
     ) -> io::Result<()> {
         self.runtime_test_mail
             .as_ref()

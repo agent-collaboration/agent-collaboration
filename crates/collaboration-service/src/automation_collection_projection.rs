@@ -39,7 +39,7 @@ pub(crate) async fn project_record(
                 .try_into()
                 .map_err(|_| StorageError::InvalidRecord)?;
             let record = store
-                .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&id)
+                .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&id)
                 .await?;
             if record.schedule_id != *schedule_id {
                 return Err(StorageError::InvalidRecord);
@@ -54,7 +54,7 @@ pub(crate) async fn project_record(
                 .try_into()
                 .map_err(|_| StorageError::InvalidRecord)?;
             let record = store
-                .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&id)
+                .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&id)
                 .await?;
             if wakeup_id.as_ref().is_some_and(|id| *id != record.wakeup_id) {
                 return Err(StorageError::InvalidRecord);
@@ -85,5 +85,6 @@ pub(crate) async fn project_record(
     result.map_err(|_| StorageError::InvalidRecord)
 }
 fn timestamp(value: i64) -> Result<collaboration_protocol::ObservationTimestamp, StorageError> {
-    crate::wakeup_projection::timestamp(value).map_err(|_| StorageError::InvalidRecord)
+    collaboration_runtime::observation_timestamp::timestamp(value)
+        .map_err(|_| StorageError::InvalidRecord)
 }

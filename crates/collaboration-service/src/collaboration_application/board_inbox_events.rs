@@ -1,5 +1,8 @@
 //! Only page-selected immutable records are decoded into inbox activities.
-use message_board::*;
+use message_board::{
+    BoardError, FeedContent, FeedCursor, FeedEntry, InboxActivity, Placement, ProjectFeedEntry,
+    ReadScope, Record, RecordPlacement,
+};
 pub(super) fn inbox_activity(entry: FeedEntry) -> Result<InboxActivity, BoardError> {
     let cursor = FeedCursor {
         epoch: entry.epoch,

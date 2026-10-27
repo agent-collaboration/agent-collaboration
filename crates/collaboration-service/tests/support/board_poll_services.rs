@@ -22,7 +22,7 @@ pub async fn fixture_poll_services(
     let automation = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&directory.join("automation.sqlite")).await?,
     ));
-    let routes = Arc::new(collaboration_service::SessionDeliveryRouter::new(Vec::new()));
+    let routes = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new()));
     let delivery = fixture_subscription_service(admission, &interactions, &routes)?;
     let identity = identity
         .with_automation_store(automation)

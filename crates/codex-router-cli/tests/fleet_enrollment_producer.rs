@@ -298,11 +298,11 @@ fn assert_produced_enrollment(
     );
     assert_eq!(
         enrollment.peer,
-        collaboration_service::load_installation_peer(&directory)?
+        collaboration_runtime::load_installation_peer(&directory)?
     );
     assert_eq!(
         enrollment.installation.as_str(),
-        String::from(collaboration_service::load_service_identity(&directory)?)
+        String::from(collaboration_runtime::load_service_identity(&directory)?)
     );
     let before = fleet_cli::snapshot(router_root)?;
     for (_, bytes) in &before {

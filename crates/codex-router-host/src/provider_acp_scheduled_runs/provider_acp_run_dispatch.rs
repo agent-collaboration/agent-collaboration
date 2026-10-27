@@ -8,15 +8,22 @@ use crate::{
     external_provider_supervisor::{ProviderPromptContentsRequest, ProviderPromptDispatch},
 };
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RunAcceptance;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunObservationContext;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
     ConversationCancelRequest, DeliveryClientReceipt, DeliveryNextAction, DeliveryOutcome,
     DeliveryReceipt, DeliveryRejection, DeliveryRejectionReason, OperationId,
     ProviderOperationEffect, ProviderOperationStage, RouterLink, RunExecution, SessionReachability,
-};
-use collaboration_service::{
-    DeliveryContractError, DeliveryPrecondition, LoadPolicy, ProviderConversationBackend,
-    RunAcceptance, RunEvidenceDisposition, RunEvidenceSink, RunObservationContext, RunSubmission,
-    ScheduledRunPayload, ScheduledRunSubmission, StopRequestOutcome,
 };
 
 impl ProviderAcpScheduledRuns {
@@ -288,7 +295,7 @@ impl ProviderAcpScheduledRuns {
 }
 
 fn prepared_push_link_matches_id(
-    prepared: &collaboration_service::layer_zero::PreparedPush,
+    prepared: &collaboration_contracts::layer_zero::PreparedPush,
 ) -> bool {
     prepared
         .line

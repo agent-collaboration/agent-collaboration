@@ -1,5 +1,5 @@
 //! Only a publisher's unchanged, terminal prefix can advance the replicated frontier.
-use super::*;
+use super::{ProjectAdmission, ProjectAdmissionError};
 use crate::notification_publisher::SettledMailPrefix;
 
 impl ProjectAdmission {

@@ -1,5 +1,9 @@
 //! Requested mail retirement keeps its route and call identity in the existing journal.
-use super::*;
+use super::{
+    CallEnvelope, CallFailure, CallTarget, CarrierAcceptance, DeliveryLimits, ItemId,
+    MailCallRouter, MailHost, MailStore, PeerId, RouterDeliveryTypes, StoreError, TursoScope,
+    Value,
+};
 use durable_steps::{JournalScope, OperationContext, OperationFailure, StepError, Task};
 use fleet_sync_delivery::{
     Outbox, OutboxAdmission, OutboxStatusState, SubmitInput, delivery_rollback,

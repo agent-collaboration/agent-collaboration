@@ -9,7 +9,8 @@ use codex_router_host::{
 use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use session_event_model::{InputId, PromptContent};
 use std::{path::PathBuf, sync::Arc};
 
@@ -130,7 +131,7 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
         )
         .await
         .expect("two blocks admitted");
-    let settled = collaboration_service::ProviderConversationBackend::wait(
+    let settled = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: submitted.operation.operation_id,
@@ -235,7 +236,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
         idle_cancel,
         Err(codex_router_host::ProviderCancelActiveTurnError::NoActiveTurn)
     ));
-    let prompt = collaboration_service::ProviderConversationBackend::prompt(
+    let prompt = collaboration_contracts::ProviderConversationBackend::prompt(
         supervisor.as_ref(),
         collaboration_protocol::ConversationPromptRequest {
             input_id: None,
@@ -268,7 +269,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
         .cancel_active_turn(target.clone(), other_actor.into())
         .await
         .expect("active turn cancel admitted");
-    let cancelled = collaboration_service::ProviderConversationBackend::wait(
+    let cancelled = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: cancel.operation.operation_id,
@@ -284,7 +285,7 @@ async fn active_control_turn_cancel_uses_operation_bound_path_and_settles_after_
             settlement: collaboration_protocol::ConversationOperationSettlement::CancelRequested { .. }
         }
     ));
-    let turn = collaboration_service::ProviderConversationBackend::wait(
+    let turn = collaboration_contracts::ProviderConversationBackend::wait(
         supervisor.as_ref(),
         collaboration_protocol::ConversationOperationWaitRequest {
             operation_id: prompt.operation.operation_id,

@@ -1,6 +1,8 @@
 //! Real actors, SDK tasks and projections; endpoints, time and release/report inputs stand in.
 use super::*;
-use crate::{NativeDeliveryResult, NativeRefusalCode, UnsentCause};
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, MessageDelivery,
 };
@@ -12,7 +14,7 @@ impl TargetPresenceProbe for Wakeable {
     fn presence(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> crate::DeliveryFuture<'_, TargetPresence> {
+    ) -> collaboration_contracts::DeliveryFuture<'_, TargetPresence> {
         Box::pin(async { Ok(TargetPresence::Wakeable) })
     }
 }

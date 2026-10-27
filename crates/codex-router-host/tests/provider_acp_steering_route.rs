@@ -6,6 +6,15 @@ use codex_router_host::{
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, ConversationPromptRequest,
     DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability,
@@ -16,12 +25,9 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
     PushId, RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, ProviderConversationBackend, ProviderOperationStore,
-    ProviderSessionRecord, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -420,7 +426,7 @@ fn request(target: SessionRef, mode: MessageDelivery) -> DeliveryRequest {
         payload: PreparedPush {
             push_id,
             line,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target,
         mode,

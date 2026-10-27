@@ -9,7 +9,7 @@ pub(crate) fn snapshot(
     record: DeliveryRecord<
         SessionRef,
         CodexGeneration,
-        crate::stored_delivery_receipt::StoredDeliveryReceipt,
+        collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
     >,
 ) -> Result<DeliveryInspection, ()> {
     let mode = match record.mode.as_str() {
@@ -59,8 +59,9 @@ pub(crate) fn snapshot(
             _ => return Err(()),
         },
         Some(attempt) => {
-            let effects =
-                crate::delivery_route_projection::project(attempt.effects.as_ref().ok_or(())?)?;
+            let effects = collaboration_runtime::delivery_route_projection::project(
+                attempt.effects.as_ref().ok_or(())?,
+            )?;
             match attempt.outcome {
                 AttemptOutcome::InProgress if record.status == DeliveryStatus::Dispatching => {
                     DeliveryEvidence::Dispatching {
@@ -111,10 +112,12 @@ pub(crate) fn snapshot(
             wakeup_id: record.wakeup_id,
             occurrence_id: record.occurrence_id,
         },
-        eligible_at: crate::wakeup_projection::timestamp(record.eligible_at_ms)?,
+        eligible_at: collaboration_runtime::observation_timestamp::timestamp(
+            record.eligible_at_ms,
+        )?,
         expires_at: record
             .expires_at_ms
-            .map(crate::wakeup_projection::timestamp)
+            .map(collaboration_runtime::observation_timestamp::timestamp)
             .transpose()?,
         disposition,
         evidence,

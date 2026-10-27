@@ -7,7 +7,12 @@ use collaboration_protocol::{
     SubscriptionWaitBatch, ThreadSubscriptionPresence, ThreadSubscriptionState,
     ThreadSubscriptionView,
 };
-use message_board::*;
+use message_board::{
+    AuthorityRole, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardId,
+    BoardNextAction, BoardOperation, Identity, PostId, ProjectId, ProjectRequest, ProtocolVersion,
+    RecordKind, RecordRef, ResourceIdentity, RoleRequirement, RoleSubject, SubscriptionState,
+    ThreadId, WorkspaceId,
+};
 use std::{sync::Arc, time::Duration};
 
 const TARGET_PRESENCE_PROBE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -82,16 +87,20 @@ pub(super) fn admission_error(error: crate::ProjectAdmissionError) -> BoardError
         crate::ProjectAdmissionError::Storage(
             message_board_storage::ProjectStorageError::InvalidRecord { record, field },
         ) => invalid_stored_record(record, field),
-        crate::ProjectAdmissionError::Fleet(crate::FleetClientError::Authoritative(
-            message_board_storage::FleetStorageError::InvalidRecordAt { record },
-        ))
-        | crate::ProjectAdmissionError::Fleet(crate::FleetClientError::Local(
+        crate::ProjectAdmissionError::Fleet(
+            collaboration_runtime::FleetClientError::Authoritative(
+                message_board_storage::FleetStorageError::InvalidRecordAt { record },
+            ),
+        )
+        | crate::ProjectAdmissionError::Fleet(collaboration_runtime::FleetClientError::Local(
             message_board_storage::RouterLocalStorageError::InvalidRecordAt { record },
         )) => invalid_stored_record(record, "payload"),
-        crate::ProjectAdmissionError::Fleet(crate::FleetClientError::Authoritative(
-            message_board_storage::FleetStorageError::InvalidRecordKey { field },
-        ))
-        | crate::ProjectAdmissionError::Fleet(crate::FleetClientError::Local(
+        crate::ProjectAdmissionError::Fleet(
+            collaboration_runtime::FleetClientError::Authoritative(
+                message_board_storage::FleetStorageError::InvalidRecordKey { field },
+            ),
+        )
+        | crate::ProjectAdmissionError::Fleet(collaboration_runtime::FleetClientError::Local(
             message_board_storage::RouterLocalStorageError::InvalidRecordKey { field },
         )) => invalid_stored_field(field),
         _ => BoardError::board_unavailable(),
@@ -326,7 +335,7 @@ fn subscription_view(
 
 async fn presence_for_reader(
     reader: &Identity,
-    presence_probe: &Arc<dyn crate::TargetPresenceProbe>,
+    presence_probe: &Arc<dyn collaboration_contracts::TargetPresenceProbe>,
 ) -> ThreadSubscriptionPresence {
     let Identity::Session { session } = reader else {
         return ThreadSubscriptionPresence::Unreachable {
@@ -350,9 +359,13 @@ async fn presence_for_reader(
     )
     .await
     {
-        Ok(Ok(crate::TargetPresence::Running)) => ThreadSubscriptionPresence::Running {},
-        Ok(Ok(crate::TargetPresence::Wakeable)) => ThreadSubscriptionPresence::Wakeable {},
-        Ok(Ok(crate::TargetPresence::Unreachable { reason })) => {
+        Ok(Ok(collaboration_contracts::TargetPresence::Running)) => {
+            ThreadSubscriptionPresence::Running {}
+        }
+        Ok(Ok(collaboration_contracts::TargetPresence::Wakeable)) => {
+            ThreadSubscriptionPresence::Wakeable {}
+        }
+        Ok(Ok(collaboration_contracts::TargetPresence::Unreachable { reason })) => {
             ThreadSubscriptionPresence::Unreachable { reason }
         }
         Ok(Err(error)) => {

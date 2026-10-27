@@ -1,6 +1,6 @@
 //! The Router's identity and composed collaboration dependencies.
-use crate::EndpointDirectory;
 use collaboration_protocol::{EndpointAvailability, EndpointDescription, UuidIdentity};
+use collaboration_runtime::EndpointDirectory;
 #[path = "subscription_delivery/mod.rs"]
 pub mod subscription_delivery;
 
@@ -8,41 +8,47 @@ pub mod subscription_delivery;
 pub struct ServiceIdentity {
     pub(crate) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
     pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
-    pub(crate) project_claim: Option<std::sync::Arc<dyn crate::ProjectClaim>>,
-    pub(crate) project_replication: std::sync::Arc<dyn crate::ProjectReplicationPosition>,
+    pub(crate) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
+    pub(crate) project_replication:
+        std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     pub(crate) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
     pub(crate) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
-    pub(crate) subscription_presence: Option<std::sync::Arc<dyn crate::TargetPresenceProbe>>,
+    pub(crate) subscription_presence:
+        Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
     pub(crate) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
     pub(crate) service_id: UuidIdentity,
     pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
-    pub(crate) machine_identity: crate::MachineIdentity,
-    pub(crate) configuration: crate::AutomationConfigurationHandle,
+    pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
+    pub(crate) configuration: collaboration_runtime::AutomationConfigurationHandle,
     pub(crate) configuration_backend:
-        Option<std::sync::Arc<dyn crate::AutomationConfigurationBackend>>,
+        Option<std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>>,
     pub(crate) service_epoch: UuidIdentity,
-    pub(crate) display_names: crate::SessionDisplayNameCache,
+    pub(crate) display_names: collaboration_runtime::SessionDisplayNameCache,
     pub(crate) directory: EndpointDirectory,
     pub(crate) wake_wait_permits: std::sync::Arc<tokio::sync::Semaphore>,
     pub(crate) journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
-    pub(crate) native_backend: Option<crate::NativeControlBackend>,
-    pub(crate) session_delivery: Option<std::sync::Arc<dyn crate::SessionMessageDelivery>>,
-    pub(crate) scheduled_run_execution: Option<std::sync::Arc<dyn crate::ScheduledRunExecution>>,
-    pub(crate) approval_broker: Option<std::sync::Arc<crate::ServiceInteractionBroker>>,
+    pub(crate) native_backend: Option<collaboration_runtime::NativeControlBackend>,
+    pub(crate) session_delivery:
+        Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>>,
+    pub(crate) scheduled_run_execution:
+        Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>>,
+    pub(crate) approval_broker:
+        Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
     pub(crate) automation:
         Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
     pub(crate) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(crate) provider_operations:
-        Option<std::sync::Arc<tokio::sync::Mutex<crate::ProviderOperationStore>>>,
-    pub(crate) provider_session_hub: Option<std::sync::Arc<dyn crate::SessionEventHub>>,
+        Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
+    pub(crate) provider_session_hub:
+        Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
     pub(crate) claude_code_sessions:
         Option<std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>>,
     pub(crate) claude_background_jobs:
         Option<std::sync::Arc<claude_code_peer_messaging::NativeClaudeJobReader>>,
     pub(crate) codex_conversation_recorder:
-        Option<std::sync::Arc<crate::CodexConversationOperationRecorder>>,
+        Option<std::sync::Arc<collaboration_runtime::CodexConversationOperationRecorder>>,
     pub(crate) provider_conversations:
-        Option<std::sync::Arc<dyn crate::ProviderConversationBackend>>,
+        Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
 impl ServiceIdentity {
     pub fn with_mail_delivery_runtime(
@@ -87,21 +93,24 @@ impl ServiceIdentity {
         self.installation_peer
     }
 
-    pub fn with_project_claim(mut self, claim: std::sync::Arc<dyn crate::ProjectClaim>) -> Self {
+    pub fn with_project_claim(
+        mut self,
+        claim: std::sync::Arc<dyn collaboration_contracts::ProjectClaim>,
+    ) -> Self {
         self.project_claim = Some(claim);
         self
     }
 
     pub fn with_project_replication(
         mut self,
-        replication: std::sync::Arc<dyn crate::ProjectReplicationPosition>,
+        replication: std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     ) -> Self {
         self.project_replication = replication;
         self
     }
     pub fn with_machine_identity(
         mut self,
-        machine_identity: crate::MachineIdentity,
+        machine_identity: collaboration_contracts::MachineIdentity,
     ) -> Result<Self, String> {
         if machine_identity.service_id() != &self.service_id {
             return Err("machine identity belongs to another service".into());
@@ -130,7 +139,7 @@ impl ServiceIdentity {
     pub fn with_subscription_delivery_service(
         mut self,
         service: crate::SubscriptionDeliveryService,
-        presence: std::sync::Arc<dyn crate::TargetPresenceProbe>,
+        presence: std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>,
     ) -> Self {
         self.subscription_clock = service.subscription_clock();
         self.subscription_delivery = Some(service);
@@ -151,9 +160,12 @@ impl ServiceIdentity {
         }
     }
 
-    pub fn automation_retention_worker(&self) -> Option<crate::AutomationRetentionWorker> {
+    pub fn automation_retention_worker(
+        &self,
+    ) -> Option<collaboration_runtime::AutomationRetentionWorker> {
         self.automation.as_ref().map(|store| {
-            let worker = crate::AutomationRetentionWorker::new(std::sync::Arc::clone(store));
+            let worker =
+                collaboration_runtime::AutomationRetentionWorker::new(std::sync::Arc::clone(store));
             let worker = match self.interaction_store.as_ref() {
                 Some(store) => worker.with_native_push_store(std::sync::Arc::clone(store)),
                 None => worker,
@@ -166,21 +178,21 @@ impl ServiceIdentity {
     }
     pub fn with_automation_configuration(
         mut self,
-        handle: crate::AutomationConfigurationHandle,
-        backend: std::sync::Arc<dyn crate::AutomationConfigurationBackend>,
+        handle: collaboration_runtime::AutomationConfigurationHandle,
+        backend: std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>,
     ) -> Self {
         self.configuration = handle;
         self.configuration_backend = Some(backend);
         self
     }
 
-    pub fn schedule_timing_worker(&self) -> Option<crate::ScheduleTimingWorker> {
+    pub fn schedule_timing_worker(&self) -> Option<collaboration_runtime::ScheduleTimingWorker> {
         self.automation
             .as_ref()
             .zip(self.scheduled_run_execution.as_ref())
             .zip(self.interaction_store.as_ref())
             .map(|((store, execution), interactions)| {
-                crate::ScheduleTimingWorker::new(
+                collaboration_runtime::ScheduleTimingWorker::new(
                     std::sync::Arc::clone(store),
                     std::sync::Arc::clone(interactions),
                     std::sync::Arc::clone(execution),
@@ -191,20 +203,20 @@ impl ServiceIdentity {
             })
     }
 
-    pub fn wake_timing_worker(&self) -> Option<crate::WakeTimingWorker> {
+    pub fn wake_timing_worker(&self) -> Option<collaboration_runtime::WakeTimingWorker> {
         self.automation
             .as_ref()
             .zip(self.session_delivery.as_ref())
             .zip(self.interaction_store.as_ref())
             .map(|((store, delivery), interactions)| {
-                crate::WakeTimingWorker::new(
+                collaboration_runtime::WakeTimingWorker::new(
                     std::sync::Arc::clone(store),
-                    crate::wakeup_delivery_sender::WakeDeliverySender {
-                        delivery: std::sync::Arc::clone(delivery),
-                        configuration: self.configuration.clone(),
-                        machine_identity: self.machine_identity.clone(),
-                        interactions: std::sync::Arc::clone(interactions),
-                    },
+                    collaboration_runtime::WakeDeliverySender::new(
+                        std::sync::Arc::clone(interactions),
+                        std::sync::Arc::clone(delivery),
+                        self.configuration.clone(),
+                        self.machine_identity.clone(),
+                    ),
                 )
             })
     }
@@ -225,12 +237,12 @@ impl ServiceIdentity {
         self
     }
 
-    pub fn push_handoff_worker(&self) -> Option<crate::PushHandoffWorker> {
+    pub fn push_handoff_worker(&self) -> Option<collaboration_runtime::PushHandoffWorker> {
         self.automation
             .as_ref()
             .zip(self.interaction_store.as_ref())
             .map(|(automation, interactions)| {
-                crate::PushHandoffWorker::new(
+                collaboration_runtime::PushHandoffWorker::new(
                     std::sync::Arc::clone(automation),
                     std::sync::Arc::clone(interactions),
                 )
@@ -239,7 +251,7 @@ impl ServiceIdentity {
 
     pub fn with_provider_operation_store(
         mut self,
-        store: std::sync::Arc<tokio::sync::Mutex<crate::ProviderOperationStore>>,
+        store: std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,
     ) -> Self {
         self.provider_operations = Some(store);
         self
@@ -248,7 +260,7 @@ impl ServiceIdentity {
     #[must_use]
     pub fn with_provider_session_hub(
         mut self,
-        hub: std::sync::Arc<dyn crate::SessionEventHub>,
+        hub: std::sync::Arc<dyn collaboration_contracts::SessionEventHub>,
     ) -> Self {
         self.provider_session_hub = Some(hub);
         self
@@ -274,7 +286,7 @@ impl ServiceIdentity {
 
     pub fn with_codex_conversation_recorder(
         mut self,
-        recorder: std::sync::Arc<crate::CodexConversationOperationRecorder>,
+        recorder: std::sync::Arc<collaboration_runtime::CodexConversationOperationRecorder>,
     ) -> Self {
         self.codex_conversation_recorder = Some(recorder);
         self
@@ -282,7 +294,7 @@ impl ServiceIdentity {
 
     pub fn with_provider_conversation_backend(
         mut self,
-        backend: std::sync::Arc<dyn crate::ProviderConversationBackend>,
+        backend: std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>,
     ) -> Self {
         self.provider_conversations = Some(backend);
         self
@@ -290,7 +302,7 @@ impl ServiceIdentity {
 
     pub fn with_native_backend(
         mut self,
-        backend: crate::NativeControlBackend,
+        backend: collaboration_runtime::NativeControlBackend,
     ) -> Result<Self, String> {
         if backend.endpoint.service_id != self.service_id {
             return Err("native backend belongs to another service".into());
@@ -302,7 +314,7 @@ impl ServiceIdentity {
     #[must_use]
     pub fn with_session_delivery(
         mut self,
-        delivery: std::sync::Arc<dyn crate::SessionMessageDelivery>,
+        delivery: std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>,
     ) -> Self {
         self.session_delivery = Some(delivery);
         self
@@ -311,18 +323,18 @@ impl ServiceIdentity {
     #[must_use]
     pub fn session_message_delivery(
         &self,
-    ) -> Option<std::sync::Arc<dyn crate::SessionMessageDelivery>> {
+    ) -> Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>> {
         self.session_delivery.clone()
     }
 
     #[must_use]
-    pub fn session_display_name_cache(&self) -> crate::SessionDisplayNameCache {
+    pub fn session_display_name_cache(&self) -> collaboration_runtime::SessionDisplayNameCache {
         self.display_names.clone()
     }
     #[must_use]
     pub fn with_scheduled_run_execution(
         mut self,
-        execution: std::sync::Arc<dyn crate::ScheduledRunExecution>,
+        execution: std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>,
     ) -> Self {
         self.scheduled_run_execution = Some(execution);
         self
@@ -330,7 +342,7 @@ impl ServiceIdentity {
     #[must_use]
     pub fn with_approval_broker(
         mut self,
-        broker: std::sync::Arc<crate::ServiceInteractionBroker>,
+        broker: std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>,
     ) -> Self {
         broker.install_display_names(self.display_names.clone());
         let interactions = broker.interaction_store();
@@ -386,13 +398,16 @@ impl ServiceIdentity {
     pub fn new(service_id: &str, service_epoch: &str) -> Result<Self, String> {
         let service_id =
             UuidIdentity::try_from(service_id.to_owned()).map_err(|error| error.to_string())?;
-        let machine_identity = crate::MachineIdentity::new(service_id.clone(), None)
-            .map_err(|error| error.to_string())?;
+        let machine_identity =
+            collaboration_contracts::MachineIdentity::new(service_id.clone(), None)
+                .map_err(|error| error.to_string())?;
         Ok(Self {
             notification_publisher: None,
-            project_replication: std::sync::Arc::new(crate::UnacknowledgedProjectReplication),
+            project_replication: std::sync::Arc::new(
+                collaboration_contracts::UnacknowledgedProjectReplication,
+            ),
             project_claim: None,
-            configuration: crate::AutomationConfigurationHandle::default(),
+            configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
             configuration_backend: None,
             service_id: service_id.clone(),
             installation_peer: None,
@@ -400,7 +415,7 @@ impl ServiceIdentity {
             machine_identity,
             service_epoch: UuidIdentity::try_from(service_epoch.to_owned())
                 .map_err(|error| error.to_string())?,
-            display_names: crate::SessionDisplayNameCache::default(),
+            display_names: collaboration_runtime::SessionDisplayNameCache::default(),
             journal: None,
             native_backend: None,
             session_delivery: None,

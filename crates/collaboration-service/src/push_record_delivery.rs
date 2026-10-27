@@ -28,17 +28,21 @@ pub(crate) async fn store_first_and_deliver(
 
 #[cfg(test)]
 mod tests {
+    use crate::BoardAvailability;
+    use crate::ServiceIdentity;
+    use crate::SubscriptionDeliveryService;
+    use crate::SubscriptionDeliveryServiceProps;
+    use crate::SystemSubscriptionClock;
     use crate::collaboration_application::CollaborationRejection;
-    use crate::{
-        BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
-        SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-        SystemSubscriptionClock, TargetPresenceProbe,
-    };
     use automation_storage::AutomationStore;
+    use collaboration_contracts::MachineIdentity;
+    use collaboration_contracts::SessionMessageDelivery;
+    use collaboration_contracts::TargetPresenceProbe;
     use collaboration_protocol::{
         EndpointId, EndpointRef, MessageContent, MessageDelivery, PushDeliveryState, RouterLink,
         SessionId, SessionMessageSendParams, SessionRef, UuidIdentity,
     };
+    use collaboration_runtime::SessionDeliveryRouter;
     use serde_json::{Value, json};
     use std::{path::Path, sync::Arc};
     use tokio::sync::Mutex;
@@ -201,7 +205,7 @@ mod tests {
     #[tokio::test]
     async fn recorded_local_result_replays_without_a_delivery_owner_and_unknown_work_is_not_admitted()
      {
-        use crate::mail_delivery_projection::tests::fixture::Fixture;
+        use crate::mail_delivery_projection_tests::fixture::Fixture;
         use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, MailItemId};
         let fixture = Fixture::new().await;
         let directory = tempfile::tempdir().expect("owned actor fixture");

@@ -1,7 +1,10 @@
 //! Fleet discovery reads only the metadata projection carried by FleetClient.
 use super::board_paging::fingerprint;
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, DiscoveryHit, DiscoverySearchRequest, DiscoverySearchResult, Record, RecordRef,
+    RepositoryListRequest, RepositoryListResult, WorkspaceShowRequest,
+};
 impl BoardOperations<'_> {
     pub async fn repository_list(
         &self,
@@ -45,7 +48,9 @@ impl BoardOperations<'_> {
         let mut keys = fleet
             .discovery_page_keys(&request, &after, u64::from(request.page.limit.get()) + 1)
             .await
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
+            .map_err(|error| {
+                admission_error(collaboration_runtime::FleetClientError::from(error).into())
+            })?;
         let mut has_more = keys.len() > limit;
         keys.truncate(limit);
         let references: std::collections::BTreeMap<_, _> = keys
@@ -58,14 +63,12 @@ impl BoardOperations<'_> {
             .map(|reference: RecordRef| (fleet_record_key(&reference), reference))
             .collect();
         let references: Vec<_> = references.into_values().collect();
-        let stored = fleet
-            .record_batch(&references)
-            .await
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
-        fleet
-            .finish()
-            .await
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
+        let stored = fleet.record_batch(&references).await.map_err(|error| {
+            admission_error(collaboration_runtime::FleetClientError::from(error).into())
+        })?;
+        fleet.finish().await.map_err(|error| {
+            admission_error(collaboration_runtime::FleetClientError::from(error).into())
+        })?;
         if stored.len() != references.len() {
             return Err(BoardError::board_unavailable());
         }
@@ -157,7 +160,9 @@ impl DiscoveryBodies {
             .remove(&key)
             .ok_or_else(BoardError::board_unavailable)?
             .decode()
-            .map_err(|error| admission_error(crate::FleetClientError::from(error).into()))?;
+            .map_err(|error| {
+                admission_error(collaboration_runtime::FleetClientError::from(error).into())
+            })?;
         self.decoded.insert(key.clone(), record.clone());
         Ok(record)
     }

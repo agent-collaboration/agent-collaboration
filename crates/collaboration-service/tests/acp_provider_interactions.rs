@@ -1,10 +1,14 @@
 use codex_acp_adapter::{AcpSchemaCatalog, NativeStoredSessions};
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::QuestionResponse;
-use collaboration_service::{
-    AcpChannelListener, HubEvent, NativeControlBackend, NativeGenerationGate,
-    ServiceInteractionBroker, SessionCommandPort, SessionEventHub, TypedApprovalResolution,
-    UnmaterializedThreadHolder,
-};
+use collaboration_runtime::AcpChannelListener;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_runtime::TypedApprovalResolution;
+use collaboration_runtime::UnmaterializedThreadHolder;
 use message_board::{Identity, SessionEndpointRef};
 use serde_json::{Value, json};
 use session_event_model::{
@@ -123,7 +127,7 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         endpoint,
@@ -300,7 +304,7 @@ async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResu
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),

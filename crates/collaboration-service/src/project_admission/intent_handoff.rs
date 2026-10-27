@@ -53,7 +53,10 @@ pub(super) async fn freeze_intent_handoff(
         .ok_or_else(|| invalid("intent cause position"))?;
     let excerpt = match &cause {
         Record::Post(post) => post.text.as_str().chars().take(280).collect(),
-        _ => crate::received_mail_push::board_notification_summary(intent.cause.kind).to_owned(),
+        _ => {
+            collaboration_runtime::received_mail_push::board_notification_summary(intent.cause.kind)
+                .to_owned()
+        }
     };
     let sender = MailSender::Project {
         project: project.clone(),

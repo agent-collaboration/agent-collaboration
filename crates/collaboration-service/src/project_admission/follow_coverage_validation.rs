@@ -1,5 +1,5 @@
 //! An SDK observation cannot bypass the locked immutable board association or live membership.
-use super::*;
+use super::{MailItemRef, ProjectAdmissionError, ProjectWriteTransaction, SubscriptionMembership};
 use crate::notification_publisher::GenerationPreventedFollow;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;

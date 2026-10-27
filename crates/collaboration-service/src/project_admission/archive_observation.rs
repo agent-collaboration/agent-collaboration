@@ -1,8 +1,11 @@
 //! A holder records one internal archive fact under its ordinary native project lock.
 use super::{ProjectAdmission, ProjectAdmissionError};
-use crate::NativeProjectStore;
 use chrono::Utc;
-use message_board::*;
+use collaboration_runtime::NativeProjectStore;
+use message_board::{
+    BoardId, BoardState, Fact, FactId, FactKind, FeedCursor, LifecycleFact, ProjectId, Record,
+    RecordEnvelope, RecordKind, RecordTime, RecordedActor, RouterComponent, ServiceId,
+};
 use std::sync::Arc;
 
 pub struct ProjectArchiveObservation {

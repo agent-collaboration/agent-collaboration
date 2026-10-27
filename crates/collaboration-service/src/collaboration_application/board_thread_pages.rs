@@ -1,8 +1,12 @@
 //! Workspace scope, per-project keysets, key merge, then page-dependent validation.
 use super::board_thread_subjects::ThreadSubjectBatch;
 use super::{BoardOperations, admission_error, board_paging::fingerprint};
-use crate::ProjectReadSnapshot;
-use message_board::*;
+use collaboration_runtime::ProjectReadSnapshot;
+use message_board::{
+    BoardError, ImplementerHolder, OrchestratorHolder, Participant, ParticipantRole, Record,
+    RecordRef, RecordedParticipantRole, ThreadId, ThreadListRequest, ThreadListResult,
+    ThreadReadRecord,
+};
 use message_board_storage::{ParticipantBatch, StoredProjectRecord};
 use std::{
     cmp::Reverse,

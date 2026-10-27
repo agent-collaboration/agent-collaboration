@@ -6,7 +6,9 @@ use collaboration_protocol::{
     ThreadUnsubscribeRequest,
 };
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    BoardError, BoardOperation, ProjectId, ProjectRequest, SubscriptionTarget, ThreadRenewRequest,
+};
 impl BoardOperations<'_> {
     pub(super) async fn subscription_project(
         &self,

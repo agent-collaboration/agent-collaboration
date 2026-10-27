@@ -1,5 +1,11 @@
 //! Route remote wake creation and controls to the installation that owns the timer.
-use super::*;
+use super::{
+    Arc, DEFAULT_WAKE_WAIT_SECONDS, Duration, LocalMutationState, MAX_WAKE_WAIT_SECONDS,
+    OperationId, WakeAction, WakeFailure, WakeFailureContext, WakeFailureReason,
+    WakeMutationRequest, WakeMutationResult, WakeOperations, WakeSendRequest, WakeShowRequest,
+    WakeSnapshot, WakeWaitFailure, WakeWaitOutcome, WakeWaitRequest, WakeWaitResult, WakeupId,
+    storage_reason, wake_failure,
+};
 use collaboration_mail_protocol::{
     RemoteWakeCreator, RemoteWakeRequest, RemoteWakeResult, WakeBody,
 };
@@ -331,7 +337,10 @@ impl<'service> WakeOperations<'service> {
             .await
     }
 
-    #[allow(clippy::too_many_arguments)] // The frozen request, correlation and caller deadline are independent inputs.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The frozen request, correlation and caller deadline are independent inputs."
+    )]
     async fn remote_call(
         &self,
         context: WakeFailureContext,

@@ -1,17 +1,22 @@
 //! A registered wait probes FIFO SDK items and hands over one matching frozen root.
-use super::*;
+#[cfg(test)]
+use super::OwnerObservation;
+use super::{
+    BoardError, Identity, ReaderDeliveryOwner, ReaderScanScope, SubscriptionMode,
+    SubscriptionWaitResult, target_session,
+};
 use collaboration_mail_protocol::NotificationSource;
 use collaboration_protocol::{MachineId, PushLineInput, RouterLink, render_push_line};
 use fleet_sync_protocol::DeliveryItem;
 
 pub(in crate::service_identity::subscription_delivery) fn poll_unsent(
     reason: &str,
-) -> crate::NativeDeliveryResult {
-    crate::NativeDeliveryResult::not_submitted(
+) -> collaboration_contracts::NativeDeliveryResult {
+    collaboration_contracts::NativeDeliveryResult::not_submitted(
         reason,
         true,
-        crate::UnsentCause::Holdable {
-            otherwise: crate::NativeRefusalCode::CarrierUnavailable,
+        collaboration_contracts::UnsentCause::Holdable {
+            otherwise: collaboration_contracts::NativeRefusalCode::CarrierUnavailable,
         },
     )
 }
@@ -80,8 +85,8 @@ impl ReaderDeliveryOwner {
 
     pub(super) async fn hand_over_poll_mail(
         &mut self,
-        item: Box<DeliveryItem<crate::RouterDeliveryTypes>>,
-    ) -> crate::NativeDeliveryResult {
+        item: Box<DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
+    ) -> collaboration_contracts::NativeDeliveryResult {
         tracing::trace!(item = ?item.id(), waiters = self.waiters.len(), "SDK Poll callback reached its reader");
         let Some(index) = self
             .waiters
@@ -218,6 +223,13 @@ impl ReaderDeliveryOwner {
             super::super::subscription_service::PollHandoverStage::AfterSend,
         )
         .await;
-        crate::NativeDeliveryResult::observed(crate::NativeObservedOutcome::Started, None, None)
+        collaboration_contracts::NativeDeliveryResult::observed(
+            collaboration_contracts::NativeObservedOutcome::Started,
+            None,
+            None,
+        )
     }
 }
+
+#[cfg(test)]
+use collaboration_protocol::PushId;

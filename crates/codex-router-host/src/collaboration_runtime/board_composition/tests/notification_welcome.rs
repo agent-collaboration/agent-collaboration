@@ -1,7 +1,11 @@
 //! A real Welcome repairs a missed publication prompt after a durable copy acknowledgement.
 use super::*;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::seed_unacknowledged_notification;
-use collaboration_service::{CollaborationApplication, MachineIdentity, ProjectAdmissionProps, ServiceIdentity, SessionDeliveryRouter};
+use collaboration_service::CollaborationApplication;
+use collaboration_contracts::MachineIdentity;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
+use collaboration_runtime::SessionDeliveryRouter;
 
 #[tokio::test]
 async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_hint_was_missed()
@@ -38,7 +42,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
         fleet: fleet.clone(),
         identity: machine,
     })?);
-    let replication: Arc<dyn collaboration_service::ProjectReplicationPosition> =
+    let replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition> =
         harness.projects.clone();
     let identity = ServiceIdentity::new(
         "00000000-0000-4000-8000-000000000001",

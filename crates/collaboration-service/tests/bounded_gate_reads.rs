@@ -11,7 +11,7 @@ use sqlx::{ConnectOptions, Connection};
 use std::collections::BTreeMap;
 
 async fn unrelated_operands(
-    store: &collaboration_service::NativeProjectStore,
+    store: &collaboration_runtime::NativeProjectStore,
     project: &ProjectId,
     size: usize,
 ) -> Result<(RecordRef, RecordRef), TestError> {

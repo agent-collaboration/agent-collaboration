@@ -1,10 +1,13 @@
 //! Provider route claims from catalog availability, loaded actors, and session records.
 use crate::{ExternalProviderSupervisor, ProviderSessionActivity};
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::NativeRouteClaim;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RouteUnavailableReason;
+use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{EndpointAvailability, EndpointRef, SessionRef, UuidIdentity};
-use collaboration_service::{
-    EndpointDirectory, NativeRefusalCode, NativeRouteClaim, ProviderConversationBackend,
-    ProviderOperationStore, RouteUnavailableReason, UnsentCause,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -159,11 +162,13 @@ fn holdable_endpoint() -> UnsentCause {
 mod tests {
     use super::*;
     use crate::ExternalProviderSupervisor;
+    use collaboration_contracts::RouteClaim;
     use collaboration_protocol::{
         EndpointAvailability, EndpointDescription, EndpointId, EndpointRef, NonEmptyText,
         ObservationTimestamp, SessionId, SessionRef, UuidIdentity,
     };
-    use collaboration_service::{EndpointDirectory, ProviderOperationStore, RouteClaim};
+    use collaboration_runtime::EndpointDirectory;
+    use collaboration_runtime::ProviderOperationStore;
     use std::sync::Arc;
 
     #[tokio::test]

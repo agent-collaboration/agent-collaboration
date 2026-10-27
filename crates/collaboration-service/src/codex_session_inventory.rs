@@ -277,10 +277,11 @@ pub(crate) async fn list_codex_sessions(
     if matches!(params.view, NativeSessionView::Stored)
         && let Some(store) = identity.journal.as_deref()
     {
-        let observer = crate::stored_inventory_observation::StoredInventoryObservation {
-            store,
-            observer_id: &identity.service_epoch,
-        };
+        let observer =
+            collaboration_runtime::stored_inventory_observation::StoredInventoryObservation {
+                store,
+                observer_id: &identity.service_epoch,
+            };
         // A storage failure invalidates C10 through LifecycleStore; it does not
         // turn a successful read-only catalog operation into a native failure.
         let _recorded = observer.record_page(&page).await;
@@ -299,7 +300,7 @@ async fn stored_page(
     home: &std::path::Path,
     params: &NativeSessionListParams,
     cursor: Option<InventoryCursor>,
-    display_names: &crate::SessionDisplayNameCache,
+    display_names: &collaboration_runtime::SessionDisplayNameCache,
     budget: ResultByteBudget,
 ) -> Result<NativeSessionListResult, ()> {
     let catalog = StoredThreadCatalog::open(home).await.map_err(|_| ())?;
@@ -438,9 +439,9 @@ async fn stored_page(
 async fn runtime_page(
     params: &NativeSessionListParams,
     cursor: Option<InventoryCursor>,
-    admission: &crate::NativeAdmission,
+    admission: &collaboration_runtime::NativeAdmission,
     schemas: &codex_native_integration::NativePayloadSchemas,
-    display_names: &crate::SessionDisplayNameCache,
+    display_names: &collaboration_runtime::SessionDisplayNameCache,
 ) -> Result<NativeSessionListResult, ()> {
     let mut native = NativeProtocolConnection::connect(admission.backend_path())
         .await

@@ -1,5 +1,5 @@
 //! Page terminal evidence outside locks, then fence its project context at admission.
-use super::*;
+use super::{BoardError, ProjectId, PublisherInner, publication_epoch};
 use crate::mail_delivery_runtime::{FrozenCancelSettlement, RemoteCancelReplay};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::NotificationSource;

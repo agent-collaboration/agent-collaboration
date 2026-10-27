@@ -2,16 +2,16 @@
 use super::*;
 
 struct ReadinessPresence(std::sync::atomic::AtomicBool);
-impl crate::TargetPresenceProbe for ReadinessPresence {
+impl collaboration_contracts::TargetPresenceProbe for ReadinessPresence {
     fn presence(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> crate::DeliveryFuture<'_, crate::TargetPresence> {
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
         Box::pin(async {
             Ok(if self.0.load(std::sync::atomic::Ordering::SeqCst) {
-                crate::TargetPresence::Running
+                collaboration_contracts::TargetPresence::Running
             } else {
-                crate::TargetPresence::Wakeable
+                collaboration_contracts::TargetPresence::Wakeable
             })
         })
     }
@@ -34,7 +34,7 @@ async fn readiness_release_then_unload_does_not_load_or_submit_a_held_auto_again
             DeliveryReceipt {
                 outcome: DeliveryOutcome::NotSubmitted {
                     retryable: true,
-                    reason: crate::NOT_LOADED_REASON.to_owned(),
+                    reason: collaboration_contracts::NOT_LOADED_REASON.to_owned(),
                 },
                 reachability: None,
                 client: None,

@@ -7,9 +7,10 @@ use collaboration_central_conformance::{
     ConformanceClient, JwksFixtureServer, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use collaboration_service::{
-    FleetClient, ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
+use collaboration_runtime::FleetClient;
 use fleet_admission::{FleetOperation, FleetRequest};
 use fleet_sync_protocol::{ClientFrame, OperationRequest, SchemaSupport};
 use fleet_sync_session::{ClientEvent, Endpoint, PeerCredential, SessionClient};

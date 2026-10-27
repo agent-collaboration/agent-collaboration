@@ -1,6 +1,9 @@
 //! Subject bodies stay opaque until output selection, including its one byte-boundary candidate.
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, Record, RecordId, RecordKind, RecordRef, SubjectTitle, Thread, ThreadId,
+    ThreadSubject, ThreadSubjectView,
+};
 use message_board_storage::{ProjectSnapshot, StoredFleetRecord, StoredProjectRecord};
 use std::collections::BTreeMap;
 

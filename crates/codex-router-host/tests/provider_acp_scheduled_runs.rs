@@ -8,6 +8,30 @@ use codex_router_host::{
     ExternalProviderSupervisor, LiveSessionOwnership, LiveSessionOwnershipCheck,
     ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::PreparedTarget;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunObservationContext;
+use collaboration_contracts::RunReconciliation;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::ScheduleCapability;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduleSupport;
+use collaboration_contracts::ScheduledRunExecution;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SettlementEvidence;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, ConversationPromptRequest, DeliveryOutcome,
@@ -20,15 +44,10 @@ use collaboration_protocol::{
     PushOrigin, RouterAccess, RouterLink, RunExecution, SessionId, SessionRef, UuidIdentity,
     render_push_line,
 };
-use collaboration_service::{
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, EndpointDirectory, LoadPolicy,
-    PreparationEvidenceSink, PreparedTarget, ProviderConversationBackend, ProviderOperationStore,
-    ProviderSessionRecord, RunEvidenceDisposition, RunEvidenceSink, RunObservationContext,
-    RunReconciliation, RunSettlement, RunSubmission, ScheduleCapability, ScheduleDestination,
-    SchedulePreparationOutcome, SchedulePreparationRequest, ScheduleSupport, ScheduledRunExecution,
-    ScheduledRunPayload, ScheduledRunSubmission, SessionDeliveryRoute, SessionDeliveryRouter,
-    SettlementEvidence, layer_zero::PreparedPush,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::json;
 use std::{
     path::{Path, PathBuf},
@@ -662,7 +681,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
             .request_stop(stop_context.clone(), &stop_sink)
             .await
             .expect("stop request"),
-        collaboration_service::StopRequestOutcome::Requested
+        collaboration_contracts::StopRequestOutcome::Requested
     ));
     assert!(matches!(
         router
@@ -818,7 +837,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
             .request_stop(pending_context.clone(), &pending_sink)
             .await
             .expect("pending stop"),
-        collaboration_service::StopRequestOutcome::Requested
+        collaboration_contracts::StopRequestOutcome::Requested
     ));
     assert!(matches!(
         router

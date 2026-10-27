@@ -26,7 +26,9 @@ use super::{
     subscription_push::{SubscriptionPushStore, target_session},
     subscription_wait::{PollWaiter, SubscriptionWaitFilter, SubscriptionWaitResult},
 };
-use crate::{LoadPolicy, TargetPresence, TargetPresenceProbe};
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, PushId, PushRecord};
 use message_board::{
     BoardError, EndReason, Identity, ProjectId, SubscriptionBatch, SubscriptionBatchSettlement,
@@ -43,7 +45,7 @@ use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 type DirectMessageReply = oneshot::Sender<Result<PushRecord, BoardError>>;
-type MailAttemptReply = oneshot::Sender<crate::NativeDeliveryResult>;
+type MailAttemptReply = oneshot::Sender<collaboration_contracts::NativeDeliveryResult>;
 
 pub(super) enum MailAttemptCheck {
     CarrierOnly,
@@ -77,12 +79,12 @@ pub(super) enum ReaderDeliveryCommand {
     },
     MailAttempt {
         kind: collaboration_protocol::PushKind,
-        request: Box<crate::layer_zero::DeliveryRequest>,
+        request: Box<collaboration_contracts::layer_zero::DeliveryRequest>,
         check: MailAttemptCheck,
         reply: MailAttemptReply,
     },
     PollMailAttempt {
-        item: Box<fleet_sync_protocol::DeliveryItem<crate::RouterDeliveryTypes>>,
+        item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
         reply: MailAttemptReply,
     },
     Wait {
@@ -548,11 +550,11 @@ impl ReaderDeliveryOwner {
                         if let Err(error) = decision {
                             tracing::warn!(%error, "local follow cancellation check delayed");
                         }
-                        let _ = reply.send(crate::NativeDeliveryResult::not_submitted(
+                        let _ = reply.send(collaboration_contracts::NativeDeliveryResult::not_submitted(
                             "local follow injection waits for its cancellation check",
                             true,
-                            crate::UnsentCause::Holdable {
-                                otherwise: crate::NativeRefusalCode::CarrierUnavailable,
+                            collaboration_contracts::UnsentCause::Holdable {
+                                otherwise: collaboration_contracts::NativeRefusalCode::CarrierUnavailable,
                             },
                         ));
                         return;
@@ -562,7 +564,7 @@ impl ReaderDeliveryOwner {
                     .push
                     .dispatch_mail_attempt(kind, *request)
                     .await
-                    .unwrap_or_else(|_| crate::NativeDeliveryResult::unknown());
+                    .unwrap_or_else(|_| collaboration_contracts::NativeDeliveryResult::unknown());
                 let _ = reply.send(receipt);
             }
             ReaderDeliveryCommand::PollMailAttempt { item, reply } => {

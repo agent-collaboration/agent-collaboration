@@ -6,9 +6,10 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderSessionListParams, ProviderSessionState,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, ServiceIdentity,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ServiceIdentity;
 use serde_json::json;
 use tokio::sync::Mutex;
 #[path = "support/served_api.rs"]

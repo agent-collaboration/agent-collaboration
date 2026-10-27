@@ -3,14 +3,16 @@
 use super::*;
 use crate::collaboration_runtime::board_composition::archive_observation as archive;
 use board_central_test_support::{EnrolledTestMachine, ObjectAddress, RuntimeControl, TestCentral};
-use collaboration_service::{NativeProjectStore, ProjectArchiveObservation, ProjectClaim};
+use collaboration_contracts::ProjectClaim;
+use collaboration_runtime::NativeProjectStore;
+use collaboration_service::ProjectArchiveObservation;
 use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, TransferId};
 
 struct ArchiveOwner {
     projects: Arc<project_writers::ProjectWriters>,
     registry: Arc<ProjectStoreRegistry>,
     admission: Arc<ProjectAdmission>,
-    fleet: Weak<collaboration_service::FleetClient>,
+    fleet: Weak<collaboration_runtime::FleetClient>,
     running: super::super::machine_session::RunningMachineSession,
 }
 impl ArchiveOwner {

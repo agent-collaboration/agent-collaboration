@@ -38,7 +38,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     )
     .await?;
     let interactions = Arc::clone(&worker.interactions);
-    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
+    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
     let inputs = first.inputs.as_ref().ok_or("captured schedule inputs")?;
     let ExecutionDestination::OwnedThread { target, .. } =
         &inputs.execution_configuration.destination
@@ -84,7 +84,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         worker.step(first_run.clone()).await?;
         apply_push_handoff(&worker).await?;
     }
-    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
+    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
     ensure_eq!(first.phase, agent_automation::RunPhase::Finished);
     let old = interactions
         .get_push_record(&first_push_id)
@@ -143,7 +143,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         worker.step(second_run.clone()).await?;
         apply_push_handoff(&worker).await?;
     }
-    let second = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&second_run).await?;
+    let second = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&second_run).await?;
     ensure_eq!(second.phase, agent_automation::RunPhase::Finished);
     ensure!(second.due_at_ms - first.due_at_ms >= interval.num_milliseconds());
     let new_origin = RouterOriginRef::ScheduleRun {

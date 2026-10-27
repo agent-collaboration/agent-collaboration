@@ -1,7 +1,14 @@
 //! The sole project-domain write path: lease, schema, replay, rules, atomic effects.
-use crate::{FleetClient, FleetClientError, ProjectRegistryError, ProjectStoreRegistry};
 use chrono::Utc;
-use message_board::*;
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::FleetClientError;
+use collaboration_runtime::ProjectRegistryError;
+use collaboration_runtime::ProjectStoreRegistry;
+use message_board::{
+    ActorOrigin, BoardOperation, MachineLabel, MailItemRef, NumericValidationError, ProjectRequest,
+    Record, RequestLedgerEntry, RequestResult, ServiceId, StoredDecision, SubscriptionMembership,
+    SubscriptionMembershipProps, WriteReply, request_canonical,
+};
 use message_board_storage::{ProjectStorageError, ProjectWriteTransaction};
 use std::sync::Arc;
 
@@ -66,7 +73,7 @@ pub struct ProjectAdmission {
 pub struct ProjectAdmissionProps {
     pub registry: Arc<ProjectStoreRegistry>,
     pub fleet: Arc<FleetClient>,
-    pub identity: crate::MachineIdentity,
+    pub identity: collaboration_contracts::MachineIdentity,
 }
 
 #[cfg(feature = "runtime-test-support")]

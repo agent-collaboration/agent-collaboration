@@ -180,7 +180,7 @@ async fn seed_empty_project(
     project: &ProjectId,
     clock: Arc<dyn Clock>,
 ) -> Result<std::path::PathBuf, TestError> {
-    let registry = collaboration_service::ProjectStoreRegistry::new(
+    let registry = collaboration_runtime::ProjectStoreRegistry::new(
         fixture._directory.path(),
         Some(fixture_peer()?),
         clock.clone(),

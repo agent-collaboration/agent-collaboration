@@ -1,7 +1,15 @@
 //! Fleet discovery and project snapshots stay outside the writer transaction.
 use super::board_paging::fingerprint;
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, BoardListRequest, BoardListResult, BoardShowRequest, BoardShowResult, BoardState,
+    FeedCursor, FeedPosition, HistoryRange, ImplementerHolder, OrchestratorHolder, Page,
+    ParticipantRole, PostListScope, PostSelection, PostShowRequest, PostShowResult, ProjectId,
+    ProjectListRequest, ProjectListResult, ProjectShowRequest, ProjectShowResult, ProjectStateView,
+    ReadPosition, ReadScope, Record, RecordRef, RecordedParticipantRole, ResourceIdentity,
+    ThreadRef, ThreadShowRequest, ThreadShowResult, WatchStatus, WorkspaceListRequest,
+    WorkspaceListResult, WorkspaceShowRequest, WorkspaceShowResult,
+};
 
 impl BoardOperations<'_> {
     pub async fn project_show(

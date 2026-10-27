@@ -1,7 +1,7 @@
 //! Project agent-advertised model choices for one provider connection.
 
 use acp_client_runtime::{ProviderSettingKind, ProviderSettingsCatalog};
-use collaboration_service::ProviderModelEntry;
+use collaboration_runtime::ProviderModelEntry;
 
 pub(crate) fn provider_default_model() -> Result<ProviderModelEntry, &'static str> {
     ProviderModelEntry::try_new(

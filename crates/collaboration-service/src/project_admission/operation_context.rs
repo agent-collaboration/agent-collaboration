@@ -1,6 +1,14 @@
 use super::ProjectAdmissionError;
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    ActorOrigin, Adr, AuthorityRole, BoardOperation, ChangeOutcome, EpochNumber, FeedCursor,
+    Identity, IntentRecipient, IntentRefusal, IntentState, NotifyIntent, NotifyIntentId,
+    NotifyIntentProps, NotifyTarget, Participant, ProjectFeedEntry, ProjectRequest, ProjectState,
+    Record, RecordEnvelope, RecordId, RecordPlacement, RecordRef, RecordScope, RecordTime,
+    RecordedActor, Refusal, ResolvedRecipient, RoleAssignment, RoleEnd, RoleRecipient, RoleRefusal,
+    RoleResolution, RoleSubject, SubjectRevision, SubtaskId, Task, TaskId, TaskLink, TaskRefusal,
+    ThreadId, Workstream, WorkstreamId, WorkstreamRefusal, WorkstreamState, work_rules,
+};
 use message_board_storage::{LinkMutation, ProjectWriteTransaction};
 
 pub(super) struct OperationPlan {

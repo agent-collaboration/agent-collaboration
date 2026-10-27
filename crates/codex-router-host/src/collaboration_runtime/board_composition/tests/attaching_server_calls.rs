@@ -146,7 +146,7 @@ async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResu
     );
     fleet_service.release()?;
     wait_welcome(ready).await?;
-    collaboration_service::ProjectRegistration::start(projects.as_ref(), &request.project_id)
+    collaboration_contracts::ProjectRegistration::start(projects.as_ref(), &request.project_id)
         .await?;
     let writer = projects.ensure(&request.project_id).await?;
     assert!(matches!(

@@ -1,29 +1,9 @@
-//! Owner-local communication service, independent of the Host executable.
+//! Collaboration application operations and publication policy, independent of the Host executable.
 pub mod collaboration_application;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
-mod project_store_paths;
-mod project_store_registry;
-pub use project_store_registry::{NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry};
-mod central_project_reads;
-mod project_read_handle;
-pub use central_project_reads::{
-    CentralReadError, ProjectReadCopyFuture, ProjectReadCopySource, PulledProjectReadCopy,
-};
-pub use project_read_handle::{ProjectReadHandle, ProjectReadSnapshot};
-mod fleet_client;
-pub use fleet_client::{FleetClient, FleetClientError, FleetReply};
-mod project_claim;
-mod project_claim_store;
-pub use project_claim::{ProjectClaim, ProjectClaimError, ProjectClaimFuture};
-mod project_registration;
-pub use project_registration::{
-    ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
-    ProjectRegistrationState,
-};
 mod board_views;
 mod notification_publisher;
 mod project_admission;
-mod project_replication_position;
 pub use notification_publisher::NotificationPublisher;
 mod project_commit_publication;
 #[cfg(feature = "runtime-test-support")]
@@ -33,253 +13,60 @@ pub use project_admission::{
     ProjectAdmissionError, ProjectAdmissionProps, ProjectArchiveObservation,
 };
 pub use project_commit_publication::after_project_commit_publish_and_reconcile;
-pub use project_replication_position::{
-    AcknowledgedMailChangesFuture, ProjectReplicationPosition, ReplicatedPositionFuture,
-    UnacknowledgedProjectReplication, project_replication_cursor,
-};
-mod machine_identity;
-pub use machine_identity::MachineIdentity;
-mod automation_retention_worker;
 mod service_identity;
-pub use automation_retention_worker::AutomationRetentionWorker;
 pub use service_identity::ServiceIdentity;
 pub use service_identity::subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
     SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
 };
-mod endpoint_directory;
-pub use endpoint_directory::{EndpointDirectory, EndpointInventoryReader, EndpointSnapshot};
-mod native_channel_relay;
-pub use native_channel_relay::{
-    MAX_NATIVE_MESSAGE_BYTES, connect_native_relay, relay_native_channels,
-};
-mod native_generation_gate;
-pub use native_generation_gate::{NativeAdmission, NativeGenerationGate};
-mod native_relay_listener;
-mod pending_snapshot_interactions;
-mod private_socket_listener;
-pub use native_relay_listener::NativeRelayListener;
-pub use private_socket_listener::{OwnerOnlySocket, SocketCleanup};
 mod conversation_operation_projection;
-mod provider_operation_store;
-pub use conversation_operation_projection::conversation_operation_snapshot;
-mod codex_conversation_operation_recorder;
 pub use codex_acp_adapter::ConversationOperationRecorder;
-pub use codex_conversation_operation_recorder::{
-    CodexConversationOperationRecorder, UnavailableConversationOperationRecorder,
-};
-mod provider_session_event_hub;
-mod provider_session_record;
-mod session_event_hub;
-pub use provider_operation_store::{
-    ProviderOperationAdmission, ProviderOperationAdmissionResult, ProviderOperationRecord,
-    ProviderOperationStore, ProviderOperationStoreError,
-};
-mod delivery_acceptance_effect;
-mod delivery_route_projection;
-pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
-pub use provider_session_record::ProviderSessionRecord;
-mod app_server_event_forwarding;
-mod app_server_item_metadata;
-mod app_server_item_translation;
-mod app_server_model_catalog;
-pub use app_server_item_translation::{
-    ApprovalPresentation, ApprovalReply, HistoricalTurn, InteractionDisplayContext,
-    InteractionReplyError, QuestionPresentation, QuestionReply, TranslatedSessionItem,
-    group_historical_turns, map_approval_reply, map_question_form_reply,
-    map_request_user_input_reply, render_historical_turn, translate_approval_request,
-    translate_question_request, translate_session_item,
-};
-#[cfg(test)]
-#[path = "app_server_interaction_translation_tests.rs"]
-mod app_server_interaction_translation_tests;
-#[cfg(test)]
-#[path = "app_server_item_translation_tests.rs"]
-mod app_server_item_translation_tests;
-mod provider_acp_content_translation;
-mod provider_acp_event_projection;
-mod provider_acp_interaction;
-mod provider_acp_session_route;
-mod provider_conversation_backend;
-mod router_session_app_server;
-mod schedule_preparation_evidence_sink;
-mod scheduled_run_contract;
-mod scheduled_run_evidence_sink;
-mod scheduled_run_router;
-mod session_command_port;
+pub use conversation_operation_projection::conversation_operation_snapshot;
 #[cfg(test)]
 mod wake_creation_crash_tests;
-pub use app_server_model_catalog::{
-    InvalidProviderModelEntry, ProviderModelEntry, render_model_list,
-};
-pub use router_session_app_server::{
-    AppServerConnectionError, RouterSessionAppServerContext, RouterSessionAppServerListener,
-    serve_router_session_app_server_connection,
-};
-mod native_delivery_result;
-mod native_route_claim;
-pub use native_route_claim::NativeRouteClaim;
-mod session_delivery_contract;
-pub use native_delivery_result::{
-    NativeDeliveryResult, NativeObservedOutcome, NativeRefusalCode, UnsentCause,
-};
-mod session_delivery_router;
-mod stored_delivery_receipt;
-mod stored_run_receipt;
 pub use collaboration_protocol::{DeliveryClientReceipt, DeliveryReceipt};
-pub use provider_acp_session_route::ProviderAcpSessionRoute;
-pub use provider_conversation_backend::{
-    ProviderConversationBackend, ProviderConversationFuture, ProviderSessionInspectFuture,
-    ProviderSettingsFuture,
-};
-pub use scheduled_run_contract::{
-    FreshSessionRequest, NativeTurnRef, PreparationEvidenceSink, PreparedTarget, RunAcceptance,
-    RunEvidenceDisposition, RunEvidenceSink, RunObservationContext, RunReconciliation,
-    RunSettlement, RunSubmission, RunSummarySource, ScheduleCapability, ScheduleDestination,
-    SchedulePreparationFailure, SchedulePreparationOutcome, SchedulePreparationRequest,
-    ScheduleSupport, ScheduledRunExecution, ScheduledRunPayload, ScheduledRunRoute,
-    ScheduledRunSubmission, SettlementEvidence, StopRequestOutcome,
-};
-pub use session_command_port::{
-    CommandContent, CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
-    QueueInputCommand, QueuedSessionInput, SessionCommandPort, SessionSettingsCommand,
-    SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand,
-    SteerSessionCommand,
-};
-pub use session_delivery_contract::layer_zero;
-pub use session_delivery_contract::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, LoadPolicy, NOT_LOADED_REASON,
-    RouteClaim, RoutePresence, RouteUnavailableReason, SessionDeliveryRoute,
-    SessionMessageDelivery, TargetPresence, TargetPresenceProbe,
-};
-pub use session_delivery_router::SessionDeliveryRouter;
-pub use session_event_hub::{
-    HubEvent, HubFuture, HubSessionSummary, SessionEventAttachment, SessionEventHub,
-    SessionEventHubError,
-};
-mod service_identity_storage;
-pub use service_identity_storage::{
-    load_installation_peer, load_service_identity, new_service_uuid, read_service_identity,
-};
-mod manifest_publication;
-pub use manifest_publication::ManifestPublication;
-mod native_control_backend;
-mod session_display_name_cache;
-pub use session_display_name_cache::SessionDisplayNameCache;
 mod push_record_delivery;
 mod push_record_resolver;
-pub use native_control_backend::NativeControlBackend;
-
-mod codex_app_server_delivery_route;
-mod codex_app_server_scheduled_runs;
-mod codex_queue_reconciliation;
-mod interaction_broker;
-mod message_effect_state;
-mod native_message_dispatch;
-#[cfg(test)]
-mod native_recorded_permission_tests;
-mod native_recorded_policy;
 pub use codex_acp_adapter::BrokeredApprovalOutcome;
-pub use codex_app_server_delivery_route::CodexAppServerDeliveryRoute;
-pub use codex_app_server_scheduled_runs::CodexAppServerScheduledRuns;
-pub use interaction_broker::{
-    ApprovalDecisionError, InteractionHistoryError, InteractionHistoryRecord,
-    InteractionHistoryState, QuestionHistoryState, QuestionResponse, RefusedApprovalOption,
-    RefusedTypedApproval, ServiceInteractionBroker, TypedApprovalLegacyContext,
-    TypedApprovalResolution, TypedApprovalSelection, TypedInteractionDecision,
-    TypedInteractionDecisionOutcome,
-};
-
-mod acp_channel_listener;
-pub use acp_channel_listener::AcpChannelListener;
-mod unmaterialized_thread_holder;
 pub use codex_acp_adapter::{ACP_SCHEMA_DIGEST, NativeStoredSessions};
-pub use unmaterialized_thread_holder::UnmaterializedThreadHolder;
-
 mod codex_session_inventory;
 mod instruction_projection;
-mod native_claude_catalogue;
-mod provider_session_inventory;
-mod stored_inventory_observation;
-
-mod interaction_storage_failure;
-mod wakeup_projection;
-mod wakeup_timing_worker;
-pub(crate) use interaction_storage_failure::map_interaction_storage_error;
-mod push_handoff_worker;
-pub use push_handoff_worker::{PushHandoffError, PushHandoffWorker};
-mod router_delivery_types;
-pub use router_delivery_types::{
-    RouterConsumerProtocol, RouterDeliveryTypes, RouterLocalObservation,
-};
-mod received_mail_push;
-pub use received_mail_push::received_mail_push;
-mod outgoing_mail_message;
-pub use outgoing_mail_message::outgoing_mail_message;
-mod mail_push_preparation;
-pub use mail_push_preparation::{MailPushPreparation, prepare_mail_push};
 mod mail_push_delivery;
 mod mail_push_outcome;
+mod native_claude_catalogue;
+mod provider_session_inventory;
+mod wakeup_projection;
 pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
 mod mail_delivery_runtime;
-#[cfg(feature = "runtime-test-support")]
-pub use interaction_storage::MailStoreTestFault;
 pub use mail_delivery_runtime::{LocalCancelReference, MailDeliveryRuntime};
-mod mail_delivery_session;
-pub use mail_delivery_session::MailDeliverySession;
-mod mail_delivery_projection;
-#[cfg(test)]
-mod mail_fetch_budget_tests;
-pub use mail_delivery_projection::{
-    project_cancelled_after_delivery, project_mail_cancel_outcome, project_mail_outcome,
-    project_received_mail,
-};
-pub use wakeup_timing_worker::WakeTimingWorker;
-
-mod delivery_projection;
-mod wakeup_delivery_sender;
-
-mod wakeup_subscription;
-
-mod schedule_projection;
-
-mod native_thread_preparation;
-mod schedule_preparation;
-
-mod schedule_activation;
-mod schedule_timing_worker;
-mod scheduled_native_dispatch;
-mod scheduled_native_observation;
-mod scheduled_run_worker;
-pub use schedule_timing_worker::ScheduleTimingWorker;
-
-mod summary_native_worker;
-
-mod automation_configuration;
-mod run_projection;
-pub use automation_configuration::{
-    AutomationConfigurationBackend, AutomationConfigurationHandle, ConfigurationAdmissionLease,
-};
-
 mod attempt_history_projection;
 mod automation_collection_cursor;
 mod automation_collection_projection;
 mod automation_event_cursor;
 mod automation_event_projection;
 mod automation_inspection_failure;
-mod delivery_reconciliation;
-mod operation_receipt_projection;
-mod run_reconciliation;
-
+mod delivery_projection;
 #[cfg(test)]
-#[path = "../tests/support/native_worker_faults.rs"]
+mod frozen_mail_query_fixture;
+#[cfg(test)]
+#[path = "../../collaboration-runtime/tests/support/native_worker_faults.rs"]
 mod native_worker_faults;
+mod operation_receipt_projection;
+mod run_projection;
+mod schedule_activation;
+mod schedule_preparation;
+mod schedule_projection;
 #[cfg(test)]
 mod test_project_runtime;
 #[cfg(test)]
 mod test_subject_workstream;
+mod wakeup_subscription;
 
 #[cfg(test)]
-mod frozen_mail_query_fixture;
+mod delivery_route_projection_tests;
+#[cfg(test)]
+mod native_control_failure_tests;
+
+#[cfg(test)]
+mod mail_delivery_projection_tests;

@@ -1,6 +1,7 @@
 use super::owner_fixture::*;
 use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
-use crate::{LoadPolicy, TargetPresence};
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::TargetPresence;
 use message_board::{EndReason, SubscriptionMode, SubscriptionScope, WhenIdle};
 
 #[tokio::test]

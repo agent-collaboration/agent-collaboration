@@ -5,9 +5,9 @@ use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryItemRef};
 mod frozen_remote;
 
 fn child(
-    item: &DeliveryItem<crate::RouterDeliveryTypes>,
+    item: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
     id: ItemId,
-) -> DeliveryCancel<crate::RouterDeliveryTypes> {
+) -> DeliveryCancel<collaboration_contracts::RouterDeliveryTypes> {
     DeliveryCancel::new(
         id,
         item.sender().clone(),
@@ -59,18 +59,20 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
-                    .mark_submitted(
-                        &input,
-                        fleet_sync_protocol::SubmitResult::CancelAlreadyRequested {
-                            existing: answer_ref,
-                            status: fleet_sync_protocol::DeliveryStatus::Held,
-                            version: fleet_sync_protocol::StatusVersion::new(1),
-                            cancel: Some(fleet_sync_protocol::CancelResult::Pending),
-                        },
-                    )
-                    .await
-                    .map_err(durable_steps::StoreError::backend)
+                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
+                    scope, limits,
+                )
+                .mark_submitted(
+                    &input,
+                    fleet_sync_protocol::SubmitResult::CancelAlreadyRequested {
+                        existing: answer_ref,
+                        status: fleet_sync_protocol::DeliveryStatus::Held,
+                        version: fleet_sync_protocol::StatusVersion::new(1),
+                        cancel: Some(fleet_sync_protocol::CancelResult::Pending),
+                    },
+                )
+                .await
+                .map_err(durable_steps::StoreError::backend)
             })
         })
         .await

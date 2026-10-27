@@ -4,10 +4,10 @@
 #[path = "support/claude_peer_subscription_fixture.rs"]
 mod fixture;
 
+use collaboration_contracts::TargetPresence;
 use collaboration_protocol::{
     PushDeliveryState, PushHeaderFacts, PushKind, RouterLink, RouterOriginRef,
 };
-use collaboration_service::TargetPresence;
 use fixture::{
     ClaudePeerSubscriptionFixture, OWNER_EVENT_TIMEOUT, POSTED_MESSAGE_TEXT, PRESENCE_RECHECK,
     ProofResult, ROOT_THREAD_TEXT, SESSION_ID,

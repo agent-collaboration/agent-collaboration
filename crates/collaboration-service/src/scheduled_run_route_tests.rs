@@ -1,20 +1,33 @@
 //! A fake execution route drives provider and peer runs through the application's stored
 //! inspection.
 use super::*;
-use crate::scheduled_run_contract::ScheduledRunPayload;
-use crate::{
-    DeliveryFuture, FreshSessionRequest, PreparationEvidenceSink, PreparedTarget, RunAcceptance,
-    RunEvidenceDisposition, RunEvidenceSink, RunReconciliation, RunSettlement, RunSubmission,
-    RunSummarySource, ScheduleCapability, ScheduleDestination, SchedulePreparationFailure,
-    SchedulePreparationOutcome, SchedulePreparationRequest, ScheduleSupport,
-    ScheduledRunSubmission, SettlementEvidence, StopRequestOutcome,
-};
 use agent_automation::{
     AttemptId, ClaudeCodePeerEffectEvidence, ContinuityInput, InstructionText, OperationId,
     PeerWriteEffect, ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
     ScheduleDefinition, SubmissionEffect, TimingRule,
 };
 use automation_storage::ScheduleCreate;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::FreshSessionRequest;
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::PreparedTarget;
+use collaboration_contracts::RunAcceptance;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunReconciliation;
+use collaboration_contracts::RunSettlement;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::RunSummarySource;
+use collaboration_contracts::ScheduleCapability;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationFailure;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduleSupport;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_contracts::SettlementEvidence;
+use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
     DeliveryRejectionReason, DeliveryRouteEvidence, PushDeliveryState, PushKind, RouterLink,
@@ -307,10 +320,13 @@ impl ScheduledRunExecution for FakeScheduledExecution {
                 (FakeSubmissionPlan::Accept, _) | (FakeSubmissionPlan::RejectOnceThenAccept, _) => {
                 }
             }
-            let started_at = crate::wakeup_projection::timestamp(timing.dispatch_started_at_ms)
-                .map_err(|_| DeliveryContractError::InvalidEvidence)?;
-            let deadline_at = crate::wakeup_projection::timestamp(timing.deadline_at_ms)
-                .map_err(|_| DeliveryContractError::InvalidEvidence)?;
+            let started_at = collaboration_runtime::observation_timestamp::timestamp(
+                timing.dispatch_started_at_ms,
+            )
+            .map_err(|_| DeliveryContractError::InvalidEvidence)?;
+            let deadline_at =
+                collaboration_runtime::observation_timestamp::timestamp(timing.deadline_at_ms)
+                    .map_err(|_| DeliveryContractError::InvalidEvidence)?;
             let timeout = timing
                 .effective_timeout_seconds
                 .try_into()
@@ -484,8 +500,8 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             interactions: Arc::clone(&interactions),
             execution: Arc::clone(&fake),
             backend: None,
-            configuration: crate::AutomationConfigurationHandle::default(),
-            machine_identity: crate::MachineIdentity::new(
+            configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
+            machine_identity: collaboration_contracts::MachineIdentity::new(
                 target.endpoint.service_id.clone(),
                 Some("Schedule Fixture"),
             )?,
@@ -495,7 +511,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
                 let current = store
                     .lock()
                     .await
-                    .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+                    .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&run_id)
                     .await?;
                 return Err(format!(
                     "fake {route_name} stage {stage}: {error}; phase={:?}, route={:?}, timing={:?}",

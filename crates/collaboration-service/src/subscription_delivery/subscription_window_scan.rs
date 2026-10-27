@@ -1,5 +1,10 @@
 //! Scan one project into Router-local windows; its read failures never escape to siblings.
-use super::*;
+use super::{
+    BoardError, DateTime, EndReason, FeedContent, FeedPosition, HashSet, Identity,
+    MembershipProgress, Placement, ProjectId, Record, SubscriptionMembership, SubscriptionScope,
+    SubscriptionWindowId, SubscriptionWindowStore, ThreadId, Utc, WindowStoreError, invalid_window,
+    membership_mode_off_or_expired, project_registry_failure, project_storage_failure,
+};
 use interaction_storage::{SubscriptionRootProgress, SubscriptionWindowProgress};
 
 impl SubscriptionWindowStore {
