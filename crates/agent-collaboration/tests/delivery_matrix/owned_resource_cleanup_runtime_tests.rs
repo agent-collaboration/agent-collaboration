@@ -41,23 +41,23 @@ mod producer_runtime_tests;
 
 #[tokio::test]
 async fn runtime_error_after_wake_receipt_retires_known_prefix() -> ProofResult<()> {
-    run_case(RuntimePrefix::WakeReceipt, [1, 0, 4, 4]).await
+    Box::pin(run_case(RuntimePrefix::WakeReceipt, [1, 0, 4, 4])).await
 }
 #[tokio::test]
 async fn runtime_schedule_before_prepare_is_cleanup_owned() -> ProofResult<()> {
-    run_case(RuntimePrefix::BeforePrepare, [1, 1, 4, 4]).await
+    Box::pin(run_case(RuntimePrefix::BeforePrepare, [1, 1, 4, 4])).await
 }
 #[tokio::test]
 async fn runtime_enabled_peer_schedule_becomes_disabled() -> ProofResult<()> {
-    run_case(RuntimePrefix::EnabledSchedule, [1, 1, 4, 4]).await
+    Box::pin(run_case(RuntimePrefix::EnabledSchedule, [1, 1, 4, 4])).await
 }
 #[tokio::test]
 async fn runtime_first_reader_is_retired_before_second_root_exists() -> ProofResult<()> {
-    run_case(RuntimePrefix::FirstReader, [0, 0, 2, 2]).await
+    Box::pin(run_case(RuntimePrefix::FirstReader, [0, 0, 2, 2])).await
 }
 #[tokio::test]
 async fn stopped_runtime_keeps_all_cleanup_attempts_unknown_without_retry() -> ProofResult<()> {
-    run_case(RuntimePrefix::UnavailableApi, [1, 1, 4, 4]).await
+    Box::pin(run_case(RuntimePrefix::UnavailableApi, [1, 1, 4, 4])).await
 }
 
 async fn run_case(prefix: RuntimePrefix, expected_counts: [usize; 4]) -> ProofResult<()> {
@@ -67,7 +67,7 @@ async fn run_case(prefix: RuntimePrefix, expected_counts: [usize; 4]) -> ProofRe
     let mut fixture = RuntimeCleanupFixture::allocate(directory.path())?;
     let scenario: ProofResult<()> =
         async {
-            fixture.start().await?;
+            Box::pin(fixture.start()).await?;
             fixture.build_prefix(prefix).await?;
             check_public_state(
                 &fixture

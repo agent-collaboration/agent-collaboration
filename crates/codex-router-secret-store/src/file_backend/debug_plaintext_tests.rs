@@ -1,10 +1,15 @@
 //! Root-policy proof with fresh private fixtures and an observed Keychain boundary.
 use super::*;
+use crate::backend::SecretStore;
 use crate::credential_migration::{
     migrate_pooled_credentials_at_production_startup, migrate_pooled_credentials_at_startup,
 };
 use crate::encrypted_credential_store::EncryptedCredentialStore;
+use crate::file_backend::Ordering;
 use crate::keychain_data_key::{KeychainAccess, KeychainAccessError};
+use crate::test_support::FileWriteTrace;
+use crate::test_support::FileWriteTraceEvent;
+use codex_router_core::redaction::SecretString;
 use std::sync::atomic::AtomicUsize;
 
 #[derive(Default)]

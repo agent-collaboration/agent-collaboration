@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Decision 1050: the old canonical expiry key carries a retired board scope.
 #![allow(clippy::panic_in_result_fn)]
 mod message_support;

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! RC-10/11 use the real closing position, causal anchors and a recorded dropped task.
 use message_board::*;
 use serde_json::{Value, json};

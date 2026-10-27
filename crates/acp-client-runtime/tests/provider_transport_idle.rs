@@ -1,7 +1,6 @@
 //! Regression coverage for idle ACP transport scheduler wakeups.
 //! The vtable regression requires an optimized build; CI runs this target in release mode.
 #![cfg(unix)]
-#![allow(clippy::expect_used)]
 
 use agent_client_protocol::{AcpAgent, AcpAgentConfig, Client, Lines};
 use futures_util::StreamExt as _;

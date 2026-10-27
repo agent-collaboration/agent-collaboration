@@ -1,12 +1,12 @@
 //! Real sessions preserve forwarding provenance and opaque request/answer bodies.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "The normal fixture is shared with Worker creation and holder scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
@@ -20,9 +20,10 @@ mod forwarded_post_native_cases;
 mod forwarded_post_oracles;
 #[path = "support/forwarded_post_route_overlap.rs"]
 mod forwarded_post_route_overlap;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "The same scenario enum serves all native and Worker lifecycle entrypoints."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/forwarded_post_scenarios.rs"]
 mod forwarded_post_scenarios;
@@ -34,9 +35,10 @@ mod forwarded_post_state_oracles;
 mod forwarded_post_terminal_slots;
 #[path = "support/forwarded_post_wire.rs"]
 mod forwarded_post_wire;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "The same helper also serves independent real writer cases."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/holder_writer_retry.rs"]
 mod holder_writer_retry;
@@ -46,11 +48,16 @@ mod identity;
 mod lifecycle;
 #[path = "forwarded_posts/reconnect.rs"]
 mod reconnect;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Shared fixture also supports publication fault cases."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "session_publication/support.rs"]
 mod session_support;

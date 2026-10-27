@@ -1,6 +1,9 @@
 //! Feed candidates are metadata; bodies are fetched in one batch after the key merge.
 use crate::{ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{
+    EpochNumber, FeedCursor, FeedEntry, FeedPosition, MergeKey, ProjectId, RecordId, RecordKind,
+    RecordRef, RecordTime, SearchPostKind, ThreadId,
+};
 use std::collections::BTreeMap;
 
 #[derive(Clone, Debug)]

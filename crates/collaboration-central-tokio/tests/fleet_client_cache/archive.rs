@@ -54,6 +54,10 @@ async fn stored(root: &Path) -> TestResult<(Vec<serde_json::Value>, Vec<String>)
     Ok((reports, ledgers))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn native_archive_reports_keep_positions_and_typed_outcomes_through_the_real_client()
 -> TestResult {

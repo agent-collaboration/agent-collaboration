@@ -1,5 +1,4 @@
 //! Failed ACP turns keep their emitted items separate from explicit successors.
-#![allow(clippy::expect_used)]
 
 use acp_client_runtime::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
@@ -118,6 +117,11 @@ impl SessionEventSink for CapturedEventSink {
         self.0.send(event).map_err(|_| EventSinkClosed)
     }
 }
+
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn text_prompt_content(text: &str) -> PromptContent {
     PromptContent::text(text.to_owned()).expect("text prompt")
 }

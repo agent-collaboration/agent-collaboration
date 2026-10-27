@@ -5,8 +5,12 @@ use crate::{
     scenario_assertions::{check, equal},
 };
 use collaboration_central_core::RegistryTime;
-use fleet_admission::*;
-use message_board::*;
+use fleet_admission::{ArchiveReportOutcome, ArchiveReportRefusal, FleetOperation, FleetRequest};
+use message_board::{
+    BoardId, BoardKind, BoardState, Description, FleetPosition, HumanId, ProjectId,
+    ProtocolVersion, Record, RecordPlacement, RecordTime, RecordedActor, RequestDecision,
+    RequestId, ResourceName, WorkspaceId, WorkspaceState,
+};
 pub(crate) fn finalized_records(
     before: &[Record],
     board_id: &BoardId,

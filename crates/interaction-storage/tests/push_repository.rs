@@ -1,5 +1,5 @@
 //! Existing push repository invariants exercised through the native interaction owner.
-#![allow(clippy::expect_used)]
+
 use agent_automation::{OccurrenceId, RunId, ScheduleId, WakeupId};
 use chrono::{Duration, Utc};
 use collaboration_protocol::{
@@ -32,6 +32,10 @@ impl Drop for TestDatabase {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -68,10 +72,18 @@ fn push_draft(
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn push_id() -> PushId {
     PushId::try_from(uuid::Uuid::now_v7().to_string()).expect("UUIDv7 push id")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn wake_push_draft(
     push_id: PushId,
     target: SessionRef,
@@ -100,6 +112,10 @@ fn wake_push_draft(
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn schedule_run_push_draft(
     push_id: PushId,
     target: SessionRef,

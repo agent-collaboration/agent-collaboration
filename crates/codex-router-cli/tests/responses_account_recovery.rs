@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #[cfg(not(feature = "keychain-test-support"))]
 compile_error!(
     "Responses recovery acceptance requires keychain-test-support and isolated file credentials"

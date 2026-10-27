@@ -1,15 +1,15 @@
 //! The normal socket binds writer authority before the real Copy apply.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "copy_receiver_session/bootstrap_refusals.rs"]
 mod bootstrap_refusals;
 #[path = "native_http/support.rs"]
 mod configuration;
-#[path = "support/copy_wait_scenarios.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "Reuse the Copy creation caller without repeating its wait scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "support/copy_wait_scenarios.rs"]
 mod copy_wait_scenarios;
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
 use collaboration_central_conformance::{
@@ -23,6 +23,10 @@ use reqwest_websocket::{Message, WebSocket};
 use serde_json::json;
 use sqlx_core::{connection::ConnectOptions, query::query, row::Row};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_normal_session_applies_annotations_and_another_peer_cannot_replay_its_receipt()
 -> ConformanceResult<()> {

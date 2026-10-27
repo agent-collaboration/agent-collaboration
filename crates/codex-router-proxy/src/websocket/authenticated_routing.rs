@@ -1,5 +1,17 @@
 use super::provider_signals::selection_close_reason_from_http_error;
-use super::*;
+use super::{
+    AccountDecisionSelector, AccountId, AsyncAccountDecisionSelector,
+    AsyncAuthenticatedWebSocketRouter, AsyncProviderCredentialResolver, AuditEvent,
+    AuditEventFields, AuditFileSink, AuditOutcome, AuditRouteKind, AuthenticatedWebSocketRouter,
+    Header, HttpAffinitySecretProvider, HttpProxyError, HttpProxyRequest, LocalAuthAuditResult,
+    Method, ProviderCredentialResolver, ProxyLocalAuthGate, QuotaAwareAccountSelectorError,
+    RESPONSES_WEBSOCKET, RequestId, ResponseCommitState, RouterAffinityHashSecret,
+    StderrAuditFailureReporter, TransportKind, WebSocketAffinityOwnerContext, WebSocketCloseReason,
+    WebSocketFirstFrameDecision, WebSocketFrame, WebSocketHandshakeRequest,
+    WebSocketProtocolRouter, allowed_audit_event, append_audit_event_with_reporter,
+    extract_presented_local_token_from_request, local_auth_rejection_audit_event,
+    redacted_account_hash,
+};
 
 const WEBSOCKET_REQUEST_LOCAL_CREDENTIAL_ATTEMPT_LIMIT: usize = 16;
 fn credential_failure_or_websocket_selection_close_reason(

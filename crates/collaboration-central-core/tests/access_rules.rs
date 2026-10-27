@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used)]
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::*;
 fn policy() -> AccessPolicy {
@@ -9,12 +8,20 @@ fn policy() -> AccessPolicy {
         owner_identity: "owner@example.test".into(),
     }
 }
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn now() -> RegistryTime {
     RegistryTime(chrono::DateTime::from_timestamp(1000, 0).expect("time"))
 }
 fn claims() -> serde_json::Value {
     serde_json::json!({"type":"app","sub":"","common_name":"client-1","iss":"https://test.cloudflareaccess.com","aud":["session-aud"],"exp":1001,"nbf":1000})
 }
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn token(claims: &serde_json::Value, alg: &str) -> String {
     format!(
         "{}.{}.{}",
@@ -267,6 +274,10 @@ fn jwks_selects_only_one_compatible_key_by_kid() {
     );
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn set_claim(claims: &mut serde_json::Value, name: &str, value: serde_json::Value) {
     claims
         .as_object_mut()

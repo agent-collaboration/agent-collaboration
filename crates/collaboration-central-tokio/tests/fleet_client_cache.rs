@@ -1,6 +1,6 @@
 //! Router FleetClient rebuilds through the production transport and real central.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)] // Permanent scenario assertions; fixture failures propagate.
+// Permanent scenario assertions; fixture failures propagate.
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::{BoardConsumerProtocol, BoardConsumerRequest};
 use collaboration_central_conformance::{

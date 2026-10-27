@@ -2,7 +2,10 @@ use collaboration_protocol::ThreadSubscribeRequest;
 use message_board::*;
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove the contract; Result propagates fixture errors.
 fn subscription_writes_require_request_identity_and_protocol_metadata()
 -> Result<(), Box<dyn std::error::Error>> {
     let value = serde_json::json!({
@@ -23,7 +26,10 @@ fn subscription_writes_require_request_identity_and_protocol_metadata()
 }
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove the contract; Result propagates fixture errors.
 fn wait_renewals_have_independent_declared_request_keys() -> Result<(), Box<dyn std::error::Error>>
 {
     let value = serde_json::json!({"actor":{"kind":"human","humanId":"reader"},"actingFor":null,"protocolVersion":1,"filter":{"kind":"all"},"maxWaitSeconds":0,"renewals":[{"requestId":RequestId::generate(),"scope":{"kind":"project","projectId":ProjectId::generate()}}]});

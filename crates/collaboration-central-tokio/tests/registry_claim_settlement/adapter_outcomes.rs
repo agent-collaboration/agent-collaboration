@@ -113,7 +113,10 @@ async fn close(fixture: &RegistryFixture) -> TestResult {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn duplicate_projection_is_recorded_by_a_new_claim_call_and_the_adapter_completes()
 -> TestResult {
     let (fixture, peer, database) = arrange().await?;
@@ -143,11 +146,14 @@ async fn duplicate_projection_is_recorded_by_a_new_claim_call_and_the_adapter_co
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn a_newer_real_publication_overtakes_the_claim_call_and_older_still_completes() -> TestResult
 {
     let (fixture, peer, database) = arrange().await?;
-    let proof = async {
+    let proof = Box::pin(async {
         // Arrange: stop only transport, after CoreHost has captured the old public snapshot.
         let operation = admit(&fixture,peer,database,1).await?;
         fixture.io.pause_grant.store(true,Ordering::SeqCst);
@@ -185,14 +191,17 @@ async fn a_newer_real_publication_overtakes_the_claim_call_and_older_still_compl
         assert_eq!(after.0,newer.0);
         assert_eq!((after.1,after.2),(1,1));
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
-    }.await;
+    }).await;
     fixture.io.grant_release.notify_one();
     close(&fixture).await?;
     proof
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn a_snapshot_behind_the_grant_keeps_the_same_call_pending_without_settling_fleet()
 -> TestResult {
     let (fixture, peer, database) = arrange().await?;

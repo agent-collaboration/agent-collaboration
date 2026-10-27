@@ -1,5 +1,4 @@
 //! Shared real owner enrollment and normal session directory/read/submit contract.
-#![allow(clippy::panic_in_result_fn)]
 
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardDeliveryTypes,

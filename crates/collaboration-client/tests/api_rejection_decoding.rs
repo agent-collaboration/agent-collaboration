@@ -6,6 +6,10 @@ use collaboration_client::protocol::{
 use collaboration_client::{ClientError, CollaborationClient, operation_failure_from_client_error};
 use serde_json::{Value, json};
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/scripted_api.rs"]
 mod scripted_api;
 use scripted_api::{SCRIPTED_SERVICE_ID, ScriptedApi};
@@ -35,7 +39,7 @@ async fn client_preserves_valid_cursor_errors() {
 
 #[tokio::test]
 async fn message_result_preserves_native_rejection_reason_action_and_code() {
-    let (api, mut calls) = ScriptedApi::start().await.unwrap();
+    let (api, mut calls) = ScriptedApi::start().unwrap();
     let fixture = tokio::spawn(async move {
         let request = calls.next().await.unwrap();
         assert_eq!(request.tool, "message_send");
@@ -99,7 +103,7 @@ async fn receive_failure(
     tool: &'static str,
     failure: Value,
 ) -> Result<ClientError, Box<dyn std::error::Error + Send + Sync>> {
-    let (api, mut calls) = ScriptedApi::start().await?;
+    let (api, mut calls) = ScriptedApi::start()?;
     let fixture = tokio::spawn(async move {
         let request = calls.next().await?;
         if request.tool != tool {

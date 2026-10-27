@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Four real tables cross owners; only A's migrator may finish the move.
 #![allow(clippy::panic_in_result_fn)]
 mod message_support;

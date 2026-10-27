@@ -12,6 +12,10 @@ use sqlx_core::{
 };
 use std::sync::Arc;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn populated_v2_ledger_migrates_origin_headers_and_replays_after_store_reopen() -> TestResult
 {

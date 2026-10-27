@@ -1,6 +1,12 @@
 //! Request receipts use immutable feed metadata, independently of present bodies.
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    ActorOrigin, DecisionEffect, DecisionEffectsPage, EpochNumber, FeedCursor, FeedPosition,
+    MAX_EFFECT_PAGE_ENTRIES, MachineLabel, ProjectFeedEntry, Record, RecordId, RecordKind,
+    RecordPlacement, RecordRef, RequestDecision, RequestEffectsCursor, RequestEffectsRead,
+    RequestEffectsRefusal, RequestEffectsRequest, RequestEffectsScope, RequestLedgerEntry,
+    ServiceId, StoredDecision,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

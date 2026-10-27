@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Fleet projection catch-up reads its checkpoint, independent of unrelated cached bodies.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;

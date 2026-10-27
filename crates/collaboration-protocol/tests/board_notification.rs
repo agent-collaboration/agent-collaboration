@@ -2,7 +2,10 @@ use collaboration_protocol::*;
 use message_board::{NotifyIntentId, ProjectId, RoleAssignmentId};
 use serde_json::json;
 
-#[allow(clippy::expect_used)] // This test-only helper asserts a typed static fixture.
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // This test-only helper asserts a typed static fixture.
 fn draft(summary: &str) -> PushRecordDraft {
     let project = ProjectId::generate();
     let intent = NotifyIntentId::generate();

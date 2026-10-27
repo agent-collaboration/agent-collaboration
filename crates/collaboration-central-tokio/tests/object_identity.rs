@@ -1,11 +1,15 @@
 //! Stored address, Worker name and native file key remain one stable physical identity.
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "../src/object_keys.rs"]
 mod native_keys;
 #[path = "../../collaboration-central-cloudflare/src/object_location.rs"]
 mod worker_location;
 use collaboration_central_core::ObjectAddress;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn copy_identity_keeps_the_original_json_worker_name_and_native_key()
 -> Result<(), Box<dyn std::error::Error>> {

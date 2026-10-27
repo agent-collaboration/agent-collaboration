@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;
 use collaboration_service::SubscriptionWindowStore;

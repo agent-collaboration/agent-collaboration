@@ -13,20 +13,12 @@ struct RecorderState {
     requests: Mutex<Vec<serde_json::Value>>,
 }
 
-#[allow(
-    dead_code,
-    reason = "TCP and Unix observer entrypoints are shared by separate test targets"
-)]
 pub(super) struct RecordedApiListener {
     pub(super) url: Option<String>,
     state: Arc<RecorderState>,
     task: tokio::task::JoinHandle<std::io::Result<()>>,
 }
 
-#[allow(
-    dead_code,
-    reason = "TCP and Unix observer entrypoints are shared by separate test targets"
-)]
 impl RecordedApiListener {
     pub(super) async fn start(
         api_url: String,
@@ -59,6 +51,10 @@ impl RecordedApiListener {
         })
     }
 
+    #[expect(
+        clippy::unused_async,
+        reason = "The async listener fixture defers socket creation until its caller awaits setup."
+    )]
     pub(super) async fn start_on_unix(
         api_url: String,
         path: &std::path::Path,

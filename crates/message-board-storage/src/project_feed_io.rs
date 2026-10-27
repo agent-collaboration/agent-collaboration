@@ -6,7 +6,11 @@ use crate::project_record_codec::{
 use crate::{
     CursorValidity, ImportRowKind, ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction,
 };
-use message_board::*;
+use message_board::{
+    ActorOrigin, EpochNumber, FeedContent, FeedCursor, FeedEntry, FeedPosition, FeedRead,
+    MachineLabel, ProjectFeedEntry, ProjectId, Record, RecordId, RecordPlacement, RecordRef,
+    RecordTime, RecordedActor, RequestId, ServiceId,
+};
 
 struct FeedWindowRow {
     cursor_row_count: i64,

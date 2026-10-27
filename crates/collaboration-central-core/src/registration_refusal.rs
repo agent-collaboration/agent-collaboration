@@ -38,12 +38,12 @@ pub(crate) fn render(reason: &Refusal) -> Result<GateReason, CallFailure> {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal contract assertions fail their test."
-)]
 mod tests {
     use super::*;
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn creation_refusals_keep_literal_text_and_stable_wire_codes()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -88,6 +88,10 @@ mod tests {
         }
         Ok(())
     }
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn other_typed_refusals_preserve_explicit_compact_structure()
     -> Result<(), Box<dyn std::error::Error>> {

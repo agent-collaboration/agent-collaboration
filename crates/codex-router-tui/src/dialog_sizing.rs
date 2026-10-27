@@ -65,7 +65,12 @@ impl DialogAxisSize {
                 let preferred = match preferred {
                     DialogPreferredSize::Cells(cells) => cells,
                     DialogPreferredSize::Percent(percent) => {
-                        (u32::from(available) * u32::from(percent.0) / 100) as u16
+                        #[expect(
+                            clippy::cast_possible_truncation,
+                            reason = "DialogPercentage is at most 100, so the scaled size cannot exceed available u16 cells."
+                        )]
+                        let cells = (u32::from(available) * u32::from(percent.0) / 100) as u16;
+                        cells
                     }
                 };
                 let resolved = preferred

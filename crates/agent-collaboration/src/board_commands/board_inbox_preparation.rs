@@ -1,5 +1,11 @@
 //! Prepare typed inbox operations before transmission.
-use super::*;
+use super::{
+    AcknowledgementEntry, CommandContext, InboxAcknowledgeRequest, InboxAcknowledgeRequestProps,
+    InboxCommand, InboxFetchRequest, InboxFetchRequestProps, InboxModeKind, InboxReadMode,
+    InboxScope, InboxWorkspacesRequest, PreparedBoardCommand, ProtocolVersion,
+    ReadInitializationEntry, RequestId, command_context, inbox_scope, parse_acting_for,
+    parse_identity, prepare_page_request,
+};
 pub(super) fn prepare_inbox(
     command: InboxCommand,
 ) -> Result<(PreparedBoardCommand, CommandContext), String> {

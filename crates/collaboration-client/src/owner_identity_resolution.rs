@@ -51,7 +51,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Test assertions must fail the test while fixture errors propagate."
+    )]
     async fn owner_lookup_uses_command_result() -> Result<(), Box<dyn std::error::Error>> {
         let script = tempfile::tempdir()?;
         let command_path = script.path().join("id");
@@ -78,7 +81,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Test assertions must fail the test while fixture errors propagate."
+    )]
     async fn invalid_or_stalled_account_lookup_fails_closed()
     -> Result<(), Box<dyn std::error::Error>> {
         use std::os::unix::fs::PermissionsExt;

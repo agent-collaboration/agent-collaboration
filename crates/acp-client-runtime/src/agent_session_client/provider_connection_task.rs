@@ -1,6 +1,25 @@
 //! Own the ACP connection task, provider process, and Session admission loop.
+#[cfg(any(test, feature = "test-observation"))]
+use super::{AtomicU64, ExternalProviderApprovalRefusalWarning};
 
-use super::*;
+use super::{
+    AcpAgent, AcpProtocolVersion, ActiveApprovalContext, AgentSessionClient, Arc,
+    CancellationToken, Client, CreateAdmissionInputs, CursorPlanItems, Duration,
+    ExternalProviderAdmission, ExternalProviderApprovalRefusalReason, ExternalProviderLaunch,
+    ExternalProviderRuntimeError, HashMap, InteractionPort, Lines, MAX_ACP_FRAME_BYTES, McpServer,
+    NewSessionRequest, Ordering, PendingSessionAdmission, PermissionDispatchState, ProtocolVersion,
+    ProviderAuthStatusHandler, ProviderCapabilityReport, ProviderCommand,
+    ProviderConnectionActivity, ProviderCursorCreatePlanHandler, ProviderCursorQuestionHandler,
+    ProviderCursorTodoHandler, ProviderFormElicitationHandler, ProviderFrameObservation,
+    ProviderKnownSessions, ProviderPromptDispatchObservation, ProviderRequestFallback,
+    ProviderRequestSessionGuard, ProviderSessionActivity, ProviderSessionCommand,
+    ProviderSessionRuntimeHandles, RequestPermissionRequest, SessionEventSink,
+    StaticSessionActivation, ToolCallOwnershipHandler, active_turn_cancellation,
+    fail_pending_session_admission, initialize_provider_connection, provider_lifecycle_requests,
+    provider_session_restore, publish_pending_session_admission, record_permission_refusal,
+    register_provider_session, register_static_provider_session, run_create_admission,
+    sanitized_initialization_error, spawn_external_approval_dispatch,
+};
 
 impl<P: InteractionPort> AgentSessionClient<P> {
     pub(super) async fn initialize_with_timeout_and_mcp_servers(

@@ -104,6 +104,10 @@ pub async fn replication(fixture: &mut BoardFixture, reader: &mut SecondHost) ->
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_reopened_copy(before: &Value, after: &Value, directory: &Value) -> FixtureResult {
     let mut expected: message_board::WorkView = serde_json::from_value(before.clone())?;
     let actual: message_board::WorkView = serde_json::from_value(after.clone())?;
@@ -129,6 +133,10 @@ fn assert_reopened_copy(before: &Value, after: &Value, directory: &Value) -> Fix
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 pub fn matching_posts<'a>(feed: &'a Value, post: &Value) -> FixtureResult<Vec<&'a Value>> {
     let entries = at(feed, "/value/entries")?
         .as_array()

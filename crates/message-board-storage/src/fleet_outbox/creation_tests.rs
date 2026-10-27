@@ -33,6 +33,10 @@ fn inputs() -> Result<(ProjectCreateRequest, FleetRequest), Box<dyn std::error::
     Ok((input, directory))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn complete_creation_input_and_identity_survive_pending_conflict_and_reopen() -> TestResult {
     let temporary = tempfile::tempdir()?;
@@ -72,6 +76,10 @@ async fn complete_creation_input_and_identity_survive_pending_conflict_and_reope
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn creation_input_failure_rolls_back_its_directory_request() -> TestResult {
     let temporary = tempfile::tempdir()?;
@@ -87,6 +95,10 @@ async fn creation_input_failure_rolls_back_its_directory_request() -> TestResult
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity() -> TestResult {
     let temporary = tempfile::tempdir()?;

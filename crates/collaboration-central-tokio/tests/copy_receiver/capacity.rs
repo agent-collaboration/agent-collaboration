@@ -141,6 +141,10 @@ impl TransactionScope for CapacityScope<'_> {
         CapacityExecutor(self.0)
     }
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollback() -> TestResult {
     let root = tempfile::tempdir()?;

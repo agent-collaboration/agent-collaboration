@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Aggregate post paging keeps escape-heavy records within the existing byte budget.
 use message_board::*;
 use serde_json::json;

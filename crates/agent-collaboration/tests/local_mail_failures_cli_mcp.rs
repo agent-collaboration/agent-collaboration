@@ -1,7 +1,16 @@
 //! Real CLI/MCP Local mail observations, sharing only the isolated surface fixture.
 use collaboration_service as mail_service;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/local_mail_surfaces.rs"]
 mod local_mail_surfaces;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
 mod native_mail_owner;
 use collaboration_protocol::MailItemId;
@@ -27,7 +36,10 @@ macro_rules! ensure_eq {
 #[path = "support/local_mail_capacity.rs"]
 mod local_mail_capacity;
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code)] // Companion replay tests use the shared compaction helpers.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // Companion replay tests use the shared compaction helpers.
 mod native_sql;
 #[tokio::test]
 async fn full_inbox_refuses_cli_and_mcp_sends_and_replies_without_effect_or_target() -> TestResult {

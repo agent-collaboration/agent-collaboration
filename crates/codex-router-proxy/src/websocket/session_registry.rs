@@ -1,4 +1,13 @@
-use super::*;
+use super::{
+    AccountId, Arc, CancellationToken, FloorSwitchIntent, HashMap, Mutex, SocketAddr,
+    TokenGeneration, current_unix_millis, watch,
+};
+#[cfg(test)]
+use crate::websocket::Shutdown;
+#[cfg(test)]
+use crate::websocket::TcpStream;
+#[cfg(test)]
+use crate::websocket::WebSocketTunnelError;
 
 /// Tracks active local WebSocket streams by local token generation.
 const MAX_WEBSOCKET_REGISTRY_SAMPLE_COUNTS: usize = 1024;

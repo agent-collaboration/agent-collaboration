@@ -169,6 +169,10 @@ pub(super) async fn assert_message_reply_without_reference_is_rejected(
     Ok(())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) async fn cli_show(
     proof: &ProofContext,
     caller: &SessionRef,
@@ -213,6 +217,10 @@ pub(super) async fn run_cli(
     run_cli_output(command, OBSERVATION_TIMEOUT).await
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) fn successful_cli_result(
     output: std::process::Output,
     operation: &str,
@@ -540,6 +548,10 @@ pub(super) async fn wait_for_schedule_push(
     }
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) async fn wait_for_acp_input(
     receipt_path: &Path,
     target: &SessionRef,

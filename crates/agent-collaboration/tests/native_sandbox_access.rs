@@ -22,7 +22,7 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
     let root =
         PathBuf::from("/tmp").join(format!("ipc-proof-{}", OperationId::generate().as_str()));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
         codex_home: home,
@@ -32,7 +32,7 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     let command: Vec<OsString> = vec![
         env!("CARGO_BIN_EXE_agent-collaboration").into(),

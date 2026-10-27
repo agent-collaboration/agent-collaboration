@@ -187,7 +187,12 @@ fn conversation_preview_recovers_when_tail_starts_inside_utf8_character() {
     let mut bytes = "épartial line\n".as_bytes().to_vec();
     bytes.extend_from_slice(recent.as_bytes());
     bytes.push(b'\n');
-    bytes.resize(SESSION_CONVERSATION_MAX_READ_BYTES as usize + 1, b'x');
+    bytes.resize(
+        usize::try_from(SESSION_CONVERSATION_MAX_READ_BYTES)
+            .expect("fixture history limit fits usize")
+            + 1,
+        b'x',
+    );
     fs::write(&path, bytes).expect("write history");
 
     let source = SessionHistorySource::new(path.display().to_string(), codex_home);

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! A fresh central decision starts registration within the request's settlement.
 use collaboration_service::{
     ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState,

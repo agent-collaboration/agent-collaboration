@@ -1,12 +1,23 @@
 //! Real CLI/MCP remote custody; a closed session cannot supply a scripted queued answer.
 use collaboration_service as mail_service;
 #[path = "support/local_mail_surfaces.rs"]
-#[allow(dead_code)] // The local companion targets use the other fixture operations.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // The local companion targets use the other fixture operations.
 mod local_mail_surfaces;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
 mod native_mail_owner;
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code)] // Companion targets use the application-row fault helpers.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // Companion targets use the application-row fault helpers.
 mod native_sql;
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
@@ -100,7 +111,10 @@ fn input(item: &MailItemId, target: &SessionRef, text: &str) -> Value {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_push_or_local_injection()
 -> TestResult {
     let (_session_root, surfaces, remote) = offline_surfaces().await?;
@@ -223,7 +237,10 @@ async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_pu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_the_real_mcp()
 -> TestResult {
     let (_session_root, surfaces, remote) = offline_surfaces().await?;
@@ -355,7 +372,10 @@ async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_t
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_and_received_projection()
 -> TestResult {
     let (_session_root, surfaces, remote) = offline_surfaces().await?;

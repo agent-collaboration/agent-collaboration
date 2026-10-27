@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Native inbox projects typed state changes and keeps reader/scope continuation boundaries.
 use message_board::*;
 use serde_json::{Value, json};

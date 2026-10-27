@@ -1,5 +1,5 @@
 //! SQLite legacy schema v6to10 responsibilities.
-use super::*;
+use super::{SqliteStateStore, StateStoreError, sqlite_error};
 #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
 pub(super) const ASYNC_QUOTA_HISTORY_SCHEMA_STATEMENTS: &[&str] = &[
     "CREATE TABLE IF NOT EXISTS quota_history_observations (

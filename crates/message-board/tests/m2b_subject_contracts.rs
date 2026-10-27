@@ -3,7 +3,10 @@ use message_board::*;
 use serde_json::json;
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Contract assertions; Result propagates fixture errors.
 fn subject_lines_trim_and_accept_exactly_one_hundred_twenty_unicode_characters()
 -> Result<(), Box<dyn std::error::Error>> {
     let line = SubjectLine::try_from(format!("  {}  ", "é".repeat(120)))?;

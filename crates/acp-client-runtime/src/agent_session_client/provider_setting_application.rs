@@ -6,7 +6,7 @@ use agent_client_protocol::schema::v1::{
 };
 use agent_client_protocol::{ConnectionTo, JsonRpcMessage, UntypedMessage};
 
-use super::*;
+use super::{ActiveSession, Agent, acp_operation_error};
 use crate::{
     AppliedProviderSetting, ProviderSettingKind, ProviderSettingsCatalog, RequestedProviderSettings,
 };

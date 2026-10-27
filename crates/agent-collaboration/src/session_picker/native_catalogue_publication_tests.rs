@@ -345,8 +345,10 @@ async fn actual_native_background_api_reaches_captured_details_and_copy_as_uuid(
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Moved,
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column)
+                                .expect("captured fixture coordinates fit terminal cells"),
+                            u16::try_from(row)
+                                .expect("captured fixture coordinates fit terminal cells"),
                         )))
                         .unwrap();
                     phase = 2;

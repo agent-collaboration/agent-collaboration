@@ -75,6 +75,10 @@ pub async fn lost_custody_then_cancel(scope: &mut MessagingCase<'_>) -> FixtureR
     finish_prevention(scope, original, cancel, None).await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_submit_identity(observed: &Value, pointer: &str, item: &str) -> FixtureResult {
     let bytes: Vec<u8> = serde_json::from_value(
         observed

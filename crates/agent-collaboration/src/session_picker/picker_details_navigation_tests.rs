@@ -477,8 +477,10 @@ async fn owner_c8_copy_path_keyboard_pointer_and_failure_use_the_existing_clipbo
                             sender
                                 .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                                     MouseEventKind::Down(MouseButton::Left),
-                                    column as u16,
-                                    row as u16,
+                                    u16::try_from(column)
+                                        .expect("captured fixture coordinates fit terminal cells"),
+                                    u16::try_from(row)
+                                        .expect("captured fixture coordinates fit terminal cells"),
                                 )))
                                 .unwrap();
                         } else {

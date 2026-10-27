@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 //! Real Host, ACP process, approval broker, and Session hub race proof.
 
 use codex_router_host::{

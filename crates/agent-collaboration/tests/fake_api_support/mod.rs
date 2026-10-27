@@ -5,7 +5,6 @@
 //! `tools/call` (one HTTP/1.1 request per connection, as the CLI's client sends them) with
 //! the reply the test scripted. Connections that carry no request, such as the client's
 //! reachability probe, are skipped.
-#![allow(dead_code)]
 
 use collaboration_service::ManifestPublication;
 use serde_json::{Value, json};

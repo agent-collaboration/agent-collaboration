@@ -1,4 +1,3 @@
-#![allow(unused_imports)]
 use super::*;
 pub(super) use std::env;
 pub(super) use std::path::PathBuf;
@@ -7,7 +6,6 @@ pub(super) use std::sync::Mutex;
 pub(super) use std::sync::MutexGuard;
 pub(super) use std::sync::atomic::AtomicBool;
 pub(super) use std::sync::atomic::AtomicUsize;
-pub(super) use std::sync::atomic::Ordering;
 pub(super) use std::sync::mpsc;
 pub(super) use std::time::Duration;
 
@@ -24,9 +22,6 @@ pub(super) use codex_router_secret_store::model::SecretStoreError;
 pub(super) use codex_router_state::credential_maintenance::CredentialMaintenanceState;
 pub(super) use codex_router_state::repositories::AccountStateRepository;
 pub(super) use codex_router_state::sqlite::SqliteStateStore;
-pub(super) use http_body_util::BodyExt;
-pub(super) use http_body_util::StreamBody;
-pub(super) use hyper::body::Frame;
 pub(super) use tokio::io::AsyncWriteExt;
 
 pub(super) static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -188,6 +183,10 @@ pub(super) struct HeldProxyRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldProxyRefreshClient {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,

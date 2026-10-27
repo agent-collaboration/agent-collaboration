@@ -1,5 +1,5 @@
 //! Template-derived bindings still pass through the real Worker's domain decoder.
-use super::*;
+use super::{ConformanceResult, Duration, WorkerdProcess, WorkerdSettings};
 pub(super) async fn run(settings: &WorkerdSettings) -> ConformanceResult<()> {
     for value in ["{}", "not-a-peer"] {
         let worker = WorkerdProcess::start_with_relay_value(settings, value).await?;

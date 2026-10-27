@@ -1,7 +1,11 @@
 //! The library identity keeps the original address bytes used inside stored routing data.
-#![allow(clippy::panic_in_result_fn)]
+
 use collaboration_central_core::ObjectAddress;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn copy_address_round_trip_preserves_the_original_persisted_encoding()
 -> Result<(), Box<dyn std::error::Error>> {

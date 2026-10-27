@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use board_sync_protocol::{BoardAnnotation, VerifiedForwardedPost};
 use message_board::RecordTime;
 use serde_json::json;

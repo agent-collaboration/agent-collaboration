@@ -6,7 +6,11 @@ use board_sync_protocol::{
 use collaboration_central_conformance::ConformanceResult;
 use collaboration_central_conformance::{ConformanceClient, enroll_admitted_peer};
 use durable_steps::Uuid;
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    DeliveryAnswer, DeliveryEnvelope, DeliveryFailureKind, DeliveryItem, DeliveryRefusal,
+    DeliveryStatus, FetchEntry, ItemId, ItemStatusState, OperationAnswer, PeerId, SettleResult,
+    SubmitResult,
+};
 use reqwest_websocket::WebSocket;
 use serde_json::json;
 

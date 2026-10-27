@@ -42,6 +42,11 @@ async fn identity(cache: &FleetCache) -> TestResult<String> {
         .await?;
     Ok(row.try_get("row_id")?)
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn staging_uuid_identity_is_immutable_while_natural_key_upserts_and_reopens() -> TestResult {
     let root = tempfile::tempdir()?;

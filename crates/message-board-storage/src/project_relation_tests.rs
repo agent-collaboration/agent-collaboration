@@ -3,6 +3,10 @@ use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn removed_subtask_leaves_the_checklist_but_keeps_its_identity_and_feed() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -88,6 +92,10 @@ async fn removed_subtask_leaves_the_checklist_but_keeps_its_identity_and_feed() 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn task_links_read_marks_and_redactions_survive_native_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;

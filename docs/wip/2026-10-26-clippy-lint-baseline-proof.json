@@ -1,0 +1,421 @@
+{
+  "status": "runtime-verification-blocked-by-owner",
+  "base": "02ceeade",
+  "finalSourcePatchSha256": "e8aedf4344021ae9b667216294bcbdc5e56f4f4d8ed4ca7346b69231d5e0d154",
+  "testSweepStartPatchSha256": "294caaa004ce93b9aad6d94e690413d2a70daaeb48d8fdef3062096b34b52c0a",
+  "changesAfterSweepStarted": {
+    "files": [
+      "crates/collaboration-central-cloudflare/src/composed_control.rs",
+      "crates/collaboration-central-cloudflare/src/conformance_admission.rs",
+      "crates/collaboration-central-cloudflare/src/conformance_bootstrap.rs",
+      "crates/collaboration-central-cloudflare/src/object_shell/conformance_routes.rs",
+      "crates/collaboration-central-cloudflare/src/shared_object_store/session_capabilities.rs"
+    ],
+    "kind": "Explicit imports only in conformance code; no executable statements or assertions changed",
+    "revalidatePackage": "collaboration-central-cloudflare",
+    "nativeRefreshStatus": "Not rerun after the owner stopped built-executable launches",
+    "staticProof": "Native workspace Clippy and Wasm Worker all-features Clippy both pass after the import-only amendment"
+  },
+  "clippy": {
+    "command": "cargo clippy --workspace --all-targets -- -D warnings",
+    "exitCode": 0
+  },
+  "fmt": {
+    "command": "cargo fmt --all -- --check",
+    "exitCode": 0
+  },
+  "wasmCoreClippy": {
+    "command": "cargo clippy --locked -p collaboration-central-core --target wasm32-unknown-unknown --lib -- -D warnings",
+    "exitCode": 0
+  },
+  "wasmWorkerClippy": {
+    "command": "cargo clippy --locked --manifest-path crates/collaboration-central-cloudflare/Cargo.toml --target wasm32-unknown-unknown --all-features -- -D warnings",
+    "exitCode": 0
+  },
+  "mailProtocolCheck": {
+    "command": "cargo check -p collaboration-mail-protocol --all-targets",
+    "exitCode": 0
+  },
+  "baseline": [
+    {
+      "lint": "wildcard_imports",
+      "before": 468,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "allow_attributes",
+      "before": 180,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "allow_attributes_without_reason",
+      "before": 198,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "large_futures",
+      "before": 46,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "cast_possible_truncation",
+      "before": 87,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "cast_sign_loss",
+      "before": 10,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "cast_possible_wrap",
+      "before": 5,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "match_wildcard_for_single_variants",
+      "before": 17,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "unwrap_in_result",
+      "before": 9,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "unused_async",
+      "before": 12,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "trivially_copy_pass_by_ref",
+      "before": 4,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "large_stack_arrays",
+      "before": 1,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "large_types_passed_by_value",
+      "before": 0,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "large_stack_frames",
+      "before": 0,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "enum_glob_use",
+      "before": 0,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "dbg_macro",
+      "before": 0,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "implicit_clone",
+      "before": 0,
+      "afterEmitted": 0
+    },
+    {
+      "lint": "inefficient_to_string",
+      "before": 0,
+      "afterEmitted": 0
+    }
+  ],
+  "packages": [
+    {
+      "package": "acp-client-runtime",
+      "passed": 85,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p acp-client-runtime --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "agent-collaboration",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "automation-storage",
+      "passed": 94,
+      "skipped": 1,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p automation-storage --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "board-central-test-support",
+      "passed": 2,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p board-central-test-support --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "board-fleet-sync",
+      "passed": 26,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p board-fleet-sync --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "board-legacy-upgrade",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "board-sync-protocol",
+      "passed": 50,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p board-sync-protocol --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "claude-code-peer-messaging",
+      "passed": 25,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p claude-code-peer-messaging --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-acp-adapter",
+      "passed": 72,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-acp-adapter --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-native-integration",
+      "passed": 84,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-native-integration --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-auth",
+      "passed": 79,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-auth --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-cli",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "codex-router-host",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "codex-router-proxy",
+      "passed": 524,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-proxy --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-quota-reset-test-harness",
+      "passed": 55,
+      "skipped": 12,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-quota-reset-test-harness --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-secret-store",
+      "passed": 82,
+      "skipped": 4,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-secret-store --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-selection",
+      "passed": 122,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-selection --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-state",
+      "passed": 176,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-state --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-test-support",
+      "passed": 44,
+      "skipped": 18,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-test-support --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "codex-router-tui",
+      "passed": 27,
+      "skipped": 1,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p codex-router-tui --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "collaboration-central-cloudflare",
+      "passed": 2,
+      "skipped": 0,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p collaboration-central-cloudflare --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "collaboration-central-conformance",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "collaboration-central-core",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "collaboration-central-tokio",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "collaboration-client",
+      "passed": 132,
+      "skipped": 1,
+      "exitCode": 0,
+      "status": "passed",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p collaboration-client --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "collaboration-mail-protocol",
+      "passed": null,
+      "skipped": null,
+      "exitCode": 101,
+      "status": "build interrupted before tests",
+      "command": "CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p collaboration-mail-protocol --no-fail-fast --status-level fail --final-status-level all"
+    },
+    {
+      "package": "collaboration-mcp",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "collaboration-protocol",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "collaboration-service",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "fleet-admission",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "interaction-storage",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "lifecycle-observation",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "message-board",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    },
+    {
+      "package": "message-board-storage",
+      "passed": null,
+      "skipped": null,
+      "exitCode": null,
+      "status": "not run: owner execution stop",
+      "command": null
+    }
+  ],
+  "total": {
+    "passed": 1681,
+    "skipped": 37,
+    "packagesPassed": 18
+  },
+  "exceptions": {
+    "splitRoots": 214,
+    "generated": 16,
+    "sharedFixture": 152,
+    "splitFixture": 21
+  },
+  "diskSnapshot": "/dev/disk3s5   926Gi   676Gi   218Gi    76%     33M  2.3G    1%   /System/Volumes/Data",
+  "finalCleanup": {
+    "command": "cargo clean --workspace --profile dev",
+    "result": "Removed 6953 files, 8.9GiB total"
+  }
+}

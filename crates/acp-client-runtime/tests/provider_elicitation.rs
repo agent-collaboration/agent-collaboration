@@ -1,7 +1,5 @@
 //! ACP form elicitation is translated through the typed Question port.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     collections::BTreeMap,
     path::PathBuf,
@@ -76,6 +74,11 @@ impl InteractionPort for QuestionPort {
     ) -> InteractionFuture<'_, ApprovalPortOutcome> {
         Box::pin(async { ApprovalPortOutcome::Cancelled })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn request_question(
         &self,
         _context: Self::Context,
@@ -116,6 +119,10 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_elicitation(
     mode: &str,
     response: QuestionResponse,

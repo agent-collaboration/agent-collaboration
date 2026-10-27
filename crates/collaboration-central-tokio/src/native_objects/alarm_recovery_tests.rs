@@ -1,8 +1,5 @@
 //! One-shot failures occur at real timer-consumed store boundaries, without HTTP nudges.
-#![allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal assertions qualify permanent conformance cases."
-)]
+
 use super::*;
 use collaboration_central_core::ObjectHost;
 use durable_steps::{
@@ -43,6 +40,10 @@ fn envelope(database: DatabaseId, kind: &str, target: Value, request: Value) -> 
     json!({"source":{"kind":"registry"},"sourceFace":"registry","authority":{"kind":"object"},"destination":{"kind":"copy","value":database},"destinationFace":"copy","identity":{"operation":durable_steps::Uuid::now_v7(),"step":"alarm_test"},"kind":kind,"target":target,"request":request})
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn copy_expiry_cancels_the_real_wait_even_when_that_alarm_inspection_fails() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -117,6 +118,10 @@ impl Task for SavedCopyProbe {
         })
     }
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_failures() -> TestResult
 {
@@ -244,6 +249,10 @@ async fn completed(
     .await?
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -287,6 +296,10 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn mailbox_consumed_wake_recovers_its_saved_open_after_deadline_begin_failure() -> TestResult
 {

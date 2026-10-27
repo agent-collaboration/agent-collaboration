@@ -1,5 +1,11 @@
 //! Endpoint resolution, operation identity, output, and failure rendering for conversation CLI.
-use super::*;
+use super::{
+    ClientError, CodexGeneration, CollaborationClient, ConversationClientError,
+    ConversationCreateOutcome, ConversationOperationFailure, ConversationOperationFailureKind,
+    ConversationOperationResult, ConversationRecord, ConversationStopReason, EndpointRef,
+    OperationEffect, OperationFailure, OperationId, SessionRef, Write, io, operation_failure_exit,
+    operation_failure_from_client_error,
+};
 
 pub(super) async fn resolve_create_endpoint(
     directory: &std::path::Path,

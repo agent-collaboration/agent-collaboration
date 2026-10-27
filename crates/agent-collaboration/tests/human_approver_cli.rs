@@ -1,5 +1,4 @@
 //! A Human Approver remains reachable through the CLI after provider creation.
-#![allow(clippy::indexing_slicing, clippy::panic_in_result_fn)]
 
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
@@ -41,6 +40,10 @@ for line in sys.stdin:
   raise AssertionError(request)
 "#;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cli_human_approver_from_create_can_decide_provider_permission() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -48,7 +51,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
     let provider_path = root.path().join("human-approver-provider.py");
     std::fs::write(&provider_path, PROVIDER)?;
     std::fs::set_permissions(&provider_path, std::fs::Permissions::from_mode(0o700))?;
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
             board_session: None,
             directory: root.path().to_owned(),
@@ -68,7 +71,7 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
             )?;
             binding
         })],
-    )
+    ))
     .await?;
     let client = CollaborationClient::connect(root.path(), "human-approver-observer", "1").await?;
     let provider = client
@@ -329,6 +332,10 @@ async fn cli_human_approver_from_create_can_decide_provider_permission() -> Test
     Ok(())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 /// Starts `events listen` on the provider Session and, once it reports readiness, collects
 /// its lines until it streams an interaction request or ten seconds pass.
 async fn start_provider_listener(
@@ -436,6 +443,10 @@ impl ProviderEvents {
         }
     }
 
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+    )]
     async fn next_event(&mut self) -> TestResult<Value> {
         loop {
             if let Some(event) = self.pending.pop_front() {
@@ -463,6 +474,10 @@ impl ProviderEvents {
     }
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 async fn wait_for_interaction(observer: &mut ProviderEvents) -> TestResult {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {
@@ -473,6 +488,10 @@ async fn wait_for_interaction(observer: &mut ProviderEvents) -> TestResult {
     }
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 async fn wait_for_turn_end(observer: &mut ProviderEvents) -> TestResult {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     loop {

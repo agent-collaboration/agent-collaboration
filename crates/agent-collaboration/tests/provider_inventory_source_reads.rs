@@ -3,6 +3,10 @@
 use serde_json::json;
 use std::time::Duration;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fake_api_support/mod.rs"]
 mod fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};

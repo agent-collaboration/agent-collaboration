@@ -1,5 +1,4 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
 use collaboration_central_tokio::TokioStorageHost;
@@ -76,6 +75,10 @@ fn config() -> Result<RegistryConfig, Box<dyn std::error::Error + Send + Sync>> 
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> TestResult {
     let directory = tempfile::tempdir()?;

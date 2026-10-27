@@ -1,6 +1,5 @@
 //! Canonical Fleet metadata and its feed commit in one owned store transaction.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 #[path = "fleet_storage/archive_inputs.rs"]
 mod archive_inputs;
@@ -31,6 +30,10 @@ mod upgrade;
 use fleet_admission::{FleetImportCounts, FleetImportResult};
 use support::{Fixture, TestResult, bundle};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn imported_fleet_records_keep_provenance_unknown_time_digest_and_replay_after_reopen()
 -> TestResult {

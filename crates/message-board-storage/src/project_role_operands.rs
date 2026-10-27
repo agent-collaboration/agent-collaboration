@@ -1,7 +1,10 @@
 //! Authority and stand-down operands use typed subject and exact actor keys.
 use crate::project_actor_rows::actor_id;
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    AuthorityRole, Identity, OwnerGrantId, ProjectId, Record, RecordId, RecordKind, RecordRef,
+    RecordedActor, RoleAssignment, RoleAssignmentId, RoleCardinality, RoleEnd, RoleSubject,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

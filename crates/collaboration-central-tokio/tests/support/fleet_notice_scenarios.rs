@@ -1,5 +1,9 @@
 //! Two ordinary sessions exercise the Fleet producer, alarm, and real notice receiver.
-use board_sync_protocol::*;
+use board_sync_protocol::{
+    BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardNotice, BoardPayload,
+    BoardReadCursor, BoardReadPage, BoardReadScope, FleetFeedRead, FleetRequestEnvelope,
+    NoticeRead, PositionedBoardNotice,
+};
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer,
 };
@@ -9,7 +13,10 @@ use fleet_sync_protocol::{
     ClientFrame, FrameId, Notice, OperationAnswer, OperationRequest, ServerFrame,
 };
 use futures_util::{SinkExt, StreamExt};
-use message_board::*;
+use message_board::{
+    ChangeOutcome, Description, FleetPosition, HumanId, ProtocolVersion, RecordedActor,
+    RequestDecision, RequestId, ResourceName, WorkspaceId,
+};
 use reqwest_websocket::{Message, WebSocket};
 use std::time::Duration;
 

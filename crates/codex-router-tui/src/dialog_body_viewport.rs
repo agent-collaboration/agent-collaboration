@@ -142,6 +142,10 @@ pub fn DialogBodyViewport<'a>(
     });
     let children = std::mem::take(&mut props.children);
     let visible_height = viewport_height.get();
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "The result is bounded by visible_height, a u16 cell count."
+    )]
     let thumb_height = if natural_height.get() == 0 {
         0
     } else {
@@ -149,6 +153,10 @@ pub fn DialogBodyViewport<'a>(
             .max(1)
             .min(u32::from(visible_height)) as u16
     };
+    #[expect(
+        clippy::cast_possible_truncation,
+        reason = "The offset ratio is at most one, so the result cannot exceed visible_height."
+    )]
     let thumb_top = if maximum_offset == 0 {
         0
     } else {

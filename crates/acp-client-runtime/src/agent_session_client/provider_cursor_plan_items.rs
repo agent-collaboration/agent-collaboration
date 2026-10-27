@@ -135,7 +135,7 @@ pub(super) enum CursorTodoStatus {
 }
 
 impl CursorTodoStatus {
-    const fn label(&self) -> &'static str {
+    const fn label(self) -> &'static str {
         match self {
             Self::Pending => "pending",
             Self::InProgress => "in progress",

@@ -9,6 +9,10 @@ use message_board::{BoardState, Record, RequestDecision, WorkspaceState};
 use serde_json::json;
 use sqlx_core::{query::query, row::Row};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn workspace_archive_keeps_unknown_lease_blockers_and_writes_more_than_five_row_ids()
 -> TestResult {

@@ -1,6 +1,10 @@
 //! Engine-independent decision tables consumed by both native and central adapters.
 use crate::{ArchiveReport, ArchiveReportOutcome, FleetOperation, FleetRequest};
-use message_board::*;
+use message_board::{
+    AdrId, AdrStatus, AdrTransition, BoardId, BoardKind, BoardState, ChangeOutcome, Description,
+    HumanId, Identity, MarkdownText, ProjectId, ProtocolVersion, RecordedActor, Refusal, RequestId,
+    ResourceName, ServiceId, SubjectRevision, WorkspaceId,
+};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum FleetExpectation {

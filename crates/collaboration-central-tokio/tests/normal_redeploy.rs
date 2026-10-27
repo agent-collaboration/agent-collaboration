@@ -2,21 +2,41 @@
 #![cfg(feature = "conformance")]
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
 #[path = "normal_redeploy/grant_readback.rs"]
 mod grant_readback;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/imported_board_fixture.rs"]
 mod imported_board_fixture;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
 mod native_fleet;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/owner_registry_scenarios.rs"]
 mod owner_registry_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[path = "normal_redeploy/state.rs"]

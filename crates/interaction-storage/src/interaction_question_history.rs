@@ -1,5 +1,9 @@
 //! Question validation and history mutations within the shared owning transaction.
-use super::*;
+use super::{
+    Identity, InteractionCancelReason, InteractionHistoryError, InteractionHistoryRecord,
+    InteractionHistoryStore, QuestionHistoryState, QuestionRequest, QuestionResponse, SessionRef,
+    Utc, validate_question_response_record,
+};
 
 impl InteractionHistoryStore {
     pub async fn record_question(

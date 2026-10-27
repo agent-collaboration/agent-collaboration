@@ -169,7 +169,7 @@ fn managed_reply_matches(
                     } => Some(actual) == target,
                     ConversationOperationWaitOutput::Pending
                     | ConversationOperationWaitOutput::OutputUnavailable { .. } => true,
-                    _ => false,
+                    ConversationOperationWaitOutput::Available { .. } => false,
                 }
         }
         SourceProviderActionResult::Failed {

@@ -4,7 +4,11 @@ use crate::{
     FleetSnapshot, FleetWrite, canonical_hash, fleet_decision::envelope,
 };
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    ActorOrigin, Board, BoardId, CanonicalHash, ChangeOutcome, Record, RecordPlacement, RecordRef,
+    RecordTime, RecordedActor, Refusal, RequestLedgerEntry, ResourceName, StoredDecision,
+    Workspace, WorkspaceId, WorkspaceState,
+};
 
 pub(crate) struct OperationPlan {
     pub records: Vec<Record>,

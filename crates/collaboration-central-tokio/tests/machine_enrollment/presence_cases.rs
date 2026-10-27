@@ -98,6 +98,10 @@ async fn report(
     let _: SchemaSupportRecorded = serde_json::from_slice(&bytes)?;
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn only_a_new_verified_admission_sets_presence_and_a_renewal_does_not() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -197,6 +201,10 @@ async fn only_a_new_verified_admission_sets_presence_and_a_renewal_does_not() ->
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn stored_presence_rejects_invalid_time_and_precision_loss_but_accepts_utc_notation()
 -> TestResult {

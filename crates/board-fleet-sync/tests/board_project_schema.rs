@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use board_fleet_sync::BoardProjectSchema;
 use fleet_sync_lease::LeasePolicy;
 use fleet_sync_protocol::PeerId;

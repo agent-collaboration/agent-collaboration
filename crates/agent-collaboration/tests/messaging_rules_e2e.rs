@@ -1,42 +1,41 @@
 //! B+ process observations compose the real Router entry points with local central.
 #![deny(clippy::too_many_lines)]
-#![allow(
-    clippy::panic_in_result_fn,
-    reason = "Test assertions retain their owned-fixture cleanup through run_scenario."
-)]
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/central_pair.rs"]
-#[allow(
-    dead_code,
-    reason = "The same pair owner also serves holder-change cases."
-)]
 mod central_pair;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture.rs"]
-#[allow(
-    dead_code,
-    reason = "Shared board owner serves several process targets."
-)]
 mod fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture_inputs.rs"]
-#[allow(
-    dead_code,
-    reason = "Shared board inputs serve several process targets."
-)]
 mod fixture_inputs;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code, reason = "Borrow the established no-I/O observation host.")]
 mod native_sql;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/owned_host.rs"]
-#[allow(
-    dead_code,
-    reason = "Shared process owner serves several test targets."
-)]
 mod owned_host;
-#[path = "board_e2e/records_reopen.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "Reuse the qualified stopped-project reader, not the records overlay."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "board_e2e/records_reopen.rs"]
 mod records_reopen;
 
 #[path = "board_e2e/messaging_cancel.rs"]

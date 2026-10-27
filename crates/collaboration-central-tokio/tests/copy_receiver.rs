@@ -1,5 +1,5 @@
 //! Copy hooks run inside the real apply/publication transaction.
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "copy_receiver/mod.rs"]
 mod support;
 use board_sync_protocol::BoardAnnotation;
@@ -8,6 +8,10 @@ use message_board::RecordTime;
 use serde_json::json;
 use support::{Fixture, TestResult, position};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn applied_summary_keeps_unknown_time_and_no_status_in_copy_and_directory() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -68,6 +72,10 @@ fn schema_piece(database: fleet_sync_protocol::DatabaseId) -> TestResult<Piece<B
     })?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_piece_without_annotation_keeps_the_last_summary_and_admits_no_new_update() -> TestResult
 {

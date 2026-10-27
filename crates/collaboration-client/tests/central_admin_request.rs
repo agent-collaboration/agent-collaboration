@@ -1,9 +1,13 @@
 //! Contract proof without sign-in, a Router, or network I/O.
-#![allow(clippy::panic_in_result_fn)]
+
 use collaboration_central_admin_protocol::*;
 use collaboration_client::{CentralAdminClient, CentralAdminOperation};
 use serde_json::{Value, json};
 const PROJECT: &str = "019f0000-0000-7000-8000-000000005881";
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn requests_bind_paths_methods_query_and_sensitive_owner_header()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -55,6 +59,10 @@ fn requests_bind_paths_methods_query_and_sensitive_owner_header()
     );
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn confirmation_serializes_the_full_native_preview_without_the_display_wrapper()
 -> Result<(), Box<dyn std::error::Error>> {

@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 //! Non-lead cards select their own pending operands before metadata decoding.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;

@@ -1,8 +1,12 @@
 //! Aggregate histories, unread continuation and independent acknowledgements through the executable.
 #[path = "../../collaboration-service/tests/support/native_authority.rs"]
 mod native_authority;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::{
@@ -18,7 +22,10 @@ mod board_cli_execution;
 use board_cli_execution::{accepted, cli};
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove the test contract; Result propagates fixture errors.
 async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> Result<(), TestError>
 {
     let directory = tempfile::tempdir()?;

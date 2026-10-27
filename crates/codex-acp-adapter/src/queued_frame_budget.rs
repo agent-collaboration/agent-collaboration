@@ -44,6 +44,10 @@ fn output_with_limits(
 }
 impl AcpOutputSender {
     /// Overflow closes this frontend connection. Never block native observation on a full queue.
+    #[expect(
+        clippy::unused_async,
+        reason = "The public sender API defers queue admission until its returned future is polled."
+    )]
     pub async fn send(&self, value: Value) -> io::Result<()> {
         if self.closed.is_cancelled() {
             return Err(io::Error::other("ACP output closed"));

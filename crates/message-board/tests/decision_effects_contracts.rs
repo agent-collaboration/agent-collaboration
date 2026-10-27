@@ -67,7 +67,10 @@ fn legacy_inline_effect_arrays_are_refused_after_the_hard_cutover() {
     assert!(serde_json::from_value::<RequestDecision>(old).is_err());
 }
 
-#[allow(clippy::unwrap_used)] // Fixture construction must fail on an invalid domain value.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Fixture construction must fail on an invalid domain value.
 fn project_effects() -> Vec<DecisionEffect> {
     let record: RecordRef = TaskId::generate().into();
     let fixture_envelope = support::record_envelope(record.id.clone(), ProjectId::generate());

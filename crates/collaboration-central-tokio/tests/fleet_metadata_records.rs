@@ -1,11 +1,17 @@
 //! The removed local authority's metadata cases run against the native Fleet owner.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
-#[allow(dead_code)]
 mod native_source;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/fleet_cache_source.rs"]
-#[allow(dead_code)]
 mod source;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_admission::{FleetOperation, FleetRequest};
@@ -75,6 +81,10 @@ async fn overwrite_name(
         .await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn workspace_identity_and_metadata_survive_reopen() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -117,6 +127,10 @@ async fn workspace_identity_and_metadata_survive_reopen() -> TestResult {
     source.close().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn corrupted_stored_name_is_rejected_by_domain_decoding() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -137,6 +151,10 @@ async fn corrupted_stored_name_is_rejected_by_domain_decoding() -> TestResult {
     source.close().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn noncanonical_stored_name_whitespace_is_rejected_instead_of_trimmed() -> TestResult {
     let root = tempfile::tempdir()?;

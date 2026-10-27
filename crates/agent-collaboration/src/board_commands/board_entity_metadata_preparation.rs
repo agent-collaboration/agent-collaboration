@@ -1,9 +1,19 @@
 //! Trail reads and structured metadata command preparation.
-use super::board_entity_arguments::*;
-use super::board_entity_preparation::*;
+use super::board_entity_arguments::{
+    AdrCommand, FactCommand, FeedCommand, OperationFileArguments, RoleCommand, WorkTrailCommand,
+};
+use super::board_entity_preparation::{
+    PreparedEntityCommand, ProjectWriteKind, json_value, list, optional_id, prepared, show, write,
+};
 use super::board_preparation::{CommandContext, PreparedBoardCommand};
-use super::board_value_parsing::*;
-use collaboration_client::board::*;
+use super::board_value_parsing::{
+    parse_bounded_text, parse_uuid_v7, prepare_page_request, read_actor,
+};
+use collaboration_client::board::{
+    BoardOperation, FeedReadRequest, FleetRecordListRequest, FleetRecordShowRequest,
+    ProjectReadKind, ProjectRequest, RecordKind, RecordRef, WorkTrailRowId, WorkTrailSelection,
+    WorkTrailShowRequest,
+};
 use serde::de::DeserializeOwned;
 
 pub(super) fn prepare_worktrail(

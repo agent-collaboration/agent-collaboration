@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 use collaboration_service::FleetClient;
 #[path = "support/native_registry.rs"]
 pub mod native_registry;

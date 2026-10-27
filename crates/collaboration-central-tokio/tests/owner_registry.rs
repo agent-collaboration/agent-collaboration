@@ -1,25 +1,37 @@
 //! Owner HTTP composes the real Registry tasks, Copy fences and admitted peers.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "native_http/support.rs"]
 mod configuration;
 #[path = "owner_registry/fixture.rs"]
 mod fixture;
 #[path = "owner_registry/grant_refusals.rs"]
 mod grant_refusals;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
 mod native_fleet;
 #[path = "owner_registry/notices.rs"]
 mod notices;
 #[path = "owner_registry/preview_presence.rs"]
 mod preview_presence;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[path = "owner_registry/retirement.rs"]
 mod retirement;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "directory_session/support.rs"]
 mod support;
 

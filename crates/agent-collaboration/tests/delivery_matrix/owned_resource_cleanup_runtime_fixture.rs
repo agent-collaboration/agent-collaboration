@@ -106,7 +106,7 @@ impl RuntimeCleanupFixture {
         let board_session = central.session_inputs()?;
         self.central = Some(central);
         self.runtime = Some(
-            CollaborationRuntime::start(CollaborationRuntimeInputs {
+            Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
                 board_session: Some(board_session),
                 directory: self.directory.clone(),
                 codex_home: self.directory.clone(),
@@ -116,7 +116,7 @@ impl RuntimeCleanupFixture {
                 peer_registry_directory: Some(self.registry.clone()),
                 remote_control_server_name: None,
                 owner_human_id: None,
-            })
+            }))
             .await?,
         );
         let service_id = self

@@ -1,6 +1,6 @@
 //! Creation recovery selects immutable request keys and facts.
 use crate::{ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{RecordId, RecordKind, RecordRef, RequestId};
 
 fn reference(kind: RecordKind, id: String) -> Result<RecordRef, ProjectStorageError> {
     Ok(RecordRef {

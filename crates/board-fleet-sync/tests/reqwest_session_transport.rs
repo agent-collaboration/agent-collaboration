@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use axum::{
     Router,
     extract::ws::{Message, WebSocketUpgrade},
@@ -18,6 +16,10 @@ use std::{
 };
 use tokio::sync::oneshot;
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn transport() -> ReqwestSessionTransport {
     ReqwestSessionTransport::new(
         AccessServiceToken::new("fixture-id", "fixture-secret").unwrap(),

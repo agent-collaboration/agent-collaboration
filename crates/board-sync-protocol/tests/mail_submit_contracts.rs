@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use board_sync_protocol::{BoardConsumerProtocol, BoardConsumerRequest, BoardDeliveryTypes};
 use fleet_sync_protocol as wire;
 use serde_json::{Value, json};
@@ -9,6 +7,10 @@ const TARGET: &str = "019a1234-5678-7000-8000-000000000002";
 const PEER: &str = "019a1234-5678-7000-8000-000000000003";
 const INSTALLATION: &str = "00000000-0000-4000-8000-000000000001";
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn recipient() -> wire::Recipient<message_board::SessionRef> {
     serde_json::from_value(json!({"peer":PEER,"address":{
         "endpoint":{"serviceId":INSTALLATION,"endpointId":"codex-local"},
@@ -17,6 +19,10 @@ fn recipient() -> wire::Recipient<message_board::SessionRef> {
     .unwrap()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn envelope(sender: Value, cancel: bool) -> wire::DeliveryEnvelope<BoardDeliveryTypes> {
     let id = ITEM.to_owned().try_into().unwrap();
     let sender = serde_json::from_value(sender).unwrap();

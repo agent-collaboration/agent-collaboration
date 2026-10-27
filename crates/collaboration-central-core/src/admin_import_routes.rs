@@ -388,8 +388,12 @@ fn refused() -> CallFailure {
 
 #[cfg(test)]
 mod integrity_refusal_tests {
-    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn seed_integrity_refusal_retains_both_tables_in_the_admin_answer()
     -> Result<(), Box<dyn std::error::Error>> {

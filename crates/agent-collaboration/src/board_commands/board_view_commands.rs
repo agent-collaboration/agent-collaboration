@@ -7,7 +7,13 @@ use super::{
     board_value_parsing::{command_context, parse_identity, parse_uuid_v7},
 };
 use clap::{Args, Subcommand};
-use collaboration_client::{BoardClientError, ClientError, CollaborationClient, board::*};
+use collaboration_client::{
+    BoardClientError, ClientError, CollaborationClient,
+    board::{
+        ContinuationCardRequest, Identity, LeadLoadRequest, OwnerViewRequest, ProjectViewRequest,
+        SessionContextRequest, SessionRef,
+    },
+};
 use serde::Serialize;
 use serde_json::Value;
 

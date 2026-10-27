@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Report aliases must refuse before any legacy source or message store is opened.
 #![allow(clippy::panic_in_result_fn)]
 mod support;

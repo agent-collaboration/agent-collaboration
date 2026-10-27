@@ -111,7 +111,10 @@ fn migration_test_checkpoint(stage: &str) {
     }
 }
 
-#[allow(deprecated)]
+#[expect(
+    deprecated,
+    reason = "The migration must read the legacy representation."
+)]
 fn map_migrate_error(error: MigrateError) -> StorageError {
     match error {
         MigrateError::Execute(error) | MigrateError::ExecuteMigration(error, _) => {

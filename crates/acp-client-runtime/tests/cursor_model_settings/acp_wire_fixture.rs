@@ -59,6 +59,15 @@ impl SessionEventSink for SettingsSink {
     fn begin_history_replay(&self, _: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, _: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if let SessionEvent::SettingsChanged { settings } = event {
             self.settings.lock().expect("settings lock").push(settings);
@@ -100,6 +109,10 @@ impl AcpWireFixture {
         Self::initialize(scenario, ClientInitialization::CursorWithoutMcp).await
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     async fn initialize(scenario: &str, initialization: ClientInitialization) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let receipt = root.path().join("wire.json");
@@ -152,6 +165,10 @@ impl AcpWireFixture {
         }
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     pub fn requests(&self) -> Vec<serde_json::Value> {
         serde_json::from_slice(&std::fs::read(&self.receipt).expect("wire receipt"))
             .expect("wire JSON")

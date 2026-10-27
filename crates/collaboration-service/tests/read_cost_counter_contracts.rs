@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! A bookkeeping exclusion must not hide a board read, wherever SQL nests it.
 #[path = "support/sql_cost_classification.rs"]
 mod sql_cost_classification;

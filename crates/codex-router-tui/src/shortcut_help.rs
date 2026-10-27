@@ -29,13 +29,13 @@ pub struct ShortcutHelpProps<'a> {
 pub fn ShortcutHelp<'a>(props: &mut ShortcutHelpProps<'a>) -> impl Into<AnyElement<'a>> {
     let sections = std::mem::take(&mut props.sections);
     let actions = std::mem::take(&mut props.actions);
-    let key_width = usize::from(props.width).saturating_sub(12).min(16);
+    let key_width = u32::from(props.width).saturating_sub(12).min(16);
     let stacked = props.width < 40;
     let content = sections.into_iter().map(|section| {
         let entries = section.entries.into_iter().map(|entry| {
             element! {
                 View(width: 100pct, column_gap: 1, flex_direction: if stacked { FlexDirection::Column } else { FlexDirection::Row }, flex_shrink: 0.0_f32) {
-                    View(width: if stacked { Size::Auto } else { Size::Length(key_width as u32) }, flex_shrink: 0.0_f32) {
+                    View(width: if stacked { Size::Auto } else { Size::Length(key_width) }, flex_shrink: 0.0_f32) {
                         Text(content: entry.keys, color: Color::Grey, weight: Weight::Bold)
                     }
                     View(flex_grow: 1.0_f32, flex_shrink: 1.0_f32, min_width: 0) {

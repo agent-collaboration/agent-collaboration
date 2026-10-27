@@ -1,9 +1,6 @@
 //! The standard listener retains only the core's sanitized Access classifications.
 #![cfg(feature = "conformance")]
-#![allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal assertions qualify permanent conformance cases."
-)]
+
 #[path = "native_http/support.rs"]
 mod configuration;
 
@@ -30,6 +27,10 @@ impl Write for CapturedLogs {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn standard_server_logs_accepted_and_refused_access_without_credentials()
 -> collaboration_central_conformance::ConformanceResult<()> {

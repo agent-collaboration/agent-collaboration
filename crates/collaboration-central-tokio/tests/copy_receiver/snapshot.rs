@@ -1,6 +1,10 @@
 use super::*;
 use fleet_sync_protocol::{CopyStatusAnswer, CopyUnavailableReason, SeedAnswer};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn ordinary_seed_keeps_summary_absent_until_an_annotated_piece() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -57,6 +61,10 @@ async fn ordinary_seed_keeps_summary_absent_until_an_annotated_piece() -> TestRe
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn admin_seed_summary_and_follow_up_share_publication_and_never_rewrite_on_replay()
 -> TestResult {

@@ -197,7 +197,7 @@ pub fn run_question_command(arguments: Vec<OsString>) -> i32 {
                 OperationFailureKind::Timeout => 124,
                 OperationFailureKind::UnsupportedCapability
                 | OperationFailureKind::ProtocolViolation => 2,
-                _ => 3,
+                OperationFailureKind::Unavailable => 3,
             };
             if output.json {
                 let _ = writeln!(

@@ -112,7 +112,7 @@ async fn owed_push_for_origin(
         .into_iter()
         .filter_map(|row| match row.operation {
             automation_storage::PushOperation::Admit { push } => Some(*push),
-            _ => None,
+            automation_storage::PushOperation::SettleScheduleRun { .. } => None,
         })
         .find(|push| push.origin_router_ref.as_deref() == Some(expected.as_str()))
         .ok_or_else(|| "owed wake push missing".into())

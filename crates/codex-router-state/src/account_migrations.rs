@@ -430,7 +430,10 @@ async fn capture_table(
         .collect())
 }
 
-#[allow(deprecated)]
+#[expect(
+    deprecated,
+    reason = "The migration must read the legacy representation."
+)]
 fn map_migration_error(error: MigrateError) -> StateStoreError {
     match error {
         MigrateError::Execute(error) | MigrateError::ExecuteMigration(error, _) => {

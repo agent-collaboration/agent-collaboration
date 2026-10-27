@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 // Compile the exact Worker codec, without copying its implementation. These
 // native checks cover validation; the actual workers-rs attachment path is a
 // separate workerd proof.
@@ -36,6 +35,10 @@ fn attachment(
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn full_integer_domains_roundtrip_as_decimal_text_without_losing_admission_origin() -> TestResult {
     for (support, sequence, expiry) in [
@@ -66,6 +69,10 @@ fn full_integer_domains_roundtrip_as_decimal_text_without_losing_admission_origi
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn malformed_noncanonical_and_out_of_domain_attachments_are_refused() -> TestResult {
     let valid = serde_json::to_value(attachment(7, 1, 123)?)?;

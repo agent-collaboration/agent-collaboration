@@ -2,7 +2,10 @@ use interaction_storage::InteractionStore;
 use message_board::{EpochNumber, FeedCursor, FeedPosition, NotifyIntentId, ProjectId};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove stored behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove stored behavior; Result propagates fixture errors.
 async fn consumed_intent_progress_is_idempotent_project_local_and_survives_restart()
 -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::temp_dir().join(format!(

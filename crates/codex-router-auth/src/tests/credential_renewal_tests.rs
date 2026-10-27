@@ -285,6 +285,10 @@ impl SecretStore for HeldActiveSecretReadStore {
         self.inner.write_secret(key, secret)
     }
 
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn read_secret(&self, key: &SecretKey) -> Result<SecretString, SecretStoreError> {
         if key.as_str().ends_with(".1") && !self.held_once.swap(true, Ordering::SeqCst) {
             self.entered_sender
@@ -866,6 +870,10 @@ struct HeldSecretWriteStore {
 }
 
 impl SecretStore for HeldSecretWriteStore {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn write_secret(&self, key: &SecretKey, secret: &SecretString) -> Result<(), SecretStoreError> {
         if key.as_str().ends_with(".2") {
             self.entered_sender
@@ -895,6 +903,10 @@ struct CrossProcessRefreshClient {
 }
 
 impl CredentialRefreshClient for CrossProcessRefreshClient {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,
@@ -924,6 +936,10 @@ struct HeldRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldRefreshClient {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,

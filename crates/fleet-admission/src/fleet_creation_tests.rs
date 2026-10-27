@@ -1,10 +1,14 @@
 //! A creation identity remains terminal after either first decision.
-#![allow(clippy::panic_in_result_fn)]
+
 use crate::*;
 use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn another_creation_request_cannot_reuse_an_accepted_or_rejected_project_identity() -> TestResult {
     let project = ProjectId::generate();
@@ -51,6 +55,10 @@ fn another_creation_request_cannot_reuse_an_accepted_or_rejected_project_identit
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn the_first_rejected_creation_still_binds_its_request_and_verified_carrier() -> TestResult {
     let project = ProjectId::generate();

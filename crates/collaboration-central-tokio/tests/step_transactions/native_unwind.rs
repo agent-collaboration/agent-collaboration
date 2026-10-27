@@ -1,10 +1,17 @@
 use super::*;
 
-#[allow(clippy::panic)]
+#[expect(
+    clippy::panic,
+    reason = "This item preserves the established contract required by its callers."
+)]
 fn unwind_after_fleet_writes() {
     panic!("native callback unwound after Fleet writes");
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn unwinding_step_rolls_back_all_writes_and_keeps_the_same_store_usable() -> TestResult {
     // Arrange: keep the original object/connection alive across the task unwind.

@@ -1,5 +1,8 @@
 //! Private conformance controls on the actual object and platform capabilities.
-use super::*;
+use super::{
+    ObjectHost, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime,
+    WakeScheduler, error,
+};
 
 impl ShellActor {
     pub(super) async fn conformance_fetch(

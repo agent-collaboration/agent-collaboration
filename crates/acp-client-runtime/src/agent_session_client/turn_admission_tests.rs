@@ -1,5 +1,4 @@
 //! ACP frames and command admission meet at the Session actor's idle boundary.
-#![allow(clippy::expect_used)]
 
 use super::*;
 use crate::{
@@ -141,6 +140,11 @@ impl SessionEventSink for GatedEventSink {
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if matches!(event, SessionEvent::TurnEnded { .. })
             && !self.gate.blocked_once.swap(true, Ordering::SeqCst)

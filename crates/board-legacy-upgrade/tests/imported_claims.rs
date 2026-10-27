@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! D's actual owner import must remain readable and claimable by normal sessions.
 #![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]

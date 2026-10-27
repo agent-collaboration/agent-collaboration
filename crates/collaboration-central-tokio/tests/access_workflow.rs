@@ -1,5 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
-
 use collaboration_central_core::{
     AccessCaller, AccessCheckOutcome, AccessKeyCache, AccessKeySource, AccessPolicy, AccessRefusal,
     AccessRouteClass, CentralApplication, CentralObservation, CentralPlatform, KeyFetchFailure,
@@ -145,6 +143,10 @@ impl CentralPlatform for FixturePlatform {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn key_expiry_honors_max_age_with_the_default_and_one_hour_cap() -> TestResult {
     for (header, lifetime) in [
@@ -215,6 +217,10 @@ async fn key_expiry_honors_max_age_with_the_default_and_one_hour_cap() -> TestRe
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn zero_max_age_does_not_reuse_keys_at_the_same_clock_value() -> TestResult {
     let platform = FixturePlatform::new(vec![
@@ -237,6 +243,10 @@ async fn zero_max_age_does_not_reuse_keys_at_the_same_clock_value() -> TestResul
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_unknown_key_refreshes_before_verifying_the_rotated_assertion() -> TestResult {
     let platform = FixturePlatform::new(vec![
@@ -288,6 +298,10 @@ async fn an_unknown_key_refreshes_before_verifying_the_rotated_assertion() -> Te
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn missing_malformed_and_expired_assertions_are_refused_without_capabilities() -> TestResult {
     let expired = assertion(FIRST_HEADER, EXPIRED_CLAIMS);
@@ -331,6 +345,10 @@ async fn missing_malformed_and_expired_assertions_are_refused_without_capabiliti
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn bad_signature_and_wrong_owner_never_release_an_authorized_caller() -> TestResult {
     let platform = FixturePlatform::new(vec![Ok(keys(&["first"], None))]);
@@ -386,6 +404,10 @@ async fn bad_signature_and_wrong_owner_never_release_an_authorized_caller() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn fetch_parse_and_key_selection_failures_refuse_before_crypto() -> TestResult {
     for (responses, expected, fetches) in [

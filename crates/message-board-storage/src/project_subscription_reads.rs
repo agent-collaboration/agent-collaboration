@@ -1,7 +1,9 @@
 //! A subscription window reads post metadata, then batches only eligible watch operands.
 use crate::project_participant_io::{cursor, invalid};
 use crate::{FeedPageBounds, FeedPageDirection, FeedPageKey, ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{
+    FeedCursor, FeedPosition, Identity, Placement, RecordId, RecordedActor, ThreadId,
+};
 use std::collections::BTreeMap;
 
 pub struct PostActivityKey {

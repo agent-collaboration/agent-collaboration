@@ -1,6 +1,5 @@
 //! The mailbox's receipt and mail mutation survive reopening its owning store.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_core::{CoreHost, MailboxKind, ObjectAddress, ObjectRuntime, PlatformIo};
@@ -158,6 +157,10 @@ fn revoked() -> Value {
     json!({"kind":"refused","value":{"reason":{"kind":"recipientRevoked"}}})
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn normal_revocation_completes_only_after_its_physical_mailbox_has_closed() -> TestResult {
     use collaboration_central_conformance::{
@@ -269,6 +272,10 @@ async fn normal_revocation_completes_only_after_its_physical_mailbox_has_closed(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn close_answers_only_its_saved_completion_and_keeps_unfetched_mail_refused_after_reopen()
 -> TestResult {

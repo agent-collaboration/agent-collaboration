@@ -1,6 +1,6 @@
 use crate::project_record_codec::{ProjectRowEnvelope, require_one_row};
 use crate::{ImportRowKind, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{TrailRedaction, WorkTrailRow};
 
 impl ProjectWriteTransaction {
     pub(crate) async fn write_trail_row(

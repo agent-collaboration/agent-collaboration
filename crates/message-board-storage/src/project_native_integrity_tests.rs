@@ -5,6 +5,10 @@ use sqlx::{ConnectOptions, Connection};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn feed_range_validation_accepts_valid_and_empty_ranges_but_counts_invalid_epochs()
 -> TestResult {
@@ -52,6 +56,10 @@ async fn feed_range_validation_accepts_valid_and_empty_ranges_but_counts_invalid
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn native_keys_parents_and_boolean_columns_refuse_mutation_without_changing_records()
 -> TestResult {
@@ -201,6 +209,10 @@ async fn native_keys_parents_and_boolean_columns_refuse_mutation_without_changin
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn project_record_scope_must_match_the_native_owning_root() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -254,6 +266,10 @@ async fn project_record_scope_must_match_the_native_owning_root() -> TestResult 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn feed_ranges_and_cursors_preserve_sparse_epoch_boundaries_and_zero_resume() -> TestResult {
     let directory = tempfile::tempdir()?;

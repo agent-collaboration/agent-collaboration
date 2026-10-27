@@ -1,8 +1,5 @@
 //! Quiet mail expires through the existing timer, including after owner reopen.
-#![allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal assertions qualify permanent conformance cases."
-)]
+
 use super::{
     grants::{connect, start},
     relay::{operation, relay_request},
@@ -69,6 +66,10 @@ async fn require_released_payload(base: &str) -> ConformanceResult<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn close_publishes_newer_revocation_to_a_disconnected_sender_across_reopen()
 -> ConformanceResult<()> {
@@ -150,6 +151,10 @@ async fn close_publishes_newer_revocation_to_a_disconnected_sender_across_reopen
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn never_fetched_deadlines_expire_after_empty_lookup_and_reopen_while_fetched_and_no_ttl_remain()
 -> ConformanceResult<()> {

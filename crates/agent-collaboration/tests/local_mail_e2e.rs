@@ -1,5 +1,5 @@
 //! LM01–LM05: actual CLI/MCP/Host and authenticated Rust peer, without agent turns.
-#![allow(clippy::panic_in_result_fn)]
+
 #![deny(clippy::too_many_lines)]
 #[path = "board_e2e/mail_fixture.rs"]
 mod mail_fixture;
@@ -9,6 +9,10 @@ mod mail_messages;
 mod mail_migration;
 #[path = "board_e2e/mail_wakes.rs"]
 mod mail_wakes;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
 use codex_router_test_support::FixtureResult;

@@ -204,6 +204,10 @@ impl AcpSessionRegistry {
         }
     }
     /// Closes only this connection's prompt actors; the Host/backend lifecycle remains separate.
+    #[expect(
+        clippy::unused_async,
+        reason = "The public shutdown API defers detachment until its returned future is polled."
+    )]
     pub async fn shutdown(mut self) {
         // Closing the ACP frontend detaches its prompt actors. Dropping their
         // command senders lets them observe EOF and keep draining native turns.

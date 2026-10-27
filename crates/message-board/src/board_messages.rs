@@ -18,7 +18,10 @@ pub struct PostReferences(Vec<ReferenceTarget>);
 
 #[derive(JsonSchema)]
 #[schemars(transparent)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared test fixtures expose helpers used by other test targets."
+)]
 struct PostReferencesSchema(#[schemars(length(max = 64))] Vec<ReferenceTarget>);
 
 impl JsonSchema for PostReferences {

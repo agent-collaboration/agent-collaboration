@@ -1,8 +1,11 @@
 //! Staged-part alarms preserve recent data and derive their deadline after commit.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "copy_receiver/mod.rs"]
-#[allow(dead_code)]
 mod support;
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::{AtomicStore, StoreError};
@@ -64,6 +67,10 @@ async fn staged(fixture: &Fixture) -> TestResult<Vec<StagedTransaction>> {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_part_younger_than_one_day_survives_and_rearms_its_original_deadline() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -102,6 +109,10 @@ async fn a_part_younger_than_one_day_survives_and_rearms_its_original_deadline()
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn each_committed_part_arms_the_earliest_staged_transaction_deadline() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -125,6 +136,10 @@ async fn each_committed_part_arms_the_earliest_staged_transaction_deadline() -> 
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_alarm_discards_a_younger_transaction_below_the_actual_copy_fence() -> TestResult {
     let root = tempfile::tempdir()?;

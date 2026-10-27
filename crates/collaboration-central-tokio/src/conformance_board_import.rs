@@ -1,5 +1,5 @@
 //! Test setup enters the actual Registry/Fleet/Copy owners without an HTTP fixture route.
-use super::*;
+use super::{Arc, NativeObjects, ObjectAddress, RuntimeFace, StoreError};
 impl NativeObjects {
     pub(crate) async fn import_board_snapshot(
         self: &Arc<Self>,

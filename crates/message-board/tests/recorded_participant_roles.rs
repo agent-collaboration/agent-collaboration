@@ -1,7 +1,10 @@
-#![allow(clippy::panic_in_result_fn)]
 use message_board::*;
 use serde_json::json;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn not_recorded_is_a_closed_interval_value_and_never_a_live_join_role()
 -> Result<(), Box<dyn std::error::Error>> {

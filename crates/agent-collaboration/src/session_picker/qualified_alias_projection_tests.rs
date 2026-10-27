@@ -1,7 +1,9 @@
 //! Registry order and returned full refs are independent presentation oracles, not remote proof.
+use super::super::merge_source_snapshots;
 use super::*;
 use crate::presentation::session_picker::test_support::{observed_records, picker_record};
 use crate::sessions::router_connection_registry::RouterConnectionRegistry;
+use crate::sessions::{SessionPickerIdentity, SessionRowProvenance};
 
 #[test]
 fn default_rows_are_not_promoted_into_configured_alias_labels() {

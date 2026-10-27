@@ -10,7 +10,7 @@ async fn cli_configures_and_inspects_future_attempt_budgets()
         OperationId::generate().as_str()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
@@ -20,7 +20,7 @@ async fn cli_configures_and_inspects_future_attempt_budgets()
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([

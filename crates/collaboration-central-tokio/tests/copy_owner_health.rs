@@ -15,29 +15,53 @@ use std::{path::Path, time::Duration};
 mod configuration;
 #[path = "support/copy_owner_scenarios.rs"]
 mod copy_owner_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/copy_wait_scenarios.rs"]
 mod copy_wait_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
 mod fleet_setup;
 use fleet_setup as native_fleet;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/imported_board_fixture.rs"]
 mod imported_board_fixture;
 #[path = "copy_owner_health/migration_cases.rs"]
 mod migration_cases;
 #[path = "copy_owner_health/migration_reopen.rs"]
 mod migration_reopen;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/owner_registry_scenarios.rs"]
 mod owner_registry_scenarios;
 #[path = "copy_owner_health/page_cases.rs"]
 mod page_cases;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[path = "copy_owner_health/retired_reopen.rs"]

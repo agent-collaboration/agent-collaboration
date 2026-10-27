@@ -1,8 +1,11 @@
 //! The machine stream owns retention; library notices only carry positioned hints.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "session_publication/support.rs"]
-#[allow(dead_code)]
 mod session_fixture;
 #[path = "machine_notices/support.rs"]
 mod support;
@@ -14,6 +17,10 @@ use session_fixture::{Fixture, TestError};
 use std::sync::atomic::Ordering;
 use support::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_orphaned_zero_position_notice_is_rejected_before_admission() -> Result<(), TestError> {
     let root = tempfile::tempdir()?;
@@ -32,6 +39,10 @@ async fn an_orphaned_zero_position_notice_is_rejected_before_admission() -> Resu
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_zero_position_notice_cannot_hide_below_an_existing_read_cursor() -> Result<(), TestError>
 {
@@ -60,6 +71,10 @@ async fn a_zero_position_notice_cannot_hide_below_an_existing_read_cursor() -> R
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn machine_notices_survive_missing_admission_disconnect_and_replacement_without_duplicates()
 -> Result<(), TestError> {
@@ -138,6 +153,10 @@ async fn machine_notices_survive_missing_admission_disconnect_and_replacement_wi
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
 -> Result<(), TestError> {
@@ -223,6 +242,10 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_conflicting_verified_admission_peer_cannot_overwrite_the_retained_snapshot()
 -> Result<(), TestError> {

@@ -1,6 +1,11 @@
 //! The built CLI must use typed SDK calls to the native board view tools.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli, cli_with_session};
@@ -9,7 +14,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn view_commands_reach_the_real_service_and_report_read_marks() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, workstream) = fixture.project().await?;

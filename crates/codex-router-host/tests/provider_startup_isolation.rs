@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Fail-fast fixture assertions at the Host endpoint boundary.
 

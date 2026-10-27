@@ -1,6 +1,16 @@
 //! CLI-generated renewal keys belong to the caller and travel with the wait result.
 use super::board_preparation::PendingSubscriptionWait;
-use collaboration_client::{BoardClientError, CollaborationClient, board::*, protocol::*};
+use collaboration_client::{
+    BoardClientError, CollaborationClient,
+    board::{
+        ProjectId, ReadActor, RequestId, SubscriptionMode, SubscriptionScope, SubscriptionTarget,
+        ThreadRef, ThreadShowRequest,
+    },
+    protocol::{
+        SubscriptionRenewalEntry, ThreadSubscriptionState, ThreadSubscriptionWaitFilter,
+        ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult, ThreadSubscriptionsRequest,
+    },
+};
 use std::collections::BTreeMap;
 
 pub(super) async fn execute(

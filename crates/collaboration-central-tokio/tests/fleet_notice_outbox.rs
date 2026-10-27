@@ -1,12 +1,15 @@
 //! Fleet mutations and owed notices commit together; only alarms perform delivery.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "fleet_notice_outbox/archive_notices.rs"]
 mod archive_notices;
 #[path = "fleet_notice_outbox/reader_progress.rs"]
 mod reader_progress;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "session_publication/support.rs"]
-#[allow(dead_code)]
 mod session_fixture;
 #[path = "fleet_notice_outbox/support.rs"]
 mod support;
@@ -16,6 +19,10 @@ use message_board::FleetPosition;
 use std::sync::{Arc, atomic::Ordering};
 use support::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn committed_notice_debt_survives_lost_dispatch_and_owner_reopen_then_delivers_once()
 -> TestResult {
@@ -96,6 +103,10 @@ async fn committed_notice_debt_survives_lost_dispatch_and_owner_reopen_then_deli
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn real_sql_failure_rolls_back_the_mutation_notice_task_and_wake_together() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -138,6 +149,10 @@ async fn real_sql_failure_rolls_back_the_mutation_notice_task_and_wake_together(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn actual_delivery_acknowledgement_loss_reopens_the_fleet_debt_without_a_second_notice()
 -> TestResult {

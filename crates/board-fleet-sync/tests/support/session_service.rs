@@ -119,10 +119,18 @@ impl PeerAuthenticator for SessionAuthenticator {
 pub struct MemorySessionStore(pub Arc<Mutex<Option<ClientSessionState>>>);
 
 impl SessionClientStore for MemorySessionStore {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     async fn load(&self) -> Result<Option<ClientSessionState>, StoreError> {
         Ok(self.0.lock().unwrap().clone())
     }
 
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     async fn save(&self, state: &ClientSessionState) -> Result<(), StoreError> {
         *self.0.lock().unwrap() = Some(state.clone());
         Ok(())

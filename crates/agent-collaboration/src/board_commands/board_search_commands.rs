@@ -4,7 +4,10 @@ use super::board_value_parsing::{
     command_context, parse_bounded_text, parse_uuid_v7, prepare_page_request,
 };
 use clap::{Args, ValueEnum};
-use collaboration_client::board::*;
+use collaboration_client::board::{
+    DiscoveryKind, DiscoveryScope, DiscoverySearchRequest, PostListScope, PostSearchRequest,
+    SearchPostKind,
+};
 
 #[derive(Clone, Copy, ValueEnum)]
 pub(super) enum DiscoveryScopeKind {

@@ -2,17 +2,26 @@
 use collaboration_mail_protocol::*;
 use serde_json::{Value, json};
 
-#[allow(clippy::expect_used)] // Fixed wire literals must fail the test if invalid.
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Fixed wire literals must fail the test if invalid.
 fn fixture() -> Value {
     serde_json::from_str(include_str!("fixtures/message_item.json"))
         .expect("valid literal mail fixture")
 }
-#[allow(clippy::expect_used)] // Test-only conversion of the literal's content.
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Test-only conversion of the literal's content.
 fn content(mut wire: Value) -> MailItemContent {
     wire.as_object_mut().expect("mail object").remove("digest");
     serde_json::from_value(wire).expect("valid literal mail content")
 }
-#[allow(clippy::expect_used)] // Test-only decoding of the independent fixture.
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Test-only decoding of the independent fixture.
 fn item() -> MailItem {
     serde_json::from_value(fixture()).expect("valid literal mail item")
 }

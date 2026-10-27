@@ -98,6 +98,10 @@ fn bounded_fixture_text(prefix: &str, source_scalars: &[char], max_scalars: usiz
     value
 }
 
+#[expect(
+    clippy::unwrap_in_result,
+    reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+)]
 fn assert_push_line_invariants(
     request: &PushLineInput,
 ) -> Result<(), proptest::test_runner::TestCaseError> {

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 #![cfg(unix)]
 #![allow(clippy::expect_used, clippy::panic)]
 //! Common Host startup must select the global native CLI, never the bridge SDK bundle.

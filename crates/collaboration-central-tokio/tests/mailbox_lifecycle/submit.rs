@@ -78,6 +78,10 @@ async fn operation_kinds(fixture: &Fixture) -> TestResult<Vec<String>> {
         .await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn checked_submit_commits_one_custody_item_and_publication_before_replay_after_reopen()
 -> TestResult {
@@ -139,6 +143,10 @@ async fn custody_record(fixture: &Fixture, replacement: Option<String>) -> TestR
         .await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn corrupt_custody_rolls_back_and_keeps_its_owner_unhealthy_until_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -207,6 +215,10 @@ async fn corrupt_custody_rolls_back_and_keeps_its_owner_unhealthy_until_reopen()
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn publication_admission_failure_rolls_back_custody_then_wake_loss_replays_one_commit()
 -> TestResult {

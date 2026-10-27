@@ -1,5 +1,8 @@
 //! Alias labels are a transient projection of successful full endpoint bindings.
-use super::*;
+use super::{
+    BTreeMap, EndpointRef, PickerRecordsSnapshot, PickerSourceContext, SourceInventoryBinding,
+    source_snapshot_matches,
+};
 
 enum EndpointAliasQualification<'a> {
     Matching {
