@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#lifecycle",
+  "originalSHA256": "543d8eb82b7e6596b51f32205e415d1d523222e6201808d28bb5880d7f7d6cbe",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["lifecycle"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/resume\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/close\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"sessionCapabilities\": {\"resume\": {}, \"close\": {}}}, \"agentInfo\": {\"name\": \"lifecycle-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

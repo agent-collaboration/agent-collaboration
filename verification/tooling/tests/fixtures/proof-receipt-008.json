@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "G-21 patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "G-21"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"artifact_paths\": [\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-01.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-02.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-03.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-04.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-05.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-06.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-07.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-08.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-09.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-10.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-11.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-12.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-13.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-14.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-15.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-16.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-17.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-18.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-19.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-20.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-22.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-23.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-24.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-25.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-26.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-27.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-28.json\",\n    \"tmp/plan-workflows/2026-06-24-async-router-runtime/evidence/structural/G-29.json\"\n  ],\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"T6 aggregate guardrail row passed through proof-matrix.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\"\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-15",
+  "originalSHA256": "537c507d0407060cae0374389b63200d7324ce1a30540464ee33edf36255f324"
+}

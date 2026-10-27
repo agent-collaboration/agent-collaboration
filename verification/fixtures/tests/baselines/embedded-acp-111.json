@@ -1,0 +1,16 @@
+{
+  "original": "Host provider owner#loading-True",
+  "originalSHA256": "9d8073e22f8cb198a7880d2438dd23dd796306d30caa0e465ba55801df9fd5ee",
+  "target": "host-fifo-load-agent.ts",
+  "arguments": ["load", "<RECEIPT>", "true"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"fixture-session\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"error\": {\"code\": -32001, \"message\": \"fixture load refused\"}}\n",
+    "stderr": "",
+    "receipt": "session/load",
+    "files": {
+      "receipt.json": "session/load"
+    }
+  }
+}

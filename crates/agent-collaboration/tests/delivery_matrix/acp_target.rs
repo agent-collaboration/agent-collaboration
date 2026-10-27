@@ -459,13 +459,12 @@ async fn scripted_recipient_records_a_duplicate_after_its_last_expected_prompt()
     let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or("workspace crates directory missing")?
-        .join("codex-router-host/src/external_provider_runtime/acp_scripted_fixture.py");
+        .join("../verification/fixtures/scripted-acp-agent.ts");
     let log = tempfile::NamedTempFile::new()?;
     let steps = json!([{"action":"expect_request","requestName":"last",
         "method":"session/prompt","params":{"sessionId":"matrix-acp-target"},
         "recordPath":log.path()}]);
-    let mut fixture_process = tokio::process::Command::new("python3")
-        .arg("-u")
+    let mut fixture_process = tokio::process::Command::new("node")
         .arg(fixture)
         .arg(steps.to_string())
         .stdin(Stdio::piped())

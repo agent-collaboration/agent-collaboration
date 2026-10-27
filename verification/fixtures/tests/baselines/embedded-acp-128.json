@@ -1,0 +1,18 @@
+{
+  "original": "Composed Host integration#composition",
+  "originalSHA256": "a5a5c361a167acb6b50eb2196961db2122bdc74013b209acc99c5ad3489198a6",
+  "target": "host-composition-agent.ts",
+  "arguments": [],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"_session/steering\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"composition-fixture\", \"version\": \"1\"}, \"_meta\": {\"steering\": {\"supported\": true}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"provider-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"outcome\": \"promptRequired\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  },
+  "configuration": {
+    "mode": "composition"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#authentication",
+  "originalSHA256": "8b5096d2d37025640b4ced17e95377783361258f9874aec0637a267c53a94648",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["authentication"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"auth-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"error\": {\"code\": -32000, \"message\": \"authentication required\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"sessionId\": \"authenticated-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "input": {
+    "name": "create-blocked",
+    "action": "create",
+    "plan": {
+      "cli": "<CLI>",
+      "evidence": "<ROOT>/evidence",
+      "service_directory": "<ROOT>/service",
+      "caller_session_id": "caller",
+      "endpoint_id": "claude-local",
+      "settings": {
+        "mode": "manual-mode",
+        "model": "provider-model",
+        "effort": "low"
+      },
+      "tools": null,
+      "approver": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "approver"
+      }
+    },
+    "manifest": {
+      "serviceId": "00000000-0000-7000-8000-000000000001",
+      "serviceEpoch": "epoch",
+      "serviceVersion": "test",
+      "machineLabel": "synthetic",
+      "routerProxyEndpoint": "http://127.0.0.1:1",
+      "mcp": {
+        "url": "<RPC>"
+      }
+    },
+    "files": {},
+    "responses": {
+      "endpoints_list": [
+        {
+          "endpoints": []
+        }
+      ]
+    }
+  },
+  "expected": {
+    "calls": [
+      {
+        "name": "endpoints_list",
+        "arguments": {}
+      }
+    ],
+    "files": {},
+    "stdout": [],
+    "failure": {
+      "category": "RuntimeError",
+      "message": "selected provider endpoint unavailable; no create"
+    }
+  }
+}

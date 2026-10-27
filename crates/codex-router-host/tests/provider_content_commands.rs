@@ -1,6 +1,8 @@
 #![allow(clippy::expect_used)]
 //! Host content admission preserves actor authority and ACP block order.
 
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor, ProviderAcpDeliveryRoute, ProviderPromptContentsError,
@@ -19,25 +21,13 @@ mod support;
 use support::{NoLivePeer, available_directory, provider_binding, target};
 
 fn two_block_fixture() -> ExternalProviderLaunch {
-    let script = r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'content-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt',request
-assert request['params']['prompt']==[
- {'type':'text','text':'Read'},
- {'type':'resource_link','uri':'https://example.test/context','name':'context'}],request['params']['prompt']
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#;
+    let script = codex_router_test_support::node_fixture::fixture_program(
+        "provider-content-command-agent.ts",
+    );
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".into(), script.into()],
+        executable: PathBuf::from("node"),
+        arguments: vec![script.to_string_lossy().into_owned(), "content".to_owned()],
         environment: Vec::new(),
     }
 }
@@ -149,30 +139,17 @@ async fn non_creator_content_prompt_is_accepted_after_capability_validation() {
 }
 
 fn cancellable_prompt_fixture(dispatch_log: &std::path::Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-log={:?}
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'cancel-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-with open(log,'a') as marker: marker.write('prompt\n')
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-with open(log,'a') as marker: marker.write('cancel\n')
-print(json.dumps({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'cancelled'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        dispatch_log.display().to_string()
+    let script = codex_router_test_support::node_fixture::fixture_program(
+        "provider-content-command-agent.ts",
     );
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".into(), script],
+        executable: PathBuf::from("node"),
+        arguments: vec![
+            script.to_string_lossy().into_owned(),
+            "cancel".to_owned(),
+            dispatch_log.to_string_lossy().into_owned(),
+        ],
         environment: Vec::new(),
     }
 }

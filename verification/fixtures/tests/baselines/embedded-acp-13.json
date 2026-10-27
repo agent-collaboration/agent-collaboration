@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_input_events.rs#STARTED_STEER_FIXTURE",
+  "originalSHA256": "2e707aab23beb72d1d2e3d8c1eb8ec8140ecd12051fe070fc424a9e986925298",
+  "target": "provider-steering-agent.ts",
+  "arguments": ["started"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"_session/steering\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"started-steer-fixture\", \"version\": \"1\"}, \"_meta\": {\"steering\": {\"supported\": true}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"outcome\": \"startedNewTurn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

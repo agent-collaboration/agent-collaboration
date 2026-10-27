@@ -12,223 +12,45 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const SETTINGS_FIXTURE: &str = r#"
-import json,sys
-receipt=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-def option(id,current,values,category):
-    return {'id':id,'name':id,'category':category,'type':'select',
-            'currentValue':current,'options':[{'value':v,'name':v} for v in values]}
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'settings-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-current={'mode':'auto','model':'a','effort':'low'}
-def options(): return [
-    option('mode',current['mode'],['auto','ask'],'mode'),
-    option('model',current['model'],['a'] if current['mode']=='auto' else ['a','b'],'model'),
-    option('effort',current['effort'],['low','high'],'thought_level')]
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session','configOptions':options()}})
-seen=[]
-for expected_id,expected_value in [('mode','ask'),('model','b'),('effort','high')]:
-    request=read()
-    assert request['method']=='session/set_config_option', request
-    assert request['params']['configId']==expected_id, request
-    assert request['params']['value']==expected_value, request
-    seen.append(expected_id)
-    current[expected_id]=expected_value
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'configOptions':options()}})
-request=read()
-assert request['method']=='session/prompt', request
-seen.append('prompt')
-with open(receipt,'w') as output: json.dump(seen,output)
-send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const SETTINGS_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-create-settings-agent.ts"
+);
 
-const FAILED_SETTINGS_FIXTURE: &str = r#"
-import json,sys
-mode,receipt=sys.argv[1:]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-def option(id,current,values):
-    return {'id':id,'name':id,'category':id,'type':'select',
-            'currentValue':current,'options':[{'value':v,'name':v} for v in values]}
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{'sessionCapabilities':{'close':{}}},
-    'agentInfo':{'name':'settings-failure-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-options=[option('mode','auto',['auto','ask']),option('model','a',['a','b'])]
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'sessionId':'fixture-session','configOptions':options}})
-if mode=='invalid':
-    close=read()
-    assert close['method']=='session/close',close
-    with open(receipt,'w') as output: output.write('closed')
-    send({'jsonrpc':'2.0','id':close['id'],'result':{}})
-else:
-    set_mode=read()
-    assert set_mode['method']=='session/set_config_option'
-    assert set_mode['params']['configId']=='mode'
-    options[0]=option('mode','ask',['auto','ask'])
-    send({'jsonrpc':'2.0','id':set_mode['id'],'result':{'configOptions':options}})
-    set_model=read()
-    assert set_model['method']=='session/set_config_option'
-    assert set_model['params']['configId']=='model'
-    send({'jsonrpc':'2.0','id':set_model['id'],'error':{'code':-32603,'message':'private agent detail'}})
-    if mode=='partial-set':
-        retry=read()
-        assert retry['method']=='session/set_config_option',retry
-        assert retry['params']['configId']=='model',retry
-        assert retry['params']['value']=='b',retry
-        options[1]=option('model','b',['a','b'])
-        send({'jsonrpc':'2.0','id':retry['id'],'result':{'configOptions':options}})
-    prompt=read()
-    assert prompt['method']=='session/prompt',prompt
-    with open(receipt,'w') as output: output.write('prompt-after-accept')
-    send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const FAILED_SETTINGS_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-failed-settings-agent.ts"
+);
 
-const LEGACY_MODE_FIXTURE: &str = r#"
-import json,sys
-receipt=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'legacy-mode-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'sessionId':'fixture-session',
-    'modes':{'currentModeId':'auto','availableModes':[
-        {'id':'auto','name':'Auto'},{'id':'ask','name':'Ask'}]}}})
-set_mode=read()
-assert set_mode['method']=='session/set_mode',set_mode
-assert set_mode['params']['modeId']=='ask',set_mode
-send({'jsonrpc':'2.0','id':set_mode['id'],'result':{}})
-prompt=read()
-assert prompt['method']=='session/prompt',prompt
-with open(receipt,'w') as output: output.write('mode-before-prompt')
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const LEGACY_MODE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-legacy-mode-agent.ts"
+);
 
-const SETTING_RESPONSE_FIXTURE: &str = r#"
-import json,sys,os
-mode=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-def option(current): return {'id':'mode','name':'Mode','category':'mode','type':'select',
-    'currentValue':current,'options':[{'value':'auto','name':'Auto'},{'value':'ask','name':'Ask'}]}
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'setting-response-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'sessionId':'fixture-session','configOptions':[option('auto')]}})
-request=read()
-assert request['method']=='session/set_config_option'
-assert request['params']['configId']=='mode' and request['params']['value']=='ask'
-if mode=='malformed':
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'configOptions':'bad-shape'}})
-elif mode=='disconnect':
-    os.close(1)
-elif mode=='rejected':
-    send({'jsonrpc':'2.0','id':request['id'],'error':{'code':-32602,'message':'private detail'}})
-    prompt=read()
-    assert prompt['method']=='session/prompt'
-    send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const SETTING_RESPONSE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-setting-response-agent.ts"
+);
 
-const HELD_SETTING_RESPONSE_FIXTURE: &str = r#"
-import json,sys
-ready_path,go_path=sys.argv[1:]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'held-setting-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session',
-    'configOptions':[{'id':'mode','name':'Mode','category':'mode','type':'select',
-    'currentValue':'auto','options':[{'value':'auto','name':'Auto'},{'value':'ask','name':'Ask'}]}]}})
-request=read()
-assert request['method']=='session/set_config_option'
-with open(ready_path,'wb',buffering=0) as ready:
-    ready.write(b'R')
-with open(go_path,'rb',buffering=0) as barrier:
-    assert barrier.read(1)==b'G'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'configOptions':'bad-shape'}})
-request=read()
-assert request['method']=='session/prompt',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const HELD_SETTING_RESPONSE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-setting-response-agent.ts"
+);
 
-const SILENT_SETTING_RESPONSE_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'silent-setting-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session',
-    'configOptions':[{'id':'mode','name':'Mode','category':'mode','type':'select',
-    'currentValue':'auto','options':[{'value':'auto','name':'Auto'},{'value':'ask','name':'Ask'}]}]}})
-request=read()
-assert request['method']=='session/set_config_option'
-sys.stdin.read()
-"#;
+const SILENT_SETTING_RESPONSE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-setting-response-agent.ts"
+);
 
-const LEGACY_SETTING_RESPONSE_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'legacy-response-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session',
-    'modes':{'currentModeId':'auto','availableModes':[
-        {'id':'auto','name':'Auto'},{'id':'ask','name':'Ask'}]}}})
-request=read()
-assert request['method']=='session/set_mode'
-send({'jsonrpc':'2.0','id':request['id'],'result':'bad-shape'})
-sys.stdin.read()
-"#;
+const LEGACY_SETTING_RESPONSE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-setting-response-agent.ts"
+);
 
-const CLOSED_SETTINGS_SINK_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{},'agentInfo':{'name':'closed-settings-sink','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-sys.stdin.read()
-"#;
+const CLOSED_SETTINGS_SINK_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-setting-response-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -323,12 +145,8 @@ async fn closed_settings_sink_aborts_create_with_typed_error() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                CLOSED_SETTINGS_SINK_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![CLOSED_SETTINGS_SINK_FIXTURE.to_owned(), "closed".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -354,10 +172,8 @@ async fn create_applies_requested_settings_before_first_prompt() {
     let sink = Arc::new(SettingsEventSink::default());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 SETTINGS_FIXTURE.to_owned(),
                 receipt.to_string_lossy().into_owned(),
             ],
@@ -413,10 +229,8 @@ async fn create_applies_requested_settings_before_first_prompt() {
 
 fn failure_fixture_launch(mode: &str, receipt: &std::path::Path) -> ExternalProviderLaunch {
     ExternalProviderLaunch {
-        executable: PathBuf::from("python3"),
+        executable: PathBuf::from("node"),
         arguments: vec![
-            "-u".to_owned(),
-            "-c".to_owned(),
             FAILED_SETTINGS_FIXTURE.to_owned(),
             mode.to_owned(),
             receipt.to_string_lossy().into_owned(),
@@ -646,10 +460,8 @@ async fn legacy_mode_is_selected_before_prompt_when_no_mode_config_exists() {
     let receipt = root.path().join("legacy-mode.txt");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 LEGACY_MODE_FIXTURE.to_owned(),
                 receipt.to_string_lossy().into_owned(),
             ],
@@ -694,13 +506,8 @@ async fn legacy_mode_is_selected_before_prompt_when_no_mode_config_exists() {
 
 fn setting_response_launch(mode: &str) -> ExternalProviderLaunch {
     ExternalProviderLaunch {
-        executable: PathBuf::from("python3"),
-        arguments: vec![
-            "-u".to_owned(),
-            "-c".to_owned(),
-            SETTING_RESPONSE_FIXTURE.to_owned(),
-            mode.to_owned(),
-        ],
+        executable: PathBuf::from("node"),
+        arguments: vec![SETTING_RESPONSE_FIXTURE.to_owned(), mode.to_owned()],
         environment: Vec::new(),
         persistence_target: ProviderPersistenceTarget::Unspecified,
     }
@@ -724,11 +531,10 @@ async fn queued_prompt_is_gated_after_in_flight_setting_becomes_uncertain() {
     }
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 HELD_SETTING_RESPONSE_FIXTURE.to_owned(),
+                "held".to_owned(),
                 ready_path.to_string_lossy().into_owned(),
                 go_path.to_string_lossy().into_owned(),
             ],
@@ -804,11 +610,10 @@ async fn silent_setting_response_expires_to_unknown_and_gates_session() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 SILENT_SETTING_RESPONSE_FIXTURE.to_owned(),
+                "silent".to_owned(),
             ],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,

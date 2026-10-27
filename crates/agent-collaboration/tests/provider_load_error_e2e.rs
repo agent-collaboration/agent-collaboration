@@ -96,8 +96,15 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
         },
         vec![ExternalProviderStartup::Launch(
             ExternalProviderLaunchBinding::cursor(
-                "/usr/bin/python3".into(),
-                vec!["-c".to_owned(), refusing_load_provider_fixture()],
+                codex_router_test_support::node_fixture::node_executable().expect("Node"),
+                vec![
+                    codex_router_test_support::node_fixture::fixture_program(
+                        "provider-load-error-agent.ts",
+                    )
+                    .to_string_lossy()
+                    .into_owned(),
+                    PRIVATE_PROVIDER_MARKER.to_owned(),
+                ],
             )
             .expect("Cursor ACP binding"),
         )],
@@ -295,25 +302,6 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     assert!(shown_detail.contains(correlation_id));
 
     runtime.shutdown().await.expect("Host shutdown");
-}
-
-fn refusing_load_provider_fixture() -> String {
-    format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{"jsonrpc":"2.0","id":request["id"],"result":{{"protocolVersion":1,"agentCapabilities":{{"loadSession":True}},"agentInfo":{{"name":"error-fixture","version":"1"}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- if request["method"]=="shutdown":
-  print(json.dumps({{"jsonrpc":"2.0","id":request["id"],"result":{{}}}})); sys.stdout.flush()
- elif request["method"]=="exit":
-  break
- else:
-  assert request["method"]=="session/load", request["method"]
-  print(json.dumps({{"jsonrpc":"2.0","id":request["id"],"error":{{"code":-32600,"message":"{PRIVATE_PROVIDER_MARKER}","data":{{"privateText":"{PRIVATE_PROVIDER_MARKER}"}}}}}})); sys.stdout.flush()
-"#
-    )
 }
 
 async fn record_unloaded_provider_session(

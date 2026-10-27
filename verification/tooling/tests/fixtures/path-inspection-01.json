@@ -1,0 +1,146 @@
+[
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must be under repo-local tmp/dev-state; got <ROOT>/repo\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/owned/new/tail"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/alias"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must not be a symlink; got <ROOT>/repo/tmp/dev-state/alias\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/dangling/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/escape/../peer"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must be under repo-local tmp/dev-state; got <ROOT>/outside/peer\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/loop-a"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must not be a symlink; got <ROOT>/repo/tmp/dev-state/loop-a\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/loop-b/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/chain-0/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/..hidden/file"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must be under repo-local tmp/dev-state; got <ROOT>/repo/..hidden/file\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/outside"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must be under repo-local tmp/dev-state; got <ROOT>/outside\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "tmp/dev-state/owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "../outside"],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must be under repo-local tmp/dev-state; got <ROOT>/outside\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", ""],
+    "expected": {
+      "exit": 2,
+      "stdout": "",
+      "stderr": "copied-dev-state router must be under repo-local tmp/dev-state; got <ROOT>/repo\n"
+    }
+  },
+  {
+    "action": "require-copied-root",
+    "arguments": ["<ROOT>/repo", "router", "<ROOT>/repo/tmp/dev-state/a/../owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  }
+]

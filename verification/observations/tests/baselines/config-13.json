@@ -1,0 +1,64 @@
+{
+  "name": "array-edit",
+  "before": "[[skills.config]]\npath = \"first\"\n[[skills.config]]\npath = \"second\"\n",
+  "after": "[[skills.config]]\npath = \"first\"\n[[skills.config]]\npath = \"changed\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 0,
+        "sha256": "47dc6e3d42216c640f33345353556b6a36bbe29eaf3b7e7fdf388627940a2a27",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 1,
+        "sha256": "81dbe1163a7e37b337aaae9aa7322aab62bbabaa97d5f5793e19113c29ede92a",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 0,
+        "sha256": "47dc6e3d42216c640f33345353556b6a36bbe29eaf3b7e7fdf388627940a2a27",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 1,
+        "sha256": "e272f209b6c57d769be3b923028c153b1ce9b1769dcce80f6a494d4b59f00439",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[[skills.config]]",
+        "occurrence": 1,
+        "before_sha256": "81dbe1163a7e37b337aaae9aa7322aab62bbabaa97d5f5793e19113c29ede92a",
+        "after_sha256": "e272f209b6c57d769be3b923028c153b1ce9b1769dcce80f6a494d4b59f00439",
+        "classification": "unexpected"
+      }
+    ],
+    "allowed": false
+  }
+}

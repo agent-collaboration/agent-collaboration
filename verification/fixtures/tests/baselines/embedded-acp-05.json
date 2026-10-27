@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_elicitation.rs#ELICITATION_FIXTURE",
+  "originalSHA256": "d8d24de8064c48de46578861e2bf6c34713426c0a15d8e60c1850856ab992210",
+  "target": "provider-elicitation-agent.ts",
+  "arguments": ["form", "<RECEIPT>"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"clientCapabilities\": {\"elicitation\": {\"form\": {}}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": \"elicit-one\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"elicitation-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": \"elicit-one\", \"method\": \"elicitation/create\", \"params\": {\"mode\": \"form\", \"sessionId\": \"fixture-session\", \"message\": \"Choose settings\", \"requestedSchema\": {\"type\": \"object\", \"properties\": {\"count\": {\"type\": \"number\", \"title\": \"Count\"}, \"active\": {\"type\": \"boolean\", \"title\": \"Active\"}, \"color\": {\"type\": \"string\", \"title\": \"Color\", \"oneOf\": [{\"const\": \"blue\", \"title\": \"Blue\"}, {\"const\": \"red\", \"title\": \"Red\"}]}, \"tags\": {\"type\": \"array\", \"title\": \"Tags\", \"items\": {\"type\": \"string\", \"anyOf\": [{\"const\": \"a\", \"title\": \"Alpha\"}, {\"const\": \"b\", \"title\": \"Beta\"}]}}}, \"required\": [\"count\", \"color\"]}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": "{\"jsonrpc\": \"2.0\", \"id\": \"elicit-one\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}"
+  }
+}

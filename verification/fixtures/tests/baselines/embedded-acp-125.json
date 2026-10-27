@@ -1,0 +1,17 @@
+{
+  "original": "Host supervisor integration#cancel",
+  "originalSHA256": "779303c4f1302de909767a1e3f31d27c758917adddce802d852ef29e022a6f09",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["cancel", "<RECEIPT>"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"supervisor-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"cancelled\"}}\n",
+    "stderr": "",
+    "receipt": "new\nprompt\ncancel\n",
+    "files": {
+      "receipt.json": "new\nprompt\ncancel\n"
+    }
+  }
+}

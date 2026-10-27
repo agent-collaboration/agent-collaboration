@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#tool-output",
+  "originalSHA256": "ae98e0d83c1ac8febfd5d362eaf81cc0e66d814dad353ced4947409384215aad",
+  "target": "host-tool-output-agent.ts",
+  "arguments": ["{\"tool\": \"result\"}", "synthetic reply", "true"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"tool-call-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call\", \"toolCallId\": \"call-1\", \"title\": \"router-collaboration: endpoints_list\", \"kind\": \"other\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call_update\", \"toolCallId\": \"call-1\", \"name\": \"router-collaboration-endpoints_list\", \"rawOutput\": {\"tool\": \"result\"}}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call_update\", \"toolCallId\": \"call-1\", \"name\": \"router-collaboration-endpoints_list\", \"status\": \"completed\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"synthetic reply\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

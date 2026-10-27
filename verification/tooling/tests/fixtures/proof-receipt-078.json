@@ -1,0 +1,21 @@
+{
+  "input": {
+    "name": "HTTP release markers false",
+    "operation": "http",
+    "arguments": [],
+    "originalArguments": [],
+    "files": {
+      "crates/codex-router-proxy/src/server.rs": "prepare_context.prepare_streaming_http_request\nProxyCredentialResolver::open("
+    },
+    "commands": {},
+    "observed": []
+  },
+  "expected": {
+    "exit": 1,
+    "stdout": "missing AsyncProxyCredentialResolver section\nmissing async HTTP/SSE release-path marker: prepare_streaming_http_request_async\nmissing async HTTP/SSE release-path marker: AsyncSqliteStateStore::open\nmissing async HTTP/SSE release-path marker: AsyncRepositoryBackedAccountSelector::new_with_runtime\nmissing async HTTP/SSE release-path marker: AsyncProxyCredentialResolver::new(\n            state_store.clone(),\n            self.secret_store.clone(),\nmissing async HTTP/SSE release-path marker: service.prepare_streaming_request_async(request).await\nmissing async HTTP/SSE release-path marker: state_store: AsyncSqliteStateStore\nmissing async HTTP/SSE release-path marker: secret_store: ProxyRuntimeSecretStore\nmissing async HTTP/SSE release-path marker: .load_account(account_id)\n            .await\nmissing async HTTP/SSE release-path marker: .activate_account_credential_generation_if_current_and_invalidate_quota(\nsync HTTP/SSE request-time marker still present: prepare_context.prepare_streaming_http_request\nsync HTTP/SSE request-time marker still present: ProxyCredentialResolver::open(\n",
+    "stderr": "",
+    "files": {}
+  },
+  "original": "scripts/proof-matrix.sh#block-12",
+  "originalSHA256": "e346fd65d20d9dbbaa468b895bf4181583790765567e5bd70187b2e257b3579d"
+}

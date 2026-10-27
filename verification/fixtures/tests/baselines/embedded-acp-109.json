@@ -1,0 +1,14 @@
+{
+  "original": "Host provider owner#supervisor-pending",
+  "originalSHA256": "a2ddd9f147192fcdcdd7db3896a5f1df7fbabe30ccfef68a87eec464ab8aeb6f",
+  "target": "host-supervisor-agent.ts",
+  "arguments": ["pending"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"dispatch-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

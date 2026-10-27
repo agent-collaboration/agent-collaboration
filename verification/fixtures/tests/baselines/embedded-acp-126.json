@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#loss",
+  "originalSHA256": "981341a20e025cd2ebf55156304ed78de276e819d062c3393f37cd2c3ddaebfb",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["loss"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"loss-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

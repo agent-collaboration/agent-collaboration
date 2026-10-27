@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_event_overflow.rs#LOST_PROVIDER_FIXTURE",
+  "originalSHA256": "9ad8df7b2253cd857d5f431475922ec672b91f55710bac6b73c5d073915ca204",
+  "target": "provider-lost-agent.ts",
+  "arguments": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"lost-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

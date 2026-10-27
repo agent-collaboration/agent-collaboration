@@ -3,63 +3,10 @@
 use super::*;
 use session_event_model::{SessionItemKind, ToolCallStatus, TurnLostReason, TurnOutcome};
 
-const FAILED_TOOL_PLAN_FIXTURE: &str = r#"
-import json,pathlib,queue,socket,sys,threading
-requests=queue.Queue()
-prompt_texts=[]
-stdin_closed=threading.Event()
-receipt_path=pathlib.Path(sys.argv[2])
-def receive_wire():
-    try:
-        for line in sys.stdin:
-            message=json.loads(line)
-            if message.get('method')=='session/prompt':
-                prompt_texts.append(message['params']['prompt'][0]['text'])
-                receipt_path.write_text(json.dumps({'promptCount':len(prompt_texts),'promptTexts':prompt_texts}))
-            requests.put(message)
-    finally:
-        stdin_closed.set()
-def read(): return requests.get(timeout=5)
-def send(value): print(json.dumps(value),flush=True)
-def update(value):
-    send({'jsonrpc':'2.0','method':'session/update','params':{
-        'sessionId':'failed-tool-plan-session','update':value}})
-threading.Thread(target=receive_wire,daemon=True).start()
-control=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-control.settimeout(15)
-control.connect(sys.argv[1])
-request=read()
-assert request['method']=='initialize',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{},'agentInfo':{'name':'failed-tool-plan-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'failed-tool-plan-session'}})
-first=read()
-assert first['method']=='session/prompt' and first['params']['prompt']==[{'type':'text','text':'FIRST_REQUEST'}],first
-update({'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'FIRST_PARTIAL'}})
-update({'sessionUpdate':'tool_call','toolCallId':'failed-tool',
-        'title':'FIRST_TOOL','kind':'execute','status':'pending'})
-update({'sessionUpdate':'plan','entries':[{
-        'content':'FIRST_PLAN','priority':'medium','status':'pending'}]})
-# Release only after the actual actor emits the first text, tool, and plan.
-assert control.recv(1)==b'e'
-send({'jsonrpc':'2.0','id':first['id'],'error':{'code':-32603,'message':'first fixture prompt failed'}})
-# The idle update deliberately omits kind/title, so retained lookup supplies them.
-assert control.recv(1)==b't'
-update({'sessionUpdate':'tool_call_update','toolCallId':'failed-tool','status':'completed'})
-assert control.recv(1)==b's'
-second=read()
-assert second['method']=='session/prompt' and second['params']['prompt']==[{'type':'text','text':'SECOND_REQUEST'}],second
-update({'sessionUpdate':'plan','entries':[{
-        'content':'SECOND_PLAN','priority':'medium','status':'pending'}]})
-update({'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'SECOND_ONLY'}})
-send({'jsonrpc':'2.0','id':second['id'],'result':{'stopReason':'end_turn'}})
-control.sendall(b'd')
-assert control.recv(1)==b'q'
-control.close()
-assert stdin_closed.wait(timeout=15),'owner did not close fixture stdin'
-"#;
+const FAILED_TOOL_PLAN_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-failed-turn-agent.ts"
+);
 
 async fn collect_until(
     events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>,
@@ -95,11 +42,10 @@ async fn failed_tool_plan_cursors_are_not_successor_turn_items() {
             std::time::Duration::from_secs(5),
             AgentSessionClient::initialize(
                 ExternalProviderLaunch {
-                    executable: PathBuf::from("/usr/bin/python3"),
+                    executable: PathBuf::from("node"),
                     arguments: vec![
-                        "-u".into(),
-                        "-c".into(),
                         FAILED_TOOL_PLAN_FIXTURE.into(),
+                        "tool-plan".into(),
                         control_path.to_string_lossy().into_owned(),
                         receipt_path.to_string_lossy().into_owned(),
                     ],

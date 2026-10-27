@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "I-17b patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "I-17b"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Focused async WebSocket slow-recorder integration test passed; side-effect persistence is spawned after local frame forwarding.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-proxy/src/websocket.rs\",\n    \"crates/codex-router-proxy/src/lib.rs\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-6",
+  "originalSHA256": "fa4b70d56658bfae519a7cdc366054cd454638edbaf70c78fa2a96989ff93a06"
+}

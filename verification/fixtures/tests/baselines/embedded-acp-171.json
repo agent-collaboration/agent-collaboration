@@ -1,0 +1,37 @@
+{
+  "original": "crates/agent-collaboration/src/session_picker/ssh_source_publication_tests.rs#observed",
+  "originalSHA256": "ca53bda0d91f22d19c8e4200407ee4c1430db9f5ccdb10c0bde84d057441c00f",
+  "target": "source-ssh-agent.ts",
+  "arguments": [
+    "-T",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ConnectTimeout=5",
+    "--",
+    "source.example.invalid",
+    "exec '/bin/echo' --source-request-v1 '{\"serviceDirectory\":\"/private/source'\"'\"'s root\",\"expectedService\":\"00000000-0000-4000-8000-000000000001\",\"operation\":{\"kind\":\"endpoints\",\"operationId\":\"019f0000-0000-7000-8000-000000000001\",\"serviceEpoch\":\"00000000-0000-4000-8000-000000000002\",\"action\":{\"target\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"source\"},\"sessionId\":\"captured\"},\"directory\":\"/source/project\",\"arguments\":[{\"Unix\":[45,45,110,97,109,101]},{\"Unix\":[108,105,116,101,114,97,108,32,118,97,108,117,101]}]}}}'"
+  ],
+  "stdin": "",
+  "configuration": {
+    "kind": "publication"
+  },
+  "environment": {
+    "SOURCE_SSH_COUNT": "<ROOT>/count",
+    "SOURCE_SSH_MODE": "observed",
+    "SOURCE_EXECUTABLE": "/bin/echo",
+    "SOURCE_SSH_TRANSCRIPT": "<ROOT>/trace"
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "--source-request-v1 {\"serviceDirectory\":\"/private/source's root\",\"expectedService\":\"00000000-0000-4000-8000-000000000001\",\"operation\":{\"kind\":\"endpoints\",\"operationId\":\"019f0000-0000-7000-8000-000000000001\",\"serviceEpoch\":\"00000000-0000-4000-8000-000000000002\",\"action\":{\"target\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"source\"},\"sessionId\":\"captured\"},\"directory\":\"/source/project\",\"arguments\":[{\"Unix\":[45,45,110,97,109,101]},{\"Unix\":[108,105,116,101,114,97,108,32,118,97,108,117,101]}]}}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "trace": "{\"serviceDirectory\": \"/private/source's root\", \"expectedService\": \"00000000-0000-4000-8000-000000000001\", \"operation\": {\"kind\": \"endpoints\", \"operationId\": \"019f0000-0000-7000-8000-000000000001\", \"serviceEpoch\": \"00000000-0000-4000-8000-000000000002\", \"action\": {\"target\": {\"endpoint\": {\"serviceId\": \"00000000-0000-4000-8000-000000000001\", \"endpointId\": \"source\"}, \"sessionId\": \"captured\"}, \"directory\": \"/source/project\", \"arguments\": [{\"Unix\": [45, 45, 110, 97, 109, 101]}, {\"Unix\": [108, 105, 116, 101, 114, 97, 108, 32, 118, 97, 108, 117, 101]}]}}}\n",
+      "trace.results": "{\"status\": 0, \"stdout\": \"--source-request-v1 {\\\"serviceDirectory\\\":\\\"/private/source's root\\\",\\\"expectedService\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"operation\\\":{\\\"kind\\\":\\\"endpoints\\\",\\\"operationId\\\":\\\"019f0000-0000-7000-8000-000000000001\\\",\\\"serviceEpoch\\\":\\\"00000000-0000-4000-8000-000000000002\\\",\\\"action\\\":{\\\"target\\\":{\\\"endpoint\\\":{\\\"serviceId\\\":\\\"00000000-0000-4000-8000-000000000001\\\",\\\"endpointId\\\":\\\"source\\\"},\\\"sessionId\\\":\\\"captured\\\"},\\\"directory\\\":\\\"/source/project\\\",\\\"arguments\\\":[{\\\"Unix\\\":[45,45,110,97,109,101]},{\\\"Unix\\\":[108,105,116,101,114,97,108,32,118,97,108,117,101]}]}}}\\n\", \"stderr\": \"\"}\n"
+    }
+  }
+}

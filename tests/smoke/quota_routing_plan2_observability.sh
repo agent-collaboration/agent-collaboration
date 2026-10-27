@@ -18,8 +18,8 @@ else
   exit 127
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required" >&2
   exit 127
 fi
 
@@ -46,35 +46,6 @@ if [[ -z "${artifact_path}" || ! -f "${artifact_path}" ]]; then
   exit 1
 fi
 
-python3 - "${artifact_path}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-assert payload["git_head"], "artifact must record git head"
-assert payload["codex"]["status"] == "exit status: 0"
-assert payload["codex"]["stdout_contains_smoke_text"] is True
-assert payload["codex"]["stdout_contains_usage_limit_reached"] is False
-assert payload["codex"]["stderr_contains_usage_limit_reached"] is False
-assert payload["quota_reconnect"]["reconnected_to_different_account"] is True
-assert payload["quota_reconnect"]["quota_error_hidden_from_codex"] is True
-assert payload["profile_uses_codex_router_token"] is False
-assert payload["upstream"]["websocket_handshake_count"] == 2
-assert payload["upstream"]["non_prewarm_frame_count"] >= 2
-
-rendered = json.dumps(payload, sort_keys=True)
-for forbidden in [
-    "acct_quota_primary",
-    "acct_quota_fallback",
-    "quota-primary",
-    "quota-fallback",
-    "primary-token",
-    "fallback-token",
-    "X-Codex-Router-Token",
-]:
-    assert forbidden not in rendered, forbidden
-PY
+node verification/tooling/quota-smoke-assertions.ts plan2 "${artifact_path}"
 
 echo "quota routing plan2 observability smoke ok: artifact=${artifact_path}"

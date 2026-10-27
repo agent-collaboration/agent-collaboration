@@ -1,0 +1,16 @@
+{
+  "original": "Provider route integration#refusal",
+  "originalSHA256": "e620bf604f5ef01224c2328439bf99b4c34ab19358c759875ae3934678f89f36",
+  "target": "provider-loaded-route-agent.ts",
+  "arguments": ["refusal", "<RECEIPT>", "-32603"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/load\", \"params\": {\"sessionId\": \"fixture-session\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"load-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"error\": {\"code\": -32603, \"message\": \"provider fixture refusal\", \"data\": {\"privateText\": \"must not escape\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"error\": {\"code\": -32603, \"message\": \"provider fixture refusal\", \"data\": {\"privateText\": \"must not escape\"}}}\n",
+    "stderr": "",
+    "receipt": "session/load\nsession/load\n",
+    "files": {
+      "receipt.json": "session/load\nsession/load\n"
+    }
+  }
+}

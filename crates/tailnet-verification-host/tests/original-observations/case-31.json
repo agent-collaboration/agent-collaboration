@@ -1,0 +1,29 @@
+{
+  "function": "require_service",
+  "args": [
+    {
+      "endpoints": [
+        {
+          "endpoint": {
+            "serviceId": "destination",
+            "endpointId": "codex-local"
+          },
+          "availability": {
+            "state": "unavailable"
+          },
+          "channels": [
+            {
+              "kind": "nativeCodex"
+            }
+          ]
+        }
+      ],
+      "serviceEpoch": "epoch"
+    },
+    "destination",
+    "epoch"
+  ],
+  "expected": {
+    "refused": true
+  }
+}

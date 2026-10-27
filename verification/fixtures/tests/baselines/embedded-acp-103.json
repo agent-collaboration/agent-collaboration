@@ -1,0 +1,16 @@
+{
+  "original": "Tailscale synthetic foreign-command fixture#STARTUP_FAILURE_FIXTURE",
+  "originalSHA256": "aed0441955b446903922ee9b83ca138f4a384a60960c2e9e1819d2adbc11865b",
+  "target": "tailscale-startup-failure-agent.ts",
+  "arguments": ["serve"],
+  "environment": {},
+  "initialFiles": {},
+  "stdin": "",
+  "expected": {
+    "exit": 23,
+    "stdout": "",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

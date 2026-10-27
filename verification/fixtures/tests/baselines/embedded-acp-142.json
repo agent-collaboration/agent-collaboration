@@ -1,0 +1,14 @@
+{
+  "original": "Provider route integration#new-only",
+  "originalSHA256": "3c27330d964943df33bfc92cc74e883430b815f4cd3040adf28168f53a5b45c6",
+  "target": "provider-loaded-route-agent.ts",
+  "arguments": ["new"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"no-load-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

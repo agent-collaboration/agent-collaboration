@@ -490,16 +490,17 @@ pub fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', "'\\''"))
 }
 
-pub async fn python_executable() -> ProofResult<PathBuf> {
-    let output = tokio::process::Command::new("python3")
+pub async fn node_executable() -> ProofResult<PathBuf> {
+    let output = tokio::process::Command::new("node")
         .args([
-            "-c",
-            "import sys; assert sys.version_info >= (3, 12); print(sys.executable)",
+            "-p",
+            "(() => { if (process.versions.node !== require(process.argv[1]).engines.node) throw new Error('repository Node version required'); return process.execPath; })()",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/../../verification/package.json"),
         ])
         .output()
         .await?;
     if !output.status.success() {
-        return Err("Python 3.12 or newer is required for the permission probe".into());
+        return Err("The Node version pinned in verification/package.json is required for the permission probe".into());
     }
     Ok(PathBuf::from(String::from_utf8(output.stdout)?.trim()).canonicalize()?)
 }

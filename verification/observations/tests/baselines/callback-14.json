@@ -1,0 +1,9 @@
+{
+  "function": "read_snapshot",
+  "name": "test_missing_database_is_not_created",
+  "args": ["<database>", ["question"]],
+  "databasePresent": false,
+  "expected": {
+    "missingDatabase": true
+  }
+}

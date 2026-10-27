@@ -1,0 +1,15 @@
+{
+  "original": "crates/acp-client-runtime/tests/create_settings_order.rs#LEGACY_SETTING_RESPONSE_FIXTURE",
+  "originalSHA256": "6b05e8431106b028ab8a5b0c4eba794e7c9df3cc6f31c713a11057bf3d9a9e51",
+  "target": "provider-setting-response-agent.ts",
+  "arguments": ["legacy"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/set_mode\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"legacy-response-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\", \"modes\": {\"currentModeId\": \"auto\", \"availableModes\": [{\"id\": \"auto\", \"name\": \"Auto\"}, {\"id\": \"ask\", \"name\": \"Ask\"}]}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": \"bad-shape\"}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

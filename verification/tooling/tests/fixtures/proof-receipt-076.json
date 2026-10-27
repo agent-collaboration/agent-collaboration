@@ -1,0 +1,37 @@
+{
+  "input": {
+    "name": "G-29 structural false",
+    "operation": "structural",
+    "arguments": ["G-29", "receipt.json"],
+    "originalArguments": ["G-29", "receipt.json"],
+    "files": {
+      "receipt.json": "{}",
+      "crates/codex-router-proxy/src/server.rs": "rusqlite\nSqliteStateStore::open\ntungstenite::accept\nunbounded_channel\ncodex_router_secret_store::\nread_secret",
+      "crates/codex-router-proxy/src/websocket.rs": "std::sync::mpsc",
+      "crates/codex-router-proxy/src/upstream.rs": "",
+      "crates/codex-router-proxy/src/http_sse.rs": "",
+      "crates/codex-router-cli/src/lib.rs": "",
+      "crates/codex-router-auth/src/resolver.rs": "",
+      "Cargo.toml": "",
+      "crates/codex-router-proxy/Cargo.toml": "tungstenite = \"x\"",
+      "tests/smoke/installed_codex_mock.sh": "",
+      "scripts/check-release-runtime-guardrails.py": "#!/bin/sh\nprintf '%s\\n' '[\"crates/codex-router-proxy/src/server.rs\",\"crates/codex-router-test-support/src/lib.rs\"]'\n",
+      "verification/tooling/check-release-runtime-guardrails.ts": "console.log(\"[\\\"crates/codex-router-proxy/src/server.rs\\\",\\\"crates/codex-router-test-support/src/lib.rs\\\"]\");\n"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "cargo": "#!/bin/sh\nprintf 'controlled failure\\n' >&2\nexit 1\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "crates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: codex_router_secret_store::\ncrates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: read_secret\ncrates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: rusqlite\ncrates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: read_secret\ncrates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: rusqlite\nrelease serve auth/state boundary missing required marker: ProxyRuntimeCredentialResources::open\nrelease serve auth/state boundary missing required marker: AsyncProxyCredentialResolverFactory\nrelease serve auth/state boundary missing required marker: .resolver_for_state(\nauth-owned credential resolver missing required marker: pub struct AsyncRouterCredentialResolver\nauth-owned credential resolver missing required marker: pub struct AsyncRefreshLeaseRegistry\nauth-owned credential resolver missing required marker: refresh_client.refresh_credentials\nauth-owned credential resolver missing required marker: .write_secret(\nauth-owned credential resolver missing required marker: .activate_account_credential_generation_if_current_and_invalidate_quota(\n",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 1,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"notes\": \"crates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: codex_router_secret_store::; crates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: read_secret; crates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: rusqlite; crates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: read_secret; crates/codex-router-proxy/src/server.rs contains request-time auth/state boundary marker: rusqlite; release serve auth/state boundary missing required marker: ProxyRuntimeCredentialResources::open; release serve auth/state boundary missing required marker: AsyncProxyCredentialResolverFactory; release serve auth/state boundary missing required marker: .resolver_for_state(; auth-owned credential resolver missing required marker: pub struct AsyncRouterCredentialResolver; auth-owned credential resolver missing required marker: pub struct AsyncRefreshLeaseRegistry; auth-owned credential resolver missing required marker: refresh_client.refresh_credentials; auth-owned credential resolver missing required marker: .write_secret(; auth-owned credential resolver missing required marker: .activate_account_credential_generation_if_current_and_invalidate_quota(\",\n  \"result\": \"fail\",\n  \"status_after\": \"[ ] pending\",\n  \"touched_targets\": [\n    \"scripts/proof-matrix.sh\",\n    \"verification/tooling/check-release-runtime-guardrails.ts\",\n    \"crates/codex-router-proxy/src/websocket.rs\",\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/credential_runtime.rs\",\n    \"crates/codex-router-test-support/src/installed_codex.rs\",\n    \"tests/smoke/installed_codex_mock.sh\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-14",
+  "originalSHA256": "b258dda4a393c9be00a34ac0f62026551cde0803ba093b4b40683f0dbb26e337"
+}

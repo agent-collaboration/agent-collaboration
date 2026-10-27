@@ -1,0 +1,24 @@
+{
+  "reset": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "rows": [
+      {
+        "account_id": "chosen",
+        "route_band": "other"
+      },
+      {
+        "account_id": "retained",
+        "route_band": "responses"
+      }
+    ]
+  },
+  "hold": {
+    "ready": "acquired\n",
+    "blocked": true,
+    "released": true,
+    "exit": 0,
+    "stderr": ""
+  }
+}

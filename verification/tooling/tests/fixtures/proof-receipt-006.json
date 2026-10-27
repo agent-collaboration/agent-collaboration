@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "I-20 patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "I-20"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Focused exact-forwarding tests passed: first response.create frame and direct response payload route once and reach upstream unchanged, including async tunnel forwarding.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-proxy/src/websocket.rs\",\n    \"crates/codex-router-proxy/src/lib.rs\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-11",
+  "originalSHA256": "80ed508a4b89c67d4de252753c557c300b4a8a0af9b4228d381ff7b7601dc920"
+}

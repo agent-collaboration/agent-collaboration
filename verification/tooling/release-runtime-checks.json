@@ -1,0 +1,220 @@
+{
+  "checks": {
+    "G-01": {
+      "row_id": "G-01",
+      "description": "no production std::net listener/stream in release serve path",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/server.rs", "std::net::TcpListener"],
+        ["crates/codex-router-proxy/src/server.rs", "std::net::TcpStream"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/server.rs", "tokio::net::TcpListener"],
+        ["crates/codex-router-proxy/src/server.rs", "AsyncLoopbackServerRuntime"]
+      ],
+      "release_scan_forbidden": ["std::net::TcpListener", "std::net::TcpStream"]
+    },
+    "G-02": {
+      "row_id": "G-02",
+      "description": "no production reqwest::blocking in release serve HTTP upstream",
+      "forbidden": [["crates/codex-router-proxy/src/upstream.rs", "reqwest::blocking"]],
+      "required": [
+        ["crates/codex-router-proxy/src/upstream.rs", "HyperHttpUpstreamTransport"],
+        ["crates/codex-router-proxy/src/upstream.rs", "hyper_util::client::legacy::Client"]
+      ],
+      "release_scan_forbidden": []
+    },
+    "G-03": {
+      "row_id": "G-03",
+      "description": "no blocking tungstenite accept/connect in release serve path",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/server.rs", "BlockingWebSocketTunnel"],
+        ["crates/codex-router-proxy/src/websocket.rs", "tungstenite::accept"],
+        ["crates/codex-router-proxy/src/websocket.rs", "use tungstenite::connect;"],
+        ["crates/codex-router-proxy/src/websocket.rs", "connect(upstream_request)"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/server.rs", "AsyncWebSocketTunnel"],
+        ["crates/codex-router-proxy/src/websocket.rs", "tokio_tungstenite::connect_async"]
+      ],
+      "release_scan_forbidden": [
+        "BlockingWebSocketTunnel",
+        "tungstenite::accept",
+        "use tungstenite::connect;",
+        "connect(upstream_request)"
+      ]
+    },
+    "G-04": {
+      "row_id": "G-04",
+      "description": "no production httparse serving or upstream response parsing",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/server.rs", "httparse::"],
+        ["crates/codex-router-proxy/src/upstream.rs", "httparse::"]
+      ],
+      "required": [],
+      "release_scan_forbidden": ["httparse::"]
+    },
+    "G-05": {
+      "row_id": "G-05",
+      "description": "no blocking Read response body in release async runtime files",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/server.rs", "Box<dyn Read + Send>"],
+        ["crates/codex-router-proxy/src/upstream.rs", "Box<dyn Read + Send>"],
+        ["crates/codex-router-proxy/src/server.rs", "std::io::copy"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/http_sse.rs", "AsyncStreamingHttpProxyResponse"],
+        ["crates/codex-router-proxy/src/server.rs", "BoxBody<Bytes, AsyncHttpBodyError>"]
+      ],
+      "release_scan_forbidden": []
+    },
+    "G-07": {
+      "row_id": "G-07",
+      "description": "positive Hyper and tokio-tungstenite ownership in release runtime",
+      "forbidden": [],
+      "required": [
+        ["crates/codex-router-proxy/src/server.rs", "http1::Builder"],
+        ["crates/codex-router-proxy/src/server.rs", "hyper_tungstenite::upgrade"],
+        ["crates/codex-router-proxy/src/server.rs", "hyper_tungstenite::HyperWebsocketStream"],
+        ["crates/codex-router-proxy/src/upstream.rs", "HyperHttpUpstreamTransport"],
+        ["crates/codex-router-proxy/src/upstream.rs", "HttpsConnectorBuilder"]
+      ],
+      "release_scan_forbidden": []
+    },
+    "G-23": {
+      "row_id": "G-23",
+      "description": "local Hyper websocket upgrade handoff has no double handshake",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/server.rs", "accept_async"],
+        ["crates/codex-router-proxy/src/server.rs", "accept_hdr_async"],
+        ["crates/codex-router-proxy/src/server.rs", "derive_accept_key"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/server.rs", "hyper_tungstenite::upgrade"],
+        ["crates/codex-router-proxy/src/server.rs", "handle_upgraded_connection"]
+      ],
+      "release_scan_forbidden": []
+    },
+    "G-26": {
+      "row_id": "G-26",
+      "description": "supported application routes are pass-through and /v1/models is not synthesized",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/upstream.rs", "chatgpt_backend_models_response"],
+        ["crates/codex-router-proxy/src/upstream.rs", "chatgpt_backend_models_async_response"],
+        ["crates/codex-router-proxy/src/upstream.rs", "br#\"{\"models\":[]}\"#"],
+        ["crates/codex-router-proxy/src/upstream.rs", "Bytes::from_static(br#\"{\"models\":[]}\"#)"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/upstream.rs", "HyperHttpUpstreamTransport"],
+        ["crates/codex-router-proxy/src/upstream.rs", ".url_for_path(request.path())"]
+      ],
+      "release_scan_forbidden": [
+        "chatgpt_backend_models_response",
+        "chatgpt_backend_models_async_response",
+        "br#\"{\"models\":[]}\"#",
+        "Bytes::from_static(br#\"{\"models\":[]}\"#)"
+      ]
+    },
+    "G-27": {
+      "row_id": "G-27",
+      "description": "WebSocket first request parsing does not require prompt-bearing payload shape",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/websocket.rs", "is_direct_response_create_payload"],
+        ["crates/codex-router-proxy/src/websocket.rs", "payload.as_object()"],
+        ["crates/codex-router-proxy/src/websocket.rs", "frame_type != \"response.create\""],
+        ["crates/codex-router-proxy/src/websocket.rs", ".get(\"model\")"],
+        ["crates/codex-router-proxy/src/websocket.rs", ".get(\"input\")"],
+        ["crates/codex-router-proxy/src/websocket.rs", ".get(\"stream\")"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/websocket.rs", "validate_first_frame"],
+        ["crates/codex-router-proxy/src/websocket.rs", "has_forbidden_top_level_json_auth_carrier"]
+      ],
+      "release_scan_forbidden": ["is_direct_response_create_payload"]
+    },
+    "AR-WS-GUARD": {
+      "row_id": "AR-WS-GUARD",
+      "description": "release WebSocket routing has no invented first-frame size or whole-frame JSON gate",
+      "forbidden": [
+        ["crates/codex-router-proxy/src/server.rs", "FirstFramePolicy"],
+        ["crates/codex-router-proxy/src/websocket.rs", "FirstFramePolicy"],
+        ["crates/codex-router-proxy/src/websocket.rs", "FirstFrameTooLarge"],
+        ["crates/codex-router-proxy/src/websocket.rs", "MalformedFirstFrame"],
+        ["crates/codex-router-proxy/src/websocket.rs", "UnsupportedFirstFrameType"],
+        [
+          "crates/codex-router-proxy/src/websocket.rs",
+          "serde_json::from_slice::<serde_json::Value>(first_frame_bytes)"
+        ],
+        ["crates/codex-router-proxy/src/websocket.rs", "has_forbidden_top_level_json_auth_carrier"]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/server.rs", "hyper_tungstenite::upgrade"],
+        ["crates/codex-router-proxy/src/websocket.rs", "tokio_tungstenite::connect_async"],
+        [
+          "crates/codex-router-proxy/src/websocket.rs",
+          "has_forbidden_top_level_websocket_auth_carrier"
+        ]
+      ],
+      "release_scan_forbidden": [
+        "FirstFramePolicy",
+        "FirstFrameTooLarge",
+        "MalformedFirstFrame",
+        "UnsupportedFirstFrameType",
+        "serde_json::from_slice::<serde_json::Value>(first_frame_bytes)"
+      ]
+    },
+    "G-28": {
+      "row_id": "G-28",
+      "description": "release WebSocket path has no message-count truncation, first-frame timeout, or provider-event-aware termination policy",
+      "forbidden": [
+        ["crates/codex-router-cli/src/lib.rs", "--max-websocket-upstream-messages"],
+        ["crates/codex-router-proxy/src/server.rs", "max_websocket_upstream_messages"],
+        ["crates/codex-router-proxy/src/websocket.rs", "FirstFrameTimeout"],
+        ["crates/codex-router-proxy/src/websocket.rs", "max_upstream_messages"],
+        ["crates/codex-router-proxy/src/websocket.rs", "response_outstanding"],
+        ["crates/codex-router-proxy/src/websocket.rs", "let mut upstream_message_count"],
+        [
+          "crates/codex-router-proxy/src/websocket.rs",
+          "upstream_message_count = upstream_message_count.saturating_add"
+        ],
+        ["crates/codex-router-proxy/src/websocket.rs", "upstream_message_count >="],
+        ["crates/codex-router-proxy/src/websocket.rs", "is_close || is_completed"],
+        [
+          "crates/codex-router-proxy/src/websocket.rs",
+          "tokio::time::timeout(Duration::from_millis(250)"
+        ]
+      ],
+      "required": [
+        ["crates/codex-router-proxy/src/websocket.rs", "next_data_message_before_upstream"],
+        ["crates/codex-router-proxy/src/websocket.rs", "note_response_completed"],
+        [
+          "crates/codex-router-proxy/src/websocket.rs",
+          "if is_close {\n                    return Ok(());"
+        ]
+      ],
+      "release_scan_forbidden": [
+        "--max-websocket-upstream-messages",
+        "max_websocket_upstream_messages",
+        "FirstFrameTimeout",
+        "response_outstanding"
+      ]
+    }
+  },
+  "crates": [
+    "codex-router-auth",
+    "codex-router-cli",
+    "codex-router-core",
+    "codex-router-proxy",
+    "codex-router-quota",
+    "codex-router-secret-store",
+    "codex-router-selection",
+    "codex-router-state"
+  ],
+  "subtrees": {
+    "crates/codex-router-proxy/src/account_selection.rs": "crates/codex-router-proxy/src/account_selection",
+    "crates/codex-router-proxy/src/lib.rs": "crates/codex-router-proxy/src/proxy_tests",
+    "crates/codex-router-proxy/src/websocket.rs": "crates/codex-router-proxy/src/websocket",
+    "crates/codex-router-selection/src/burn_down.rs": "crates/codex-router-selection/src/burn_down",
+    "crates/codex-router-state/src/lib.rs": "crates/codex-router-state/src/state_tests",
+    "crates/codex-router-state/src/sqlite.rs": "crates/codex-router-state/src/sqlite"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_elicitation.rs#ELICITATION_FIXTURE",
+  "originalSHA256": "d8d24de8064c48de46578861e2bf6c34713426c0a15d8e60c1850856ab992210",
+  "target": "provider-elicitation-agent.ts",
+  "arguments": ["unsupported", "<RECEIPT>"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"clientCapabilities\": {\"elicitation\": {\"form\": {}}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": \"elicit-one\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"elicitation-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": \"elicit-one\", \"method\": \"elicitation/create\", \"params\": {\"mode\": \"url\", \"sessionId\": \"fixture-session\", \"message\": \"Open a link\", \"url\": \"https://example.invalid\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": "{\"jsonrpc\": \"2.0\", \"id\": \"elicit-one\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}"
+  }
+}

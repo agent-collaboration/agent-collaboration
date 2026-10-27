@@ -12,40 +12,10 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent, SessionItemKind, ToolCallStatus};
 use tokio_util::sync::CancellationToken;
 
-const IDLE_UPDATE_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-def update(value):
-    send({'jsonrpc':'2.0','method':'session/update',
-          'params':{'sessionId':'fixture-session','update':value}})
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{},'agentInfo':{'name':'idle-update-fixture','version':'1'},
-    '_meta':{'steering':{'supported':True}}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session',
-    'modes':{'currentModeId':'auto','availableModes':[
-        {'id':'auto','name':'Auto'},{'id':'ask','name':'Ask'}]}}})
-update({'sessionUpdate':'current_mode_update','currentModeId':'ask'})
-update({'sessionUpdate':'config_option_update','configOptions':[
-    {'id':'model','name':'Model','category':'model','type':'select','currentValue':'b',
-     'options':[{'value':'a','name':'A'},{'value':'b','name':'B'}]}]})
-update({'sessionUpdate':'future_idle_kind','content':{'type':'text','text':'Future detail'}})
-prompt=read()
-assert prompt['method']=='session/prompt',prompt
-update({'sessionUpdate':'tool_call','toolCallId':'late-tool',
-        'title':'Run check','kind':'execute','status':'pending'})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-steer=read()
-assert steer['method']=='_session/steering',steer
-update({'sessionUpdate':'tool_call_update','toolCallId':'late-tool',
-        'title':'Check passed','status':'completed'})
-send({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'promptRequired'}})
-sys.stdin.read()
-"#;
+const IDLE_UPDATE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-idle-updates-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -112,12 +82,8 @@ async fn idle_mode_config_unknown_and_late_tool_updates_are_projected() {
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                IDLE_UPDATE_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![IDLE_UPDATE_FIXTURE.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

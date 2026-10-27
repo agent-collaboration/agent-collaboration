@@ -1,0 +1,15 @@
+{
+  "function": "decode_rpc_body",
+  "name": "test_sse_notifications_are_not_the_final_tool_result",
+  "args": [
+    "event: message\ndata: {\"method\":\"notification\",\"params\":{}}\n\nevent: message\ndata: {\"id\":1,\"result\":{\"events\":[]}}\n\n"
+  ],
+  "expected": {
+    "result": {
+      "id": 1,
+      "result": {
+        "events": []
+      }
+    }
+  }
+}

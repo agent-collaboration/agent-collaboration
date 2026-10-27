@@ -1,0 +1,97 @@
+{
+  "name": "test_both_original_terminal_captures_must_render_the_reply",
+  "observation": {
+    "target": {
+      "endpoint": {
+        "serviceId": "service",
+        "endpointId": "cursor-local"
+      },
+      "sessionId": "thread"
+    },
+    "events": [
+      {
+        "sequence": 1,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "commands",
+            "kind": {
+              "kind": "notice"
+            },
+            "text": "{\"availableCommands\":[{\"name\":\"compact\",\"description\":\"Compact context\"}]}"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 2,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "assistant",
+            "kind": {
+              "kind": "agentMessage"
+            },
+            "text": "ACP_OK"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 3,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "usage",
+            "kind": {
+              "kind": "usage"
+            },
+            "text": "{\"used\":12,\"size\":100}"
+          },
+          "turnId": null
+        }
+      }
+    ],
+    "epoch": 0,
+    "endReason": "deadlineReached"
+  },
+  "views": [
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "terminal": "ACP_OK",
+  "resumedTerminal": "working",
+  "expectedReply": "ACP_OK",
+  "requireUsage": false,
+  "expected": {
+    "error": "ordinary assistant reply absent from original installed-client PTY"
+  }
+}

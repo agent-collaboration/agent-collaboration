@@ -346,7 +346,7 @@ async fn provider_prompt_without_operation_id_names_uuidv7_generator_before_muta
         .as_str()
         .expect("generator fix");
     assert!(
-        fix.contains("python3 -c 'import uuid; print(uuid.uuid7())'"),
+        fix == "Generate a fresh UUIDv7 and pass it as operationId",
         "{fix}"
     );
     let load = call_tool(
@@ -373,7 +373,7 @@ async fn provider_prompt_without_operation_id_names_uuidv7_generator_before_muta
     assert!(
         load["result"]["structuredContent"]["fix"]
             .as_str()
-            .is_some_and(|fix| fix.contains("python3 -c 'import uuid; print(uuid.uuid7())'"))
+            .is_some_and(|fix| fix == "Generate a fresh UUIDv7 and pass it as operationId")
     );
     assert!(
         backend.calls().is_empty(),

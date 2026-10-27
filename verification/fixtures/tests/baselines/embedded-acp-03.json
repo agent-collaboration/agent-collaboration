@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/cursor_question_roundtrip.rs#ASK_QUESTION_FIXTURE",
+  "originalSHA256": "1630690a379d5d7d054ce696698bc6af1d6fa44c3dddccd34ed9479f3e330de4",
+  "target": "cursor-question-agent.ts",
+  "arguments": ["<RECEIPT>"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"clientCapabilities\": {\"elicitation\": {\"form\": {}}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": \"question-request\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"question-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call\", \"toolCallId\": \"question-tool\", \"title\": \"Ask\", \"kind\": \"think\", \"status\": \"pending\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": \"question-request\", \"method\": \"cursor/ask_question\", \"params\": {\"toolCallId\": \"question-tool\", \"title\": \"Choose\", \"questions\": [{\"id\": \"single\", \"prompt\": \"First?\", \"options\": [{\"id\": \"first-id\", \"label\": \"Same\"}, {\"id\": \"second-id\", \"label\": \"Same\"}]}, {\"id\": \"multi\", \"prompt\": \"Which?\", \"allowMultiple\": true, \"options\": [{\"id\": \"alpha\", \"label\": \"Alpha\"}, {\"id\": \"beta\", \"label\": \"Beta\"}]}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": "{\"jsonrpc\": \"2.0\", \"id\": \"question-request\", \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}"
+  }
+}

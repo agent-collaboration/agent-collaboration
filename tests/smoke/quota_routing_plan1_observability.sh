@@ -23,8 +23,8 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 127
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required" >&2
   exit 127
 fi
 
@@ -132,27 +132,6 @@ for forbidden in \
   fi
 done
 
-python3 - "${json_output}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-assert payload["route_band"] == "responses"
-
-by_label = {account["safe_account_label"]: account for account in payload["accounts"]}
-preferred = [account for account in payload["accounts"] if account["preferred_next"]]
-assert len(preferred) == 1
-assert preferred[0]["safe_account_label"] == "best"
-assert by_label["weak"]["active_clients"] == 1
-assert by_label["weak"]["active_clients_source"] == "sqlx_mirror"
-assert by_label["mid"]["active_clients"] == 1
-assert by_label["mid"]["active_clients_source"] == "sqlx_mirror"
-assert by_label["best"]["active_clients"] == 0
-assert by_label["best"]["active_clients_source"] == "sqlx_mirror"
-assert by_label["best"]["next_use"] == "preferred by quota"
-assert by_label["best"]["routing_reason"] == "preferred_weekly_healthier"
-PY
+node verification/tooling/quota-smoke-assertions.ts plan1 "${json_output}"
 
 echo "quota routing plan1 observability smoke ok: ${smoke_root}"

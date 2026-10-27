@@ -1,0 +1,125 @@
+{
+  "mode": "plan3-installed",
+  "secret": "private-canary",
+  "payload": {
+    "router_process": {
+      "pid": 77,
+      "spawned_real_serve_child": true
+    },
+    "shared_router_pid": 77,
+    "clients": {
+      "count": 3,
+      "all_success": true,
+      "statuses": [
+        {
+          "status": "exit status: 0",
+          "stdout_contains_smoke_text": true
+        }
+      ]
+    },
+    "upstream": {
+      "active_high_water": 3,
+      "overlap_proven": true,
+      "target_model_session_count": 3
+    }
+  },
+  "originalSHA256": "c6fafb6c12cc88e47091b114634afdd44d7134c81f5750441f44672127cc756e",
+  "cases": [
+    {
+      "name": "valid original input",
+      "path": [],
+      "action": "keep",
+      "accepted": true
+    },
+    {
+      "name": "delete router_process",
+      "path": ["router_process"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete router_process.pid",
+      "path": ["router_process", "pid"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete router_process.spawned_real_serve_child",
+      "path": ["router_process", "spawned_real_serve_child"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete shared_router_pid",
+      "path": ["shared_router_pid"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients",
+      "path": ["clients"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients.count",
+      "path": ["clients", "count"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients.all_success",
+      "path": ["clients", "all_success"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients.statuses",
+      "path": ["clients", "statuses"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients.statuses.0",
+      "path": ["clients", "statuses", "0"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients.statuses.0.status",
+      "path": ["clients", "statuses", "0", "status"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete clients.statuses.0.stdout_contains_smoke_text",
+      "path": ["clients", "statuses", "0", "stdout_contains_smoke_text"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream",
+      "path": ["upstream"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream.active_high_water",
+      "path": ["upstream", "active_high_water"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream.overlap_proven",
+      "path": ["upstream", "overlap_proven"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream.target_model_session_count",
+      "path": ["upstream", "target_model_session_count"],
+      "action": "delete",
+      "accepted": false
+    }
+  ]
+}

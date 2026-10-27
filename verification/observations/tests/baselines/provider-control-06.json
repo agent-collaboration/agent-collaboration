@@ -1,0 +1,652 @@
+{
+  "input": {
+    "name": "initialize-tool",
+    "action": "initialize-approver",
+    "plan": {
+      "cli": "<CLI>",
+      "evidence": "<ROOT>/evidence",
+      "service_directory": "<ROOT>/service",
+      "caller_session_id": "caller",
+      "endpoint_id": "claude-local",
+      "settings": {
+        "mode": "manual-mode",
+        "model": "provider-model",
+        "effort": "low"
+      },
+      "tools": null,
+      "approver": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "approver"
+      }
+    },
+    "manifest": {
+      "serviceId": "00000000-0000-7000-8000-000000000001",
+      "serviceEpoch": "epoch",
+      "serviceVersion": "test",
+      "machineLabel": "synthetic",
+      "routerProxyEndpoint": "http://127.0.0.1:1",
+      "mcp": {
+        "url": "<RPC>"
+      }
+    },
+    "files": {
+      "target-binding": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      },
+      "session-inspect": {
+        "record": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "state": "idle",
+          "capabilities": {
+            "elicitation": true
+          },
+          "settingsCatalog": {
+            "currentMode": "manual-mode",
+            "modes": [
+              {
+                "value": "manual-mode",
+                "label": "Manual"
+              }
+            ],
+            "configOptions": [
+              {
+                "id": "model",
+                "category": "model",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "provider-model"
+                },
+                "choices": [
+                  {
+                    "value": "provider-model",
+                    "label": "Actual provider model"
+                  }
+                ]
+              },
+              {
+                "id": "effort",
+                "category": "effort",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "low"
+                },
+                "choices": [
+                  {
+                    "value": "low",
+                    "label": "Low"
+                  }
+                ]
+              },
+              {
+                "id": "thinking",
+                "category": null,
+                "currentValue": {
+                  "kind": "boolean",
+                  "value": true
+                },
+                "choices": []
+              }
+            ]
+          },
+          "retainedExtension": {
+            "precision": "2026-10-26T01:02:03.123456789Z"
+          }
+        }
+      },
+      "create-intent": {
+        "operationId": "00000000-0000-7000-8000-000000000002"
+      }
+    },
+    "responses": {
+      "provider_session_inspect": [
+        {
+          "record": {
+            "target": {
+              "endpoint": {
+                "serviceId": "00000000-0000-7000-8000-000000000001",
+                "endpointId": "claude-local"
+              },
+              "sessionId": "requester"
+            },
+            "state": "idle",
+            "capabilities": {
+              "elicitation": true
+            },
+            "settingsCatalog": {
+              "currentMode": "manual-mode",
+              "modes": [
+                {
+                  "value": "manual-mode",
+                  "label": "Manual"
+                }
+              ],
+              "configOptions": [
+                {
+                  "id": "model",
+                  "category": "model",
+                  "currentValue": {
+                    "kind": "select",
+                    "value": "provider-model"
+                  },
+                  "choices": [
+                    {
+                      "value": "provider-model",
+                      "label": "Actual provider model"
+                    }
+                  ]
+                },
+                {
+                  "id": "effort",
+                  "category": "effort",
+                  "currentValue": {
+                    "kind": "select",
+                    "value": "low"
+                  },
+                  "choices": [
+                    {
+                      "value": "low",
+                      "label": "Low"
+                    }
+                  ]
+                },
+                {
+                  "id": "thinking",
+                  "category": null,
+                  "currentValue": {
+                    "kind": "boolean",
+                    "value": true
+                  },
+                  "choices": []
+                }
+              ]
+            },
+            "retainedExtension": {
+              "precision": "2026-10-26T01:02:03.123456789Z"
+            }
+          }
+        }
+      ],
+      "conversation_prompt": [
+        {
+          "settlement": {
+            "detail": {
+              "output": {
+                "text": "TEST_APPROVER_READY"
+              }
+            }
+          }
+        }
+      ],
+      "conversation_operation_show": [
+        {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "binding": {
+            "binding": {
+              "generation": {
+                "serviceEpoch": "epoch",
+                "generation": 1
+              }
+            }
+          },
+          "stage": "terminal",
+          "effect": "applied",
+          "reconciliation": "confirmed"
+        }
+      ],
+      "events_observe": [
+        {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "generation": {
+            "serviceEpoch": "epoch",
+            "generation": 1
+          },
+          "attached": true,
+          "endReason": "deadlineReached",
+          "extra": "retained",
+          "events": [
+            {
+              "sequence": 1,
+              "event": {
+                "kind": "turnStarted",
+                "turnId": "turn",
+                "inputId": "input"
+              }
+            },
+            {
+              "sequence": 2,
+              "event": {
+                "kind": "itemUpdated",
+                "item": {
+                  "itemId": "tool",
+                  "kind": {
+                    "kind": "toolCall",
+                    "status": "completed"
+                  },
+                  "text": "must not retain",
+                  "detail": {
+                    "kept": true
+                  }
+                }
+              }
+            },
+            {
+              "sequence": 3,
+              "event": {
+                "kind": "itemUpdated",
+                "item": {
+                  "itemId": "text",
+                  "kind": {
+                    "kind": "text"
+                  },
+                  "text": "do not keep"
+                }
+              }
+            },
+            {
+              "sequence": 4,
+              "event": {
+                "kind": "inputAccepted",
+                "turnId": "turn",
+                "inputId": "input"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "expected": {
+    "calls": [
+      {
+        "name": "provider_session_inspect",
+        "arguments": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          }
+        }
+      },
+      {
+        "name": "conversation_prompt",
+        "arguments": {
+          "operationId": "<OPERATION>",
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "requestedBy": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "codex-local"
+            },
+            "sessionId": "caller"
+          },
+          "approver": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "approver"
+          },
+          "message": {
+            "kind": "agent",
+            "sender": {
+              "endpoint": {
+                "serviceId": "00000000-0000-7000-8000-000000000001",
+                "endpointId": "codex-local"
+              },
+              "sessionId": "caller"
+            },
+            "text": "You are a dedicated test-automation notification sink on this debug Host. For every future Router Question or Approval notice, call no tools, make no decision, change nothing, and reply exactly TEST_NOTICE_ACK. An external test driver will answer the actual requests explicitly under your real Session identity. For this initialization only, call no tools and reply exactly TEST_APPROVER_READY, then end the turn."
+          },
+          "timeoutSeconds": 60
+        }
+      },
+      {
+        "name": "conversation_operation_show",
+        "arguments": {
+          "operationId": "<OPERATION>"
+        }
+      },
+      {
+        "name": "events_observe",
+        "arguments": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "timeoutSeconds": 1,
+          "maxEvents": 1024,
+          "maxBytes": 1048576
+        }
+      }
+    ],
+    "files": {
+      "callback-events.json": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-7000-8000-000000000001",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "events": [
+          {
+            "sequence": 1,
+            "event": {
+              "kind": "turnStarted",
+              "turnId": "turn",
+              "inputId": "input"
+            }
+          },
+          {
+            "sequence": 2,
+            "event": {
+              "kind": "itemUpdated",
+              "item": {
+                "itemId": "tool",
+                "kind": {
+                  "kind": "toolCall",
+                  "status": "completed"
+                },
+                "detail": {
+                  "kept": true
+                }
+              }
+            }
+          },
+          {
+            "sequence": 4,
+            "event": {
+              "kind": "inputAccepted",
+              "turnId": "turn",
+              "inputId": "input"
+            }
+          }
+        ],
+        "observation": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "generation": {
+            "serviceEpoch": "epoch",
+            "generation": 1
+          },
+          "attached": true,
+          "endReason": "deadlineReached",
+          "extra": "retained"
+        }
+      },
+      "conversation_prompt-intent.json": {
+        "at": "<TIMESTAMP>",
+        "arguments": {
+          "operationId": "<OPERATION>",
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "requestedBy": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "codex-local"
+            },
+            "sessionId": "caller"
+          },
+          "approver": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "approver"
+          },
+          "message": {
+            "kind": "agent",
+            "sender": {
+              "endpoint": {
+                "serviceId": "00000000-0000-7000-8000-000000000001",
+                "endpointId": "codex-local"
+              },
+              "sessionId": "caller"
+            },
+            "text": "You are a dedicated test-automation notification sink on this debug Host. For every future Router Question or Approval notice, call no tools, make no decision, change nothing, and reply exactly TEST_NOTICE_ACK. An external test driver will answer the actual requests explicitly under your real Session identity. For this initialization only, call no tools and reply exactly TEST_APPROVER_READY, then end the turn."
+          },
+          "timeoutSeconds": 60
+        },
+        "testAutomation": true
+      },
+      "conversation_prompt-result.json": {
+        "settlement": {
+          "detail": {
+            "output": {
+              "text": "TEST_APPROVER_READY"
+            }
+          }
+        }
+      },
+      "create-intent.json": {
+        "operationId": "<OPERATION>"
+      },
+      "initialization-operation.json": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-7000-8000-000000000001",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "binding": {
+          "binding": {
+            "generation": {
+              "serviceEpoch": "epoch",
+              "generation": 1
+            }
+          }
+        },
+        "stage": "terminal",
+        "effect": "applied",
+        "reconciliation": "confirmed"
+      },
+      "pre-input-qualification.json": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-7000-8000-000000000001",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "actualInspection": {
+          "record": {
+            "target": {
+              "endpoint": {
+                "serviceId": "00000000-0000-7000-8000-000000000001",
+                "endpointId": "claude-local"
+              },
+              "sessionId": "requester"
+            },
+            "state": "idle",
+            "capabilities": {
+              "elicitation": true
+            },
+            "settingsCatalog": {
+              "currentMode": "manual-mode",
+              "modes": [
+                {
+                  "value": "manual-mode",
+                  "label": "Manual"
+                }
+              ],
+              "configOptions": [
+                {
+                  "id": "model",
+                  "category": "model",
+                  "currentValue": {
+                    "kind": "select",
+                    "value": "provider-model"
+                  },
+                  "choices": [
+                    {
+                      "value": "provider-model",
+                      "label": "Actual provider model"
+                    }
+                  ]
+                },
+                {
+                  "id": "effort",
+                  "category": "effort",
+                  "currentValue": {
+                    "kind": "select",
+                    "value": "low"
+                  },
+                  "choices": [
+                    {
+                      "value": "low",
+                      "label": "Low"
+                    }
+                  ]
+                },
+                {
+                  "id": "thinking",
+                  "category": null,
+                  "currentValue": {
+                    "kind": "boolean",
+                    "value": true
+                  },
+                  "choices": []
+                }
+              ]
+            },
+            "retainedExtension": {
+              "precision": "2026-10-26T01:02:03.123456789Z"
+            }
+          }
+        },
+        "selectedSettings": {
+          "mode": "manual-mode",
+          "model": "provider-model",
+          "effort": "low"
+        },
+        "tools": null,
+        "kind": "noToolsApproverInitialization"
+      },
+      "session-inspect.json": {
+        "record": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "state": "idle",
+          "capabilities": {
+            "elicitation": true
+          },
+          "settingsCatalog": {
+            "currentMode": "manual-mode",
+            "modes": [
+              {
+                "value": "manual-mode",
+                "label": "Manual"
+              }
+            ],
+            "configOptions": [
+              {
+                "id": "model",
+                "category": "model",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "provider-model"
+                },
+                "choices": [
+                  {
+                    "value": "provider-model",
+                    "label": "Actual provider model"
+                  }
+                ]
+              },
+              {
+                "id": "effort",
+                "category": "effort",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "low"
+                },
+                "choices": [
+                  {
+                    "value": "low",
+                    "label": "Low"
+                  }
+                ]
+              },
+              {
+                "id": "thinking",
+                "category": null,
+                "currentValue": {
+                  "kind": "boolean",
+                  "value": true
+                },
+                "choices": []
+              }
+            ]
+          },
+          "retainedExtension": {
+            "precision": "2026-10-26T01:02:03.123456789Z"
+          }
+        }
+      },
+      "target-binding.json": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      }
+    },
+    "stdout": [],
+    "failure": {
+      "category": "RuntimeError",
+      "message": "approver initialization used a tool or requested an interaction"
+    }
+  }
+}

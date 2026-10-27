@@ -1,0 +1,36 @@
+{
+  "original": "crates/agent-collaboration/src/session_commands/source_action_transport_tests.rs#managed-wrong-id",
+  "originalSHA256": "6b81d79c932ab9d3b34baca42948ed83a752b7e1fe0cef835e661dba3c1bf02e",
+  "target": "source-ssh-agent.ts",
+  "arguments": [
+    "-T",
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "StrictHostKeyChecking=yes",
+    "-o",
+    "ConnectTimeout=5",
+    "--",
+    "source.example.invalid",
+    "exec '/fixed/agent-sessions' --source-request-v1 '{\"serviceDirectory\":\"/private/source'\"'\"'s root\",\"expectedService\":\"00000000-0000-4000-8000-000000000001\",\"operation\":{\"kind\":\"nativeClaude\",\"operationId\":\"019f0000-0000-7000-8000-000000000001\",\"serviceEpoch\":\"00000000-0000-4000-8000-000000000002\",\"action\":{\"target\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"source\"},\"sessionId\":\"captured\"},\"directory\":\"/source/project\",\"arguments\":[{\"Unix\":[45,45,110,97,109,101]},{\"Unix\":[108,105,116,101,114,97,108,32,118,97,108,117,101]}]}}}'"
+  ],
+  "stdin": "",
+  "configuration": {
+    "kind": "receipt"
+  },
+  "environment": {
+    "SOURCE_SSH_COUNT": "<ROOT>/count",
+    "SOURCE_SSH_MODE": "managed-wrong-id",
+    "SOURCE_EXECUTABLE": "/fixed/agent-sessions",
+    "SOURCE_SSH_TRANSCRIPT": "<ROOT>/trace"
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"kind\": \"ready\", \"reply\": {\"kind\": \"providerAction\", \"result\": {\"kind\": \"unknown\", \"operationId\": \"019f0000-0000-7000-8000-000000000002\", \"target\": {\"endpoint\": {\"serviceId\": \"00000000-0000-4000-8000-000000000001\", \"endpointId\": \"source\"}, \"sessionId\": \"captured\"}}}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "count": "ssh\n"
+    }
+  }
+}

@@ -23,8 +23,8 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 127
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required" >&2
   exit 127
 fi
 
@@ -137,64 +137,6 @@ for forbidden in "acct_askluna" "acct_matches" "acct_ssdev" "access-token" "refr
   fi
 done
 
-python3 -c '
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-assert payload["route_band"] == "responses"
-assert payload["selected_pool"] in {"usable", "reserve", "none"}
-assert len(payload["accounts"]) == 3
-
-by_label = {account["safe_account_label"]: account for account in payload["accounts"]}
-assert by_label["askluna"]["availability"] == "blocked"
-assert by_label["askluna"]["next_use"] == "blocked"
-assert by_label["matches"]["availability"] in {"usable", "reserve"}
-assert by_label["ssdev"]["availability"] in {"usable", "reserve"}
-assert "weighted_candidates" not in payload
-assert "routing_weight" not in by_label["ssdev"]
-assert by_label["ssdev"]["weekly_quota_guard"] == 3
-assert "weekly_survival_margin_basis_points" in by_label["ssdev"]
-assert "weekly_projected_exhaustion_unix_seconds" in by_label["ssdev"]
-assert by_label["ssdev"]["short_guard_result"] in {"pass", "held", "unknown"}
-assert "current_active_sessions" in by_label["ssdev"]
-assert by_label["ssdev"]["active_session_source"] in {"sqlx_mirror", "unavailable"}
-assert by_label["ssdev"]["weekly_burn_rate_confidence"] in {
-    "unknown",
-    "insufficient",
-    "low",
-    "normal",
-    "stale",
-}
-assert "hard_block_reason" in by_label["ssdev"]
-assert "routing_weight" not in by_label["matches"]
-assert by_label["matches"]["weekly_quota_guard"] == 32
-
-for account in payload["accounts"]:
-    assert len(account["windows"]) == 2
-    assert "routing_weight" not in account
-    assert "short_quota_risk" not in account
-    assert "weekly_quota_risk" not in account
-    assert "short_quota_guard" in account
-    assert "weekly_quota_guard" in account
-    assert account["routing_reason"] in {
-        "preferred_weekly_healthier",
-        "preferred_weekly_reset_soon",
-        "preferred_short_reset_soon",
-        "preferred_safest_quota",
-        "available_same_pool",
-        "held_reserve",
-        "held_unknown",
-        "held_short_window_guard",
-        "unknown_fallback_preferred",
-        "unknown_fallback_available",
-        "excluded_disabled",
-        "excluded_missing_credential",
-        "blocked_window_exhausted",
-        "blocked_window_ineligible",
-    }
-' "${json_output}"
+node verification/tooling/quota-smoke-assertions.ts status "${json_output}"
 
 echo "quota status smoke ok: ${smoke_root}"

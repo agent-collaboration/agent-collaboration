@@ -104,11 +104,13 @@ impl AcpWireFixture {
         let root = tempfile::tempdir().expect("fixture root");
         let receipt = root.path().join("wire.json");
         let launch = ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".into(),
-                "-c".into(),
-                include_str!("scripted_acp_agent.py").into(),
+                concat!(
+                    env!("CARGO_MANIFEST_DIR"),
+                    "/../../verification/fixtures/cursor-settings-agent.ts"
+                )
+                .into(),
                 scenario.into(),
                 receipt.to_string_lossy().into_owned(),
             ],

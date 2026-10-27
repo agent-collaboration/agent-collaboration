@@ -1,0 +1,17 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#concurrent-session/new",
+  "originalSHA256": "7a7f2f202740807344179d37ac70e5b93e5e2f71f3ef0d30cc1a4938a6136897",
+  "target": "host-admission-agent.ts",
+  "arguments": ["concurrent", "session/new", "<RECEIPT>"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"method\": \"session/cancel\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"concurrent-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"active-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"cancelled\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"sessionId\": \"new-session\"}}\n",
+    "stderr": "",
+    "receipt": "observed",
+    "files": {
+      "receipt.json": "observed"
+    }
+  }
+}

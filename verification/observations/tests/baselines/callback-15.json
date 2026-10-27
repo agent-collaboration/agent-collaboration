@@ -1,0 +1,32 @@
+{
+  "function": "read_snapshot",
+  "name": "test_scoped_sqlite_decoder_retains_raw_metadata_and_creation_precision",
+  "args": ["<database>", ["question"]],
+  "databasePresent": true,
+  "databaseFile": "callback-db-15.sqlite",
+  "expected": {
+    "result": {
+      "database": "<database>",
+      "revision": 4,
+      "records": [
+        {
+          "requestId": "question",
+          "record": {
+            "kind": "question",
+            "state": {
+              "kind": "answered",
+              "content": {
+                "choice": "first"
+              }
+            },
+            "request": {
+              "requestId": "question"
+            },
+            "unknownMetadata": [true, null, "retained"]
+          },
+          "createdAt": "2026-10-16T00:00:00.123456789Z"
+        }
+      ]
+    }
+  }
+}

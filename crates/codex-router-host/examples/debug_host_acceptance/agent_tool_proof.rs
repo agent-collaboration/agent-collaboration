@@ -130,12 +130,16 @@ impl DeniedTargets {
         Ok(&self.task_file)
     }
     fn command(&self) -> Result<String, Box<dyn Error>> {
-        let script = format!(
-            "import socket,errno\nfor family,address in [(socket.AF_UNIX,{}),(socket.AF_INET,(\"127.0.0.1\",{}))]:\n s=socket.socket(family,socket.SOCK_STREAM);s.settimeout(2)\n try:\n  s.connect(address)\n except OSError as e:\n  assert e.errno in (errno.EPERM,errno.EACCES), \"connection did not fail by permission\"\n else:\n  raise RuntimeError(\"unrelated connection allowed\")\n finally:\n  s.close()\nprint(\"NARROW_ACCESS_DENIED\")",
-            serde_json::to_string(self.socket.to_str().ok_or("socket path")?)?,
+        let node = codex_router_test_support::node_fixture::node_executable()?;
+        let program =
+            codex_router_test_support::node_fixture::fixture_program("narrow-access-probe.ts");
+        Ok(format!(
+            "{} {} {} {} NARROW_ACCESS_DENIED",
+            quote(node.to_str().ok_or("Node path")?),
+            quote(program.to_str().ok_or("probe path")?),
+            quote(self.socket.to_str().ok_or("socket path")?),
             self.tcp.local_addr()?.port()
-        );
-        Ok(format!("python3 -c {}", quote(&script)))
+        ))
     }
 }
 impl Drop for DeniedTargets {

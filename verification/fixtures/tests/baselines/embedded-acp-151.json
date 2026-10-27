@@ -1,0 +1,14 @@
+{
+  "original": "Provider route integration#idle-drop",
+  "originalSHA256": "7c94949640a7dbf003f4b542c4cda1848b1d69dcdf483683ce92be5627977725",
+  "target": "provider-steering-route-agent.ts",
+  "arguments": ["drop"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"_session/steering\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"claude-fixture\", \"version\": \"1\"}, \"_meta\": {\"steering\": {\"supported\": true}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

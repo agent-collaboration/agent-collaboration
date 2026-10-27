@@ -1,0 +1,62 @@
+{
+  "function": "require_advertised_settings",
+  "name": "test_invented_model_sku_is_rejected",
+  "args": [
+    {
+      "settingsCatalog": {
+        "currentMode": "manual-mode",
+        "modes": [
+          {
+            "value": "manual-mode",
+            "label": "Manual"
+          }
+        ],
+        "configOptions": [
+          {
+            "id": "model",
+            "category": "model",
+            "currentValue": {
+              "kind": "select",
+              "value": "provider-model"
+            },
+            "choices": [
+              {
+                "value": "provider-model",
+                "label": "Actual provider model"
+              }
+            ]
+          },
+          {
+            "id": "effort",
+            "category": "effort",
+            "currentValue": {
+              "kind": "select",
+              "value": "low"
+            },
+            "choices": [
+              {
+                "value": "low",
+                "label": "Low"
+              }
+            ]
+          },
+          {
+            "id": "thinking",
+            "category": null,
+            "currentValue": {
+              "kind": "boolean",
+              "value": true
+            },
+            "choices": []
+          }
+        ]
+      }
+    },
+    {
+      "model": "provider-model-low"
+    }
+  ],
+  "expected": {
+    "error": "actual provider setting differs from selected advertised value"
+  }
+}

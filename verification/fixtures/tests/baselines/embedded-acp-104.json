@@ -1,0 +1,14 @@
+{
+  "original": "Host provider owner#hub-create",
+  "originalSHA256": "573186a1fc63e20c20472f658015e7baf9cb47d93bd0121b78b4076893c06c95",
+  "target": "host-hub-lifecycle-agent.ts",
+  "arguments": ["create"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"resume\": {}}}, \"agentInfo\": {\"name\": \"hub-lifecycle-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

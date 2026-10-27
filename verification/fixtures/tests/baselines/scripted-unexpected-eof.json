@@ -1,0 +1,19 @@
+{
+  "name": "unexpected-eof",
+  "steps": [
+    {
+      "action": "expect_message",
+      "message": {
+        "method": "expected"
+      }
+    }
+  ],
+  "input": "",
+  "expected": {
+    "status": 1,
+    "stdout": "",
+    "stderr": "ACP fixture step 1 mismatch\nexpected: \"JSON-RPC message\"\nactual:   \"EOF\"\n",
+    "receipt": null,
+    "marker": false
+  }
+}

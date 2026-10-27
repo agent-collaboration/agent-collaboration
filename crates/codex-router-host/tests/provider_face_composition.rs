@@ -39,18 +39,11 @@ async fn composed_acp_connection_admits_provider_without_codex_generation() {
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
-    let provider = root.path().join("acp-provider.py");
-    std::fs::write(
+    let provider = root.path().join("acp-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
         &provider,
-        r#"#!/usr/bin/python3
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'acp-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'acp-provider-session'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"acp"}),
     )
     .expect("provider fixture");
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))
@@ -178,31 +171,13 @@ async fn app_server_socket_creates_and_prompts_with_the_owner_identity() {
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
-    let provider = root.path().join("tui-provider.py");
-    std::fs::write(&provider, r#"#!/usr/bin/python3
-import json,sys
-def receive(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value)); sys.stdout.flush()
-request=receive()
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'tui-fixture','version':'1'}}})
-request=receive()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'tui-provider-session'}})
-request=receive()
-assert request['method']=='session/prompt'
-assert request['params']['prompt']==[{'type':'text','text':'hello from TUI'}]
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'tui-provider-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'fixture reply'}}}})
-send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-request=receive()
-assert request['method']=='session/prompt'
-assert request['params']['prompt']==[{'type':'text','text':'queued by another agent'}]
-send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-request=receive()
-assert request['method']=='session/prompt'
-assert request['params']['prompt']==[{'type':'text','text':'prompt by another agent'}]
-send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#).expect("provider fixture");
+    let provider = root.path().join("tui-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &provider,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"tui"}),
+    )
+    .expect("provider fixture");
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))
         .expect("provider executable");
     let owner = message_board::HumanId::try_from("tui-owner".to_owned()).expect("owner HumanId");

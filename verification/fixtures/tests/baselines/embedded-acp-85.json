@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime#owned",
+  "originalSHA256": "1b375a7a5b1a9cc0e87028e66d8dbf4c555adc027c2ae12edb193ac22a944824",
+  "target": "host-live-approval-agent.ts",
+  "arguments": ["owned"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"owned-result-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

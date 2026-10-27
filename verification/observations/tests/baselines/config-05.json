@@ -1,0 +1,43 @@
+{
+  "name": "same-prefix-worktree",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[projects.\"/fixture/run.another-worktree\"]\ntrust_level = \"trusted\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[projects.\"/fixture/run.another-worktree\"]",
+        "table": ["projects", "/fixture/run.another-worktree"],
+        "occurrence": 0,
+        "sha256": "4d48f5b11a42fb66c80babf725cd9438c0cd4f3876dc3fc2225dbe24b84433a4",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[projects.\"/fixture/run.another-worktree\"]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "4d48f5b11a42fb66c80babf725cd9438c0cd4f3876dc3fc2225dbe24b84433a4",
+        "classification": "externalProjectSection"
+      }
+    ],
+    "allowed": true
+  }
+}

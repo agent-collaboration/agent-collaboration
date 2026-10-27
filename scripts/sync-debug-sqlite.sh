@@ -12,18 +12,13 @@ if [[ -z "$ROUTER_SOURCE" || -z "$CODEX_SOURCE" ]]; then
   exit 2
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required to validate debug SQLite destinations" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required to validate debug SQLite destinations" >&2
   exit 127
 fi
 
 canonical_path() {
-  python3 - "$1" <<'PY'
-import os
-import sys
-
-print(os.path.realpath(sys.argv[1]))
-PY
+  node "$ROOT/verification/tooling/path-inspection.ts" canonical "$1"
 }
 
 if [[ -L "$ROOT/tmp" ]]; then

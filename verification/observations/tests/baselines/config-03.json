@@ -1,0 +1,43 @@
+{
+  "name": "external-desktop",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[desktop.preferences]\nsecret = \"PRIVATE_VALUE_CANARY\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[desktop.preferences]",
+        "table": ["desktop", "preferences"],
+        "occurrence": 0,
+        "sha256": "6c2d9eda497ca6724f16d07d25fa8ff4e24a179a43aa708437a3c156f1247769",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[desktop.preferences]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "6c2d9eda497ca6724f16d07d25fa8ff4e24a179a43aa708437a3c156f1247769",
+        "classification": "externalDesktopSection"
+      }
+    ],
+    "allowed": true
+  }
+}

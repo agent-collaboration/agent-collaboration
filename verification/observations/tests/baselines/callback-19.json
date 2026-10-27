@@ -1,0 +1,53 @@
+{
+  "function": "compare_reopen",
+  "name": "test_unknown_fields_and_nanosecond_timestamps_remain_exact",
+  "args": [
+    {
+      "database": "/owned/interaction.sqlite",
+      "revision": 4,
+      "records": [
+        {
+          "requestId": "question",
+          "createdAt": "2026-10-16T00:00:00.000000000Z",
+          "record": {
+            "kind": "question",
+            "state": {
+              "kind": "answered",
+              "content": {
+                "choice": "first"
+              }
+            }
+          }
+        }
+      ],
+      "opaqueMetadata": {
+        "retained": [true, null, "unknown"]
+      }
+    },
+    {
+      "database": "/owned/interaction.sqlite",
+      "revision": 4,
+      "records": [
+        {
+          "requestId": "question",
+          "createdAt": "2026-10-16T00:00:00.000000001Z",
+          "record": {
+            "kind": "question",
+            "state": {
+              "kind": "answered",
+              "content": {
+                "choice": "first"
+              }
+            }
+          }
+        }
+      ],
+      "opaqueMetadata": {
+        "retained": [true, null, "unknown"]
+      }
+    }
+  ],
+  "expected": {
+    "error": "terminal content, creation instant, root or revision changed on owning reopen"
+  }
+}

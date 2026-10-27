@@ -1,0 +1,18 @@
+{
+  "original": "Composed Host integration#recovery-session/new",
+  "originalSHA256": "cc242bf60cc9c1b543d34fc561e816ece119cd3fbd8563995ff5b327a28bf4d5",
+  "target": "provider-recovery-agent.ts",
+  "arguments": ["held", "<ROOT>/dispatch.log", "<RECEIPT>", "session/new"],
+  "pidFiles": ["receipt.json"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"recovery-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": "<OWN_PID>",
+    "files": {
+      "dispatch.log": "session/new\n",
+      "receipt.json": "<OWN_PID>"
+    }
+  }
+}

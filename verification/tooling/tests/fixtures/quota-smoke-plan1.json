@@ -1,0 +1,180 @@
+{
+  "mode": "plan1",
+  "secret": "private-canary",
+  "payload": {
+    "route_band": "responses",
+    "accounts": [
+      {
+        "safe_account_label": "weak",
+        "preferred_next": false,
+        "active_clients": 1,
+        "active_clients_source": "sqlx_mirror",
+        "next_use": "preferred by quota",
+        "routing_reason": "preferred_weekly_healthier"
+      },
+      {
+        "safe_account_label": "mid",
+        "preferred_next": false,
+        "active_clients": 1,
+        "active_clients_source": "sqlx_mirror",
+        "next_use": "preferred by quota",
+        "routing_reason": "preferred_weekly_healthier"
+      },
+      {
+        "safe_account_label": "best",
+        "preferred_next": true,
+        "active_clients": 0,
+        "active_clients_source": "sqlx_mirror",
+        "next_use": "preferred by quota",
+        "routing_reason": "preferred_weekly_healthier"
+      }
+    ]
+  },
+  "originalSHA256": "05697a634cabd18653d9dd33f3e6031704de93803ce9ad5146b45c8228ed1c0c",
+  "cases": [
+    {
+      "name": "valid original input",
+      "path": [],
+      "action": "keep",
+      "accepted": true
+    },
+    {
+      "name": "delete route_band",
+      "path": ["route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts",
+      "path": ["accounts"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.0",
+      "path": ["accounts", "0"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.0.safe_account_label",
+      "path": ["accounts", "0", "safe_account_label"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.0.preferred_next",
+      "path": ["accounts", "0", "preferred_next"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.0.active_clients",
+      "path": ["accounts", "0", "active_clients"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.0.active_clients_source",
+      "path": ["accounts", "0", "active_clients_source"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.0.next_use",
+      "path": ["accounts", "0", "next_use"],
+      "action": "delete",
+      "accepted": true
+    },
+    {
+      "name": "delete accounts.0.routing_reason",
+      "path": ["accounts", "0", "routing_reason"],
+      "action": "delete",
+      "accepted": true
+    },
+    {
+      "name": "delete accounts.1",
+      "path": ["accounts", "1"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.1.safe_account_label",
+      "path": ["accounts", "1", "safe_account_label"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.1.preferred_next",
+      "path": ["accounts", "1", "preferred_next"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.1.active_clients",
+      "path": ["accounts", "1", "active_clients"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.1.active_clients_source",
+      "path": ["accounts", "1", "active_clients_source"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.1.next_use",
+      "path": ["accounts", "1", "next_use"],
+      "action": "delete",
+      "accepted": true
+    },
+    {
+      "name": "delete accounts.1.routing_reason",
+      "path": ["accounts", "1", "routing_reason"],
+      "action": "delete",
+      "accepted": true
+    },
+    {
+      "name": "delete accounts.2",
+      "path": ["accounts", "2"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.2.safe_account_label",
+      "path": ["accounts", "2", "safe_account_label"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.2.preferred_next",
+      "path": ["accounts", "2", "preferred_next"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.2.active_clients",
+      "path": ["accounts", "2", "active_clients"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.2.active_clients_source",
+      "path": ["accounts", "2", "active_clients_source"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.2.next_use",
+      "path": ["accounts", "2", "next_use"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete accounts.2.routing_reason",
+      "path": ["accounts", "2", "routing_reason"],
+      "action": "delete",
+      "accepted": false
+    }
+  ]
+}

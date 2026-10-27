@@ -1,0 +1,12 @@
+{
+  "function": "rpc_result",
+  "args": [
+    {
+      "status": 200,
+      "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{}}"
+    }
+  ],
+  "expected": {
+    "refused": true
+  }
+}

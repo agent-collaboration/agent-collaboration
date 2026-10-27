@@ -1,0 +1,16 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/robustness_tests.rs#replay",
+  "originalSHA256": "82112574d3dde42399679be2ea8ce3e8a33c94827c07062b18c9330e79de621d",
+  "target": "host-output-pressure-agent.ts",
+  "arguments": ["replay", "4097"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "865e4ae31cb35d64f65304b6e2541a5b9fba67282a262a2e47142ffb77868725",
+      "bytes": 806468
+    },
+    "stderr": "",
+    "receipt": null
+  }
+}
