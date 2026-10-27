@@ -9,11 +9,14 @@ use fleet_sync_tokio_runner::{NativeWriterRuntime, SessionRequests, WriterSessio
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderError, SenderOptions};
 use message_board::ProjectId;
 use message_board_storage::ProjectStorageError;
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, OnceCell, mpsc, watch},
     task::JoinSet,
 };
+
+// Retry failed copies after 500 ms; idle copies wait on commit events.
+const REPLICATION_ERROR_RETRY_AFTER: Duration = Duration::from_millis(500);
 
 type BoardWriterRuntime = NativeWriterRuntime<BoardProjectSchema, BoardConsumerProtocol>;
 type BoardReplicationSender = ReplicationSender<
@@ -90,7 +93,10 @@ impl ProjectWriter {
             Arc::new(BoardPieceAnnotation),
             Arc::new(BoardCaptureBookkeeping),
             runtime.transport(),
-            SenderOptions::default(),
+            SenderOptions {
+                retry_after: REPLICATION_ERROR_RETRY_AFTER,
+                ..SenderOptions::default()
+            },
         ));
         Ok(Self {
             runtime,
