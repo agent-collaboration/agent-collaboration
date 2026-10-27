@@ -88,10 +88,7 @@ mod tests {
             .to_owned()
             .try_into()
             .expect("epoch");
-        let peer = PeerId::new(
-            uuid::Uuid::parse_str("00000000-0000-4000-8000-000000000003").expect("peer UUID"),
-        )
-        .expect("peer");
+        let peer = PeerId::new(uuid::Uuid::now_v7()).expect("peer");
         let machine =
             MachineIdentity::new(service.clone(), Some("Router machine")).expect("machine");
         let identity = RouterIdentity::new(service.clone(), epoch.clone(), Some(peer), machine)

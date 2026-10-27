@@ -266,6 +266,7 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     let frozen = pause_mail(&request, &snapshot, deadline);
     freeze(&source, &frozen).await;
     let paused = owner_ops.wake_pause_local(request.clone()).await.unwrap();
+    drop(owner_ops);
     assert_eq!(paused.wakeup.state, WakeState::Paused);
     let result = retain_result
         .then(|| serde_json::from_value(json!({"kind":"mutation","value":paused})).unwrap());
