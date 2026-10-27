@@ -3,26 +3,25 @@ mod session_environment;
 pub use session_environment::CliContext;
 use session_environment::app_server_socket_or_default;
 pub use session_environment::{RunArgumentsFailure, run_arguments};
+mod details_client_composition;
+mod session_client_composition;
 #[path = "session_command_dispatch.rs"]
 mod sessions;
-mod presentation {
-    pub(crate) use crate::session_picker;
-}
-mod picker_runtime_status;
-mod session_picker;
 #[cfg(feature = "quota-reset-test-harness")]
 pub fn run_sessions_picker_test_harness() -> std::io::Result<()> {
-    session_picker::run_sessions_picker_test_harness()
+    if std::env::args().nth(2).as_deref() == Some("--provider-filter-storyboard") {
+        agent_session_picker::session_picker::run_sessions_picker_test_harness()
+    } else {
+        sessions::run_stored_model_terminal_fixture()
+    }
 }
-
-pub use sessions::SessionsCommandError;
 
 /// Public executable usage generated from its argument parser.
 #[must_use]
 pub fn command_help() -> String {
     let help = format!(
         "{}\nCollaboration:\n  central --central URL copies|copy|migrate|project --help\n  workspace|board|project|workstream|task|subtask|work-trail|thread|post|role|move|fact|feed|adr|process --help\n  operation show --operation-id UUID --json\n  delivery attempts --delivery-id UUID [--cursor CURSOR] --json\n  run summaries --run-id UUID [--cursor CURSOR] --json\n  automation events [--after CURSOR] [--limit 50] --json\n  instruction list --json\n  schedule list --json\n  run list --schedule-id UUID --json\n  revision list --instruction-id UUID --json\n  delivery list [--wakeup-id UUID] --json\n  delivery show --delivery-id UUID --json\n  schedule export --schedule-id UUID > schedule.jsonl\n  schedule import --package-file PATH [--overwrite] --json\n  automation status --json\n  automation configure --execution-timeout-seconds 3600 --summary-timeout-seconds 900 --json\n  run show --run-id UUID --json\n  run summary-retry|summary-skip --run-id UUID [--operation-id UUID] --json\n  schedule create --definition-file PATH [--operation-id UUID] --json\n  schedule show --schedule-id UUID --json\n  schedule prepare --schedule-id UUID --fresh --cwd PATH --json\n  schedule update --schedule-id UUID --expected-change-id UUID --definition-file PATH --json\n  schedule enable|disable --schedule-id UUID --json\n  wake send --to ADDRESS --from ADDRESS --text TEXT --every 10m --for 2h [--wait-until-first-fire] --json\n  wake show --wakeup-id UUID --json\n  wake list [--limit 50] [--cursor CURSOR] --json\n  wake pause|resume|cancel --wakeup-id UUID [--operation-id UUID] --json\n  instruction create --text TEXT [--operation-id UUID] --json\n  instruction show --instruction-id UUID --json\n  instruction update --instruction-id UUID --expected-revision-id UUID --text TEXT --json\n  conversation create --endpoint ID --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--mode ID] [--model ID] [--effort LEVEL] [--fork SESSION] [--generation JSON] [--timeout-seconds 300] --json\n  conversation settings set --target ADDRESS --actor ADDRESS --setting mode|model|effort --value ID --json\n  conversation settings accept --target ADDRESS --actor ADDRESS --json\n  conversation prompt --endpoint ID --new|--session ID|--fork ID|--to ADDRESS [--cwd PATH] [--operation-id UUID] [--prompt-operation-id UUID] [--generation JSON] --text-file PATH --json\n  conversation load --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation resume --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation close --target ADDRESS [--operation-id UUID] [--generation JSON] --json\n  conversation cancel --target ADDRESS --target-operation-id UUID [--operation-id UUID] [--generation JSON] --json\n  conversation operation show|wait|reconcile --operation-id UUID --json\n  sessions list --endpoint ID --view stored|loaded|active --cwd PATH|--checkout PATH|--repo PATH|--any [--source interactive|subagents|all] --json\n  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  message send --to ADDRESS --from ADDRESS [--delivery auto|queue|steer] --text TEXT --json\n  message send --human-user --to ADDRESS --text-file PATH --json\n  whoami [--json] (this agent's SessionRef from CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID or CURSOR_CONVERSATION_ID)\n  endpoints list --json [--service-directory PATH]\n  addresses list --endpoint ID --json [--cursor CURSOR]\n  session inspect --endpoint ID --session ID --json\n  session rename --endpoint ID --session ID --name TEXT --json\n  turn interrupt --endpoint ID --session ID --turn ID --json\n  native --endpoint ID\n  acp --endpoint ID\n  journal status --json\n  journal read --endpoint ID --journal-id UUID --after SEQUENCE --json\n",
-        sessions::command_help("agent-collaboration")
+        agent_session_inventory::sessions::command_help("agent-collaboration")
     );
     help.replace(
         "  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n",
@@ -45,7 +44,7 @@ pub fn command_help() -> String {
 /// Usage for the standalone session picker executable.
 #[must_use]
 pub fn session_command_help() -> String {
-    sessions::command_help("agent-sessions")
+    agent_session_inventory::sessions::command_help("agent-sessions")
 }
 
 mod current_session_identity;

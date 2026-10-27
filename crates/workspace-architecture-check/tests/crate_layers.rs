@@ -6,7 +6,36 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 4] = [
+const LAYER_POLICY: [(&str, &[&str]); 8] = [
+    ("node-test-fixture", &[]),
+    (
+        "agent-session-inventory",
+        &[
+            "node-test-fixture",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "agent-session-picker",
+        &[
+            "agent-session-inventory",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "agent-collaboration",
+        &[
+            "agent-session-inventory",
+            "agent-session-picker",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
     ("collaboration-contracts", &[]),
     ("collaboration-runtime", &["collaboration-contracts"]),
     (

@@ -1,6 +1,4 @@
 //! Real SQLite, peer registry, bounded job child and served MCP/client.
-#[path = "../../../codex-router-test-support/src/node_fixture.rs"]
-mod node_fixture;
 use super::served_api::ServedApi;
 use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
 use collaboration_protocol::{
@@ -11,6 +9,7 @@ use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
 use collaboration_runtime::ProviderSessionRecord;
 use collaboration_service::ApplicationFixture;
+use node_test_fixture as node_fixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;

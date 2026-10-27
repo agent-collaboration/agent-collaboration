@@ -19,4 +19,5 @@ thiserror.workspace = true
 tokio.workspace = true
 
 [dev-dependencies]
+node-test-fixture = { path = "../node-test-fixture" }
 tempfile = "3.27.0"
