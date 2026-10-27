@@ -15,10 +15,10 @@ use tokio::{
     task::JoinSet,
 };
 
-type BoardWriterRuntime = NativeWriterRuntime<BoardProjectSchema, BoardConsumerProtocol>;
-// Poll idle copies every 10 s until agent-fleet-sync supports event-driven local-write wakes.
-const REPLICATION_RETRY_AFTER: Duration = Duration::from_secs(10);
+// Retry failed copies after 500 ms; idle copies wait on commit events.
+const REPLICATION_ERROR_RETRY_AFTER: Duration = Duration::from_millis(500);
 
+type BoardWriterRuntime = NativeWriterRuntime<BoardProjectSchema, BoardConsumerProtocol>;
 type BoardReplicationSender = ReplicationSender<
     BoardProjectSchema,
     BoardPieceAnnotation,
@@ -98,7 +98,7 @@ impl ProjectWriter {
             Arc::new(BoardCaptureBookkeeping),
             runtime.transport(),
             SenderOptions {
-                retry_after: REPLICATION_RETRY_AFTER,
+                retry_after: REPLICATION_ERROR_RETRY_AFTER,
                 ..SenderOptions::default()
             },
         ));
