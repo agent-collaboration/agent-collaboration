@@ -37,6 +37,8 @@ Falsifiers:
 - A placed module needs an upward edge beyond the 3 handled in `module-placement.md`.
 - A family constructor can't be written without passing a services bag.
 - The ratchet takes more than 3 minutes in CI.
+  - **Fired, resolved 2026-10-27.** The ratchet step took 435 s in CI run 40441030104 (151 s on an M-series Mac). The cost this falsifier guards is static-job wall-clock time, and the ratchet runs as a `background: true` step. Main's static job takes about 17 minutes (run 40432253607), and its foreground steps alone are longer than 435 s: variant builds take 405 s, the Turso SQLx check 160 s and clippy 173 s. So the ratchet finishes inside the job, and its remaining cost is CPU contention.
+  - **Reopen** if the PR's first fully green static job exceeds main's by more than 3 minutes. The fix then is to scan crates in parallel inside the checker, not to drop the gate.
 
 ## Target structure
 
