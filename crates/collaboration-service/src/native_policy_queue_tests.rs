@@ -7,7 +7,7 @@ use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, OperationId, RouterOriginRef, SavedMessage,
 };
 use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_runtime::WakeDeliverySender;
+use collaboration_runtime::test_support::WakeDeliverySender;
 
 struct QueueObservation {
     intent: Option<PreparationEffect>,

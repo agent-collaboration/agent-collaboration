@@ -1,6 +1,7 @@
 //! Test-only hooks; the normal Host and CLI dependency graphs do not enable these.
 pub use crate::scheduled_route_fixture;
 pub use crate::scheduled_run_worker::ScheduledRunWorker;
+pub use crate::wakeup_delivery_sender::WakeDeliverySender;
 /// Test-only wake draft conversion at the durable evaluation boundary.
 pub fn build_wake_push_draft(
     wake: &agent_automation::WakeRecord<

@@ -1,7 +1,7 @@
 //! A permanent provider rejection must finish one wake delivery without retry eligibility.
 
-use super::WakeDeliverySender;
 use crate::AutomationConfigurationHandle;
+use crate::wakeup_delivery_sender::WakeDeliverySender;
 use agent_automation::{ExpiryRule, OperationId, TimingRule};
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
 use collaboration_contracts::AttemptEvidenceSink;

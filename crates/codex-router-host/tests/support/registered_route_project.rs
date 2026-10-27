@@ -1,4 +1,5 @@
 //! Typed requests for the route fixture; creation runs through its real enrolled Host.
+#![cfg(test)]
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use message_board::{
     BoardCreateRequest, BoardId, BoardKind, Description, HumanId, Identity, ProjectCreateRequest,

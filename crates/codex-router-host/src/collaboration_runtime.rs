@@ -109,6 +109,12 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    #[cfg(test)]
+    startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
+    #[cfg(test)]
+    startup_test_broker: std::sync::Weak<collaboration_runtime::ServiceInteractionBroker>,
+    #[cfg(test)]
+    startup_test_display_names: collaboration_runtime::SessionDisplayNameCache,
     #[cfg(feature = "runtime-test-support")]
     runtime_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
     notification_publisher: Option<std::sync::Arc<collaboration_service::NotificationPublisher>>,
@@ -214,6 +220,9 @@ mod lifecycle;
 mod native_backend;
 #[path = "collaboration_runtime/startup_composition.rs"]
 mod startup_composition;
+#[cfg(test)]
+#[path = "collaboration_runtime/startup_contract_tests.rs"]
+mod startup_contract_tests;
 
 impl Drop for CollaborationRuntime {
     fn drop(&mut self) {

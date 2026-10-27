@@ -39,6 +39,8 @@ mod frozen_cancel_outcome;
 mod frozen_handoff_status;
 pub(crate) use frozen_cancel_outcome::{FrozenCancelSettlement, RemoteCancelReplay};
 mod held_readiness;
+#[cfg(feature = "test-support")]
+mod inbound_wake_probe;
 mod installation_directory;
 mod local_admission;
 mod local_cancellation;

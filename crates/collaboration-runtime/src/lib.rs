@@ -148,8 +148,6 @@ mod project_replication_cursor;
 pub use project_replication_cursor::project_replication_cursor;
 pub mod observation_timestamp;
 
-pub use wakeup_delivery_sender::WakeDeliverySender;
-
 #[cfg(test)]
 #[path = "../tests/support/native_worker_faults.rs"]
 mod native_worker_faults;

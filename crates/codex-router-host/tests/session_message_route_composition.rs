@@ -1,12 +1,9 @@
-#![expect(
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! The Host's real router selects provider and peer clients through the collaboration API.
+#[path = "support/session_follow_fixture.rs"]
+mod follow_fixture;
 #[path = "support/registered_route_project.rs"]
 mod registered_route_project;
+use follow_fixture::post_thread_activity_for_sessions;
 #[path = "support/session_message_route_fixture.rs"]
 #[expect(
     dead_code,
@@ -26,9 +23,9 @@ use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
 use registered_route_project::route_project_requests;
 use route_fixture::{
-    create_provider_target, load_provider_target, message, post_thread_activity_for_sessions,
-    prompt_and_approve_from_peer_provider, provider_fixture, publish_peer, send_and_wait_wake,
-    wait_for_completed_provider_prompts, wait_for_prompt_text,
+    create_provider_target, load_provider_target, message, prompt_and_approve_from_peer_provider,
+    provider_fixture, publish_peer, send_and_wait_wake, wait_for_completed_provider_prompts,
+    wait_for_prompt_text,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;

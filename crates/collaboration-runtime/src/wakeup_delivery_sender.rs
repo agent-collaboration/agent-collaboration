@@ -45,6 +45,7 @@ impl WakeDeliverySender {
         Arc::clone(&self.interactions)
     }
 
+    #[cfg(feature = "test-support")]
     pub fn new(
         interactions: Arc<interaction_storage::InteractionStore>,
         delivery: Arc<dyn SessionMessageDelivery>,

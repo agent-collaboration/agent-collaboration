@@ -483,7 +483,7 @@ impl CollaborationRuntime {
             let board = collaboration_service::collaboration_application::BoardOperations::new(
                 identity.clone(),
                 project_admission.clone(),
-                project_claim.clone(),
+                project_claim,
                 notification_publisher.clone(),
                 subscription_delivery.clone(),
                 subscription_delivery
@@ -492,7 +492,7 @@ impl CollaborationRuntime {
                 subscription_clock.clone(),
                 Some(interactions.clone()),
                 mail_delivery.clone(),
-                project_replication.clone(),
+                project_replication,
                 session_context,
                 project_admission
                     .as_ref()
@@ -510,7 +510,7 @@ impl CollaborationRuntime {
             let conversations =
                 collaboration_service::collaboration_application::ConversationOperations::new(
                     identity.clone(),
-                    provider_conversations.clone(),
+                    provider_conversations,
                     provider_store.clone(),
                     codex_recorder.clone(),
                     endpoint_directory.clone(),
@@ -534,9 +534,9 @@ impl CollaborationRuntime {
                                 dyn collaboration_runtime::AutomationConfigurationBackend,
                             >
                     }),
-                    Some(session_delivery.clone()),
+                    Some(session_delivery),
                     Some(interactions.clone()),
-                    Some(scheduled_run_execution.clone()),
+                    Some(scheduled_run_execution),
                     Some(native_backend.clone()),
                 );
             let interactions =
@@ -662,10 +662,14 @@ impl CollaborationRuntime {
         // Runtime listeners now own these dependencies. Constructor-local hub,
         // router, presence and broker references can retain provider storage
         // transitively and must be gone before exposure-startup cleanup runs.
+        #[cfg(test)]
+        let startup_test_broker = std::sync::Arc::downgrade(&approval_broker);
         drop(provider_session_hub);
         drop(message_routes.router);
         drop(subscription_presence);
         drop(approval_broker);
+        drop(automation_store);
+        drop(interactions);
         let publication = publication.with_acp_listener()?;
         if let Some(settings) = settings_backend
             && settings.recover().await.is_err()
@@ -727,6 +731,8 @@ impl CollaborationRuntime {
                 shutdown: shutdown.clone(),
             });
         let mut tasks = JoinSet::new();
+        #[cfg(test)]
+        let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]
         let runtime_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         if let Some(mail) = mail_delivery {
@@ -770,6 +776,12 @@ impl CollaborationRuntime {
             tokio::spawn(async move { maintenance_store.run_maintenance(maintenance_stop).await })
         });
         let mut runtime = Self {
+            #[cfg(test)]
+            startup_test_mail,
+            #[cfg(test)]
+            startup_test_broker,
+            #[cfg(test)]
+            startup_test_display_names: display_names.clone(),
             #[cfg(feature = "runtime-test-support")]
             runtime_test_mail,
             notification_publisher,
