@@ -136,7 +136,7 @@ pub(super) struct OwnedCapture {
 
 pub(super) enum CapturedChildOwnership {
     FixtureCapability(String),
-    RetainedPythonChild,
+    RetainedAdapterChild,
 }
 
 pub(super) fn owned_capture_group_termination_command(group_id: u32) -> Command {
@@ -178,21 +178,21 @@ impl OwnedCapture {
                 CapturedChildOwnership::FixtureCapability(capability) => {
                     terminate_owned_pid(&self.output.join("quota-child.pid"), capability)
                 }
-                // The retained Python Popen owns component/public children whose
+                // The retained Node ChildProcess owns component/public children whose
                 // argv has no fixture capability. Never signal those PIDs here.
-                CapturedChildOwnership::RetainedPythonChild => Ok(()),
+                CapturedChildOwnership::RetainedAdapterChild => Ok(()),
             };
             let wrapper_cleanup = if matches!(
                 self.child_ownership,
-                CapturedChildOwnership::RetainedPythonChild
+                CapturedChildOwnership::RetainedAdapterChild
             ) && self.output.join("quota-wrapper.pid").exists()
                 && !self.output.join("quota-wrapper.identity").is_file()
             {
-                Err("retained Python wrapper identity missing; refusing signal".into())
+                Err("retained Node wrapper identity missing; refusing signal".into())
             } else {
                 terminate_owned_pid(
                     &self.output.join("quota-wrapper.pid"),
-                    &self.output.join("fixed_quota_child.py").to_string_lossy(),
+                    &self.output.join("fixture-command.json").to_string_lossy(),
                 )
             };
             let outcomes = [
@@ -200,7 +200,7 @@ impl OwnedCapture {
                 wrapper_cleanup,
                 terminate_owned_pid(
                     &self.output.join("ttyd.pid"),
-                    &self.output.join("fixed_quota_child.py").to_string_lossy(),
+                    &self.output.join("fixture-command.json").to_string_lossy(),
                 ),
                 owned_capture_group_termination_command(self.child.id())
                     .output()

@@ -41,55 +41,29 @@ pub(super) fn render_details(
     selected_conversation: Option<&SessionConversationPreview>,
     height: Size,
 ) -> AnyElement<'static> {
-    let wrap = if height == Size::Auto {
-        TextWrap::Wrap
-    } else {
-        TextWrap::NoWrap
-    };
+    if height == Size::Auto {
+        return render_structured_details(record, width, selected_conversation);
+    }
+    // Passive sidecar keeps its existing bounded, single-line facts.
+    let wrap = TextWrap::NoWrap;
     if record.identity.is_provider() {
         let detail_width = width.saturating_sub(4);
-        let display_line = |value: String| {
-            if height == Size::Auto {
-                value
-            } else {
-                fit_line(&value, detail_width)
-            }
-        };
+        let display_line = |value: String| fit_line(&value, detail_width);
         let endpoint = record.endpoint_label.as_deref().unwrap_or("Provider");
-        let state = if matches!(
-            &record.identity,
-            crate::sessions::SessionPickerIdentity::NativeClaude(_)
-        ) {
-            record.runtime_status.label()
-        } else {
-            match record.provider_state {
-                Some(collaboration_client::protocol::ProviderSessionState::Unloaded) => "Unloaded",
-                Some(collaboration_client::protocol::ProviderSessionState::Idle) => "Idle",
-                Some(collaboration_client::protocol::ProviderSessionState::Running) => "Running",
-                Some(collaboration_client::protocol::ProviderSessionState::RequiresAction) => {
-                    "Requires action"
-                }
-                Some(
-                    collaboration_client::protocol::ProviderSessionState::AuthenticationRequired,
-                ) => "Authentication required",
-                Some(collaboration_client::protocol::ProviderSessionState::Closed) => "Closed",
-                None => "Unknown",
-            }
-        };
+        let state = provider_state_label(record);
         return element! {
             View(
                 width: width as u32,
                 height,
                 flex_direction: FlexDirection::Column,
                 flex_shrink: 0.0_f32,
-                border_style: if height==Size::Auto {BorderStyle::None}else {BorderStyle::Single},
+                border_style: BorderStyle::Single,
                 border_color: Color::DarkGrey,
-                overflow: if height == Size::Auto { Overflow::Visible } else { Overflow::Hidden },
-                padding_left: if height==Size::Auto {0}else {1},
-                padding_right: if height==Size::Auto {0}else {1},
+                overflow: Overflow::Hidden,
+                padding_left:1,
+                padding_right:1,
             ) {
-                #((height!=Size::Auto).then(||element!(Text(content:record.full_title.clone(),color:Color::White,wrap))))
-                #((height==Size::Auto&&(!record.full_title.is_empty()||!record.title.is_empty())).then(||element!(Text(content:format!("Title: {}",if record.full_title.is_empty() {&record.title}else {&record.full_title}),color:Color::White,wrap))))
+                Text(content:record.full_title.clone(),color:Color::White,wrap)
                 Text(content:format!("Client: {}",record.client_provider_family().label()),color:Color::White,wrap)
                 Text(content:display_line(format!("Machine: {}",record.machine_label())),color:Color::Grey,wrap)
                 Text(content: display_line(format!("Session ID: {}", record.session_id)), color: Color::Grey, wrap)
@@ -126,15 +100,13 @@ pub(super) fn render_details(
             height,
             flex_shrink: 0.0_f32,
             flex_direction: FlexDirection::Column,
-            border_style: if height==Size::Auto {BorderStyle::None}else {BorderStyle::Single},
+            border_style: BorderStyle::Single,
             border_color: Color::DarkGrey,
-            overflow: if height == Size::Auto { Overflow::Visible } else { Overflow::Hidden },
-            padding_left: if height==Size::Auto {0}else {1},
-            padding_right: if height==Size::Auto {0}else {1},
+            overflow: Overflow::Hidden,
+            padding_left:1,
+            padding_right:1,
         ) {
-            #((height==Size::Auto&&(!record.full_title.is_empty()||!record.title.is_empty())).then(||element!(Text(content:format!("Title: {}",if record.full_title.is_empty() {&record.title}else {&record.full_title}),color:Color::White,wrap))))
             Text(content: format!("Session ID: {}", record.session_id), color: Color::Grey, weight: Weight::Normal, wrap)
-            #((height==Size::Auto).then(||element!(Text(content:format!("Working directory: {}",record.cwd.as_deref().unwrap_or("-")),color:Color::White,wrap))))
             View(height: 1) { Text(content: "") }
             UiHeading(content: "Conversation".to_owned(), level: UiHeadingLevel::Section)
             #(conversation_rows)
@@ -181,4 +153,106 @@ pub(super) fn detail_text(value: &str, width: usize, color: Color) -> AnyElement
         )
     }
     .into_any()
+}
+
+/// The modal body retains original values; its fixed context may shorten a title.
+fn render_structured_details(
+    record: &SessionPickerRecord,
+    width: usize,
+    selected_conversation: Option<&SessionConversationPreview>,
+) -> AnyElement<'static> {
+    let field = |label: &str, value: String, secondary: bool| {
+        element! {
+        codex_router_tui::FormField(label:label.to_owned(),label_width:18u16,stacked:width<52) {
+            codex_router_tui::UiText(content:value,role:if secondary {codex_router_tui::UiTextRole::Secondary}else {codex_router_tui::UiTextRole::Body},wrap:TextWrap::Wrap)
+        }
+    }.into_any()
+    };
+    let mut fields = vec![field("Session ID:", record.session_id.clone(), false)];
+    if record.identity.is_provider() {
+        fields.extend([
+            field(
+                "Endpoint:",
+                record
+                    .endpoint_label
+                    .clone()
+                    .unwrap_or_else(|| "Provider".to_owned()),
+                true,
+            ),
+            field("State:", provider_state_label(record).to_owned(), true),
+            field(
+                "Client:",
+                record.client_provider_family().label().to_owned(),
+                false,
+            ),
+            field("Machine:", record.machine_label().to_owned(), true),
+        ]);
+        if let Some(job) = &record.native_background {
+            fields.push(field(
+                "Job handle:",
+                String::from(job.job_handle.clone()),
+                true,
+            ));
+            fields.push(field(
+                "Job state:",
+                native_job_state_label(&job.state),
+                true,
+            ));
+        }
+        if let Some(peer) = &record.native_peer {
+            fields.push(field("Peer status:", format!("{:?}", peer.status), true));
+        }
+    }
+    fields.push(field(
+        "Working directory:",
+        record.cwd.clone().unwrap_or_else(|| "-".to_owned()),
+        false,
+    ));
+    let conversation = selected_conversation.unwrap_or(&record.conversation);
+    let history = if conversation.snippets.is_empty() {
+        vec![conversation_text(
+            conversation
+                .unavailable_reason
+                .as_deref()
+                .unwrap_or("history unavailable"),
+            Color::DarkGrey,
+        )]
+    } else {
+        conversation
+            .snippets
+            .iter()
+            .map(|snippet| conversation_text(&format!("• {snippet}"), Color::Grey))
+            .collect()
+    };
+    element! {
+        View(width:width as u32,max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+            #(fields)
+            UiHeading(content:"Original title",level:UiHeadingLevel::Section)
+            codex_router_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:codex_router_tui::UiTextRole::Body,wrap:TextWrap::Wrap)
+            UiHeading(content:"Conversation",level:UiHeadingLevel::Section)
+            #(history)
+        }
+    }.into_any()
+}
+
+fn provider_state_label(record: &SessionPickerRecord) -> &str {
+    if matches!(
+        &record.identity,
+        crate::sessions::SessionPickerIdentity::NativeClaude(_)
+    ) {
+        return record.runtime_status.label();
+    }
+    match record.provider_state {
+        Some(collaboration_client::protocol::ProviderSessionState::Unloaded) => "Unloaded",
+        Some(collaboration_client::protocol::ProviderSessionState::Idle) => "Idle",
+        Some(collaboration_client::protocol::ProviderSessionState::Running) => "Running",
+        Some(collaboration_client::protocol::ProviderSessionState::RequiresAction) => {
+            "Requires action"
+        }
+        Some(collaboration_client::protocol::ProviderSessionState::AuthenticationRequired) => {
+            "Authentication required"
+        }
+        Some(collaboration_client::protocol::ProviderSessionState::Closed) => "Closed",
+        None => "Unknown",
+    }
 }

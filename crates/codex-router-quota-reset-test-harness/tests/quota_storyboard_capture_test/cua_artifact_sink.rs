@@ -364,9 +364,13 @@ mod tests {
     const ORIGINAL: &[u8] = &[0xff, 0xd8, 0x00, 0x01, 0x7f, 0x80, 0xfe, 0xff, 0xd9];
 
     fn output() -> PathBuf {
+        // Parallel tests can read the same coarse clock value; the counter
+        // keeps each owned directory unique within this process.
+        static NEXT_OUTPUT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let path = std::env::temp_dir().join(format!(
-            "cua-artifact-test-{}-{}",
+            "cua-artifact-test-{}-{}-{}",
             std::process::id(),
+            NEXT_OUTPUT.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
                 .unwrap()
@@ -423,11 +427,30 @@ mod tests {
         assert!(second.starts_with("HTTP/1.1 409"), "{second}");
         assert_eq!(fs::read(image).unwrap(), ORIGINAL);
         let address = sink.address;
+        let nonce = sink.store.nonce.clone();
+        let export_path = format!("/export/{nonce}/quota-options-120x36");
         assert_eq!(sink.stop().await.unwrap(), 1);
-        assert!(
-            TcpStream::connect(address).await.is_err(),
-            "export listener must stop with lease"
-        );
+        if let Ok(mut stream) = TcpStream::connect(address).await {
+            // Retain who answered the freed address before failing: the stopped
+            // sink's own export route, or another listener on a reused port.
+            let request = format!(
+                "GET {export_path} HTTP/1.1\r\nHost: {address}\r\nConnection: close\r\n\r\n"
+            );
+            let mut response = Vec::new();
+            let outcome = tokio::time::timeout(Duration::from_secs(2), async {
+                stream.write_all(request.as_bytes()).await?;
+                stream.read_to_end(&mut response).await
+            })
+            .await;
+            let text = String::from_utf8_lossy(&response);
+            let served_own_export = text.starts_with("HTTP/1.1 200")
+                && text.contains("Save original")
+                && text.contains(&format!("<input type=hidden name=nonce value=\"{nonce}\">"));
+            let head = text.chars().take(200).collect::<String>();
+            panic!(
+                "export listener must stop with lease: {address} still accepted; old nonce route {outcome:?}; served_own_export={served_own_export}: {head:?}"
+            );
+        }
     }
 
     #[tokio::test]

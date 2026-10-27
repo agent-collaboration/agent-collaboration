@@ -1,0 +1,32 @@
+╭──────────────────────────────────────────────╮
+│ Quota                               [?] Help │
+│                                              │
+│ [/] Filters  All providers · Disabled shown  │
+│   ss-retail-relay-claude                     │
+│   OpenAI · 2 clients                         │
+│   ✓ Available                                │
+│   Weekly                                     │
+│   ██████ 92% left                            │
+│   Resets                                     │
+│   6d 16h                                     │
+│   5-hour                                     │
+│   No data reported                           │
+│   Weekly pace                                │
+│   Healthy · 0.89x                            │
+│                                              │
+│ ❯ ssdev                                      │
+│   OpenAI · 2 clients                         │
+│   ★ Preferred                                │
+│   Weekly                                     │
+│   ██████ 92% left                            │
+│   Resets                                     │
+│   6d 16h                                     │
+│   5-hour                                     │
+│   No data reported                           │
+│   Weekly pace                                │
+│   Healthy · 0.89x                            │
+│                                              │
+│   ss-retail-relay-claude                     │
+│   OpenAI · 2 clients                         │
+│ [enter] Details  [a] Account actions         │
+╰──────────────────────────────────────────────╯

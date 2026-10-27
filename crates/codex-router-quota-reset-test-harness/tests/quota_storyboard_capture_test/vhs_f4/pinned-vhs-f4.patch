@@ -1,17 +1,25 @@
 --- a/token/token.go
 +++ b/token/token.go
-@@ -52,0 +53 @@
+@@ -52,0 +53,3 @@
++	F1          = "F1"
 +	F4          = "F4"
-@@ -124,0 +126 @@
++	F5          = "F5"
+@@ -124,0 +128,3 @@
++	"F1":            F1,
 +	"F4":            F4,
-@@ -199 +201 @@
++	"F5":            F5,
+@@ -199 +205 @@
 -		ENTER, BACKSPACE, DELETE, TAB,
-+		ENTER, F4, BACKSPACE, DELETE, TAB,
++		ENTER, F1, F4, F5, BACKSPACE, DELETE, TAB,
 --- a/parser/parser.go
 +++ b/parser/parser.go
-@@ -144,0 +145 @@
+@@ -144,0 +145,3 @@
++		token.F1,
 +		token.F4,
++		token.F5,
 --- a/command.go
 +++ b/command.go
-@@ -46,0 +47 @@
+@@ -46,0 +47,3 @@
++	token.F1:          ExecuteKey(input.F1),
 +	token.F4:          ExecuteKey(input.F4),
++	token.F5:          ExecuteKey(input.F5),

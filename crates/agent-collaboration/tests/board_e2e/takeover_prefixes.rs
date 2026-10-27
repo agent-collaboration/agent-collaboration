@@ -1,7 +1,7 @@
 //! Three literal Copy prefixes decide which cause, allocation and generation survive.
 use super::{
     central_pair::{SecondHost, settled_view, work_view},
-    fixture::{BoardFixture, at},
+    fixture::{BoardFixture, accepted, at, identity},
     takeover_controls::{self as controls, BOUND},
     takeover_follows::{
         FollowMembership, TransferKind, delivered, only_item, submitted_item, transfer_to_second,
@@ -24,16 +24,46 @@ pub enum ReplicatedPrefix {
     Both,
 }
 
+#[derive(Clone, Copy)]
+enum LocalCaptureCut {
+    Observe,
+    HoldPriorPiece,
+}
+
 pub async fn prefix(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
     prefix: ReplicatedPrefix,
 ) -> FixtureResult {
+    prefix_at_capture_cut(fixture, second, prefix, LocalCaptureCut::Observe).await
+}
+
+pub async fn uncaptured_prefix(
+    fixture: &mut BoardFixture,
+    second: &mut SecondHost,
+) -> FixtureResult {
+    prefix_at_capture_cut(
+        fixture,
+        second,
+        ReplicatedPrefix::Neither,
+        LocalCaptureCut::HoldPriorPiece,
+    )
+    .await
+}
+
+async fn prefix_at_capture_cut(
+    fixture: &mut BoardFixture,
+    second: &mut SecondHost,
+    prefix: ReplicatedPrefix,
+    capture_cut: LocalCaptureCut,
+) -> FixtureResult {
     recipients::scenario(fixture, second, async move |fixture, second, peers| {
         Box::pin(controls::scenario(
             fixture,
             second,
-            async move |fixture, second| prove_prefix(fixture, second, peers, prefix).await,
+            async move |fixture, second| {
+                prove_prefix(fixture, second, peers, prefix, capture_cut).await
+            },
         ))
         .await
     })
@@ -45,6 +75,7 @@ async fn prove_prefix(
     second: &mut SecondHost,
     peers: &mut Recipients,
     prefix: ReplicatedPrefix,
+    capture_cut: LocalCaptureCut,
 ) -> FixtureResult {
     fixture.create().await?;
     peers
@@ -84,10 +115,19 @@ async fn prove_prefix(
             .await?
         }
     }
+    if matches!(capture_cut, LocalCaptureCut::HoldPriorPiece) {
+        // Hold an unrelated real Copy before committing the followed post.
+        // The actual stopped-owner readback below must then prove no capture.
+        commit_and_hold_prior_piece(fixture).await?;
+    }
+    // In the prior-piece cut, the hold blocks further same-copy ACK progress.
+    // Sample after that barrier and before the post; other cuts use only its epoch.
+    let pre_post_ack = controls::copy_ack(fixture).await?;
     let range = follow
         .post(fixture, "one literal takeover owed post")
         .await?;
-    let expected = acknowledged_cut(fixture, &follow, &range, &baseline, prefix).await?;
+    let expected =
+        acknowledged_cut(fixture, &follow, &range, &baseline, prefix, capture_cut).await?;
     let copy_before_crash = controls::copy_ack(fixture).await?;
     let stopped = fixture
         .host
@@ -119,9 +159,11 @@ async fn prove_prefix(
         &range,
         prefix,
         original.as_ref(),
-        copy_before_crash,
+        pre_post_ack,
+        capture_cut,
     )
     .await?;
+    eprintln!("T Copy ACK before crash: {copy_before_crash:?}");
     drop(stopped);
     transfer_to_second(fixture, second, TransferKind::Takeover).await?;
     match prefix {
@@ -133,16 +175,49 @@ async fn prove_prefix(
     assert_successor(fixture, second, peers, &follow, &range, prefix, original).await
 }
 
+async fn commit_and_hold_prior_piece(fixture: &BoardFixture) -> FixtureResult {
+    let marker = identity();
+    let request = identity();
+    let actor = fixture.owner.to_string();
+    let committed = fixture
+        .cli_write(&[
+            "workstream",
+            "create",
+            "--project-id",
+            &fixture.project,
+            "--workstream-id",
+            &marker,
+            "--name",
+            "earlier held Copy",
+            "--goal",
+            "hold a preceding write before the followed post",
+            "--request-id",
+            &request,
+            "--actor",
+            &actor,
+        ])
+        .await?;
+    accepted(&committed)?;
+    controls::held(fixture, controls::connection(fixture)?).await?;
+    Ok(())
+}
+
 async fn acknowledged_cut(
     fixture: &BoardFixture,
     follow: &FollowMembership,
     range: &Value,
     baseline: &Value,
     prefix: ReplicatedPrefix,
+    capture_cut: LocalCaptureCut,
 ) -> FixtureResult<Option<DeliveryItem<BoardDeliveryTypes>>> {
     Ok(match prefix {
         ReplicatedPrefix::Neither => {
-            hold_post_capture(fixture, range).await?;
+            match capture_cut {
+                LocalCaptureCut::Observe => hold_post_capture(fixture, range).await?,
+                LocalCaptureCut::HoldPriorPiece => {
+                    controls::held(fixture, controls::connection(fixture)?).await?;
+                }
+            }
             let observed = work_view(fixture.host()?, &fixture.project).await?;
             assert_eq!(
                 observed.get("replicatedThrough"),
@@ -241,11 +316,25 @@ async fn assert_copy_cut(
     range: &Value,
     prefix: ReplicatedPrefix,
     original: Option<&DeliveryItem<BoardDeliveryTypes>>,
-    copy_before_crash: ReplicationPosition,
+    pre_post_ack: ReplicationPosition,
+    capture_cut: LocalCaptureCut,
 ) -> FixtureResult {
     let cursor = serde_json::from_value(at(range, "/through")?.clone())?;
-    assert!(readbacks::contains_post_at(stopped, &fixture.project, 1, cursor).await?);
-    let cause = readbacks::cause_capture(stopped, &fixture.project, cursor).await?;
+    readbacks::assert_local_post_at_cursor(stopped, &fixture.project, cursor).await?;
+    // A held earlier settlement can precede capture of the new committed post.
+    // Neither still means that central acknowledged neither cause nor handoff.
+    let cause = match (prefix, capture_cut) {
+        (ReplicatedPrefix::Neither, LocalCaptureCut::HoldPriorPiece) => {
+            let cause =
+                readbacks::optional_cause_capture(stopped, &fixture.project, cursor).await?;
+            assert!(
+                cause.is_none(),
+                "the prior-piece control must force the uncaptured native cut"
+            );
+            cause
+        }
+        _ => Some(readbacks::cause_capture(stopped, &fixture.project, cursor).await?),
+    };
     let handoff = match (prefix, original) {
         (ReplicatedPrefix::Neither, _) => None,
         (_, Some(item)) => {
@@ -257,7 +346,8 @@ async fn assert_copy_cut(
         ReplicatedPrefix::Neither => ("neither", controls::copy_ack(fixture).await?),
         ReplicatedPrefix::CauseOnly => (
             "causeOnly",
-            controls::confirm_copy_ack(fixture, cause).await?,
+            controls::confirm_copy_ack(fixture, cause.ok_or("retained cause has no capture")?)
+                .await?,
         ),
         ReplicatedPrefix::Both => (
             "both",
@@ -269,13 +359,16 @@ async fn assert_copy_cut(
         ),
     };
     assert_eq!(copy.epoch.value(), cursor.epoch.get());
-    match prefix {
-        ReplicatedPrefix::Neither => {
-            // The held Piece contains the post, so its owning capture must
-            // have committed before transport. Neither ACK includes it.
+    assert_eq!(copy.epoch, pre_post_ack.epoch);
+    if let Some(cause) = cause {
+        assert_eq!(copy.epoch, cause.epoch);
+    }
+    match (prefix, cause) {
+        (ReplicatedPrefix::Neither, Some(cause)) => {
             assert!(discarded_copy_excludes_cause(Some(cause), copy));
         }
-        ReplicatedPrefix::CauseOnly => {
+        (ReplicatedPrefix::Neither, None) => assert_eq!(copy, pre_post_ack),
+        (ReplicatedPrefix::CauseOnly, Some(cause)) => {
             assert!(copy.sequence >= cause.sequence);
             assert!(
                 copy.sequence
@@ -284,13 +377,14 @@ async fn assert_copy_cut(
                         .sequence
             );
         }
-        ReplicatedPrefix::Both => {
+        (ReplicatedPrefix::Both, Some(_)) => {
             assert!(copy.sequence >= handoff.ok_or("both has no allocation")?.sequence)
         }
+        (_, None) => return Err("retained prefix requires an actual native capture".into()),
     }
     eprintln!(
         "T native prefix evidence: {}",
-        json!({"prefix":name,"cause":cause,"handoff":handoff,"copyAck":copy,"copyBeforeCrash":copy_before_crash})
+        json!({"prefix":name,"cause":cause,"handoff":handoff,"prePostAck":pre_post_ack,"copyAck":copy})
     );
     Ok(())
 }

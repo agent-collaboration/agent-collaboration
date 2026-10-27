@@ -254,7 +254,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Esc)),
-                Some("Details"),
+                Some("Pool details"),
             ),
             (
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Char('q'))),
@@ -262,10 +262,11 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
             ),
         ]);
 
+        let terminal_width_reader: fn() -> Option<usize> = || None;
         let frames = element! {
             QuotaStatusComponent(
                 view_model: quota_two_account_view_model(),
-                width: 0usize,
+                width: 0usize,terminal_width_reader:Some(terminal_width_reader),
                 height,
                 reset_intent_sender: Some(ports.intent_sender),
                 reset_snapshot_receiver: Some(ports.snapshot_receiver),
@@ -358,7 +359,7 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         );
         assert!(
             frames.last().is_some_and(
-                |frame| frame.contains("Details") && !frame.contains("Options · Resets")
+                |frame| frame.contains("Pool details") && !frame.contains("Options · Resets")
             ),
             "closing the Resets tab should restore browse controls: {frames:?}"
         );

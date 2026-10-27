@@ -97,6 +97,22 @@ jobs:
         id: verification_tests
         background: true
         run: pnpm --dir verification test
+      # Each tooling package keeps its declared Node version. The background
+      # verification suite retains the earlier runtime in its own environment.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26.12.1'
+          cache: pnpm
+          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+      - name: Check Quota and Sessions verification TypeScript
+        id: tui_verification
+        background: true
+        run: |
+          pnpm --dir scripts/verification/tui install --frozen-lockfile
+          pnpm --dir scripts/verification/tui typecheck
+          pnpm --dir scripts/verification/tui lint
+          pnpm --dir scripts/verification/tui format:check
+          pnpm --dir scripts/verification/tui test
       - name: Enforce dependency policy
         id: dependency_policy
         background: true
@@ -185,6 +201,15 @@ jobs:
           package_json_file: verification/package.json
       - name: Install TypeScript fixture dependencies
         run: pnpm --dir verification install --frozen-lockfile
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26.12.1'
+          cache: pnpm
+          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+      - name: Install native adapter test dependencies
+        run: |
+          pnpm --dir scripts/verification/tui install --frozen-lockfile
+          node -e 'const fs=require("node:fs");const crypto=require("node:crypto");const runtime=fs.realpathSync(process.execPath);fs.appendFileSync(process.env.GITHUB_ENV,"QUOTA_STORYBOARD_NODE="+runtime+"\nQUOTA_STORYBOARD_NODE_SHA256="+crypto.createHash("sha256").update(fs.readFileSync(runtime)).digest("hex")+"\n");'
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -228,7 +253,10 @@ jobs:
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
       - name: Test Rust workspace
         id: workspace_tests
-        run: cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
+        run: |
+          # Exercise private fixture setup under the ordinary Unix mask.
+          umask 022
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover

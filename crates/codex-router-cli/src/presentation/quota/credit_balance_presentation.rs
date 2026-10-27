@@ -27,7 +27,7 @@ pub(super) fn detailed_credit_balance(balance: &CreditBalance) -> String {
     output
 }
 
-pub(super) fn compact_credit_balance(balance: &CreditBalance) -> String {
+pub(in crate::presentation::quota) fn compact_credit_balance(balance: &CreditBalance) -> String {
     let (integer, fraction) = normalized_parts(balance);
     let all_digits = format!("{integer}{fraction}");
     let significant = all_digits.trim_start_matches('0');

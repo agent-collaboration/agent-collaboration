@@ -349,3 +349,116 @@ async fn constrained_filter_tabs_reveal_focused_field_and_retain_actions() {
     assert!(result.is_ok(), "phase={phase} {last}");
     assert_eq!(phase, 3, "{last}");
 }
+
+#[tokio::test]
+async fn compact_folder_checkout_explains_refusal_and_cancel_preserves_folder() {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut picker =
+        element!(SessionsPickerComponent(request:mixed_request(),width:48usize,height:24usize));
+    let frames = picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let mut phase = 0;
+    let mut last = String::new();
+    let journey = async {
+        while let Some(canvas) = next_current_canvas(frames.as_mut()).await.unwrap() {
+            let frame = canvas.to_string();
+            match phase {
+                0 if frame.contains("Sessions") => {
+                    sender.send(key(KeyCode::F(3))).unwrap();
+                    phase = 1;
+                }
+                1 if frame.contains("Session filters") => {
+                    sender.send(key(KeyCode::Tab)).unwrap();
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    sender
+                        .send(TerminalEvent::BracketedPaste("Checkout".to_owned()))
+                        .unwrap();
+                    phase = 2;
+                }
+                2 if frame.contains("Search: Checkout▏") => {
+                    let bounds = dialog_bounds(&frame, "Session filters");
+                    let body = dialog_text(&frame, bounds);
+                    println!("COMPACT FOLDER CHECKOUT ORIGINAL:\n{frame}");
+                    let reason_lines = body
+                        .lines()
+                        .map(|line| line.trim().trim_end_matches('│').trim())
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    let words = reason_lines
+                        .split_whitespace()
+                        .collect::<Vec<_>>()
+                        .join(" ");
+                    assert!(
+                        words.contains("Checkout scope is supported by CLI --checkout --list only"),
+                        "complete existing eligibility reason: {body}"
+                    );
+                    assert!(
+                        body.contains("Cancel") && body.contains("Select"),
+                        "footer remains reachable: {body}"
+                    );
+                    let (row, line) = frame
+                        .lines()
+                        .enumerate()
+                        .find(|(_, line)| {
+                            line.contains("Checkout")
+                                && !line.contains("Search:")
+                                && !line.contains("scope")
+                        })
+                        .unwrap();
+                    let column = line.chars().position(|character| character == 'C').unwrap();
+                    sender.send(key(KeyCode::Enter)).unwrap();
+                    sender
+                        .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                            MouseEventKind::Down(MouseButton::Left),
+                            column as u16,
+                            row as u16,
+                        )))
+                        .unwrap();
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    phase = 3;
+                }
+                3 if frame.contains("Session filters") && !frame.contains("Search:") => {
+                    assert!(
+                        frame.contains("Any folder ▾"),
+                        "unavailable inputs changed folder: {frame}"
+                    );
+                    let (row, line) = frame
+                        .lines()
+                        .enumerate()
+                        .find(|(_, line)| line.contains("Cancel") && line.contains("Apply"))
+                        .unwrap();
+                    let column = line.chars().position(|character| character == 'C').unwrap();
+                    sender
+                        .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
+                            MouseEventKind::Down(MouseButton::Left),
+                            column as u16,
+                            row as u16,
+                        )))
+                        .unwrap();
+                    phase = 4;
+                }
+                4 if !frame.contains("Session filters") => {
+                    sender.send(key(KeyCode::F(3))).unwrap();
+                    phase = 5;
+                }
+                5 if frame.contains("Session filters") => {
+                    assert!(
+                        frame.contains("Any folder ▾"),
+                        "Cancel changed committed folder: {frame}"
+                    );
+                    sender.send(key(KeyCode::Esc)).unwrap();
+                    sender.send(ctrl_key('d')).unwrap();
+                    phase = 6;
+                }
+                _ => {}
+            }
+            last = frame;
+        }
+    };
+    let result = tokio::time::timeout(Duration::from_secs(2), journey).await;
+    assert!(result.is_ok(), "phase={phase}: {last}");
+    assert_eq!(phase, 6, "{last}");
+}

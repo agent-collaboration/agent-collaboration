@@ -9,6 +9,7 @@ fn required_public_value(name: &str) -> TestResult<String> {
 }
 
 pub(super) async fn run_live_public_sessions() -> TestResult<()> {
+    let (_, node_sha256) = verified_node_executable()?;
     ensure(
         std::env::var_os("QUOTA_STORYBOARD_COMPONENT_FIXTURE_BINARY").is_none(),
         "public and synthetic component variants cannot be mixed",
@@ -57,11 +58,11 @@ pub(super) async fn run_live_public_sessions() -> TestResult<()> {
         drop(listener);
         let browser_directory = create_browser_temporary_directory(&output)?;
         // Preserve actual inherited environment, including HOME/CODEX_HOME absence.
-        // The fixed Python adapter rechecks public argv/hash/cwd/Host before Popen.
+        // The fixed TypeScript adapter rechecks public argv/hash/cwd/Host before spawn.
         let child = Command::new(&tools.ttyd)
             .arg(format!("--port={}", address.port()))
             .args(["--interface", "127.0.0.1", "--once", "--writable", "-t", "rendererType=canvas", "-t", "disableResizeOverlay=true", "-t", "fontFamily=Menlo", "-t", "fontSize=16"])
-            .arg("/usr/bin/python3").arg(output.join("fixed_quota_child.py"))
+            .arg(verified_node_executable()?.0).arg(permanent_adapter_source("fixture-child.ts")?).arg(output.join("fixture-command.json"))
             .current_dir(&output)
             .env("TMPDIR", &browser_directory).env("LANG", "C.UTF-8").env("TERM", "xterm-256color")
             .env("DYLD_LIBRARY_PATH", &tools.dynamic_library_path)
@@ -74,7 +75,7 @@ pub(super) async fn run_live_public_sessions() -> TestResult<()> {
             Err(error) => { fs::remove_dir_all(&browser_directory)?; return Err(error.into()); }
         };
         let mut capture = OwnedCapture { child, group_released: false, output: output.clone(),
-            child_ownership: CapturedChildOwnership::RetainedPythonChild,
+            child_ownership: CapturedChildOwnership::RetainedAdapterChild,
             browser_temporary_directory: browser_directory, stop_file: None };
         fs::write(output.join("ttyd.pid"), capture.child.id().to_string())?;
         let ready_deadline = std::time::Instant::now() + Duration::from_secs(10);
@@ -85,7 +86,7 @@ pub(super) async fn run_live_public_sessions() -> TestResult<()> {
             tokio::time::sleep(Duration::from_millis(25)).await;
         }
         fs::write(output.join("cua-ready.json"), format!(
-            "{{\"kind\":\"listener-ready-not-ui\",\"surface\":\"sessions\",\"url\":{},\"ttyd_pid\":{},\"binary_sha256\":{},\"ttyd_sha256\":{},\"child_pid_file\":{},\"viewport_file\":{},\"stop_file\":{},\"lifetime_seconds\":600,\"quota_fixture_scenario\":null,\"artifact_export\":{export}}}\n",
+            "{{\"kind\":\"listener-ready-not-ui\",\"surface\":\"sessions\",\"url\":{},\"ttyd_pid\":{},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"ttyd_sha256\":{},\"child_pid_file\":{},\"viewport_file\":{},\"stop_file\":{},\"lifetime_seconds\":600,\"quota_fixture_scenario\":null,\"artifact_export\":{export}}}\n",
             encode_json_string(&format!("http://127.0.0.1:{}/", address.port())), capture.child.id(),
             encode_json_string(&digest_file(&binary)?), encode_json_string(&digest_file(&tools.ttyd)?),
             encode_json_string(&output.join("quota-child.pid").to_string_lossy()),
@@ -113,16 +114,20 @@ pub(super) async fn run_live_public_sessions() -> TestResult<()> {
     let stopped = sink.stop().await;
     result?;
     let count = stopped?;
+    verified_node_executable()?;
+    permanent_adapter_source("ttyd-adapter.ts")?;
     fs::write(
         output.join("public-cua-receipt.json"),
         format!(
-            "{{\"kind\":\"public-sessions-cua-lifecycle-only\",\"binary_sha256\":{},\"public_capture_source_sha256\":{},\"fixed_child_sha256\":{},\"host_service_id\":{},\"host_service_epoch\":{},\"child_exit\":0,\"owned_processes_stopped\":true,\"artifact_sink_stopped\":true,\"artifact_count\":{count},\"last_viewport\":{},\"effect_evidence_sha256\":{},\"job_settlement\":\"separate-runtime-helper-proof-required\"}}\n",
+            "{{\"kind\":\"public-sessions-cua-lifecycle-only\",\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"public_capture_source_sha256\":{},\"fixed_child_sha256\":{},\"host_service_id\":{},\"host_service_epoch\":{},\"child_exit\":0,\"owned_processes_stopped\":true,\"artifact_sink_stopped\":true,\"artifact_count\":{count},\"last_viewport\":{},\"effect_evidence_sha256\":{},\"job_settlement\":\"separate-runtime-helper-proof-required\"}}\n",
             encode_json_string(&digest_file(&binary)?),
             encode_json_string(&format!(
                 "{:x}",
                 Sha256::digest(include_bytes!("public_sessions_capture.rs"))
             )),
-            encode_json_string(&digest_file(&output.join("fixed_quota_child.py"))?),
+            encode_json_string(&digest_file(&permanent_adapter_source(
+                "fixture-child.ts"
+            )?)?),
             encode_json_string(&service),
             encode_json_string(&epoch),
             encode_json_string(fs::read_to_string(output.join("quota-child.viewport"))?.trim()),

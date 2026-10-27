@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Router · Composed terminal dialog design</title>
+  <link rel="stylesheet" href="terminal-theme.css">
+  <script src="terminal-components.js" defer></script>
+  <script src="sample-data.js" defer></script>
+  <script src="screen-composition.js" defer></script>
+  <script src="preview-controller.js" defer></script>
+</head>
+<body>
+  <main class="study">
+    <header class="study-header">
+      <h1 class="study-title">Router <span class="tui-role-secondary">/ terminal design · proposed</span></h1>
+      <div class="study-controls">
+        <nav class="study-tabs" role="tablist" aria-label="Design screens">
+          <button id="tab-quota" role="tab" aria-selected="true" aria-controls="terminal-host" data-view="quota">Quota</button>
+          <button id="tab-session" role="tab" aria-selected="false" aria-controls="terminal-host" data-view="session" tabindex="-1">Session details</button>
+          <button id="tab-components" role="tab" aria-selected="false" aria-controls="component-notes" data-view="components" tabindex="-1">Components & design</button>
+        </nav>
+        <select id="terminal-size" aria-label="Terminal columns and rows">
+          <option value="132x34">132 × 34</option>
+          <option value="100x34">100 × 34</option>
+          <option value="48x32">48 × 32</option>
+        </select>
+      </div>
+    </header>
+    <p class="study-caption" id="study-caption">Loading terminal design…</p>
+    <section class="terminal-host" id="terminal-host" role="tabpanel" aria-labelledby="tab-quota" style="--columns:132; --rows:34"></section>
+    <section class="component-notes" id="component-notes" role="tabpanel" aria-labelledby="tab-components" hidden>
+      <h2 class="tui-heading surface">One terminal component system</h2>
+      <p>Both screens and every modal use the same frame, type roles, selectable rows, fields, scrolling body and action bar. Product state and sample effects stay with the preview controller. No external library, service, font or backend is loaded.</p>
+      <pre class="component-map">DialogFrame
+├─ SurfaceHeader       title · status · secondary actions
+├─ Context             account or session identity
+├─ DialogBodyViewport  only this region scrolls
+│  ├─ FormField        blue label · white value
+│  ├─ SelectableRow    fixed two-cell selector gutter
+│  ├─ QuotaMeter       six character cells · exact % beside it
+│  └─ SearchSelect     field → search caret → nested choices
+└─ DialogActionBar     fixed footer · visible keys · clear primary action</pre>
+      <p>Hierarchy uses one font size, bold weight, semantic colors and whole-row spacing. Frames use actual box-drawing glyphs. Meter length is quantized to six cells; the adjacent percentage remains exact. Modal backgrounds are opaque. Screen widths are expressed in terminal columns.</p>
+      <h3 class="tui-heading section tui-section">Semantic colors</h3>
+      <table>
+        <thead><tr><th>Role</th><th>Color</th><th>Use</th></tr></thead>
+        <tbody>
+          <tr><td>Surface heading</td><td class="tui-role-teal">Teal · #77c8bb</td><td>Quota, session and modal titles</td></tr>
+          <tr><td>Section / label</td><td class="tui-role-blue">Blue · #9cbcfb</td><td>Column headings, field names, keys</td></tr>
+          <tr><td>Body / secondary</td><td>White / <span class="tui-role-secondary">grey</span></td><td>Names, values / provider, age, IDs</td></tr>
+          <tr><td>Focus / primary</td><td class="tui-role-selected">Yellow · #f0d35a</td><td>Selection marker, focused controls, commit action</td></tr>
+          <tr><td>Meaning</td><td><span class="tui-role-green">Healthy</span> · <span class="tui-role-orange">Warning</span> · <span class="tui-role-red">Danger</span></td><td>Text and glyph accompany every semantic color</td></tr>
+        </tbody>
+      </table>
+      <h3 class="tui-heading section tui-section">What changes in the screens</h3>
+      <p>The quota header keeps only title, clients, Pool details and Help, then one filter row. Pool census and freshness stay in Pool details. The four columns are Account, Quota, Weekly pace and Extra. Account restores the compact three-line block: name; provider with client count; one status. Weekly and 5-hour stack inside Quota; pace stays two lines; credits and resets have their own Extra column. Two blank rows separate accounts. When groups fold vertically, no blank row separates them: their headings carry the internal hierarchy.</p>
+      <p>Quota is two compact lines: <code class="tui-role-body">██████ 92% · week · 6d 16h</code> and <code class="tui-role-short-window">█████░ 83% · 5h · 2h 10m</code>. Weekly is white; 5h is a slightly softer cool white. The header says QUOTA LEFT · RESET IN, so “Resets” is not repeated on every line. Missing observations read <code>No data · 5h · —</code>; a known amount with an unknown reset keeps its percentage and shows a dash for the time.</p>
+      <p>Very subtle alternating account backgrounds separate adjacent rows without another border. Selection uses a stronger background plus yellow name and marker; hover never overrides it. Below 76 terminal columns the same groups stack to preserve readable values.</p>
+      <p>Column headers are bold white uppercase text on a distinct header band, with a teal glyph rule below. At narrow widths the same uppercase header treatment appears above each stacked group. Blue is reserved for field labels and keys; weekly and 5h lines use white and soft white respectively. This gives table headings and row fields different text roles without changing font size.</p>
+      <p>Each account has one status. “62.5k credits” shows the quantity first; stale amounts remain labeled, and observation age sits in Details. Held is the row’s selection status; reserve is its pool classification, so their explanation appears once in Details. The extra vertical line in the original screenshot was an overflow scrollbar inside another border. The preview has one scroll affordance and one outer frame.</p>
+      <p>Filters compose a provider heading, a focused search input, nested provider choices and a disabled-account toggle. Account actions keeps Disable and Remove separate. Removal has an account-specific confirmation. Session details keeps a short title and labeled metadata visible, with the full original title preserved in a disclosure and the actions outside the scrolling body. More retains copy actions at narrow widths.</p>
+      <h3 class="tui-heading section tui-section">Source homes and composition</h3>
+      <table>
+        <thead><tr><th>Preview source</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td><a href="terminal-theme.css">terminal-theme.css</a></td><td>Shared color roles, cell units and primitive styling</td></tr>
+          <tr><td><a href="terminal-components.js">terminal-components.js</a></td><td>Composable presentation primitives, matching codex-router-tui names</td></tr>
+          <tr><td><a href="screen-composition.js">screen-composition.js</a></td><td>Quota, session and modal compositions; receives data and callbacks</td></tr>
+          <tr><td><a href="preview-controller.js">preview-controller.js</a></td><td>Preview selection, filters, keyboard focus and sample-only effects</td></tr>
+          <tr><td><a href="sample-data.js">sample-data.js</a></td><td>Synthetic account and session examples</td></tr>
+        </tbody>
+      </table>
+      <p>The real application already has DialogFrame, SurfaceHeader, DialogBodyViewport, DialogAction, UiHeading, UiText, FormField, SelectableRow and SearchSelect. The preview proposes shared role styling and composition improvements at those existing homes. It does not introduce a separate product component framework.</p>
+      <h3 class="tui-heading section tui-section">OpenCode reference and TUI feasibility</h3>
+      <p>OpenCode informed semantic theme roles, focused search, separate selection/metadata treatment and footer composition. Sources at bc3a709b: <a href="https://github.com/anomalyco/opencode/blob/bc3a709bd187da6ab8333920c075b236335f6c8e/packages/tui/src/ui/dialog-select.tsx#L654">search and dialog composition</a>, <a href="https://github.com/anomalyco/opencode/blob/bc3a709bd187da6ab8333920c075b236335f6c8e/packages/tui/src/ui/dialog-select.tsx#L899">selected row roles</a>, <a href="https://github.com/anomalyco/opencode/blob/bc3a709bd187da6ab8333920c075b236335f6c8e/packages/tui/src/theme/assets/opencode.json#L43">theme tokens</a>.</p>
+      <p>iocraft supports <a href="https://docs.rs/iocraft/0.9.2/iocraft/enum.Color.html">RGB text/background colors</a>, <a href="https://docs.rs/iocraft/0.9.2/iocraft/components/struct.ViewProps.html">colored backgrounds and glyph borders</a>, and <a href="https://docs.rs/iocraft/0.9.2/iocraft/components/struct.TextProps.html">bold, dim and underlined text</a>. Exact palette rendering needs truecolor support. Per-heading font sizes and alpha blending are not part of this design.</p>
+      <h3 class="tui-heading section tui-section">Boundaries and proof</h3>
+      <p>This HTML is a proposed terminal design. All actions use sample data; reload restores the account list. No Router or provider state is touched. The removal backend still needs decisions about credentials, history and active clients before implementation. Browser local-file preview was blocked by host policy, so browser visual and interaction verification remain open.</p>
+      <h3 class="tui-heading section tui-section">Real iocraft renderer check</h3>
+      <p>An isolated Rust probe renders the Account / Quota / Weekly pace / Extra layout and session composition through real iocraft 0.9.2. At all three sizes the title, clipped body and separate footer fit the requested rows. At 100 and 132 columns each ordinary account keeps its compact three-line identity and two spacer rows; credits and resets align in Extra beside pace. At narrow widths the folded groups touch, with two blank rows only between accounts. Quota lines use white for week and soft white for 5h. Deliberately moving the footer inside the clipped body loses it in all six controls. Earlier color controls also verified that NO_COLOR suppresses RGB without changing plain layout.</p>
+      <table>
+        <thead><tr><th>Terminal</th><th>Quota · four groups</th><th>Session</th><th>Wrong-footer control</th></tr></thead>
+        <tbody>
+          <tr><td>132 × 34</td><td><a href="rendered/spacing-hierarchy/quota-132x34-composed.txt">Plain text</a></td><td><a href="rendered/spacing-hierarchy/session-132x34-composed.txt">Plain text</a></td><td><a href="rendered/spacing-hierarchy/quota-132x34-wrong-footer.txt">Footer lost</a></td></tr>
+          <tr><td>100 × 34</td><td><a href="rendered/spacing-hierarchy/quota-100x34-composed.txt">Plain text</a></td><td><a href="rendered/spacing-hierarchy/session-100x34-composed.txt">Plain text</a></td><td><a href="rendered/spacing-hierarchy/quota-100x34-wrong-footer.txt">Footer lost</a></td></tr>
+          <tr><td>48 × 32</td><td><a href="rendered/spacing-hierarchy/quota-48x32-composed.txt">Plain text</a></td><td><a href="rendered/spacing-hierarchy/session-48x32-composed.txt">Plain text</a></td><td><a href="rendered/spacing-hierarchy/quota-48x32-wrong-footer.txt">Footer lost</a></td></tr>
+        </tbody>
+      </table>
+      <p><a href="rendered/spacing-hierarchy/observations.json">Six passing render observations and controls</a>. ANSI captures are alongside the plain-text files. This proves renderer feasibility, not exact HTML parity, real terminal display, keyboard/mouse behavior or installed Router behavior. Those layers remain unverified.</p>
+      <p>Source baseline: quotes-ui 691cd560; current screen behavior read at origin/main 2ec6a67c. Product Rust is unchanged.</p>
+    </section>
+    <noscript>This local design needs JavaScript enabled. Keep this HTML and its five companion files together.</noscript>
+  </main>
+</body>
+</html>

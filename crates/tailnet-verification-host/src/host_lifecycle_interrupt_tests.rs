@@ -59,6 +59,7 @@ fn cleanup_fixture(root: &Path, driver: &mut Child) -> TestResult {
 fn sigint_reaps_owned_child_before_restoring_the_original_profile() -> TestResult {
     let root = tempfile::Builder::new()
         .prefix("tailnet-interrupt-")
+        .permissions(fs::Permissions::from_mode(0o700))
         .tempdir()?;
     fs::write(root.path().join("profile"), ORIGINAL)?;
     fs::set_permissions(

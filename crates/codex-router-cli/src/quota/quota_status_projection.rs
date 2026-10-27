@@ -38,6 +38,16 @@ pub(super) fn quota_status_view_model(
                 credit_usage_summary: credit_usage_compact_summary(&row.credit_usage),
                 credit_usage: row.credit_usage.clone(),
                 reason: display_quota_row_reason(report, row),
+                display_weekly: project_display_window(
+                    &row.windows,
+                    V1_WEEKLY_WINDOW_SECONDS,
+                    report.now_unix_seconds,
+                ),
+                display_short: project_display_window(
+                    &row.windows,
+                    V1_SHORT_WINDOW_SECONDS,
+                    report.now_unix_seconds,
+                ),
                 weekly_window: quota_account_list_window_summary(
                     &row.windows,
                     V1_WEEKLY_WINDOW_SECONDS,
@@ -437,6 +447,111 @@ mod presentation_projection_tests {
         assert_eq!(
             projected.rows[0].status,
             QuotaRowStatus::Account(QuotaAccountStatus::Stale)
+        );
+    }
+}
+
+fn project_display_window(
+    windows: &[DisplayQuotaWindow],
+    duration: u64,
+    now: u64,
+) -> crate::presentation::quota::QuotaDisplayWindow {
+    use crate::presentation::quota::QuotaDisplayWindow;
+    match windows
+        .iter()
+        .find(|window| window.window_seconds == duration)
+    {
+        Some(window) if window.status != QuotaWindowStatus::Unknown => QuotaDisplayWindow::Known {
+            remaining_percent: window.remaining_headroom,
+            reset_in_seconds: window
+                .reset_unix_seconds
+                .and_then(|reset| reset.checked_sub(now)),
+            stale: window.status == QuotaWindowStatus::Stale,
+        },
+        _ => QuotaDisplayWindow::Unknown,
+    }
+}
+
+#[cfg(test)]
+mod compact_window_projection_tests {
+    use super::*;
+    use crate::presentation::quota::QuotaDisplayWindow;
+
+    #[test]
+    fn elapsed_reset_is_unknown_but_due_now_remains_zero() {
+        for status in [QuotaWindowStatus::Eligible, QuotaWindowStatus::Stale] {
+            for (reset, expected_reset) in [(99, None), (100, Some(0)), (101, Some(1))] {
+                let window = DisplayQuotaWindow {
+                    window_seconds: 604800,
+                    status,
+                    remaining_headroom: 5,
+                    reset_unix_seconds: Some(reset),
+                    observed_unix_seconds: 90,
+                    effective: true,
+                    run_rate_estimate: QuotaRunRateEstimate::unknown(),
+                };
+                assert_eq!(
+                    project_display_window(&[window], 604800, 100),
+                    QuotaDisplayWindow::Known {
+                        remaining_percent: 5,
+                        reset_in_seconds: expected_reset,
+                        stale: status == QuotaWindowStatus::Stale,
+                    },
+                    "reset={reset}, now=100, status={status:?}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn canonical_window_facts_keep_missing_reset_unknown_and_stale_distinct() {
+        let window = DisplayQuotaWindow {
+            window_seconds: 604800,
+            status: QuotaWindowStatus::Eligible,
+            remaining_headroom: 92,
+            reset_unix_seconds: None,
+            observed_unix_seconds: 100,
+            effective: true,
+            run_rate_estimate: QuotaRunRateEstimate::unknown(),
+        };
+        assert_eq!(
+            project_display_window(&[], 604800, 100),
+            QuotaDisplayWindow::Unknown
+        );
+        assert_eq!(
+            project_display_window(std::slice::from_ref(&window), 604800, 100),
+            QuotaDisplayWindow::Known {
+                remaining_percent: 92,
+                reset_in_seconds: None,
+                stale: false
+            }
+        );
+        assert_eq!(
+            project_display_window(
+                &[DisplayQuotaWindow {
+                    status: QuotaWindowStatus::Stale,
+                    reset_unix_seconds: Some(576100),
+                    ..window
+                }],
+                604800,
+                100
+            ),
+            QuotaDisplayWindow::Known {
+                remaining_percent: 92,
+                reset_in_seconds: Some(576000),
+                stale: true
+            }
+        );
+        assert_eq!(
+            project_display_window(
+                &[DisplayQuotaWindow {
+                    status: QuotaWindowStatus::Unknown,
+                    ..window
+                }],
+                604800,
+                100
+            ),
+            QuotaDisplayWindow::Unknown
         );
     }
 }

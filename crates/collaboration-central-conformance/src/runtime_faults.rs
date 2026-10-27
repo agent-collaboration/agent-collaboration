@@ -381,6 +381,7 @@ impl RuntimeFaults {
             RuntimeControl::DropNextSelectedObjectReply { destination, call } => {
                 self.arm_object_reply(destination, DispatchSelection::Call(call))?;
             }
+            RuntimeControl::DropHeldDispatchReply => self.arm_held_reply()?,
             RuntimeControl::ResumeDispatchAndHoldNext { destination } => {
                 self.resume_and_hold(destination, DispatchSelection::Any)?;
             }
@@ -455,6 +456,29 @@ impl RuntimeFaults {
         state.object_reply = ObjectReplyFault::Armed {
             destination,
             selection,
+            observed: Arc::default(),
+        };
+        Ok(())
+    }
+
+    fn arm_held_reply(&self) -> Result<(), RuntimeControlFailure> {
+        let mut state = self.state()?;
+        let DispatchFault::Held {
+            destination,
+            request,
+            ..
+        } = &state.dispatch
+        else {
+            return Err(RuntimeControlFailure::NotHeld);
+        };
+        if matches!(state.object_reply, ObjectReplyFault::Armed { .. }) {
+            return Err(RuntimeControlFailure::AlreadyArmed);
+        }
+        // Capture both under the fault owner's lock; a later bypassing call
+        // cannot consume the lost reply even when its invocation kind matches.
+        state.object_reply = ObjectReplyFault::Armed {
+            destination: destination.clone(),
+            selection: DispatchSelection::ExactRequest(request.clone()),
             observed: Arc::default(),
         };
         Ok(())

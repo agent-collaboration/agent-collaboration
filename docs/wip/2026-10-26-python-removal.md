@@ -1,8 +1,8 @@
 # Python removal: disposition and proof
 
-Base: `be7e61e8bca32ebac172eb743e8064d2c7d6ffe7`. Inventory: 61 tracked files; 37 originals replaced, 7 deleted, 17 unchanged for PR #161. Embedded Rust/shell programs and active instructions are included. PR #165 is merged and the workflow cutover is implemented on top of main; final-head CI and release dry-run results are reported in PR #169. This report does not claim merge readiness.
+Base: `be7e61e8bca32ebac172eb743e8064d2c7d6ffe7`. Inventory: 61 tracked files; 43 originals replaced, 7 unused files deleted, and 11 removed by merged PR #161. Zero tracked Python files remain. Embedded Rust/shell programs and active instructions are included. PR #165 is merged and the workflow cutover is implemented on top of main; final-head CI and release dry-run results are reported in PR #169. This report does not claim merge readiness.
 
-This is the direct unpaired Worker assignment. The Lead verifies the diff/logs and arranges independent review before merge. The complete 17-file TUI import closure stays unchanged by the Lead’s explicit decision; six support originals temporarily coexist with their TypeScript owners until #161 removes the whole closure. No production Router, tag, actual Homebrew/tap operation, provider model or deployment was touched. The workspace inherits main’s0.1.103; the next version remains the Lead’s merge-time assignment.
+This is the direct unpaired Worker assignment. The Lead verifies the diff/logs and arranges independent review before merge. The TUI import closure was preserved until #161 merged as `6388b973`. That PR removed its 11 entrypoints/tests; this PR then removed the six orphaned Python support modules after a tracked reference search. Their TypeScript owners remain active. No production Router, tag, actual Homebrew/tap operation, provider model or deployment was touched. The workspace inherits main’s0.1.105; the next version remains the Lead’s merge-time assignment.
 
 ## Per-file dispositions
 
@@ -12,8 +12,8 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | --- | --- | --- |
 | `crates/acp-client-runtime/tests/cursor_model_settings/scripted_acp_agent.py` | Ported | `verification/fixtures/cursor-settings-agent.ts` (F) |
 | `crates/codex-router-host/src/external_provider_runtime/acp_scripted_fixture.py` | Ported | `verification/fixtures/scripted-acp-agent.ts` (F) |
-| `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixed_quota_child.py` | Left to #161 | Unchanged |
-| `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixed_ttyd_adapter.py` | Left to #161 | Unchanged |
+| `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixed_quota_child.py` | Removed by #161 | Merged in main at `6388b973` |
+| `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/fixed_ttyd_adapter.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/check-http-streaming-guard.py` | Ported | `verification/tooling/check-http-streaming-guard.ts` (G) |
 | `scripts/check-proxy-db-runtime-isolation.py` | Deleted | D |
 | `scripts/check-release-runtime-guardrails.py` | Ported | `verification/tooling/check-release-runtime-guardrails.ts` (G) |
@@ -27,10 +27,10 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/tests/test_rust_file_size.py` | Ported | `verification/tooling/tests/rust-file-size.test.ts` (C) |
 | `scripts/tests/test_tailnet_mcp_https_transport.py` | Ported | `verification/observations/tests/tailnet-curl-transport.test.ts` (T) |
 | `scripts/tests/test_tailnet_mcp_verification.py` | Ported | `verification/observations/tests/tailnet-oracles.test.ts` (T) |
-| `scripts/tests/test_tui_capture.py` | Left to #161 | Unchanged |
-| `scripts/tests/test_tui_component_capture.py` | Left to #161 | Unchanged |
-| `scripts/tests/test_tui_public_sessions.py` | Left to #161 | Unchanged |
-| `scripts/tests/test_tui_verification.py` | Left to #161 | Unchanged |
+| `scripts/tests/test_tui_capture.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/tests/test_tui_component_capture.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/tests/test_tui_public_sessions.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/tests/test_tui_verification.py` | Removed by #161 | Merged in main at `6388b973` |
 | `scripts/tests/test_update_homebrew_formula.py` | Ported | `verification/tooling/tests/release-tooling.test.ts` (H) |
 | `scripts/tests/test_verification_lifecycle.py` | Ported | `verification/observations/tests/lifecycle.test.ts` (L) |
 | `scripts/tests/test_verification_observations.py` | Ported | `verification/observations/tests/observation-core.test.ts` (O) |
@@ -49,28 +49,28 @@ Every original file has exactly one disposition. Proof letters are explained bel
 | `scripts/verification/board_journey_runtime.py` | Deleted | D |
 | `scripts/verification/board_journey_target.py` | Deleted | D |
 | `scripts/verification/board_journey_values.py` | Deleted | D |
-| `scripts/verification/config_sections.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/config-sections.ts` remains in use |
+| `scripts/verification/config_sections.py` | Ported | `verification/observations/config-sections.ts` (O); orphaned Python original removed here after #161 |
 | `scripts/verification/harness_report.py` | Ported | `verification/observations/harness-report.ts` (O) |
 | `scripts/verification/interaction_journey.py` | Ported | `verification/observations/interaction-journey.ts` (I) |
 | `scripts/verification/interaction_readback.py` | Ported | `verification/observations/interaction-readback.ts` (I) |
 | `scripts/verification/mail_journey_peer.py` | Deleted | D |
 | `scripts/verification/native_correlation.py` | Ported | `verification/observations/native-correlation.ts` (O) |
-| `scripts/verification/owned_runtime.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/owned-runtime.ts` remains in use |
+| `scripts/verification/owned_runtime.py` | Ported | `verification/observations/owned-runtime.ts` (L); orphaned Python original removed here after #161 |
 | `scripts/verification/process_inventory.py` | Ported | `verification/observations/process-inventory.ts` (L) |
-| `scripts/verification/process_ownership.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/process-ownership.ts` remains in use |
+| `scripts/verification/process_ownership.py` | Ported | `verification/observations/process-ownership.ts` (L); orphaned Python original removed here after #161 |
 | `scripts/verification/provider_session_control.py` | Ported | `verification/observations/provider-session-control.ts` (I) |
-| `scripts/verification/readonly_codex_home.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/readonly-codex-home.ts` remains in use |
-| `scripts/verification/runtime_qualification.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/runtime-qualification.ts` remains in use |
+| `scripts/verification/readonly_codex_home.py` | Ported | `verification/observations/readonly-codex-home.ts` (O); orphaned Python original removed here after #161 |
+| `scripts/verification/runtime_qualification.py` | Ported | `verification/observations/runtime-qualification.ts` (L); orphaned Python original removed here after #161 |
 | `scripts/verification/tailnet_mcp.py` | Ported | `verification/observations/tailnet-mcp.ts` (T) |
 | `scripts/verification/tailnet_mcp_client.py` | Ported | `verification/observations/tailnet-transport.ts` (T) |
 | `scripts/verification/tailnet_mcp_host.py` | Ported | `crates/tailnet-verification-host/src/main.rs` (T) |
 | `scripts/verification/tailnet_mcp_models.py` | Ported | `verification/observations/tailnet-plans.ts` (T) |
-| `scripts/verification/tui_capture.py` | Left to #161 | Unchanged |
-| `scripts/verification/tui_capture_lifecycle.py` | Left to #161 | Unchanged |
-| `scripts/verification/tui_component_capture.py` | Left to #161 | Unchanged |
-| `scripts/verification/tui_public_sessions.py` | Left to #161 | Unchanged |
-| `scripts/verification/tui_verification.py` | Left to #161 | Unchanged |
-| `scripts/verification/typed_observations.py` | Left to #161 | Unchanged Python import dependency; TS owner `verification/observations/evidence-models.ts` remains in use |
+| `scripts/verification/tui_capture.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/verification/tui_capture_lifecycle.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/verification/tui_component_capture.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/verification/tui_public_sessions.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/verification/tui_verification.py` | Removed by #161 | Merged in main at `6388b973` |
+| `scripts/verification/typed_observations.py` | Ported | `verification/observations/evidence-models.ts` (O); orphaned Python original removed here after #161 |
 
 ## Original-input proof
 
@@ -78,7 +78,7 @@ Golden inputs/results come from the base implementations. Fixture data retains s
 
 | Proof | Comparisons and retained evidence |
 | --- | --- |
-| H: Homebrew | Current releasev0.1.102, asset SHA256 `54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517`. Original/new formula CLIs produce byte-identical files, stdout and stderr; CRLF behavior also matches. The whole local publisher CLI runs against identical fake external commands: formula, command trace and stdout match after declared temporary-path normalization. Permanent tests: `verification/tooling/tests/release-tooling.test.ts` and `release-command-process.test.ts`. No real brew, tap or publication ran. |
+| H: Homebrew | Captured releasev0.1.102, asset SHA256 `54e978fb41bab35653a998ffdc50a9f4c49e83240fe5458565072e575d4c1517`. Original/new formula CLIs produce byte-identical files, stdout and stderr; CRLF behavior also matches. The whole local publisher CLI runs against identical fake external commands: formula, command trace and stdout match after declared temporary-path normalization. Permanent tests: `verification/tooling/tests/release-tooling.test.ts` and `release-command-process.test.ts`. No real brew, tap or publication ran. |
 | C: CI tooling |51 original Worker bundle exit/output cases;14 original SQLx preparation scenarios compare commands, environment, refusal/commit behavior and cache bytes;8 rustc-wrapper environment vectors plus executable-process checks. Rust size checks cover physical bytes, Git inventories, quoted paths,6 source-parser fixtures and9 line-count vectors. Bootstrap tests preserve successful/stale/failed/offline/check-mode outcomes with controlled installers. Tests are under `verification/tooling/tests/`. |
 | G: guards/artifacts | Original HTTP G24/G25 outputs match exactly. Release guard rows retain original results with timestamps normalized, including pre-existing failures. Proxy DB artifact fixtures retain root, pressure, ordering, correlation and privacy checks. See `verification/tooling/tests/structural-guards.test.ts` and its original fixture data. |
 | O: observations | Configuration sections, evidence models/JSON, reports, native read protocol and read-only Codex-home checks use frozen original observations, including unknown fields, exact integers and invalid inputs. Tests: `verification/observations/tests/{observation-core,config-sections,harness-report}.test.ts`. Raw validated records remain the serialization boundary where the original omitted unset fields. |
@@ -89,7 +89,7 @@ Golden inputs/results come from the base implementations. Fixture data retains s
 | F: executable fixtures | Shared ACP settings/scripted agents retain original request/response bytes and receipts. Broader migration:173 frozen ACP/CLI scenarios,3 ordered socket transcripts,12 restricted-PATH native executable cases and6 original shell-word vectors under `verification/fixtures/tests/`. The full oversized initialize fixture retains67,108,866 original output bytes and the actual child PID. |
 | N: permission probes | Owned live Unix/TCP listeners ensure allowed connections cannot produce denial receipts; only EPERM/EACCES counts as denial. Old/new embedded probes match exit/stdout and permission classification on the same allowed/denied Unix inputs. See `verification/tooling/tests/socket-permission-probe.test.ts`. Complete native Seatbelt/delivery acceptance remains unrun. |
 
-The local current-release receipts are `tmp/python-removal-proof/final-formula-comparison.json`, `formula-newline-comparisons.json` and `local-publisher-comparison.json`. The publisher proof substitutes every external command and retains the resulting formula; it does not establish an actual Homebrew installation or tap publication.
+The original captured-release receipts are `tmp/python-removal-proof/final-formula-comparison.json`, `formula-newline-comparisons.json` and `local-publisher-comparison.json`. Later published-release refreshes are identified in the PR handback. The publisher proof substitutes every external command and retains the resulting formula; it does not establish an actual Homebrew installation or tap publication.
 
 ## Embedded programs and consumers
 
@@ -131,7 +131,7 @@ The five board/mail helpers form an unreachable closure after their journey entr
 - Type check, lint and formatter pass. Focused fixture-cutover rerun:91 passed,0 failed.
 - `cargo clippy -p acp-client-runtime -p agent-collaboration -p codex-router-host -p codex-router-test-support -p collaboration-mcp -p codex-router-tailnet-verification-host --all-targets -- -D warnings`: exit0 with narrow debug profiles.
 - Cargo formatting, Git whitespace and the Rust1000-line guard pass. Existing generated Cargo.lock/pnpm-lock.yaml exceed1000 lines; authored files remain within the cap.
-- Main atb4881497 is merged without rebase. The four validation jobs, background/wait-all structure and main-only cache policy are preserved. Static validation runs the TypeScript suite; Rust fixture consumers install pinned Node/dependencies, and SQLx/size/Worker checks call the ports. The release dry run generates an idempotent formula preview from its packaged digest and retains it while publication/tap steps remain disabled. Final-head CI and release dry-run links/results belong to PR #169 and the handback.
+- Main through6388b973 is merged without rebase. The four validation jobs, background/wait-all structure and main-only cache policy are preserved. Static validation runs the TypeScript suite; Rust fixture consumers install pinned Node/dependencies, and SQLx/size/Worker checks call the ports. The release dry run generates an idempotent formula preview from its packaged digest and retains it while publication/tap steps remain disabled. Final-head CI and release dry-run links/results belong to PR #169 and the handback.
 - Version bump awaits the Lead's merge-time reservation. Independent review and merge remain outside this Worker's acceptance authority.
 - Fake-command/apparatus evidence does not establish real Homebrew publication, provider behavior, hosted delivery, production replacement or a real Tailnet journey.
 
@@ -143,6 +143,14 @@ The next CI atb4afbf06 passed5569 workspace cases, including both tests above, a
 
 - SIGINT uses the existing native interruption flag and a scoped TypeScript listener. Both wait for owned-child settlement; the native profile restore remains in the same Rust-owned critical section. A private profile wrapper shared with Host execution makes the real-signal test exercise the production restore operation. The TypeScript test checks child reaping at settlement before fixture fallback cleanup.
 - Real-signal subprocess tests fail without the wiring and pass with it. The Rust negative control observes both an unreaped harmless child and projected disposable profile bytes. Green runs require child absence, settled evidence and exact original profile bytes; no production profile, Host or Tailscale instance is used.
-- All 17 retained Python files match main byte-for-byte. Original-source and current-source import traversal closes over exactly those 17. Nine real module --help runs pass. The non-help quota child passes a stdlib pydoc import check; the ttyd adapter’s own --version branch dispatches to a harmless controlled stand-in. The retained unit/fixture suite passes 45 tests. This is import/dispatch proof, without a capture or installed ttyd claim.
+- Before #161 merged, all 17 retained Python files matched main in bytes and mode. Nine module --help checks, a stdlib quota-child import, adapter --version dispatch to a controlled stand-in, and 45 retained unit/fixture tests passed. This historical import/dispatch proof closed the original review finding. The later Lead instruction supersedes retention: #161 removed 11 files, and the six orphaned support originals are now removed here.
 - `.sqlx/README.md`, `docs/testing/rust-reliability-tools.md` and the central Worker README now use the TypeScript commands and the Node/pnpm pins in `verification/package.json`. Historical receipts remain unchanged.
-- Local quality: 835 TypeScript tests pass; the complete Rust driver suite passes 14 tests (its one ignored subprocess fixture is invoked by the passing parent signal test), and its all-target Clippy check with `-D warnings` passes. Fresh final-head CI and release dry-run results are recorded in the PR and handback.
+- Pre-integration local quality: 835 TypeScript tests passed; the complete Rust driver suite passed 14 tests (its one ignored subprocess fixture is invoked by the passing parent signal test), and its all-target Clippy check with `-D warnings` passed. Fresh final-head CI, including the explicit private-root correction below, and release dry-run results are recorded in the PR and handback.
+
+## Final closure after #161
+
+A tracked search for `process_ownership|owned_runtime|typed_observations|readonly_codex_home|runtime_qualification|config_sections` found 22 lines: 12 inside the six-module Python closure, six report provenance rows, and four unrelated TypeScript schema/property uses. There were no outside executable consumers. Raw results are `tmp/python-removal-proof/closure-removal-all-tracked-references.txt`. Removing the six modules makes `git ls-files '*.py'` empty; the embedded-program audit contains only explanatory comments.
+
+The workflow merge retains both TypeScript packages and their declared Node versions, #161's qualified native adapter setup, four validation jobs, background/wait-all steps and main-only caches. No Python checks remain. The release job retains the owner's 45-minute limit.
+
+The native real-signal test now requests a 0700 temporary root explicitly. Its child private-root guard, signal/child/profile assertions and deadlines remain intact. Hosted workspace tests explicitly use umask022; the earlier unwired negative-control receipts remain preserved. No local Rust executable/test was launched after the owner's stop. Final-head CI and signed release/formula proof are required in the PR handback.

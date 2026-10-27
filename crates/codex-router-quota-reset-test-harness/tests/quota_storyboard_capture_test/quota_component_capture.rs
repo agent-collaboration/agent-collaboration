@@ -1,7 +1,9 @@
-//! Static normal component tour. Pending observations use the existing live CUA owner.
+//! Static normal and hard-case component tours. Pending observations use the
+//! existing live CUA owner.
 use super::quota_component_tape::{
     NORMAL_CHECKPOINTS, build_failure_retention_control_tape, build_first_frame_diagnostic_tape,
-    build_normal_component_tape, validate_normal_checkpoints,
+    build_hard_case_component_tape, build_normal_component_tape, hard_case_checkpoints,
+    validate_hard_case_checkpoints, validate_normal_checkpoints,
 };
 use super::*;
 use std::collections::BTreeMap;
@@ -220,15 +222,88 @@ mod layer_tests {
     }
 }
 
+/// Inputs of the fixed child's launch record (`fixture-child.ts` reads it).
+struct ComponentFixtureCommand<'a> {
+    binary: &'a Path,
+    output: &'a Path,
+    temporary_directory: &'a Path,
+    scenario: &'a str,
+    ttyd: &'a Path,
+    dynamic_library_path: &'a str,
+}
+
+// Named placeholders: a field can never shift into its neighbour's slot.
+fn component_fixture_command_json(command: &ComponentFixtureCommand<'_>) -> String {
+    format!(
+        "{{\"binary\":{binary},\"output\":{output},\"temporary_directory\":{temporary},\"surface\":\"quota-component\",\"component_fixture_scenario\":{scenario},\"component_fixture_receipt\":{receipt},\"ttyd\":{ttyd},\"dynamic_library_path\":{library}}}\n",
+        binary = encode_json_string(&command.binary.to_string_lossy()),
+        output = encode_json_string(&command.output.to_string_lossy()),
+        temporary = encode_json_string(&command.temporary_directory.to_string_lossy()),
+        scenario = encode_json_string(command.scenario),
+        receipt = encode_json_string(&command.output.join("fixture-finished").to_string_lossy()),
+        ttyd = encode_json_string(&command.ttyd.to_string_lossy()),
+        library = encode_json_string(command.dynamic_library_path),
+    )
+}
+
+#[cfg(test)]
+mod fixture_command_tests {
+    use super::*;
+
+    #[test]
+    fn fixture_command_keeps_every_field_in_its_own_slot_for_both_scenarios() -> TestResult<()> {
+        for scenario in ["normal", "visual-hard-cases"] {
+            let json = component_fixture_command_json(&ComponentFixtureCommand {
+                binary: Path::new("/declared/cli-libtest"),
+                output: Path::new("/owned/output"),
+                temporary_directory: Path::new("/owned/temp"),
+                scenario,
+                ttyd: Path::new("/tools/ttyd"),
+                dynamic_library_path: "/tools/lib",
+            });
+            let result = run_actual_fixture_reader(
+                &json,
+                "const expected = { binary: '/declared/cli-libtest', output: '/owned/output', temporary_directory: '/owned/temp', surface: 'quota-component', component_fixture_scenario: args[0], component_fixture_receipt: '/owned/output/fixture-finished', ttyd: '/tools/ttyd', dynamic_library_path: '/tools/lib' };\n(await import('node:assert/strict')).deepStrictEqual({ ...record }, expected);",
+                &[scenario],
+            )?;
+            if !result.status.success() {
+                return Err(String::from_utf8_lossy(&result.stderr).into_owned().into());
+            }
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ComponentCaptureJourney {
     NormalTour,
+    HardCaseTour,
     FirstFrameDiagnostic,
     FailureRetentionControl,
 }
 
+impl ComponentCaptureJourney {
+    fn fixture_scenario(self) -> &'static str {
+        match self {
+            Self::HardCaseTour => "visual-hard-cases",
+            _ => "normal",
+        }
+    }
+
+    fn checkpoints(self, columns: u16, rows: u16) -> TestResult<&'static [&'static str]> {
+        match self {
+            Self::HardCaseTour => hard_case_checkpoints(columns, rows),
+            _ => Ok(&NORMAL_CHECKPOINTS),
+        }
+    }
+}
+
 pub(crate) async fn run_normal_component_capture(columns: u16, rows: u16) -> TestResult<()> {
     run_component_capture(columns, rows, ComponentCaptureJourney::NormalTour).await
+}
+
+pub(crate) async fn run_hard_case_component_capture(columns: u16, rows: u16) -> TestResult<()> {
+    run_component_capture(columns, rows, ComponentCaptureJourney::HardCaseTour).await
 }
 
 pub(crate) async fn run_first_frame_component_diagnostic() -> TestResult<()> {
@@ -244,14 +319,16 @@ async fn run_component_capture(
     rows: u16,
     journey: ComponentCaptureJourney,
 ) -> TestResult<()> {
+    let (_, node_sha256) = verified_node_executable()?;
     let binary = fs::canonicalize(
         std::env::var_os("QUOTA_STORYBOARD_COMPONENT_FIXTURE_BINARY")
             .ok_or("declared component libtest binary required")?,
     )?;
     ensure(binary.is_file(), "component libtest binary missing")?;
+    let scenario = journey.fixture_scenario();
     ensure(
-        std::env::var("QUOTA_STORYBOARD_COMPONENT_FIXTURE_SCENARIO").as_deref() == Ok("normal"),
-        "static component tour selects only the normal scenario",
+        std::env::var("QUOTA_STORYBOARD_COMPONENT_FIXTURE_SCENARIO").as_deref() == Ok(scenario),
+        "static component tour selects only its own declared fixture scenario",
     )?;
     let tools = CaptureTools::from_environment()?;
     ensure_capture_running(tools.stop_file.as_deref())?;
@@ -261,6 +338,7 @@ async fn run_component_capture(
     )?;
     let purpose = match journey {
         ComponentCaptureJourney::NormalTour => "normal",
+        ComponentCaptureJourney::HardCaseTour => "hard-cases",
         ComponentCaptureJourney::FirstFrameDiagnostic => "first-frame-diagnostic",
         ComponentCaptureJourney::FailureRetentionControl => "failure-retention-control",
     };
@@ -270,20 +348,23 @@ async fn run_component_capture(
     prepare_layer_destination(&output)?;
     fs::write(
         output.join("fixture-command.json"),
-        format!(
-            "{{\"binary\":{},\"output\":{},\"temporary_directory\":{},\"surface\":\"quota-component\",\"component_fixture_scenario\":\"normal\",\"component_fixture_receipt\":{},\"ttyd\":{},\"dynamic_library_path\":{}}}\n",
-            encode_json_string(&binary.to_string_lossy()),
-            encode_json_string(&output.to_string_lossy()),
-            encode_json_string(&std::env::temp_dir().to_string_lossy()),
-            encode_json_string(&output.join("fixture-finished").to_string_lossy()),
-            encode_json_string(&tools.ttyd.to_string_lossy()),
-            encode_json_string(&tools.dynamic_library_path),
-        ),
+        component_fixture_command_json(&ComponentFixtureCommand {
+            binary: &binary,
+            output: &output,
+            temporary_directory: &std::env::temp_dir(),
+            scenario,
+            ttyd: &tools.ttyd,
+            dynamic_library_path: &tools.dynamic_library_path,
+        }),
     )?;
     tools.write_child_adapter_files(&output)?;
     validate_normal_checkpoints(&NORMAL_CHECKPOINTS)?;
+    if journey == ComponentCaptureJourney::HardCaseTour {
+        validate_hard_case_checkpoints(columns, rows, hard_case_checkpoints(columns, rows)?)?;
+    }
     let tape = match journey {
         ComponentCaptureJourney::NormalTour => build_normal_component_tape(columns, rows)?,
+        ComponentCaptureJourney::HardCaseTour => build_hard_case_component_tape(columns, rows)?,
         ComponentCaptureJourney::FirstFrameDiagnostic => build_first_frame_diagnostic_tape(),
         ComponentCaptureJourney::FailureRetentionControl => build_failure_retention_control_tape(),
     };
@@ -299,9 +380,12 @@ async fn run_component_capture(
         "component tape rejected before any UI startup",
     )?;
     let mut capture =
-        tools.start_capture_with_owner(&output, CapturedChildOwnership::RetainedPythonChild)?;
+        tools.start_capture_with_owner(&output, CapturedChildOwnership::RetainedAdapterChild)?;
     let status = capture.wait(Duration::from_secs(240))?;
     capture.release_process_group()?;
+    verified_node_executable()?;
+    permanent_adapter_source("fixture-child.ts")?;
+    permanent_adapter_source("ttyd-adapter.ts")?;
     let layers = collect_original_layers(&output);
     if let Err(error) = &layers {
         fs::write(output.join("diagnostic-layer-error.txt"), error.to_string())?;
@@ -326,7 +410,7 @@ async fn run_component_capture(
         fs::write(
             output.join("failure-retention-control-receipt.json"),
             format!(
-                "{{\"kind\":\"compiled-quota-natural-error-layer-control\",\"complete\":false,\"columns\":32,\"rows\":24,\"binary_sha256\":{},\"tape_sha256\":{},\"layers_manifest_sha256\":{},\"vhs_exit\":{},\"owned_children_stopped\":true,\"effects_observed\":false}}\n",
+                "{{\"kind\":\"compiled-quota-natural-error-layer-control\",\"complete\":false,\"columns\":32,\"rows\":24,\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"tape_sha256\":{},\"layers_manifest_sha256\":{},\"vhs_exit\":{},\"owned_children_stopped\":true,\"effects_observed\":false}}\n",
                 encode_json_string(&digest_file(&binary)?),
                 encode_json_string(&digest_file(&output.join("quota.tape"))?),
                 encode_json_string(&digest_file(&output.join("diagnostic-layers.json"))?),
@@ -352,9 +436,16 @@ async fn run_component_capture(
             && fs::read_to_string(output.join("component-process.exit"))?.trim() == "0",
         "component child or durable completion failed",
     )?;
+    let finished_scenario = match journey {
+        ComponentCaptureJourney::HardCaseTour => "VisualHardCases",
+        _ => "Normal",
+    };
     ensure(
         fs::read(output.join("fixture-finished"))?
-            == b"QUOTA_COMPONENT_FIXTURE_FINISHED scenario=Normal released=false external_requests=0 persisted_writes=0\n",
+            == format!(
+                "QUOTA_COMPONENT_FIXTURE_FINISHED scenario={finished_scenario} released=false external_requests=0 persisted_writes=0\n"
+            )
+            .into_bytes(),
         "component completion receipt mismatch",
     )?;
     let transcript = fs::read_to_string(output.join("screens.txt"))?;
@@ -372,11 +463,11 @@ async fn run_component_capture(
         let image = output.join("component-quota-browse.png");
         validate_png(&image)?;
         // Deliberately no full-image oracle: the original is for investigating
-        // the phone layout. The normal receipt and its42+12 checks stay below.
+        // the phone layout. The normal receipt and its43+13 checks stay below.
         fs::write(
             output.join("first-frame-diagnostic-receipt.json"),
             format!(
-                "{{\"kind\":\"compiled-quota-first-frame-diagnostic\",\"complete\":false,\"columns\":{columns},\"rows\":{rows},\"binary_sha256\":{},\"png_sha256\":{},\"tape_sha256\":{},\"child_exit\":0,\"external_requests\":0,\"persisted_writes\":0,\"owned_children_stopped\":true}}\n",
+                "{{\"kind\":\"compiled-quota-first-frame-diagnostic\",\"complete\":false,\"columns\":{columns},\"rows\":{rows},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"png_sha256\":{},\"tape_sha256\":{},\"child_exit\":0,\"external_requests\":0,\"persisted_writes\":0,\"owned_children_stopped\":true}}\n",
                 encode_json_string(&digest_file(&binary)?),
                 encode_json_string(&digest_file(&image)?),
                 encode_json_string(&digest_file(&output.join("quota.tape"))?),
@@ -384,7 +475,8 @@ async fn run_component_capture(
         )?;
         return Ok(());
     }
-    for checkpoint in NORMAL_CHECKPOINTS {
+    let checkpoints = journey.checkpoints(columns, rows)?;
+    for checkpoint in checkpoints {
         let image = output.join(format!("{checkpoint}.png"));
         validate_png(&image)?;
         tools.verify_image(&output, checkpoint, &image, false)?;
@@ -393,6 +485,38 @@ async fn run_component_capture(
         env!("CARGO_MANIFEST_DIR"),
         "/tests/quota_storyboard_capture_test/fixtures/blank-startup.png"
     ));
+    if journey == ComponentCaptureJourney::HardCaseTour {
+        let short = (columns, rows) == (48, 12);
+        let (selected_scene, pairs): (&str, &[(&str, &str)]) = if short {
+            (
+                "component-quota-hard-beta-selected",
+                &HARD_CASE_SHORT_NEGATIVE_PAIRS,
+            )
+        } else {
+            (
+                "component-quota-hard-beta-windows",
+                &HARD_CASE_NEGATIVE_PAIRS,
+            )
+        };
+        tools.verify_image(&output, selected_scene, blank, true)?;
+        for &(checkpoint, wrong_checkpoint) in pairs {
+            tools.verify_image(
+                &output,
+                checkpoint,
+                &output.join(format!("{wrong_checkpoint}.png")),
+                true,
+            )?;
+        }
+        return write_component_receipt(
+            &output,
+            &binary,
+            &tools,
+            columns,
+            rows,
+            "compiled-quota-component-hard-cases",
+            checkpoints,
+        );
+    }
     tools.verify_image(&output, "component-quota-policy-saved", blank, true)?;
     tools.verify_image(
         &output,
@@ -446,6 +570,10 @@ async fn run_component_capture(
             "component-quota-reset-result-bottom",
             "component-quota-confirm-yes",
         ),
+        (
+            "component-quota-reset-result-consumption",
+            "component-quota-confirm-yes",
+        ),
     ] {
         tools.verify_image(
             &output,
@@ -454,7 +582,95 @@ async fn run_component_capture(
             true,
         )?;
     }
-    let images = NORMAL_CHECKPOINTS
+    write_component_receipt(
+        &output,
+        &binary,
+        &tools,
+        columns,
+        rows,
+        "compiled-quota-component-normal",
+        &NORMAL_CHECKPOINTS,
+    )
+}
+
+// Hard-case wrong images: Alpha's browse is not Beta's selected windows; Beta's
+// windows are not its credit facts; Beta's browse is not Pool details (F5
+// no-op); an open Pool details is not its closed return; Pool details is not
+// Account details (F5 is not F4/Enter).
+const HARD_CASE_NEGATIVE_PAIRS: [(&str, &str); 5] = [
+    (
+        "component-quota-hard-beta-windows",
+        "component-quota-hard-browse",
+    ),
+    (
+        "component-quota-hard-beta-extra",
+        "component-quota-hard-browse",
+    ),
+    (
+        "component-quota-hard-pool-details",
+        "component-quota-hard-beta-windows",
+    ),
+    (
+        "component-quota-hard-pool-closed",
+        "component-quota-hard-pool-details",
+    ),
+    (
+        "component-quota-hard-pool-details-bottom",
+        "component-quota-hard-details",
+    ),
+];
+
+// 48x12 poses: the selected Beta is not Alpha's top; Beta's scrolled facts are
+// not Alpha's (unique Beta literals); Pool details is not the selected browse
+// (F5 no-op); closed is not open Pool details; Pool details is not Account
+// details (F5 is not F4/Enter); each name continuation is not the other
+// account's continuation.
+const HARD_CASE_SHORT_NEGATIVE_PAIRS: [(&str, &str); 8] = [
+    (
+        "component-quota-hard-beta-selected",
+        "component-quota-hard-browse-top",
+    ),
+    (
+        "component-quota-hard-beta-week",
+        "component-quota-hard-alpha-week",
+    ),
+    (
+        "component-quota-hard-beta-short",
+        "component-quota-hard-alpha-short",
+    ),
+    (
+        "component-quota-hard-pool-details",
+        "component-quota-hard-beta-selected",
+    ),
+    (
+        "component-quota-hard-pool-closed-top",
+        "component-quota-hard-pool-details",
+    ),
+    (
+        "component-quota-hard-pool-details-bottom",
+        "component-quota-hard-details",
+    ),
+    (
+        "component-quota-hard-alpha-name-continued",
+        "component-quota-hard-beta-name-continued",
+    ),
+    (
+        "component-quota-hard-beta-name-continued",
+        "component-quota-hard-alpha-name-continued",
+    ),
+];
+
+fn write_component_receipt(
+    output: &Path,
+    binary: &Path,
+    tools: &CaptureTools,
+    columns: u16,
+    rows: u16,
+    kind: &str,
+    checkpoints: &[&str],
+) -> TestResult<()> {
+    let (_, node_sha256) = verified_node_executable()?;
+    let images = checkpoints
         .iter()
         .map(|checkpoint| {
             Ok(format!(
@@ -468,8 +684,9 @@ async fn run_component_capture(
     fs::write(
         output.join("component-receipt.json"),
         format!(
-            "{{\"kind\":\"compiled-quota-component-normal\",\"columns\":{columns},\"rows\":{rows},\"binary_sha256\":{},\"verifier_sha256\":{},\"checkpoint_source_sha256\":{},\"recognition_source_sha256\":{},\"driver_source_sha256\":{},\"tape_source_sha256\":{},\"fixed_child_sha256\":{},\"tape_sha256\":{},\"child_exit\":0,\"external_requests\":0,\"persisted_writes\":0,\"owned_children_stopped\":true,\"images\":[{images}]}}\n",
-            encode_json_string(&digest_file(&binary)?),
+            "{{\"kind\":{},\"columns\":{columns},\"rows\":{rows},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"verifier_sha256\":{},\"checkpoint_source_sha256\":{},\"recognition_source_sha256\":{},\"driver_source_sha256\":{},\"tape_source_sha256\":{},\"fixed_child_sha256\":{},\"tape_sha256\":{},\"child_exit\":0,\"external_requests\":0,\"persisted_writes\":0,\"owned_children_stopped\":true,\"images\":[{images}]}}\n",
+            encode_json_string(kind),
+            encode_json_string(&digest_file(binary)?),
             encode_json_string(&digest_file(&tools.image_verifier)?),
             encode_json_string(&format!(
                 "{:x}",
@@ -487,7 +704,9 @@ async fn run_component_capture(
                 "{:x}",
                 Sha256::digest(include_bytes!("quota_component_tape.rs"))
             )),
-            encode_json_string(&digest_file(&output.join("fixed_quota_child.py"))?),
+            encode_json_string(&digest_file(&permanent_adapter_source(
+                "fixture-child.ts"
+            )?)?),
             encode_json_string(&digest_file(&output.join("quota.tape"))?),
         ),
     )?;

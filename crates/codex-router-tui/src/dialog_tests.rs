@@ -365,7 +365,7 @@ fn form_field_columns_use_terminal_layout_for_wide_labels() {
 }
 
 #[test]
-fn percentage_dialog_actions_follow_a_short_body_with_one_gap() {
+fn percentage_dialog_footer_is_pinned_below_flexible_empty_space() {
     for (width, height) in [
         (120u16, 36u16),
         (76, 30),
@@ -388,11 +388,9 @@ fn percentage_dialog_actions_follow_a_short_body_with_one_gap() {
             .lines()
             .position(|line| line.contains("Cancel") && line.contains("Save"))
             .expect("actions remain visible");
-        assert_eq!(
-            action - body,
-            2,
-            "one deliberate gap after natural content at {width}x{height}: {frame}"
-        );
+        let bottom = frame.lines().position(|line| line.contains('╰')).unwrap();
+        assert!(action > body, "{frame}");
+        assert!(bottom - action <= 2, "C9 footer remains at bottom: {frame}");
         assert!(frame.lines().count() <= usize::from(height), "{frame}");
     }
 }

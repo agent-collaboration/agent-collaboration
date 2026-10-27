@@ -267,3 +267,166 @@ async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_n
     assert!(faults.drop_successful_object_reply(&destination, b"opaque reply")?);
     Ok(())
 }
+
+fn mailbox_submit_identity(origin: &str, item: &str, operation: &str) -> serde_json::Value {
+    json!({
+        "kind": "central.mailbox-submit",
+        "identity": {"operation": operation, "step": "selected-item"},
+        "request": {"origin": origin, "item": {"kind": "item", "value": {"id": item}}},
+    })
+}
+
+#[tokio::test]
+async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries() -> TestResult {
+    let origin = "019f0000-0000-7000-8000-000000000810";
+    let item = "019f0000-0000-7000-8000-000000000811";
+    let operation = "019f0000-0000-7000-8000-000000000812";
+    let selector = DispatchCallSelector::MailboxSubmitFor {
+        origin: origin.to_owned().try_into()?,
+        item: item.to_owned().try_into()?,
+    };
+    assert_eq!(
+        serde_json::to_value(selector)?,
+        json!({"mailboxSubmitFor": {"origin": origin, "item": item}})
+    );
+    let selector = serde_json::from_value(serde_json::to_value(selector)?)?;
+    let faults = RuntimeFaults::default();
+    let destination = ObjectAddress::Registry;
+    faults
+        .control(RuntimeControl::HoldNextSelectedDispatch {
+            destination: destination.clone(),
+            call: selector,
+        })
+        .await?;
+    let expected = mailbox_submit_identity(origin, item, operation);
+    let mut wrong_origin = expected.clone();
+    wrong_origin["request"]["origin"] = json!("019f0000-0000-7000-8000-000000000813");
+    let mut wrong_item = expected.clone();
+    wrong_item["request"]["item"]["value"]["id"] = json!("019f0000-0000-7000-8000-000000000814");
+    let mut cancel = wrong_item.clone();
+    cancel["request"]["item"]["kind"] = json!("cancel");
+    let mut query = expected.clone();
+    query["kind"] = json!("central.mailbox-request");
+    let mut invalid = expected.clone();
+    invalid["request"]["item"]["value"]["id"] = json!("invalid");
+    let mut missing = expected.clone();
+    missing["request"] = json!({"origin": origin});
+    for unrelated in [wrong_origin, wrong_item, cancel, query, invalid, missing] {
+        tokio::time::timeout(
+            BOUND,
+            faults.before_dispatch(&destination, &serde_json::to_vec(&unrelated)?),
+        )
+        .await??;
+        assert!(matches!(
+            faults.observe()?.dispatch,
+            DispatchFaultObservation::Armed { .. }
+        ));
+    }
+    let expected = serde_json::to_vec(&expected)?;
+    let forwarding = faults.before_dispatch(&destination, &expected);
+    tokio::pin!(forwarding);
+    assert!(futures_util::poll!(&mut forwarding).is_pending());
+    let held = faults.control(RuntimeControl::AwaitHeldDispatch).await?;
+    assert!(
+        matches!(held.dispatch, DispatchFaultObservation::Held { request, .. }
+        if request == expected)
+    );
+    faults.control(RuntimeControl::ResumeDispatch).await?;
+    tokio::time::timeout(BOUND, forwarding).await??;
+    Ok(())
+}
+
+#[tokio::test]
+async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault() -> TestResult {
+    let faults = RuntimeFaults::default();
+    let destination = ObjectAddress::Registry;
+    assert!(matches!(
+        faults.control(RuntimeControl::DropHeldDispatchReply).await,
+        Err(RuntimeControlFailure::NotHeld)
+    ));
+    faults
+        .control(RuntimeControl::HoldNextDispatch {
+            destination: destination.clone(),
+        })
+        .await?;
+    assert!(matches!(
+        faults.control(RuntimeControl::DropHeldDispatchReply).await,
+        Err(RuntimeControlFailure::NotHeld)
+    ));
+    assert!(matches!(
+        faults.observe()?.object_reply,
+        ObjectReplyFaultObservation::Idle
+    ));
+    let forwarding = faults.before_dispatch(&destination, b"held request");
+    tokio::pin!(forwarding);
+    assert!(futures_util::poll!(&mut forwarding).is_pending());
+    faults
+        .control(RuntimeControl::DropNextObjectReply {
+            destination: ObjectAddress::Fleet,
+        })
+        .await?;
+    assert!(matches!(
+        faults.control(RuntimeControl::DropHeldDispatchReply).await,
+        Err(RuntimeControlFailure::AlreadyArmed)
+    ));
+    assert!(!faults.drop_successful_object_reply(&destination, b"held request")?);
+    assert!(faults.drop_successful_object_reply(&ObjectAddress::Fleet, b"original fault")?);
+    // As with the existing reply controls, Dropped can be replaced by a new arm.
+    faults
+        .control(RuntimeControl::DropHeldDispatchReply)
+        .await?;
+    faults.control(RuntimeControl::ResumeDispatch).await?;
+    tokio::time::timeout(BOUND, forwarding).await??;
+    assert!(faults.drop_successful_object_reply(&destination, b"held request")?);
+    Ok(())
+}
+
+#[tokio::test]
+async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_call_bytes()
+-> TestResult {
+    let faults = RuntimeFaults::default();
+    let destination = ObjectAddress::Registry;
+    let expected = mailbox_submit_identity(
+        "019f0000-0000-7000-8000-000000000810",
+        "019f0000-0000-7000-8000-000000000811",
+        "019f0000-0000-7000-8000-000000000812",
+    );
+    let mut cancel = expected.clone();
+    cancel["request"]["item"]["kind"] = json!("cancel");
+    cancel["request"]["item"]["value"]["id"] = json!("019f0000-0000-7000-8000-000000000813");
+    let mut new_call = expected.clone();
+    new_call["identity"]["operation"] = json!("019f0000-0000-7000-8000-000000000814");
+    let expected = serde_json::to_vec(&expected)?;
+    faults
+        .control(RuntimeControl::HoldNextDispatch {
+            destination: destination.clone(),
+        })
+        .await?;
+    let forwarding = faults.before_dispatch(&destination, &expected);
+    tokio::pin!(forwarding);
+    assert!(futures_util::poll!(&mut forwarding).is_pending());
+    faults
+        .control(RuntimeControl::DropHeldDispatchReply)
+        .await?;
+    for unrelated in [serde_json::to_vec(&cancel)?, serde_json::to_vec(&new_call)?] {
+        tokio::time::timeout(BOUND, faults.before_dispatch(&destination, &unrelated)).await??;
+        assert!(!faults.drop_successful_object_reply(&destination, &unrelated)?);
+        assert!(matches!(
+            faults.observe()?.object_reply,
+            ObjectReplyFaultObservation::Armed { .. }
+        ));
+    }
+    assert!(!faults.drop_successful_object_reply(&ObjectAddress::Fleet, &expected)?);
+    faults.control(RuntimeControl::ResumeDispatch).await?;
+    tokio::time::timeout(BOUND, forwarding).await??;
+    assert!(faults.drop_successful_object_reply(&destination, &expected)?);
+    let dropped = faults
+        .control(RuntimeControl::AwaitDroppedObjectReply)
+        .await?;
+    assert!(
+        matches!(dropped.object_reply, ObjectReplyFaultObservation::Dropped { request, .. }
+        if request == expected)
+    );
+    assert!(!faults.drop_successful_object_reply(&destination, &expected)?);
+    Ok(())
+}

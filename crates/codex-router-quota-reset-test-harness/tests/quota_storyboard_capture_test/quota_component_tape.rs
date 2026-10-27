@@ -1,7 +1,7 @@
 //! Real-input tour of the existing component fixture; external ports stay synthetic.
 use super::{FONT_FAMILY, TestResult, ensure};
 
-pub(super) const NORMAL_CHECKPOINTS: [&str; 42] = [
+pub(super) const NORMAL_CHECKPOINTS: [&str; 43] = [
     "component-quota-browse",
     "component-quota-browse-credit-window",
     "component-quota-browse-pace-heading",
@@ -42,6 +42,7 @@ pub(super) const NORMAL_CHECKPOINTS: [&str; 42] = [
     "component-quota-confirm-help-identity",
     "component-quota-confirm-help-returned",
     "component-quota-reset-result",
+    "component-quota-reset-result-consumption",
     "component-quota-reset-result-bottom",
     "component-quota-returned",
 ];
@@ -59,11 +60,40 @@ const CREDIT_REFRESH_READY: &str = r"Options · Credits.*alpha-tag.*[\s│┃]Cr
 const MODAL_FIELD_ROW_GAP: &str =
     r"(?:[ \t│┃]{1,1000}|[ \t│┃]{0,1000}\r?\n[^\r\n]{0,1000}[│┃][ \t]*)";
 
+// The 48x12 Normal body has 38 rows and a four-row viewport. Saturate
+// its existing paging owner, acknowledge the bottom, then reverse to the
+// complete Alpha group witnessed by the permanent mounted test.
+fn append_short_normal_group_pose(tape: &mut String, reverse_pages: usize) {
+    tape.push_str(
+        "PageDown@1ms 256\nWait+Screen /(?s)Quota status.*Extra.*Credits unknown.*2 resets/\n",
+    );
+    tape.push_str(&"PageUp\n".repeat(reverse_pages));
+}
+
 fn credit_field_readiness(label: &str, value: &str) -> String {
     format!(r"Options · Credits.*alpha-tag.*[\s│┃]{label}{MODAL_FIELD_ROW_GAP}{value}(?:[\s│┃]|$)")
 }
 
+// Actual76 Help wraps the selected name onto the next modal row after background
+// browse meter glyphs: every word stays in order. The Help image ROI stays strict.
+fn help_identity_readiness() -> String {
+    let words = [
+        "Research",
+        "Account",
+        "Alpha",
+        "Long",
+        "Name",
+        r"\[alpha-tag\]",
+    ];
+    format!("Quota Help.*{}", words.join(MODAL_FIELD_ROW_GAP))
+}
+
 const RESET_SUCCESS_READY: &str = r"Reset result.*alpha-tag.*[\s│┃]Success[\s│┃]{1,1000}—[\s│┃]{1,1000}reset[\s│┃]{1,1000}completed(?:[\s│┃]|$)";
+
+// Narrow Details clips the account name before its reserved tag (hard 32x24
+// "Claude Resea… [beta-tag]"); the captured tag, notice and Close stay exact.
+const HARD_DETAILS_READY: &str =
+    r"Account details.*Claude Resea(?:rch|…).*\[beta-tag\].*Credentials locked.*Close";
 
 pub(super) fn validate_normal_checkpoints(checkpoints: &[&str]) -> TestResult<()> {
     ensure(
@@ -97,6 +127,23 @@ fn selected_account_readiness_expression(words: &[&str]) -> String {
         fragments.join(&word_gap)
     )
 }
+
+// The Beta windows pose waits on two expressions over one settled screen. The
+// first binds the selection marker to Beta's whole wrapped name; the second
+// requires Beta's window facts after that marker. At 120x36 the name wraps
+// after "Account" with the week window on the marker row itself, so the facts
+// can precede the end of the name.
+fn hard_beta_selected_name_readiness() -> String {
+    format!(
+        "Quota status.*{}",
+        selected_account_readiness_expression(&[
+            "Claude", "Research", "Account", "Beta", "Full", "Name",
+        ])
+    )
+}
+
+const HARD_BETA_WINDOW_FACTS_READY: &str =
+    "Quota status.*❯.*75% · week · —.*week stale.*No data · 5h · —";
 
 fn checkpoint(tape: &mut String, name: &str, expression: &str) {
     tape.push_str(&format!(
@@ -142,35 +189,52 @@ pub(super) fn build_normal_component_tape(columns: u16, rows: u16) -> TestResult
     };
     let mut tape = component_tape_settings(columns, rows);
     checkpoint(&mut tape, "component-quota-browse", "Quota status.*OpenAI");
-    if (columns, rows) == (48, 12) {
-        tape.push_str("PageDown\n");
+    // Forward poses start at the top; short complete groups reverse from the
+    // acknowledged bottom so their heading and literal value remain together.
+    let short_groups = (columns, rows) == (48, 12);
+    let (credit_pages, heading_pages, value_pages) = match (columns, rows) {
+        (48, 12) => (0, 2, 0),
+        (48, 24) | (32, 24) => (1, 0, 0),
+        _ => (0, 0, 0),
+    };
+    if short_groups {
+        append_short_normal_group_pose(&mut tape, 5);
+    } else {
+        tape.push_str(&"PageDown\n".repeat(credit_pages));
     }
+    // 2026-10-23 C6: browse credit text is quantity-first with its unit.
     checkpoint(
         &mut tape,
         "component-quota-browse-credit-window",
-        r"Quota status.*62\.5k",
+        r"Quota status.*62\.5k credits",
     );
-    if (columns, rows) == (48, 12) {
-        tape.push_str("PageDown\n");
+    if short_groups || credit_pages > 0 {
+        tape.push_str("PageUp@1ms 256\n");
     }
+    tape.push_str(&"PageDown\n".repeat(heading_pages));
+    // C1/C2: wide puts "Weekly pace" in the header row above the window line;
+    // folded repeats it as the group heading after the Quota group.
     checkpoint(
         &mut tape,
         "component-quota-browse-pace-heading",
-        r"Quota status.*99%.*5h.*Weekly[\s│┃]{1,1000}pace",
+        r"Quota status.*(?:99% · 5h.*Weekly[\s│┃]{1,1000}pace|Weekly[\s│┃]{1,1000}pace.*99% · 5h)",
     );
-    if (columns, rows) == (48, 12) {
-        tape.push_str("PageDown@1ms 256\nPageUp\nPageUp\nPageUp\n");
+    if heading_pages > 0 {
+        tape.push_str("PageUp@1ms 256\n");
     }
+    if short_groups {
+        append_short_normal_group_pose(&mut tape, 6);
+    } else {
+        tape.push_str(&"PageDown\n".repeat(value_pages));
+    }
+    // The interactive Weekly pace group renders "burn unavailable" at every
+    // width (quota_account_groups.rs); the old 32-column "Unknown" is retired.
     checkpoint(
         &mut tape,
         "component-quota-browse-pace-value",
-        if columns == 32 {
-            r"Quota status.*Weekly[\s│┃]{1,1000}pace[\s│┃]{1,1000}Unknown(?:[\s│┃]|$)"
-        } else {
-            r"Quota status.*burn[\s│┃]{1,1000}u[\s│┃]{0,1000}n[\s│┃]{0,1000}a[\s│┃]{0,1000}v[\s│┃]{0,1000}a[\s│┃]{0,1000}i[\s│┃]{0,1000}l[\s│┃]{0,1000}a[\s│┃]{0,1000}b[\s│┃]{0,1000}l[\s│┃]{0,1000}e"
-        },
+        r"Quota status.*burn[\s│┃]{1,1000}u[\s│┃]{0,1000}n[\s│┃]{0,1000}a[\s│┃]{0,1000}v[\s│┃]{0,1000}a[\s│┃]{0,1000}i[\s│┃]{0,1000}l[\s│┃]{0,1000}a[\s│┃]{0,1000}b[\s│┃]{0,1000}l[\s│┃]{0,1000}e",
     );
-    if (columns, rows) == (48, 12) {
+    if short_groups || value_pages > 0 {
         tape.push_str("PageUp@1ms 256\n");
     }
     checkpoint(
@@ -404,7 +468,7 @@ pub(super) fn build_normal_component_tape(columns: u16, rows: u16) -> TestResult
     checkpoint(
         &mut tape,
         "component-quota-confirm-help-identity",
-        "Quota Help.*Research[\\s│┃]{1,1000}Account[\\s│┃]{1,1000}Alpha[\\s│┃]{1,1000}Long[\\s│┃]{1,1000}Name[\\s│┃]{1,1000}\\[alpha-tag\\]",
+        &help_identity_readiness(),
     );
     tape.push_str("Escape\nDown@1ms 256\n");
     checkpoint(
@@ -417,6 +481,16 @@ pub(super) fn build_normal_component_tape(columns: u16, rows: u16) -> TestResult
         &mut tape,
         "component-quota-reset-result",
         RESET_SUCCESS_READY,
+    );
+    // The permanent mounted result proof measures exactly two Down events at
+    // 48x12; every other declared grid shows consumption in the top pose.
+    if (columns, rows) == (48, 12) {
+        tape.push_str("Down\nDown\n");
+    }
+    checkpoint(
+        &mut tape,
+        "component-quota-reset-result-consumption",
+        r"Reset result.*alpha-tag.*[\s│┃]One[\s│┃]{1,1000}reset[\s│┃]{1,1000}credit[\s│┃]{1,1000}was[\s│┃]{1,1000}consumed\.(?:[\s│┃]|$)",
     );
     tape.push_str("Down@1ms 256\n");
     checkpoint(
@@ -440,6 +514,254 @@ pub(super) fn build_normal_component_tape(columns: u16, rows: u16) -> TestResult
     Ok(tape)
 }
 
+// 2026-10-23 C2/C3/C6 hard cases on the separate `visual-hard-cases` fixture
+// (quota_storyboard_fixture_test.rs fixture_scenario_model): Alpha has known
+// windows and resets, Beta a stale weekly window with unknown reset, no 5h data
+// and stale credits; every row and the header carry "Credentials locked".
+// 120x36 only: the whole Pool body fits there.
+pub(super) const HARD_CASE_CHECKPOINTS: [&str; 9] = [
+    "component-quota-hard-browse",
+    "component-quota-hard-beta-windows",
+    "component-quota-hard-beta-extra",
+    "component-quota-hard-pool-details",
+    "component-quota-hard-pool-details-complete",
+    "component-quota-hard-pool-details-middle",
+    "component-quota-hard-pool-details-bottom",
+    "component-quota-hard-pool-closed",
+    "component-quota-hard-details",
+];
+
+// 76x30 and the 24-row grids: top, middle and bottom Pool poses (no complete).
+pub(super) const HARD_CASE_PARTIAL_CHECKPOINTS: [&str; 8] = [
+    "component-quota-hard-browse",
+    "component-quota-hard-beta-windows",
+    "component-quota-hard-beta-extra",
+    "component-quota-hard-pool-details",
+    "component-quota-hard-pool-details-middle",
+    "component-quota-hard-pool-details-bottom",
+    "component-quota-hard-pool-closed",
+    "component-quota-hard-details",
+];
+
+// 48x12 shows one body row per page at the top: the selected name's first row,
+// then its continuation one page down in the same terminal.
+// Identity is the composite of that prefix, the same-child continuation and the
+// captured Details tag; no single 48x12 frame holds the whole name. Alpha's
+// week line at PageDown 2, 5h at 3; Beta's week 2, stale/no-data 3, credits 6.
+pub(super) const HARD_CASE_SHORT_CHECKPOINTS: [&str; 14] = [
+    "component-quota-hard-browse-top",
+    "component-quota-hard-alpha-name-continued",
+    "component-quota-hard-alpha-week",
+    "component-quota-hard-alpha-short",
+    "component-quota-hard-beta-selected",
+    "component-quota-hard-beta-name-continued",
+    "component-quota-hard-beta-week",
+    "component-quota-hard-beta-short",
+    "component-quota-hard-beta-extra",
+    "component-quota-hard-pool-details",
+    "component-quota-hard-pool-details-middle",
+    "component-quota-hard-pool-details-bottom",
+    "component-quota-hard-pool-closed-top",
+    "component-quota-hard-details",
+];
+
+pub(super) fn hard_case_checkpoints(
+    columns: u16,
+    rows: u16,
+) -> TestResult<&'static [&'static str]> {
+    match (columns, rows) {
+        (48, 12) => Ok(&HARD_CASE_SHORT_CHECKPOINTS),
+        (120, 36) => Ok(&HARD_CASE_CHECKPOINTS),
+        (76, 30) | (48, 24) | (40, 24) | (32, 24) => Ok(&HARD_CASE_PARTIAL_CHECKPOINTS),
+        _ => Err("hard-case viewport is not declared".into()),
+    }
+}
+
+pub(super) fn validate_hard_case_checkpoints(
+    columns: u16,
+    rows: u16,
+    checkpoints: &[&str],
+) -> TestResult<()> {
+    ensure(
+        checkpoints == hard_case_checkpoints(columns, rows)?,
+        "hard-case tour must keep every window, census and return scene in order",
+    )
+}
+
+/// Body PageDowns from Beta's selected window lines to Beta's Extra group on
+/// the tall grids, derived from the folded block height against each body and
+/// confirmed by a declared calibration run.
+fn hard_case_extra_page_downs(columns: u16, rows: u16) -> TestResult<usize> {
+    match (columns, rows) {
+        (120, 36) | (76, 30) => Ok(0),
+        (48, 24) | (40, 24) | (32, 24) => Ok(1),
+        _ => Err("hard-case tall viewport is not declared".into()),
+    }
+}
+
+fn beta_selected() -> String {
+    selected_account_readiness_expression(&[
+        "Claude", "Research", "Account", "Beta", "Full", "Name",
+    ])
+}
+
+fn beta_selected_prefix() -> String {
+    selected_account_readiness_expression(&["Claude", "Research", "Account", "Beta", "Full"])
+}
+
+fn hard_case_pool_and_return(
+    tape: &mut String,
+    complete: bool,
+    middle_downs: usize,
+    closed: (&str, String),
+) {
+    tape.push_str("F5\nUp@1ms 256\n");
+    checkpoint(
+        tape,
+        "component-quota-hard-pool-details",
+        "Pool details.*Accounts: 2.*Usable: 1.*Reserve: 0.*Close",
+    );
+    if complete {
+        checkpoint(
+            tape,
+            "component-quota-hard-pool-details-complete",
+            "Pool details.*Accounts: 2.*Usable: 1.*Reserve: 0.*Blocked: 1.*Pool unknown: 0.*Excluded: 0.*Fresh: 0.*Stale: 1.*Data unknown: 1.*Clients: 1.*Credentials locked.*Close",
+        );
+    }
+    // Middle rows: offset 0 on tall grids, four Downs in the 48x12 body.
+    tape.push_str(&"Down\n".repeat(middle_downs));
+    checkpoint(
+        tape,
+        "component-quota-hard-pool-details-middle",
+        "Pool details.*Blocked: 1.*Pool unknown: 0.*Excluded: 0.*Fresh: 0.*Close",
+    );
+    tape.push_str("Down@1ms 256\n");
+    checkpoint(
+        tape,
+        "component-quota-hard-pool-details-bottom",
+        "Pool details.*Stale: 1.*Data unknown: 1.*Clients: 1.*Credentials locked.*Close",
+    );
+    tape.push_str("Escape\n");
+    checkpoint(tape, closed.0, &format!("Quota status.*{}", closed.1));
+    tape.push_str("F4\nUp@1ms 256\n");
+    checkpoint(tape, "component-quota-hard-details", HARD_DETAILS_READY);
+    tape.push_str("Escape\nWait+Screen /Quota status/\nType \"q\"\nWait+Line /^QUOTA_STORYBOARD_CHILD_EXIT=0$/\n");
+}
+
+fn build_short_hard_case_tape() -> String {
+    let mut tape = component_tape_settings(48, 12);
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-browse-top",
+        &format!(
+            "Quota status.*Credentials locked.*{}",
+            selected_account_readiness_expression(&[
+                "東京", "OpenAI", "Research", "Account", "Alpha",
+            ])
+        ),
+    );
+    tape.push_str("PageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-alpha-name-continued",
+        r"Quota status.*Long Name.*OpenAI · 1 client",
+    );
+    tape.push_str("PageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-alpha-week",
+        "Quota status.*92% · week · 6d 16h",
+    );
+    tape.push_str("PageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-alpha-short",
+        "Quota status.*83% · 5h · 2h 10m",
+    );
+    tape.push_str("PageUp\nPageUp\nPageUp\nDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-selected",
+        &format!("Quota status.*{}", beta_selected_prefix()),
+    );
+    tape.push_str("PageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-name-continued",
+        r"Quota status.*Name.*Claude · 0 clients",
+    );
+    tape.push_str("PageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-week",
+        "Quota status.*75% · week · —",
+    );
+    tape.push_str("PageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-short",
+        "Quota status.*week stale.*No data · 5h · —",
+    );
+    tape.push_str("PageDown\nPageDown\nPageDown\n");
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-extra",
+        r"Quota status.*125\.5 credits.*Credits stale",
+    );
+    // Back to the selected-Beta pose before Pool details and its return.
+    tape.push_str(&"PageUp\n".repeat(6));
+    hard_case_pool_and_return(
+        &mut tape,
+        false,
+        4,
+        (
+            "component-quota-hard-pool-closed-top",
+            beta_selected_prefix(),
+        ),
+    );
+    tape
+}
+
+pub(super) fn build_hard_case_component_tape(columns: u16, rows: u16) -> TestResult<String> {
+    if (columns, rows) == (48, 12) {
+        return Ok(build_short_hard_case_tape());
+    }
+    let extra_page_downs = hard_case_extra_page_downs(columns, rows)?;
+    let mut tape = component_tape_settings(columns, rows);
+    // Exact rendered window lines (quota_account_groups.rs render_window).
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-browse",
+        r"Quota status.*Credentials locked.*92% · week · 6d 16h.*83% · 5h · 2h 10m",
+    );
+    tape.push_str("Down\n");
+    tape.push_str(&format!(
+        "Wait+Screen /(?s){}/\n",
+        hard_beta_selected_name_readiness()
+    ));
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-windows",
+        HARD_BETA_WINDOW_FACTS_READY,
+    );
+    // Same child, same selection; only Beta has these credit facts.
+    tape.push_str(&"PageDown\n".repeat(extra_page_downs));
+    checkpoint(
+        &mut tape,
+        "component-quota-hard-beta-extra",
+        r"Quota status.*125\.5 credits.*Credits stale",
+    );
+    // Back to the windows pose, where Beta's selected name is visible again.
+    tape.push_str(&"PageUp\n".repeat(extra_page_downs));
+    hard_case_pool_and_return(
+        &mut tape,
+        (columns, rows) == (120, 36),
+        0,
+        ("component-quota-hard-pool-closed", beta_selected()),
+    );
+    Ok(tape)
+}
+
 #[cfg(test)]
 #[path = "quota_component_tape_test.rs"]
 mod tests;
@@ -447,3 +769,7 @@ mod tests;
 #[cfg(test)]
 #[path = "quota_component_observation_wait_test.rs"]
 mod observation_wait_tests;
+
+#[cfg(test)]
+#[path = "quota_component_result_tape_test.rs"]
+mod result_tape_tests;
