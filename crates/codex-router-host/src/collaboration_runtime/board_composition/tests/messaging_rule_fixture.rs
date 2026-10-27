@@ -128,6 +128,10 @@ impl RuleFixture {
     pub async fn confirm_prefix(&self, head: FeedCursor) -> TestResult {
         timeout(BOUND, async {
             loop {
+                self.holder
+                    .projects
+                    .replicate_project_for_test(&self.project)
+                    .await?;
                 if self
                     .holder
                     .projects

@@ -169,13 +169,16 @@ async fn seed_notification_for_recipient(
     read.finish().await?;
     timeout(BOUND, async {
         loop {
+            projects
+                .replicate_project_for_test(&creating.project_id)
+                .await?;
             if replication
                 .replicated_through(&creating.project_id, head.epoch)
                 .await?
                 .position
                 >= head.position
             {
-                return Ok::<_, BoardError>(());
+                return TestResult::Ok(());
             }
             tokio::task::yield_now().await;
         }
