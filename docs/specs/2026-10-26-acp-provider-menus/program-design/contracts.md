@@ -9,7 +9,7 @@ This is a proposed realization of R1–R7. It does not approve a client change o
 | E1 provider conversation | Existing ACP actor in `acp-client-runtime`, existing Host/session binding | Existing session/thread identity; no replacement identity |
 | E2 provider action | Provider owns meaning; modified ACP actor consumes an injected shim; provider implementations own translation | Existing ACP rows/custom data enter a proposed internal menu view; shared Rust shape in `session-event-model`, without a persisted field or catalogue crate |
 | E3 menu view | Candidate modified Codex composer/popup, conditional on client approval | Proposed app-server schema owned once by Codex protocol and generated for its consumers; two derived partitions |
-| E4 action invocation | Candidate Codex input edge; modified service/Host admission and ACP actor | `ProviderPromptSubmission::Action` carries typed selection to the actor; actor prepares ACP text; existing turn lifecycle remains authoritative |
+| E4 action invocation | Candidate Codex input edge; modified runtime app-server/Host admission and ACP actor | `ProviderPromptSubmission::Action` carries typed selection to the actor; actor prepares ACP text; existing turn lifecycle remains authoritative |
 
 The internal view and client wire view are different boundaries with an explicit translation; do not hand-maintain duplicate versions of one schema. Internal types are Rust enums; the proposed client examples below explain the conditional wire contract, not a second implementation schema.
 
@@ -45,7 +45,7 @@ pub trait ProviderMenuShim: Send {
 
 `observe` consumes a complete advertised command list or a permitted extension notification and returns a replacement snapshot only when menu state changes. `ProviderMenuEvent` is a runtime-owned neutral enum: `CommandList` carries decoded name/description/input-hint and opaque metadata; `ExtensionNotification` carries method and JSON parameters. ACP SDK values stay private to the existing runtime decoding edge. This is a translated input vocabulary, not a second wire schema. The default implementation retains unclassified command rows and ignores unrelated extensions.
 
-The output `ProviderMenuSnapshot` has skills/commands partitions and no client thread ID; the service adds the existing thread binding in the client wire view. A snapshot is immutable after publication. The error set distinguishes invalid advertisement and ambiguous native identity; missing classification is fallback state, not an error. A malformed optional classification extension cannot turn unrelated notification data into a command or permission.
+The output `ProviderMenuSnapshot` has skills/commands partitions and no client thread ID; the runtime app-server translator adds the existing thread binding in the client wire view. A snapshot is immutable after publication. The error set distinguishes invalid advertisement and ambiguous native identity; missing classification is fallback state, not an error. A malformed optional classification extension cannot turn unrelated notification data into a command or permission.
 
 `prepare` accepts the actor-validated native identity and literal arguments, and returns validated native text. Its errors distinguish action unavailable, invalid invocation and unsupported submission. It does not read files, expand skill bodies or invoke anything. Runtime adds existing attachment blocks and sends the normal ACP prompt. The existing approval and cancellation code remains outside the shim.
 
@@ -112,7 +112,7 @@ The alternative stock `$` option uses the existing `skills/list` and path-bearin
 
 `collaboration-runtime::router_session_app_server_methods` owns the Codex-facing read and notification translation. The capability traits `SessionEventHub` and `SessionCommandPort` belong to `collaboration-contracts`: the former owns the read/attachment contract, the latter effects. The stateful `ProviderSessionEventHub` implementation belongs to `collaboration-runtime`. Add the narrow typed menu read/update contract at the existing hub boundary; keep its implementation in runtime. `codex-router-host` constructs these owners and binds them to its ACP actor. The shared menu data remains in `session-event-model`, which both runtimes already consume. `collaboration-service` does not gain a second runtime or a provider-specific dependency. These homes follow the #173 crate DAG.
 
-The ACP actor remains the sole writer of its ephemeral translated view. Host forwards its state changes into the existing hub's ordered read/update attachment. The service maps the existing thread binding to that view; a client cannot supply another provider identifier. Atomically attaching a current view and later updates follows the existing hub contract, so a read/update race cannot silently lose a replacement.
+The ACP actor remains the sole writer of its ephemeral translated view. Host forwards its state changes into the existing hub's ordered read/update attachment. The runtime app-server translator maps the existing thread binding to that view; a client cannot supply another provider identifier. Atomically attaching a current view and later updates follows the existing hub contract, so a read/update race cannot silently lose a replacement.
 
 Existing persisted command/usage items and prose filtering retain their owners and schemas. The new live menu projection is not another database. On reopen, await the provider's fresh setup/catalogue evidence; do not treat old unclassified history as authority for a current selection. Historical metadata remains readable through the existing metadata surface.
 
@@ -130,7 +130,7 @@ pub enum ProviderPromptSubmission {
 }
 ```
 
-`SelectedProviderAction` carries the selected native name, kind and literal arguments shown in the client contract. `PromptContent` itself keeps its existing meaning and variants. The selected action is not converted to text by the service.
+`SelectedProviderAction` carries the selected native name, kind and literal arguments shown in the client contract. `PromptContent` itself keeps its existing meaning and variants. The selected action is not converted to text by the runtime app-server translator.
 
 The complete edge is: candidate app-server selected input → `PromptSessionCommand` submission → Host `ProviderPromptContentsRequest` submission → existing in-memory `ProviderQueuedPrompt` when queued → runtime `ProviderSessionCommand::Prompt` submission → actor validation and shim preparation → existing ACP `PromptRequest`. These existing owners receive the envelope in place of the raw content-only field; no parallel command bus is added.
 
@@ -138,7 +138,7 @@ The actor checks current native name/kind at actual dispatch, including after qu
 
 **Storage boundary:** the typed selection is held only in process memory, including the existing FIFO; it is not serialized into operation rows, queued-input storage or history. `ProviderOperationStore` is metadata-only and the current FIFO/queue registry are in memory. The persisted history keeps the existing submitted-text item shape. No persisted-format change, migration or new recovery/replay mechanism is selected. A future durable selected-input queue would be a separate owner decision. Process loss retains the existing unsent-queue limitation.
 
-Current source on the #173 base: `collaboration-contracts/src/session_command_port.rs` defines the content-only command edge; `provider_session_command_port.rs:154` forwards it; `external_provider_supervisor/provider_prompt_contents.rs` admits and forwards without storing content; `provider_acp_message_fifo.rs:33` and `provider_queue_operation_registry.rs:19` hold queued input in memory. `provider_session_actor.rs:161` currently receives prepared blocks and sends them; the proposed change delays selected-action preparation to this owning actor. `provider_operation_store.rs:1` explicitly excludes prompt/transcript input.
+Current source on #173 plus foundation 6e98f4667: `collaboration-contracts/src/session_command_port.rs` defines the content-only command edge; `provider_session_command_port.rs:164` forwards it; `external_provider_supervisor/provider_prompt_contents.rs` admits and forwards without storing content; `provider_acp_message_fifo.rs:33` and `provider_queue_operation_registry.rs:19` hold queued input in memory. `provider_session_actor.rs:161` currently receives prepared blocks and sends them; the proposed change delays selected-action preparation to this owning actor. `provider_operation_store.rs:1` explicitly excludes prompt/transcript input.
 
 ## Replacement, validation and invocation
 
@@ -159,7 +159,7 @@ After any Host queue wait, the actor validates exact native name and kind agains
 sequenceDiagram
   participant P as Provider
   participant R as ACP actor and shim
-  participant H as Host and service hub
+  participant H as Host and runtime hub
   participant C as Candidate Codex client
   P->>R: Existing list or approved extension
   R->>H: Typed current view and changes
@@ -195,13 +195,13 @@ Each vertical row preserves `capability · U · R · E · owner · interface · 
 ### R3 / C3 — Intended invocation
 
 - **Capability / U / E:** skills, also serves commands / U1–U4, U6, U7 / E1, E2, E4.
-- **Owner / interface / shape-home:** service, Host admission and actor / typed ProviderPromptSubmission reaches actor, then shim prepares ACP content / envelope in session-event-model, conditional Codex input schema, existing PromptRequest.
+- **Owner / interface / shape-home:** runtime app-server translator, Host admission and actor / typed ProviderPromptSubmission reaches actor, then shim prepares ACP content / envelope in session-event-model, conditional Codex input schema, existing PromptRequest.
 - **State / failure / proof:** current name/kind membership and one enqueue / removed or ambiguous selection refused; still-present name survives resend / exact arguments, effect and dispatch count.
 
 ### R4 / C4 — Replacement and support
 
 - **Capability / U / E:** skills, also serves commands / U3–U5, U7 / E1–E4.
-- **Owner / interface / shape-home:** actor writer, Host/hub reader, service translator / typed view and changes / ephemeral internal view, no new persisted field.
+- **Owner / interface / shape-home:** actor writer, Host/hub reader, runtime app-server translator / typed view and changes / ephemeral internal view, no new persisted field.
 - **State / failure / proof:** waiting, ready-empty, unsupported, closed / every view change published; valid replacement recovers / mixed/unclassified, empty, no-list, closure and reopen controls.
 
 ### R5 / C5 — Bridge boundary
