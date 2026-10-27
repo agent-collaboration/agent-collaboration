@@ -1,8 +1,8 @@
 //! Real generic FleetService; directory policy and enrollment are explicit fixture inputs.
 use board_fleet_sync::{AccessServiceToken, BOARD_LEASE_POLICY, BoardSessionInputs};
 use board_sync_protocol::{
-    BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardReadCursor,
-    BoardReadPage, BoardReadScope, MailSubmitAnswer, NoticeRead,
+    BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardPayload,
+    BoardReadCursor, BoardReadPage, BoardReadScope, MailSubmitAnswer, NoticeRead,
 };
 use durable_steps::CallId;
 use fleet_sync_lease::{GateFailure, HolderChangeGate, LifecycleGate, RegistryConfig};
@@ -60,6 +60,7 @@ struct Consumer {
     read_copy_unavailable: Arc<AtomicBool>,
     read_copy_requests: Arc<AtomicUsize>,
     notifications: Arc<NotificationProbe>,
+    archive_reports: watch::Sender<Vec<board_sync_protocol::ArchiveSeen>>,
     registration: GateAnswer,
     registration_gate: Arc<RegistrationGate>,
     notices: Arc<NoticeScripts>,
@@ -211,6 +212,15 @@ impl ConsumerHandler<BoardConsumerProtocol> for Consumer {
                 }),
             };
         }
+        if let BoardConsumerRequest::ArchiveSeen(report) = request {
+            self.archive_reports
+                .send_modify(|reports| reports.push(report));
+            let payload = BoardPayload::encode(&fleet_admission::ArchiveReportOutcome::Recorded)
+                .map_err(|error| ServiceError::Rule {
+                    message: error.to_string(),
+                })?;
+            return Ok(BoardConsumerAnswer::ArchiveSeen(payload));
+        }
         if let BoardConsumerRequest::Read { scope, cursor } = request
             && matches!(
                 scope,
@@ -332,6 +342,7 @@ pub(super) struct TestFleet {
     #[allow(dead_code)] // Read-copy observations run with runtime-test-support.
     pub read_copy_requests: Arc<AtomicUsize>,
     pub notifications: Arc<NotificationProbe>,
+    pub archive_reports: watch::Sender<Vec<board_sync_protocol::ArchiveSeen>>,
     pub peer: PeerId,
     pub receiver: ReceiverId,
     pub auth: Arc<Authenticator>,
@@ -411,6 +422,7 @@ impl TestFleet {
         let fleet_reads = Arc::new(FleetReadProbe::default());
         let delivery_requests = Arc::new(Mutex::new(None));
         let notifications = Arc::new(NotificationProbe::default());
+        let archive_reports = watch::channel(Vec::new()).0;
         let directory_probe = Arc::new(DirectoryProbe::default());
         let read_copy_entries = Arc::new(Mutex::new(Vec::new()));
         let read_copy_unavailable = Arc::new(AtomicBool::new(false));
@@ -436,6 +448,7 @@ impl TestFleet {
                 read_copy_unavailable: read_copy_unavailable.clone(),
                 read_copy_requests: read_copy_requests.clone(),
                 notifications: notifications.clone(),
+                archive_reports: archive_reports.clone(),
                 registration,
                 registration_gate: registration_gate.clone(),
                 notices: notices.clone(),
@@ -455,6 +468,7 @@ impl TestFleet {
             read_copy_unavailable,
             read_copy_requests,
             notifications,
+            archive_reports,
             peer,
             receiver,
             auth,
