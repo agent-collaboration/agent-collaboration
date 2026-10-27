@@ -113,14 +113,14 @@ async fn private_registry_host_child_entrypoint() -> TestResult {
         }),
         "no ACP provider may be launched",
     )?;
-    let exit = HostRuntime::run(
+    let exit = Box::pin(HostRuntime::run(
         config,
         ManagedChildLaunchPlans::new(
             None,
             AppServerLaunchPlan::new(command, identity, "1.2.3".into()),
         ),
         ManagedUpdateInputs::production(),
-    )
+    ))
     .await?;
     check_equal(
         exit,

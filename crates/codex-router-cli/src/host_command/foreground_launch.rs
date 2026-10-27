@@ -189,13 +189,13 @@ pub(super) async fn run_foreground_host(
         update_inputs =
             update_inputs.with_pre_exec_telemetry(Arc::new(HostPreExecTelemetry(telemetry)));
     }
-    HostRuntime::run_acquired_with_progress(
+    Box::pin(HostRuntime::run_acquired_with_progress(
         config,
         child_launch_plans,
         update_inputs,
         instance,
         None,
-    )
+    ))
     .await?;
     Ok(())
 }
