@@ -238,6 +238,13 @@ impl LoopbackProtocolConnectionHandler {
         })
     }
 
+    #[cfg_attr(
+        target_os = "linux",
+        expect(
+            clippy::large_futures,
+            reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
+        )
+    )]
     pub(super) async fn handle_hyper_websocket_upgraded(
         self: Arc<Self>,
         local_websocket: hyper_tungstenite::HyperWebsocketStream,
