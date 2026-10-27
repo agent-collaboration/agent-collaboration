@@ -41,6 +41,7 @@ members = [
     "crates/codex-router-state",
     "crates/codex-router-test-support",
     "prototypes/ux_prototype",
+    "crates/workspace-architecture-check",
 ]
 
 [workspace.package]
