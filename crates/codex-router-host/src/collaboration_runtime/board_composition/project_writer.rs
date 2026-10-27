@@ -9,13 +9,16 @@ use fleet_sync_tokio_runner::{NativeWriterRuntime, SessionRequests, WriterSessio
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderError, SenderOptions};
 use message_board::ProjectId;
 use message_board_storage::ProjectStorageError;
-use std::{io, sync::Arc};
+use std::{io, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, OnceCell, mpsc, watch},
     task::JoinSet,
 };
 
 type BoardWriterRuntime = NativeWriterRuntime<BoardProjectSchema, BoardConsumerProtocol>;
+// Poll idle copies every 10 s until agent-fleet-sync supports event-driven local-write wakes.
+const REPLICATION_RETRY_AFTER: Duration = Duration::from_secs(10);
+
 type BoardReplicationSender = ReplicationSender<
     BoardProjectSchema,
     BoardPieceAnnotation,
@@ -90,7 +93,10 @@ impl ProjectWriter {
             Arc::new(BoardPieceAnnotation),
             Arc::new(BoardCaptureBookkeeping),
             runtime.transport(),
-            SenderOptions::default(),
+            SenderOptions {
+                retry_after: REPLICATION_RETRY_AFTER,
+                ..SenderOptions::default()
+            },
         ));
         Ok(Self {
             runtime,
