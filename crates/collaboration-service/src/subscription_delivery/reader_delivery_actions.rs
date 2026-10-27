@@ -1,6 +1,13 @@
 //! Subscription lifecycle, policy decisions, and durable board settlement.
 use super::super::subscription_windows::WindowWrite;
-use super::*;
+#[cfg(test)]
+use super::OwnerObservation;
+use super::{
+    BoardError, Duration, EndReason, HashMap, Identity, PushRecord, ReaderDeliveryOwner,
+    ReaderScanScope, RootSubscriptionFacts, SubscriptionBatch, SubscriptionBatchSettlement,
+    SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, TargetPresence, ThreadId,
+    ThreadSubscriptionRecord, target_session,
+};
 #[path = "reader_held_push_settlement.rs"]
 mod reader_held_push_settlement;
 

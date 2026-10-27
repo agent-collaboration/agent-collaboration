@@ -1,5 +1,8 @@
 //! Wake failures retain the existing typed public guidance and uncertainty.
-use super::*;
+use super::{
+    LocalMutationEvidence, LocalMutationState, OperationId, StorageError, WaitUnavailable,
+    WakeFailure, WakeFailureReason, WakeFailureStage, WakeNextAction, WakeNotFound, WakeupId, json,
+};
 use crate::collaboration_application::{
     CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };

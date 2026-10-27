@@ -1,5 +1,7 @@
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, OwnerOnlySocket, ServiceIdentity};
+use collaboration_runtime::OwnerOnlySocket;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
 #[tokio::test]

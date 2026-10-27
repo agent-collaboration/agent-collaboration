@@ -1,7 +1,9 @@
 //! The holder's claim uses the machine session and publishes only a verified, renewed seed.
 use super::project_writers::ProjectWriters;
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::{ProjectClaim, ProjectClaimError, ProjectClaimFuture};
+use collaboration_contracts::ProjectClaim;
+use collaboration_contracts::ProjectClaimError;
+use collaboration_contracts::ProjectClaimFuture;
 use fleet_sync_protocol::{
     DatabaseId, HolderChangeAnswer, HolderChangeRefusal, LeaseAnswer, LeaseRequest,
     OperationAnswer, OperationRequest,

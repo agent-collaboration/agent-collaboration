@@ -1,7 +1,8 @@
 //! Provider conversations: Host-owned operations on external provider sessions, plus the
 //! inspection and recovery of recorded Codex ACP operations.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::{ProviderConversationBackend, ServiceIdentity};
+use crate::ServiceIdentity;
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationBindingIdentity,
     ConversationCancelRequest, ConversationCloseRequest, ConversationCreateRequest,
@@ -319,7 +320,7 @@ impl<'service> ConversationOperations<'service> {
     async fn codex_record(
         &self,
         operation_id: &OperationId,
-    ) -> Result<Option<crate::ProviderOperationRecord>, ConversationFailure> {
+    ) -> Result<Option<collaboration_runtime::ProviderOperationRecord>, ConversationFailure> {
         let Some(store) = self.identity.provider_operations.as_ref() else {
             return Ok(None);
         };
@@ -598,7 +599,7 @@ fn local_failure(
 }
 
 fn codex_snapshot(
-    record: crate::ProviderOperationRecord,
+    record: collaboration_runtime::ProviderOperationRecord,
 ) -> Result<ConversationOperationSnapshot, ConversationFailure> {
     crate::conversation_operation_snapshot(record)
         .map_err(|_| ConversationFailure::InvalidStoredOperation)

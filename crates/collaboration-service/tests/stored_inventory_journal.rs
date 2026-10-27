@@ -9,9 +9,10 @@ mod tests {
         NativeSessionView, PushHeaderFacts, PushId, PushLineInput, PushOrigin, RouterLink,
         SessionDisplayNameLookup, parse_push_line_header, render_push_line, session_identity,
     };
-    use collaboration_service::{
-        CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-    };
+    use collaboration_runtime::NativeControlBackend;
+    use collaboration_runtime::NativeGenerationGate;
+    use collaboration_service::CollaborationApplication;
+    use collaboration_service::ServiceIdentity;
     use lifecycle_observation::{LifecycleStore, ObservationJournal};
     use serde_json::json;
     use std::{

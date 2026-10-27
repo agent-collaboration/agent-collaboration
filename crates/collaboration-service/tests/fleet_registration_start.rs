@@ -4,9 +4,9 @@
     reason = "lint pass follows the crate split"
 )]
 //! A fresh central decision starts registration within the request's settlement.
-use collaboration_service::{
-    ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use std::sync::{Arc, Mutex};

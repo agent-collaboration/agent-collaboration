@@ -1,11 +1,11 @@
+use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{
     CodexGeneration, EndpointId, EndpointRef, NonEmptyText, OperationId, SessionId, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{
-    CodexConversationOperationRecorder, ConversationOperationRecorder, ProviderOperationStore,
-    ServiceIdentity,
-};
+use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_service::ServiceIdentity;
 use serde_json::{Value, json};
 use std::sync::Arc;
 #[path = "support/served_api.rs"]

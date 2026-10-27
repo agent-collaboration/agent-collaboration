@@ -10,7 +10,9 @@ pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
-use collaboration_service::{NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry};
+use collaboration_runtime::NativeProjectStore;
+use collaboration_runtime::ProjectRegistryError;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_lease::WriterState;
 use fleet_sync_protocol::{
     DatabaseId, Epoch, LeaseRefusal, LeaseState, LeaseStatus, PeerId, RenewAnswer, RenewResult,

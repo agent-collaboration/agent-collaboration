@@ -1,14 +1,15 @@
 //! Provider operation settlement and summary source from live ACP output.
 use super::ProviderAcpScheduledRuns;
 use agent_automation::{ProviderAcpEffectEvidence, RouteEffectEvidence, SubmissionEffect};
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RunObservationContext;
+use collaboration_contracts::RunReconciliation;
+use collaboration_contracts::RunSettlement;
 use collaboration_protocol::{
     CodexGeneration, ConversationOperationSettlement, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, OperationId, PositiveSeconds, ProviderOperationEffect,
     ProviderOperationStage, ProviderPromptStopReason, SessionRef,
-};
-use collaboration_service::{
-    DeliveryContractError, ProviderConversationBackend, RunObservationContext, RunReconciliation,
-    RunSettlement,
 };
 
 impl ProviderAcpScheduledRuns {

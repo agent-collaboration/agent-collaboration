@@ -50,7 +50,10 @@ async fn running_reader_stores_one_neutral_push_before_layer_zero_and_keeps_inbo
         request.correlation.as_str(),
         request.payload.push_id.as_str()
     );
-    assert_eq!(request.payload.load_policy, crate::LoadPolicy::LoadedOnly);
+    assert_eq!(
+        request.payload.load_policy,
+        collaboration_contracts::LoadPolicy::LoadedOnly
+    );
     assert!(
         request
             .payload

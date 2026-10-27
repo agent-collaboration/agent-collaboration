@@ -106,8 +106,8 @@ impl<'service> AutomationOperations<'service> {
         };
         let invalid_record = || failure::storage(StorageError::InvalidRecord);
         let mut coverage = match (
-            crate::wakeup_projection::timestamp(page.history_from_ms),
-            crate::wakeup_projection::timestamp(page.as_of_ms),
+            collaboration_runtime::observation_timestamp::timestamp(page.history_from_ms),
+            collaboration_runtime::observation_timestamp::timestamp(page.as_of_ms),
         ) {
             (Ok(history_from), Ok(as_of)) => AttemptHistoryCoverage {
                 history_from,

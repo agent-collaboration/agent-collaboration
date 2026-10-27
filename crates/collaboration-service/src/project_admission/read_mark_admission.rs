@@ -1,6 +1,10 @@
 //! Covered-read updates use the library write gate and the accepted project line.
 use super::{ProjectAdmission, ProjectAdmissionError};
-use message_board::*;
+use message_board::{
+    FeedCursor, Identity, ProjectId, ReadMark, ReadMarkNotAdvanced, ReadMarkOutcome, ReadScope,
+    Record, RecordEnvelope, RecordId, RecordPlacement, RecordTime, RecordedActor, RequestResult,
+    RoleEnd,
+};
 use message_board_storage::CursorValidity;
 
 impl ProjectAdmission {

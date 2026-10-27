@@ -1,7 +1,8 @@
 //! Native test composition with explicit directory and registration inputs.
-use crate::{
-    ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState, ProjectStoreRegistry,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::*;
 use std::{path::Path, sync::Arc};
 

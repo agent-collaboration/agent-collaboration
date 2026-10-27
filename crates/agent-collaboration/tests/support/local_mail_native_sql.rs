@@ -114,14 +114,14 @@ pub async fn local_is_compacted(
 ) -> Result<bool, StoreError> {
     // This read context uses PD4's limits and only the SDK's public observation methods.
     let limits =
-        fleet_sync_delivery::DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+        fleet_sync_delivery::DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             1024 * 1024 * 1024,
             200_000,
             256 * 1024 * 1024,
             50_000,
             256 * 1024 * 1024,
             fleet_sync_delivery::minimum_settlement_allowance::<
-                collaboration_service::RouterDeliveryTypes,
+                collaboration_contracts::RouterDeliveryTypes,
             >()
             .map_err(StoreError::backend)?,
         )
@@ -131,7 +131,7 @@ pub async fn local_is_compacted(
             Box::pin(async move {
                 let mut inbox = fleet_sync_delivery::Inbox::<
                     _,
-                    collaboration_service::RouterDeliveryTypes,
+                    collaboration_contracts::RouterDeliveryTypes,
                 >::new(scope, peer, limits);
                 if !matches!(
                     inbox

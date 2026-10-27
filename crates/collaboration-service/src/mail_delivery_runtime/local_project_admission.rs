@@ -1,5 +1,9 @@
 //! A frozen project notification enters local custody without consulting a relay.
-use super::*;
+use super::{
+    AtomicStore, DeliveryConsumer, DeliveryError, DeliveryItem, Inbox, LocalMailTask,
+    MailDeliveryRuntime, MailSender, OperationState, RecipientOutcome, RouterDeliveryTypes,
+    StoreError, SyncTime, WakeScheduler,
+};
 use durable_steps::JournalScope;
 use fleet_sync_delivery::{
     DeliveryTransactionFailure, LocalItemAdmission, classify_delivery_store_error,
@@ -47,11 +51,11 @@ impl MailDeliveryRuntime {
                 field: "local project notification".to_owned(),
             });
         }
-        let draft = crate::received_mail_push(&item, self.clock.now()).map_err(|error| {
-            DeliveryTransactionFailure::Corrupt {
+        let draft = collaboration_runtime::received_mail_push(&item, self.clock.now()).map_err(
+            |error| DeliveryTransactionFailure::Corrupt {
                 field: error.to_string(),
-            }
-        })?;
+            },
+        )?;
         let config = self.config;
         let now = SyncTime::from_unix_millis(self.clock.now().timestamp_millis());
         let consumer = self.consumer.clone();
@@ -65,7 +69,7 @@ impl MailDeliveryRuntime {
                             .await
                             .map_err(delivery_rollback)?;
                     let mut inserted_projection = false;
-                    if crate::received_mail_push::is_poll_mail(&item)
+                    if collaboration_runtime::received_mail_push::is_poll_mail(&item)
                         && interaction_storage::read_pending_poll_in_scope(scope, item.id())
                             .await
                             .map_err(StoreError::backend)?

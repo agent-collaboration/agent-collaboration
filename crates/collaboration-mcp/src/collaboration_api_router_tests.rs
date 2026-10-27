@@ -25,8 +25,8 @@ async fn project_admission(
     directory: &std::path::Path,
 ) -> (
     Arc<collaboration_service::ProjectAdmission>,
-    Arc<collaboration_service::ProjectStoreRegistry>,
-    Arc<collaboration_service::FleetClient>,
+    Arc<collaboration_runtime::ProjectStoreRegistry>,
+    Arc<collaboration_runtime::FleetClient>,
     board_central_test_support::FleetTestRuntime,
 ) {
     let registry =
@@ -51,7 +51,7 @@ async fn project_admission(
             collaboration_service::ProjectAdmissionProps {
                 registry: registry.clone(),
                 fleet: fleet.clone(),
-                identity: collaboration_service::MachineIdentity::new(
+                identity: collaboration_contracts::MachineIdentity::new(
                     collaboration_protocol::UuidIdentity::try_from(TEST_SERVICE_ID.to_owned())
                         .expect("service"),
                     Some("API proof"),

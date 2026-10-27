@@ -13,6 +13,8 @@ workspace = true
 test-support = []
 
 [dependencies]
+collaboration-runtime = { path = "../collaboration-runtime" }
+collaboration-contracts = { path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.30" }

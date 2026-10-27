@@ -1,3 +1,6 @@
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::ProviderSessionInspectFuture;
+use collaboration_contracts::ProviderSettingsFuture;
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationCreateRequest, ConversationLoadRequest,
     ConversationOperationFailure, ConversationOperationReconcileRequest,
@@ -7,11 +10,9 @@ use collaboration_protocol::{
     ProviderBindingIdentity, ProviderSessionInspectRequest, ProviderSessionInspectResult,
     ProviderSettingsAcceptRequest, ProviderSettingsResult, ProviderSettingsSetRequest,
 };
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use collaboration_service::collaboration_application::CollaborationRejection;
-use collaboration_service::{
-    CollaborationApplication, ProviderConversationBackend, ProviderSessionInspectFuture,
-    ProviderSettingsFuture, ServiceIdentity,
-};
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{future::Future, pin::Pin, sync::Arc};

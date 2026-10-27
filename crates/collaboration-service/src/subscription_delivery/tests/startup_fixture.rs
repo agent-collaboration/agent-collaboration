@@ -109,7 +109,7 @@ pub(in crate::service_identity::subscription_delivery) fn expected_range(
 // Retain each real native reader until another acquisition actually times out.
 // The caller resets timeout evidence afterward so only its own operation can satisfy it.
 pub(in crate::service_identity::subscription_delivery) async fn exhaust_project_readers(
-    project: &crate::NativeProjectStore,
+    project: &collaboration_runtime::NativeProjectStore,
 ) -> Vec<message_board_storage::ProjectSnapshot> {
     let mut snapshots = Vec::new();
     loop {

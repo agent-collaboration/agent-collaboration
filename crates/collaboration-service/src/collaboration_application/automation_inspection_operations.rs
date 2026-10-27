@@ -243,7 +243,7 @@ impl<'service> AutomationOperations<'service> {
             .interaction_store
             .as_ref()
             .ok_or_else(failure::unavailable)?;
-        crate::delivery_reconciliation::reconcile(
+        collaboration_runtime::delivery_reconciliation::reconcile(
             store,
             interactions,
             session_delivery.as_ref(),
@@ -270,7 +270,7 @@ impl<'service> AutomationOperations<'service> {
     ) -> InspectionResult<RunSnapshot> {
         let store = self.inspection_store()?;
         let record = read_run(store, &request).await?;
-        crate::run_reconciliation::reconcile(
+        collaboration_runtime::run_reconciliation::reconcile(
             store,
             self.identity.scheduled_run_execution.as_ref(),
             self.identity.native_backend.as_ref(),
@@ -437,13 +437,13 @@ async fn read_delivery(
     automation_storage::DeliveryRecord<
         SessionRef,
         CodexGeneration,
-        crate::stored_delivery_receipt::StoredDeliveryReceipt,
+        collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
     >,
 > {
     store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&request.delivery_id)
+        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&request.delivery_id)
         .await
         .map_err(failure::storage)
 }
@@ -456,13 +456,13 @@ async fn read_run(
         SessionRef,
         EndpointRef,
         CodexGeneration,
-        crate::stored_run_receipt::StoredRunReceipt,
+        collaboration_runtime::stored_run_receipt::StoredRunReceipt,
     >,
 > {
     store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&request.run_id)
+        .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&request.run_id)
         .await
         .map_err(failure::storage)
 }

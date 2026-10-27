@@ -1,14 +1,13 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::QuestionResponse;
-use collaboration_service::{
-    HubEvent, NativeControlBackend, NativeGenerationGate, RouterSessionAppServerContext,
-    ServiceInteractionBroker, SessionCommandPort, SessionEventHub, TypedApprovalResolution,
-    serve_router_session_app_server_connection,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::RouterSessionAppServerContext;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_runtime::TypedApprovalResolution;
+use collaboration_runtime::serve_router_session_app_server_connection;
 use futures_util::{SinkExt, StreamExt};
 use message_board::Identity;
 use serde_json::{Value, json};

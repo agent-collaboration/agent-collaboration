@@ -6,11 +6,12 @@
 )]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 mod native_registry;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
-    ServiceIdentity,
-};
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
@@ -67,7 +68,7 @@ async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_reque
         interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
             .await?,
     );
-    let routes = Arc::new(collaboration_service::SessionDeliveryRouter::new(Vec::new()));
+    let routes = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new()));
     let delivery = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Available(Arc::new(

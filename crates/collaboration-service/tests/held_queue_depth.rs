@@ -14,15 +14,22 @@ mod native_delivery;
 use automation_storage::AutomationStore;
 use board_fixture::native_mail_owner;
 use board_fixture::{BoardFixture, TestError};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, MailItemId, MessageContent, MessageDelivery,
     PushDeliveryState, SessionMessageSendParams, SessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, BoardAvailability, CollaborationApplication, DeliveryFuture,
-    MachineIdentity, ServiceIdentity, SessionMessageDelivery, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock, TargetPresence, TargetPresenceProbe,
-};
+use collaboration_service::BoardAvailability;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use serde_json::json;
 use std::{
     sync::{
@@ -43,15 +50,15 @@ impl TargetPresenceProbe for UnloadedTarget {
 impl SessionMessageDelivery for UnloadedTarget {
     fn reconcile_attempt(
         &self,
-        _: collaboration_service::AttemptReconciliationContext,
-    ) -> DeliveryFuture<'_, collaboration_service::AttemptReconciliation> {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation> {
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
     fn deliver<'a>(
         &'a self,
-        _: collaboration_service::layer_zero::DeliveryRequest,
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(native_delivery::scripted(held())) })
     }

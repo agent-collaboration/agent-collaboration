@@ -13,6 +13,8 @@ name = "codex-router-board-upgrade"
 path = "src/main.rs"
 
 [dependencies]
+collaboration-runtime = { path = "../collaboration-runtime" }
+collaboration-contracts = { path = "../collaboration-contracts" }
 board-fleet-sync = { version = "0.1.100", path = "../board-fleet-sync" }
 board-sync-protocol = { version = "0.1.100", path = "../board-sync-protocol" }
 collaboration-central-core = { version = "0.1.100", path = "../collaboration-central-core" }

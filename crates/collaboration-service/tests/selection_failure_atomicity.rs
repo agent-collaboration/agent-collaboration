@@ -10,7 +10,7 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::json;
 use std::sync::Arc;
-#[path = "support/native_worker_faults.rs"]
+#[path = "../../collaboration-runtime/tests/support/native_worker_faults.rs"]
 mod native_worker_faults;
 
 #[tokio::test]

@@ -1,6 +1,10 @@
 //! A provider backend that answers the Host's provider operations from a script, so the CLI
 //! runs against the real collaboration API and its in-Host composition while the provider
 //! itself is a fixture.
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::ProviderConversationFuture;
+use collaboration_contracts::ProviderSessionInspectFuture;
+use collaboration_contracts::ProviderSettingsFuture;
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationCloseRequest, ConversationCreateRequest,
     ConversationLoadRequest, ConversationOperationFailure, ConversationOperationReconcileRequest,
@@ -9,10 +13,6 @@ use collaboration_protocol::{
     ConversationOperationWaitResult, ConversationPromptRequest, ConversationResumeRequest,
     EndpointRef, ProviderBindingIdentity, ProviderSessionInspectRequest,
     ProviderSettingsAcceptRequest, ProviderSettingsSetRequest,
-};
-use collaboration_service::{
-    ProviderConversationBackend, ProviderConversationFuture, ProviderSessionInspectFuture,
-    ProviderSettingsFuture,
 };
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::Value;

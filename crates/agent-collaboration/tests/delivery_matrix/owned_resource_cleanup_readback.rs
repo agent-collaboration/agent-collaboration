@@ -1,8 +1,9 @@
 //! Read native membership, watches and local windows with the persisted installation peer.
 use super::super::proof_context::ProofResult;
-use collaboration_service::{
-    NativeProjectStore, ProjectStoreRegistry, SubscriptionWindowStore, load_installation_peer,
-};
+use collaboration_runtime::NativeProjectStore;
+use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_runtime::load_installation_peer;
+use collaboration_service::SubscriptionWindowStore;
 use interaction_storage::InteractionStore;
 use message_board::{
     Identity, Record, SubscriptionScope, Thread, ThreadId, ThreadSubscriptionRecord,

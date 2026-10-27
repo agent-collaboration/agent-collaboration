@@ -148,7 +148,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
             ));
             assert!(matches!(
                 registry.existing_project(project).await,
-                Err(collaboration_service::ProjectRegistryError::Installing { .. })
+                Err(collaboration_runtime::ProjectRegistryError::Installing { .. })
             ));
             emit(
                 "CLAIM_RESTART_PUBLISHED_NOT_READY ",
@@ -164,11 +164,11 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
             // classification checks. Neither producer can repair their subject.
             let unpublished = matches!(
                 registry.existing_project(project).await,
-                Err(collaboration_service::ProjectRegistryError::Installing { .. })
+                Err(collaboration_runtime::ProjectRegistryError::Installing { .. })
             );
             let open_refused = matches!(
                 registry.open_project(project).await,
-                Err(collaboration_service::ProjectRegistryError::Installing { .. })
+                Err(collaboration_runtime::ProjectRegistryError::Installing { .. })
             );
             emit(
                 "CLAIM_RESTART_ADMISSION ",
@@ -202,7 +202,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
                     loop {
                         let answer = projects.claim(&inputs.request).await?;
                         if !matches!(answer, ProjectClaimReply::Pending { .. }) {
-                            return Ok::<_, collaboration_service::ProjectClaimError>(answer);
+                            return Ok::<_, collaboration_contracts::ProjectClaimError>(answer);
                         }
                     }
                 })

@@ -3,7 +3,9 @@ use super::super::{
 };
 use super::native_worker_faults;
 use super::owner_fixture::*;
-use crate::{DeliveryPrecondition, LoadPolicy, TargetPresence};
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::TargetPresence;
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId,
     PushKind, PushOrigin, PushRecord, PushRecordDraft,
@@ -42,7 +44,7 @@ async fn record(fixture: &OwnerFixture, push_id: &PushId) -> PushRecord {
         .unwrap()
 }
 
-async fn request(runtime: &OwnerRuntime) -> crate::layer_zero::DeliveryRequest {
+async fn request(runtime: &OwnerRuntime) -> collaboration_contracts::layer_zero::DeliveryRequest {
     tokio::time::timeout(Duration::from_secs(30), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })
@@ -438,21 +440,22 @@ struct LiveElsewhereRoute {
     effects: std::sync::atomic::AtomicUsize,
 }
 
-impl crate::SessionDeliveryRoute for LiveElsewhereRoute {
+impl collaboration_contracts::SessionDeliveryRoute for LiveElsewhereRoute {
     fn reachability(&self) -> collaboration_protocol::SessionReachability {
         collaboration_protocol::SessionReachability::ClaudeCodePeer
     }
     fn claim(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> crate::DeliveryFuture<'_, crate::NativeRouteClaim> {
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim>
+    {
         self.claims
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         Box::pin(async {
-            Ok(crate::NativeRouteClaim::live_elsewhere(
+            Ok(collaboration_contracts::NativeRouteClaim::live_elsewhere(
                 false,
                 Some("live peer cannot receive Router input".to_owned()),
-                crate::UnsentCause::for_rejection(
+                collaboration_contracts::UnsentCause::for_rejection(
                     collaboration_protocol::DeliveryRejectionReason::LiveElsewhere,
                 ),
             ))
@@ -461,40 +464,42 @@ impl crate::SessionDeliveryRoute for LiveElsewhereRoute {
     fn presence(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> crate::DeliveryFuture<'_, crate::RoutePresence> {
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::RoutePresence> {
         Box::pin(async {
-            Ok(crate::RoutePresence::LiveElsewhere {
+            Ok(collaboration_contracts::RoutePresence::LiveElsewhere {
                 detail: Some("live peer cannot receive Router input".to_owned()),
             })
         })
     }
     fn deliver<'a>(
         &'a self,
-        _: crate::layer_zero::DeliveryRequest,
-        _: &'a dyn crate::AttemptEvidenceSink,
-    ) -> crate::DeliveryFuture<'a, crate::NativeDeliveryResult> {
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
+    {
         self.effects
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-        Box::pin(async { Err(crate::DeliveryContractError::InvalidEvidence) })
+        Box::pin(async { Err(collaboration_contracts::DeliveryContractError::InvalidEvidence) })
     }
     fn reconcile_attempt(
         &self,
-        _: crate::AttemptReconciliationContext,
-    ) -> crate::DeliveryFuture<'_, crate::AttemptReconciliation> {
-        Box::pin(async { Err(crate::DeliveryContractError::InvalidEvidence) })
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
+    {
+        Box::pin(async { Err(collaboration_contracts::DeliveryContractError::InvalidEvidence) })
     }
 }
 
 fn live_elsewhere_service(
     fixture: &OwnerFixture,
-    router: std::sync::Arc<crate::SessionDeliveryRouter>,
+    router: std::sync::Arc<collaboration_runtime::SessionDeliveryRouter>,
 ) -> super::super::SubscriptionDeliveryService {
     super::super::SubscriptionDeliveryService::new(super::super::SubscriptionDeliveryServiceProps {
         board_availability: super::super::BoardAvailability::Unavailable,
         push_store: fixture.interactions.clone(),
         delivery: router.clone(),
         presence: router,
-        machine_identity: crate::MachineIdentity::new(
+        machine_identity: collaboration_contracts::MachineIdentity::new(
             collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
             Some("live-elsewhere-proof"),
         )
@@ -513,7 +518,9 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
             claims: Default::default(),
             effects: Default::default(),
         });
-        let router = Arc::new(crate::SessionDeliveryRouter::new(vec![route.clone()]));
+        let router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
+            route.clone(),
+        ]));
         let service = live_elsewhere_service(&fixture, router.clone());
         service.start().await.unwrap();
         let mut pending = draft(&fixture, mode, None).await;

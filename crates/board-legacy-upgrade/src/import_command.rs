@@ -169,7 +169,7 @@ impl ImportCommand {
         Box<dyn std::error::Error>,
     > {
         let service_directory = router_collaboration_directory(&self.router_directory);
-        let installation = collaboration_service::read_service_identity(&service_directory)?
+        let installation = collaboration_runtime::read_service_identity(&service_directory)?
             .ok_or_else(|| {
                 io::Error::other("Router identity is absent; it must not be minted by the importer")
             })?;
@@ -190,7 +190,7 @@ impl ImportCommand {
             ),
             None => {
                 let identity =
-                    collaboration_service::MachineIdentity::new(installation.clone(), None)?;
+                    collaboration_contracts::MachineIdentity::new(installation.clone(), None)?;
                 (
                     MachineLabel::try_from(identity.machine_label().as_str().to_owned())?,
                     ValueSource::OfflineRouterDerivation,

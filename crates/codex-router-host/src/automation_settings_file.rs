@@ -4,7 +4,8 @@ use collaboration_protocol::{
     AutomationConfiguration, AutomationConfigureRequest, ConfigurationFailure,
     ConfigurationFailureKind, ConfigurationFileState, ConfigurationNextAction, OperationId,
 };
-use collaboration_service::{AutomationConfigurationBackend, AutomationConfigurationHandle};
+use collaboration_runtime::AutomationConfigurationBackend;
+use collaboration_runtime::AutomationConfigurationHandle;
 use serde::{Deserialize, Serialize};
 use std::{
     future::Future,

@@ -1,16 +1,20 @@
 //! U66 / MS-10: bounded wakes expire; age-only history pruning preserves their evidence.
 use super::{WakeDeliverySender, build_wake_push_draft};
-use crate::collaboration_application::{CollaborationApplication, CollaborationRejection};
-use crate::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, MachineIdentity, ServiceIdentity,
-    SessionMessageDelivery,
-};
+use crate::ServiceIdentity;
+use crate::collaboration_application::CollaborationApplication;
+use crate::collaboration_application::CollaborationRejection;
 use agent_automation::{
     CessationEvidence, ExpiryRule, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
     SubmissionEffect, TimingRule, WakeState,
 };
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, DeliveryReceipt, MachineId, OperationId, PushDeliveryState,
     PushHeaderFacts, PushKind, PushLineInput, PushOrigin, PushRecord, PushRecordShowParams,
@@ -36,16 +40,16 @@ fn ensure(condition: bool, detail: &'static str) -> TestResult {
 
 struct StoredWakeRoute {
     interactions: Arc<interaction_storage::InteractionStore>,
-    observed: Mutex<Vec<crate::layer_zero::DeliveryRequest>>,
+    observed: Mutex<Vec<collaboration_contracts::layer_zero::DeliveryRequest>>,
     generation: CodexGeneration,
 }
 
 impl SessionMessageDelivery for StoredWakeRoute {
     fn deliver<'a>(
         &'a self,
-        request: crate::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         sink: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let stored = self
                 .interactions
@@ -78,7 +82,7 @@ impl SessionMessageDelivery for StoredWakeRoute {
             sink.record(RouteEffectEvidence::CodexAppServer(effects))
                 .await?;
             self.observed.lock().await.push(request);
-            Ok(crate::native_delivery_result::scripted_delivery_result(
+            Ok(collaboration_contracts::scripted_delivery_result(
                 DeliveryReceipt {
                     outcome: DeliveryOutcome::Started,
                     reachability: Some(SessionReachability::CodexAppServer),
@@ -136,9 +140,12 @@ async fn evaluate_and_dispatch(
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id.clone(),
     };
-    crate::PushHandoffWorker::new(Arc::clone(store), Arc::clone(&sender.interactions))
-        .apply_pending()
-        .await?;
+    collaboration_runtime::PushHandoffWorker::new(
+        Arc::clone(store),
+        Arc::clone(&sender.interactions),
+    )
+    .apply_pending()
+    .await?;
     sender.dispatch(Arc::clone(store), delivery_id).await?;
     let record = sender
         .interactions
@@ -208,7 +215,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         delivery: identity
             .session_message_delivery()
             .ok_or("composed wake delivery missing")?,
-        configuration: crate::AutomationConfigurationHandle::default(),
+        configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
         machine_identity: machine.clone(),
     };
     let application = CollaborationApplication::new(identity.clone());
@@ -267,7 +274,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
             && fresh_request.correlation.as_str() == fresh_push.push_id.as_str()
             && fresh_request.payload.line.as_str() == expected_line
             && fresh_request.payload.line.as_str().lines().count() == 1
-            && fresh_request.payload.load_policy == crate::LoadPolicy::MayLoad,
+            && fresh_request.payload.load_policy == collaboration_contracts::LoadPolicy::MayLoad,
         "new firing must deliver exactly the stored neutral wake line with fresh identity",
     )?;
     drop(observed);

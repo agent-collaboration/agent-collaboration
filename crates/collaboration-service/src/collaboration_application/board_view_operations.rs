@@ -3,7 +3,10 @@ use super::BoardOperations;
 use crate::board_views::{
     ViewReadSelection, ViewSnapshot, continuation_card, lead_owed, owner_waiting, work_view,
 };
-use message_board::*;
+use message_board::{
+    BoardError, ContinuationCard, ContinuationCardRequest, LeadLoad, LeadLoadRequest, OwnerView,
+    OwnerViewRequest, ProjectId, ProjectViewRequest, WorkView,
+};
 
 impl BoardOperations<'_> {
     pub async fn view_card(

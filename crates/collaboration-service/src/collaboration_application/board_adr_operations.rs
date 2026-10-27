@@ -4,7 +4,10 @@ use super::board_fleet_operations::FleetHeader;
 use super::board_paging::fingerprint;
 use fleet_admission::FleetOperation;
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    AdrCreateRequest, AdrTransitionRequest, BoardError, FleetRecordListRequest,
+    FleetRecordShowRequest, Record, RecordKind, RecordListResult,
+};
 impl BoardOperations<'_> {
     pub async fn adr_create(&self, request: AdrCreateRequest) -> Result<WriteReply, BoardError> {
         let header = FleetHeader {

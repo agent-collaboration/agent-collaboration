@@ -1,12 +1,22 @@
 //! The real reader actors serialize each target; the external client is held at a channel seam.
 use super::super::subscription_service::OwnerObservation;
-use crate::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, BoardAvailability,
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, LoadPolicy, MachineIdentity,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresence, TargetPresenceProbe,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use crate::BoardAvailability;
+use crate::SubscriptionDeliveryService;
+use crate::SubscriptionDeliveryServiceProps;
+use crate::SystemSubscriptionClock;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
     DeliveryRejectionReason, MessageDelivery, PushId, PushKind, SessionRef,
@@ -30,7 +40,7 @@ impl SessionMessageDelivery for HeldClient {
         &'a self,
         request: DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, crate::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let (reply, response) = oneshot::channel();
             self.calls
@@ -38,7 +48,7 @@ impl SessionMessageDelivery for HeldClient {
                 .map_err(|_| DeliveryContractError::ClientOperation)?;
             response
                 .await
-                .map(crate::native_delivery_result::scripted_delivery_result)
+                .map(collaboration_contracts::scripted_delivery_result)
                 .map_err(|_| DeliveryContractError::ClientOperation)
         })
     }
@@ -65,7 +75,7 @@ async fn actor_validation_classifies_invalid_input_before_queue_acceptance_or_cl
         .await;
     assert_eq!(
         result.unsent_cause(),
-        Some(crate::UnsentCause::InvalidInput)
+        Some(collaboration_contracts::UnsentCause::InvalidInput)
     );
     assert!(matches!(
         result.receipt().outcome,

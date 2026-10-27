@@ -14,6 +14,7 @@ bench = false
 [features]
 runtime-test-support = [
     "collaboration-service/runtime-test-support",
+    "collaboration-runtime/runtime-test-support",
     "board-central-test-support/conformance",
 ]
 keychain-test-support = [
@@ -25,6 +26,10 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
+interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
+collaboration-runtime = { path = "../collaboration-runtime" }
+collaboration-contracts = { path = "../collaboration-contracts" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 fleet-sync-receiver.workspace = true
 sqlx = { workspace = true, features = ["sqlite"] }
@@ -74,7 +79,6 @@ collaboration-central-conformance = { version = "0.1.100", path = "../collaborat
 sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false, features = ["runtime-tokio"] }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
-interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 fleet-sync-writer = { workspace = true, features = ["test-support"] }
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
 axum = { workspace = true, features = ["ws"] }

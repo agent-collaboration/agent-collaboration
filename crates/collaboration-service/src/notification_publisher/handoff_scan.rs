@@ -1,5 +1,5 @@
 //! Every frozen project notification is eligible independently of a blocked earlier handoff.
-use super::*;
+use super::{BoardError, IntentHandling, ProjectId, PublisherInner, publication_epoch};
 use message_board::EpochNumber;
 use message_board_storage::{MailHandoff, MailHandoffItem};
 

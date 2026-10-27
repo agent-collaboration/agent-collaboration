@@ -1,5 +1,11 @@
 //! Membership grouping and replicated coverage bound each local follow proposal.
-use super::*;
+use super::{
+    BoardError, DateTime, EndReason, FeedCursor, HandoffSeq, Identity,
+    MAX_SUBSCRIPTION_NOTICE_ROOTS, ProjectId, RecordId, SubscriptionGeneration,
+    SubscriptionMembership, SubscriptionMode, SubscriptionWindowStore, ThreadId, Utc,
+    WindowStoreError, membership_mode_off_or_expired, project_registry_failure,
+    project_storage_failure, unavailable,
+};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{NotificationSource, RootRange};
 use fleet_sync_protocol::DeliveryEnvelope;
@@ -228,3 +234,6 @@ impl SubscriptionWindowStore {
         Ok(coverage)
     }
 }
+
+#[cfg(test)]
+use std::sync::Arc;

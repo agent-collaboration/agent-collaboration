@@ -5,16 +5,18 @@
     clippy::result_large_err,
     reason = "typed failures are the published payloads, returned once per IO-bound request"
 )]
+use crate::ServiceIdentity;
 use crate::collaboration_application::ScheduleOperationFailure;
-use crate::{
-    PreparationEvidenceSink, ScheduleDestination, SchedulePreparationOutcome,
-    SchedulePreparationRequest, ScheduledRunExecution, ServiceIdentity,
-};
 use agent_automation::RouteEffectEvidence;
 use automation_storage::{
     AutomationStore, ExternalAdmission, ExternalAdmissionResult, PreparationFailureDisposition,
     PreparationFailureRecord, ScheduleInspection,
 };
+use collaboration_contracts::PreparationEvidenceSink;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::SchedulePreparationOutcome;
+use collaboration_contracts::SchedulePreparationRequest;
+use collaboration_contracts::ScheduledRunExecution;
 use collaboration_protocol::{
     CodexGeneration, DestinationPreparation, EndpointRef, ScheduleEffects, ScheduleFailure,
     ScheduleFailureKind, ScheduleFailureStage, ScheduleNextAction, SchedulePrepareRequest,
@@ -170,7 +172,7 @@ pub(crate) async fn prepare_schedule(
             if let Some(failure) = record.failure {
                 // The retained failure is the typed failure the original attempt recorded.
                 let failure =
-                    crate::schedule_preparation_evidence_sink::upgrade_stored_failure(failure)
+                    collaboration_runtime::schedule_preparation_evidence_sink::upgrade_stored_failure(failure)
                         .ok()
                         .and_then(|failure| {
                             serde_json::from_value::<ScheduleFailure>(failure).ok()
@@ -228,14 +230,15 @@ pub(crate) async fn prepare_schedule(
         text.push_str("\n\nPrior scheduled-work summary (context, not proof):\n");
         text.push_str(summary);
     }
-    let sink = crate::schedule_preparation_evidence_sink::StoredPreparationEvidenceSink {
-        store: Arc::clone(store),
-        configuration: request.configuration.clone(),
-        operation_id: params.operation_id.clone(),
-        schedule_id: params.schedule_id.clone(),
-        expected_change_id: inspected.record.change_id,
-        working_directory: destination_cwd(&params.destination).to_owned(),
-    };
+    let sink =
+        collaboration_runtime::schedule_preparation_evidence_sink::StoredPreparationEvidenceSink {
+            store: Arc::clone(store),
+            configuration: request.configuration.clone(),
+            operation_id: params.operation_id.clone(),
+            schedule_id: params.schedule_id.clone(),
+            expected_change_id: inspected.record.change_id,
+            working_directory: destination_cwd(&params.destination).to_owned(),
+        };
     let result = execution
         .prepare_destination(
             SchedulePreparationRequest {
@@ -258,7 +261,7 @@ pub(crate) async fn prepare_schedule(
     match result {
         Ok(SchedulePreparationOutcome::Prepared(prepared)) => {
             let prepared_effects = prepared.evidence.clone();
-            if crate::schedule_preparation_evidence_sink::project_evidence(&prepared_effects).is_err() {
+            if collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(&prepared_effects).is_err() {
                 return reject(&params, ScheduleFailureKind::OutcomeUnknown,
                     "Prepared route evidence could not be projected; inspect the operation.", effects);
             }
@@ -272,11 +275,11 @@ pub(crate) async fn prepare_schedule(
                         effects,
                     ),
                 },
-                Err(crate::DeliveryContractError::PreparationOwnershipConflict) => finish_failure(store, &params, ScheduleFailureKind::OwnershipConflict,
+                Err(collaboration_contracts::DeliveryContractError::PreparationOwnershipConflict) => finish_failure(store, &params, ScheduleFailureKind::OwnershipConflict,
                     "The thread belongs to another schedule. Select a different thread; no binding was committed for this schedule.",
                     effects, false,
                 ).await,
-                Err(crate::DeliveryContractError::PreparationChangeConflict) => finish_failure(store, &params, ScheduleFailureKind::ChangeConflict,
+                Err(collaboration_contracts::DeliveryContractError::PreparationChangeConflict) => finish_failure(store, &params, ScheduleFailureKind::ChangeConflict,
                     "The schedule changed during preparation; no binding was committed. Inspect the current schedule and retained route effects before preparing again.",
                     effects, false,
                 ).await,
@@ -288,7 +291,7 @@ pub(crate) async fn prepare_schedule(
         }
         Ok(SchedulePreparationOutcome::Failed(failure)) => {
             let failed_effects = failure.evidence.clone();
-            if crate::schedule_preparation_evidence_sink::project_evidence(&failed_effects).is_err() {
+            if collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(&failed_effects).is_err() {
                 return reject(&params, ScheduleFailureKind::OutcomeUnknown,
                     "Preparation route evidence could not be projected; inspect the operation.", effects);
             }
@@ -455,7 +458,7 @@ async fn finish_failure(
 }
 
 fn public_effects(effects: &RouteEffectEvidence<SessionRef, CodexGeneration>) -> ScheduleEffects {
-    match crate::schedule_preparation_evidence_sink::project_evidence(effects) {
+    match collaboration_runtime::schedule_preparation_evidence_sink::project_evidence(effects) {
         Ok(evidence) => ScheduleEffects::Route {
             evidence: Box::new(evidence),
         },
@@ -485,7 +488,7 @@ fn reject_without_route(params: &SchedulePrepareRequest, message: &str) -> Prepa
 }
 
 struct PreparationDependencies<'a> {
-    configuration: &'a crate::AutomationConfigurationHandle,
+    configuration: &'a collaboration_runtime::AutomationConfigurationHandle,
     service_id: &'a collaboration_protocol::UuidIdentity,
     execution: Option<&'a Arc<dyn ScheduledRunExecution>>,
     store: Option<&'a Arc<Mutex<AutomationStore>>>,

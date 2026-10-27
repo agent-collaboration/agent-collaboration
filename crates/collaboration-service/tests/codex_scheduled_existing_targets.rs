@@ -1,13 +1,16 @@
 //! Existing scheduled Codex targets preserve and verify the declared workspace.
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     CodexGeneration, MachineId, MachineLabel, PushHeaderFacts, PushId, PushKind, PushLineInput,
     PushOrigin, RouterLink, SessionRef, render_push_line,
 };
-use collaboration_service::{
-    DeliveryFuture, DeliveryPrecondition, LoadPolicy, NativeControlBackend, NativeGenerationGate,
-    ScheduledRunPayload, layer_zero::PreparedPush,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
@@ -16,9 +19,10 @@ use tokio_tungstenite::tungstenite::Message;
 #[tokio::test]
 async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use collaboration_service::{
-        RunEvidenceDisposition, RunEvidenceSink, RunSubmission, ScheduledRunExecution,
-    };
+    use collaboration_contracts::RunEvidenceDisposition;
+    use collaboration_contracts::RunEvidenceSink;
+    use collaboration_contracts::RunSubmission;
+    use collaboration_contracts::ScheduledRunExecution;
     let root = std::path::PathBuf::from("/tmp").join(format!(
         "materialized-schedule-{}",
         agent_automation::RunId::generate().as_str()
@@ -57,13 +61,13 @@ async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
     )?);
     let gate = NativeGenerationGate::default();
     gate.activate(generation.clone(), socket_path.clone(), Some(schemas))?;
-    let route = collaboration_service::CodexAppServerScheduledRuns::new(
+    let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
         NativeControlBackend {
             endpoint: target.endpoint.clone(),
             gate,
             codex_home: root.clone(),
         },
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let run_id = agent_automation::RunId::generate();
     let schedule_id = agent_automation::ScheduleId::generate();
@@ -175,7 +179,7 @@ async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
     }))?;
     let result = route
         .submit_run(
-            collaboration_service::ScheduledRunSubmission {
+            collaboration_contracts::ScheduledRunSubmission {
                 run_id,
                 target,
                 payload: ScheduledRunPayload::Existing {

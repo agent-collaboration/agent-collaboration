@@ -49,7 +49,7 @@ async fn aggregate_initializations_expose_each_result_when_a_project_file_is_mov
         .await?;
     assert!(matches!(
         fixture._registry.orphan_project(&moving).await,
-        Err(collaboration_service::ProjectRegistryError::Move(
+        Err(collaboration_runtime::ProjectRegistryError::Move(
             fleet_sync_writer::MoveAsideError::Publish(
                 fleet_sync_writer::native_file::PublishError::CheckpointBusy { .. },
             )

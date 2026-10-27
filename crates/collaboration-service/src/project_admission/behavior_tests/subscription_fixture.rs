@@ -1,13 +1,16 @@
 //! Current admission owns replicated membership; InteractionStore owns local delivery progress.
 #![allow(dead_code)] // Shared fixture methods are used by separate behavioral targets.
-use crate::{
-    CollaborationApplication, FleetClient, MachineIdentity, ProjectAdmission,
-    ProjectAdmissionProps, ProjectStoreRegistry, ServiceIdentity,
-};
+use crate::CollaborationApplication;
+use crate::ProjectAdmission;
+use crate::ProjectAdmissionProps;
+use crate::ServiceIdentity;
+use collaboration_contracts::MachineIdentity;
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
-use crate::NativeProjectStore;
 use crate::SubscriptionWindowStore;
 use chrono::{DateTime, Utc};
+use collaboration_runtime::NativeProjectStore;
 use interaction_storage::{InteractionStore, SubscriptionDeliveryProgress};
 use message_board::*;
 use serde_json::json;

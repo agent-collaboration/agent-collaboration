@@ -4,7 +4,9 @@
 )]
 #![allow(clippy::expect_used)]
 
-use collaboration_service::{load_installation_peer, load_service_identity};
+use collaboration_runtime::load_installation_peer;
+
+use collaboration_runtime::load_service_identity;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
 fn private_identity_root() -> tempfile::TempDir {

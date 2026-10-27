@@ -1,7 +1,12 @@
 //! Compose one actual Host project, publisher, native mail owner and saved session.
 use super::*;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::{seed_unacknowledged_notification, seed_unacknowledged_local_notification, NotificationSeed};
-use collaboration_service::{CollaborationApplication, MachineIdentity, NotificationPublisher, ProjectAdmissionProps, ServiceIdentity, SessionDeliveryRouter};
+use collaboration_service::CollaborationApplication;
+use collaboration_contracts::MachineIdentity;
+use collaboration_service::NotificationPublisher;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
+use collaboration_runtime::SessionDeliveryRouter;
 use message_board::*;
 #[path = "notification_authority_recovery.rs"]
 mod authority_recovery;

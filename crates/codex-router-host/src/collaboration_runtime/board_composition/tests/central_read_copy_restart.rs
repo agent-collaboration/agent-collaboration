@@ -127,7 +127,7 @@ async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
                 );
                 snapshot.finish().await?;
             }
-            Err(collaboration_service::ProjectRegistryError::Unavailable { .. }) => {}
+            Err(collaboration_runtime::ProjectRegistryError::Unavailable { .. }) => {}
             _ => return Err("unexpected moved-pull outcome".into()),
         }
         head

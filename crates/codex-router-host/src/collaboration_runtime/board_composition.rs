@@ -1,10 +1,17 @@
 //! Compose native project storage with an explicit enrollment input from the Host.
 use board_fleet_sync::BoardSessionInputs;
-use collaboration_service::{
-    FleetClient, MachineIdentity, MailDeliveryRuntime, MailDeliverySession, NotificationPublisher,
-    ProjectAdmission, ProjectAdmissionProps, ProjectRegistration, ProjectRegistrationError,
-    ProjectRegistrationFuture, ProjectReplicationPosition, ProjectStoreRegistry,
-};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationError;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectReplicationPosition;
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::MailDeliverySession;
+use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_service::MailDeliveryRuntime;
+use collaboration_service::NotificationPublisher;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use machine_session::PreparedMachineSession;
 use message_board::ProjectId;
 use runtime_primitives::SystemClock;
@@ -52,7 +59,7 @@ pub(super) use machine_session::RunningMachineSession;
 pub(super) struct BoardComposition {
     pub admission: Arc<ProjectAdmission>,
     pub replication: Option<Arc<dyn ProjectReplicationPosition>>,
-    pub claim: Option<Arc<dyn collaboration_service::ProjectClaim>>,
+    pub claim: Option<Arc<dyn collaboration_contracts::ProjectClaim>>,
     session: Option<PreparedMachineSession>,
     fleet: Weak<FleetClient>,
     mail: Weak<MailDeliveryRuntime>,
@@ -160,11 +167,9 @@ pub(super) async fn open_board_admission(
         .recover_creating_projects()
         .await
         .map_err(io::Error::other)?;
-    let claim = session
-        .as_ref()
-        .map(|session| -> Arc<dyn collaboration_service::ProjectClaim> {
-            session.projects.clone()
-        });
+    let claim = session.as_ref().map(
+        |session| -> Arc<dyn collaboration_contracts::ProjectClaim> { session.projects.clone() },
+    );
     Ok(BoardComposition {
         claim,
         admission: Arc::new(admission),

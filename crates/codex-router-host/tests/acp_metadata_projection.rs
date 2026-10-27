@@ -12,7 +12,8 @@ use acp_client_runtime::{
     HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
     RefusedApprovalOffer, SessionEventSink,
 };
-use collaboration_service::{HistoricalTurn, render_historical_turn};
+use collaboration_runtime::HistoricalTurn;
+use collaboration_runtime::render_historical_turn;
 use serde_json::{Value, json};
 use session_event_model::{
     ApprovalRequest, SessionEvent, SessionItemKind, StopReason, TurnOutcome,

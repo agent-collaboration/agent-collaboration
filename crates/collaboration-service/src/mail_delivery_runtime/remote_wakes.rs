@@ -1,5 +1,9 @@
 //! Remote wake requests use the same durable outbox, inbox and canonical reports as messages.
-use super::*;
+use super::{
+    Arc, AtomicStore, CarrierAcceptance, Clock, DeliveryError, DeliveryItem, DeliveryReceipt,
+    InstallationPeerResolutionError, ItemId, LocalDelivery, MailConsumer, MailDeliveryRuntime,
+    MailSender, RouterDeliveryTypes, StoreError, SubmitMailTask, SyncTime, WakeScheduler,
+};
 use collaboration_mail_protocol::{
     RemoteWakeCreator, RemoteWakeMutationState, RemoteWakeRefusal, RemoteWakeResult, WakeBody,
 };

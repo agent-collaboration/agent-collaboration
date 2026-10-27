@@ -107,7 +107,7 @@ impl MailHarness {
         let mail = mail_owner::MailOwner::open(
             &root,
             central.peer,
-            collaboration_service::MailDeliverySession {
+            collaboration_runtime::MailDeliverySession {
                 requests: requests.clone(),
                 welcomed: readiness.clone(),
                 peer: central.peer,

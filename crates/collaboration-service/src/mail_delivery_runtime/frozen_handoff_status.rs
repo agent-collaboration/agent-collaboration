@@ -1,5 +1,8 @@
 //! Frontier observations and acknowledged retirement use public SDK custody operations.
-use super::*;
+use super::{
+    AtomicStore, DeliveryItemRef, Inbox, ItemId, MailDeliveryRuntime, PeerId, RecipientOutcome,
+    RemoteCancelReplay, RouterDeliveryTypes, StoreError,
+};
 use board_sync_protocol::BoardDeliveryTypes;
 use fleet_sync_delivery::LocalRetirement;
 use fleet_sync_protocol::{

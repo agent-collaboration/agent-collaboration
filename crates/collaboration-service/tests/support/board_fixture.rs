@@ -1,11 +1,14 @@
 #![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
 //! Shared real MCP/native composition, without replacing admission rules.
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_service as mail_service;
-use collaboration_service::{
-    CollaborationApplication, FleetClient, MachineIdentity, ProjectAdmission,
-    ProjectAdmissionProps, ProjectStoreRegistry, ServiceIdentity,
-};
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
@@ -87,7 +90,7 @@ impl BoardFixture {
         Ok(fixture)
     }
     pub async fn start_with_project_replication(
-        replication: Arc<dyn collaboration_service::ProjectReplicationPosition>,
+        replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     ) -> Result<Self, TestError> {
         let fixture = Self::compose_with_ports(false, false, Some(replication)).await?;
         fixture.create_default_scope().await?;
@@ -137,7 +140,7 @@ impl BoardFixture {
     async fn compose_with_ports(
         with_poll: bool,
         with_context: bool,
-        replication: Option<Arc<dyn collaboration_service::ProjectReplicationPosition>>,
+        replication: Option<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>,
     ) -> Result<Self, TestError> {
         Self::compose_with_clock(
             with_poll,
@@ -150,7 +153,7 @@ impl BoardFixture {
     async fn compose_with_clock(
         with_poll: bool,
         with_context: bool,
-        replication: Option<Arc<dyn collaboration_service::ProjectReplicationPosition>>,
+        replication: Option<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>,
         clock: Arc<dyn runtime_primitives::Clock>,
     ) -> Result<Self, TestError> {
         let directory = tempfile::tempdir()?;
@@ -589,7 +592,7 @@ fn fixture_machine_identity() -> Result<MachineIdentity, TestError> {
 fn fixture_subscription_service(
     admission: &ProjectAdmission,
     interactions: &Arc<interaction_storage::InteractionStore>,
-    routes: &Arc<collaboration_service::SessionDeliveryRouter>,
+    routes: &Arc<collaboration_runtime::SessionDeliveryRouter>,
 ) -> Result<collaboration_service::SubscriptionDeliveryService, TestError> {
     Ok(collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {

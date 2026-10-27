@@ -85,7 +85,7 @@ async fn owed_wake_process_loss_replays_before_admission_and_before_acknowledgem
             loop {
                 interval.tick().await;
                 let delivery = automation.lock().await.read_delivery::<
-                    SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt,
+                    SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
                 >(&delivery_id).await?;
                 if delivery.status == agent_automation::DeliveryStatus::Accepted {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(delivery);

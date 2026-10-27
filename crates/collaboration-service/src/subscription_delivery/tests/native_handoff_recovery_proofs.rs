@@ -111,7 +111,7 @@ impl CallRouter for NoRecoveryObservationCalls {
 
 async fn assert_recovered_custody(
     native: &NativeMailOwner,
-    original: &DeliveryItem<crate::RouterDeliveryTypes>,
+    original: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
 ) {
     let observer = interaction_storage::InteractionAtomicStore::new(
         native.interactions.clone(),

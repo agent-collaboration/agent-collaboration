@@ -22,7 +22,7 @@ mod native_sql;
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_protocol::{MailItemId, SessionRef};
-use collaboration_service::MailDeliverySession;
+use collaboration_runtime::MailDeliverySession;
 use durable_steps::AtomicStore;
 use fleet_sync_protocol::{PeerId, SchemaSupport};
 use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
@@ -427,7 +427,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
     .transaction(move |scope| {
         Box::pin(async move {
             let limits = fleet_sync_delivery::DeliveryLimits::new::<
-                collaboration_service::RouterDeliveryTypes,
+                collaboration_contracts::RouterDeliveryTypes,
             >(
                 64 * 1024 * 1024,
                 10_000,
@@ -435,7 +435,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 10_000,
                 64 * 1024 * 1024,
                 fleet_sync_delivery::minimum_settlement_allowance::<
-                    collaboration_service::RouterDeliveryTypes,
+                    collaboration_contracts::RouterDeliveryTypes,
                 >()
                 .map_err(durable_steps::StoreError::backend)?,
             )
@@ -462,7 +462,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 .map_err(durable_steps::StoreError::backend)?;
             let mut outbox = fleet_sync_delivery::Outbox::<
                 _,
-                collaboration_service::RouterDeliveryTypes,
+                collaboration_contracts::RouterDeliveryTypes,
             >::new(scope, limits);
             outbox
                 .resolve_submit(&fleet_sync_protocol::DeliveryItemRef { item: sdk, digest })
@@ -483,7 +483,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
         Some(original.as_str())
     );
     assert_eq!(body.text.as_str(), "reply body");
-    let projected = collaboration_service::received_mail_push(&item, chrono::Utc::now())?
+    let projected = collaboration_runtime::received_mail_push(&item, chrono::Utc::now())?
         .ok_or("received reply")?;
     assert_eq!(projected.reply_to_push_id.as_ref(), Some(&original));
     assert_eq!(projected.body.as_deref(), Some("reply body"));

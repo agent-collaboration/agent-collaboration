@@ -1,5 +1,5 @@
 //! Weak paired ports keep the reader's windows separate from allocation and publication.
-use super::*;
+use super::SubscriptionDeliveryService;
 use crate::{NotificationPublisher, ProjectAdmission};
 use std::sync::{Arc, RwLock, Weak};
 

@@ -78,16 +78,16 @@ fn router_push_tools_expose_reported_caller_and_reference_contracts() {
 /// Session delivery that writes every message to a Claude Code peer.
 struct PeerWrittenDelivery;
 
-impl collaboration_service::SessionMessageDelivery for PeerWrittenDelivery {
+impl collaboration_contracts::SessionMessageDelivery for PeerWrittenDelivery {
     fn deliver<'a>(
         &'a self,
-        _request: collaboration_service::layer_zero::DeliveryRequest,
-        _evidence: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_service::NativeDeliveryResult>
+        _request: collaboration_contracts::layer_zero::DeliveryRequest,
+        _evidence: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
     {
         Box::pin(async {
-            Ok(collaboration_service::NativeDeliveryResult::observed(
-                collaboration_service::NativeObservedOutcome::PeerMessageWritten,
+            Ok(collaboration_contracts::NativeDeliveryResult::observed(
+                collaboration_contracts::NativeObservedOutcome::PeerMessageWritten,
                 Some(collaboration_protocol::SessionReachability::ClaudeCodePeer),
                 Some(collaboration_protocol::DeliveryClientReceipt::ClaudeCodePeer),
             ))
@@ -96,19 +96,19 @@ impl collaboration_service::SessionMessageDelivery for PeerWrittenDelivery {
 
     fn reconcile_attempt(
         &self,
-        _context: collaboration_service::AttemptReconciliationContext,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
+        _context: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
     {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
-impl collaboration_service::TargetPresenceProbe for PeerWrittenDelivery {
+impl collaboration_contracts::TargetPresenceProbe for PeerWrittenDelivery {
     fn presence(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::TargetPresence> {
-        Box::pin(async { Ok(collaboration_service::TargetPresence::Running) })
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
+        Box::pin(async { Ok(collaboration_contracts::TargetPresence::Running) })
     }
 }
 
@@ -125,9 +125,9 @@ async fn message_server(
             .await
             .expect("push store"),
     ));
-    let delivery: std::sync::Arc<dyn collaboration_service::SessionMessageDelivery> =
+    let delivery: std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery> =
         std::sync::Arc::new(PeerWrittenDelivery);
-    let presence: std::sync::Arc<dyn collaboration_service::TargetPresenceProbe> =
+    let presence: std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe> =
         std::sync::Arc::new(PeerWrittenDelivery);
     let interactions = std::sync::Arc::new(
         interaction_storage::InteractionStore::open(directory.join("interaction.sqlite"))
@@ -140,7 +140,7 @@ async fn message_server(
             push_store: interactions.clone(),
             delivery: std::sync::Arc::clone(&delivery),
             presence: std::sync::Arc::clone(&presence),
-            machine_identity: collaboration_service::MachineIdentity::new(
+            machine_identity: collaboration_contracts::MachineIdentity::new(
                 collaboration_protocol::UuidIdentity::try_from(FIXTURE_SERVICE_ID.to_owned())
                     .expect("service id"),
                 Some("mcp-message-test"),
@@ -161,7 +161,7 @@ async fn message_server(
             interactions,
             actors: owner.clone(),
             presence,
-            machine: collaboration_service::MachineIdentity::new(
+            machine: collaboration_contracts::MachineIdentity::new(
                 FIXTURE_SERVICE_ID.to_owned().try_into().expect("service"),
                 Some("mcp-message-test"),
             )

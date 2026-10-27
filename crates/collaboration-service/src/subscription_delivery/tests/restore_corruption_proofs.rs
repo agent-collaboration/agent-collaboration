@@ -347,7 +347,7 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
         )
         .await
         .unwrap();
-    *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Wakeable;
+    *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Wakeable;
     let first_runtime = fixture.runtime_without_board().await;
     bounded_stage(
         "observe previously held Auto before corruption",
@@ -389,7 +389,7 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
         .unwrap();
     assert_eq!(recovery_targets, vec![target.clone()]);
 
-    *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Running;
+    *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Running;
     let recovered_runtime = fixture.runtime_without_board().await;
     let request = tokio::time::timeout(Duration::from_secs(5), async {
         recovered_runtime

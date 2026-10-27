@@ -10,10 +10,12 @@
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 mod native_registry;
 use automation_storage::AutomationStore;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_protocol::OperationId;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use collaboration_service::{CollaborationApplication, ServiceIdentity};
-use collaboration_service::{MachineIdentity, ProjectAdmission, ProjectAdmissionProps};
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;

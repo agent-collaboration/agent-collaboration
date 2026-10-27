@@ -1,7 +1,8 @@
 //! ACP provider message delivery, evidence, and reconciliation.
-use collaboration_service::{
-    NativeDeliveryResult, NativeObservedOutcome, NativeRefusalCode, UnsentCause,
-};
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeObservedOutcome;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::UnsentCause;
 mod native_result;
 mod provider_active_turn_cancel;
 mod provider_content_commands;
@@ -28,15 +29,20 @@ use agent_automation::{
     ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
     RouteEffectEvidence, SubmissionEffect,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::NOT_LOADED_REASON;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RouteClaim;
 use collaboration_protocol::{
     CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryRejection,
     DeliveryRejectionReason, MessageDelivery, OperationId, ProviderIdentity,
     ProviderOperationEffect, SessionReachability, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryContractError, DeliveryPrecondition, EndpointDirectory,
-    LoadPolicy, NOT_LOADED_REASON, ProviderConversationBackend, ProviderOperationStore, RouteClaim,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex as StdMutex},

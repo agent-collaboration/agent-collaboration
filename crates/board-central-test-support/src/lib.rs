@@ -12,7 +12,8 @@
 use board_fleet_sync::BoardSessionInputs;
 use collaboration_central_conformance::{JwksFixtureServer, fixture_policy, owner_assertion};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use collaboration_service::{FleetClient, ProjectRegistration};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_runtime::FleetClient;
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
 use fleet_sync_protocol::{PeerId, ReceiverId};
 use message_board::ActorOrigin;

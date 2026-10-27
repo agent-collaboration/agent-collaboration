@@ -5,12 +5,16 @@ mod cancellation;
 mod cancellation_storage;
 #[path = "mail_delivery_projection_fixture.rs"]
 pub(crate) mod fixture;
-use super::*;
+use collaboration_mail_protocol::CarrierAcceptance;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, PushDeliveryState,
 };
+use collaboration_protocol::{
+    DeliveryOutcome, DeliveryReceipt, MessageSendResult, PushMessageSendResult,
+};
 use fixture::*;
 use fleet_sync_delivery::LocalOutcome;
+use fleet_sync_protocol::RecipientOutcome;
 use std::sync::atomic::Ordering;
 
 fn rejection(detail: String) -> DeliveryReceipt {
@@ -423,12 +427,16 @@ async fn a_remote_reply_link_survives_shared_wire_native_receipt_and_owning_reop
         .to_owned()
         .try_into()
         .unwrap();
-    let item =
-        crate::outgoing_mail_message(&reply, &sender, fixture.host.config.local.owner).unwrap();
+    let item = collaboration_runtime::outgoing_mail_message(
+        &reply,
+        &sender,
+        fixture.host.config.local.owner,
+    )
+    .unwrap();
     let reply_digest = item.digest().clone();
     let shared: fleet_sync_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes> =
         serde_json::from_slice(&serde_json::to_vec(&item).unwrap()).unwrap();
-    let received: fleet_sync_protocol::DeliveryItem<crate::RouterDeliveryTypes> =
+    let received: fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes> =
         serde_json::from_slice(&serde_json::to_vec(&shared).unwrap()).unwrap();
 
     // Act: the actual Inbox receipt invokes the real native receive hook in
@@ -449,15 +457,19 @@ async fn a_remote_reply_link_survives_shared_wire_native_receipt_and_owning_reop
         "remote mail discarded the original item's reply link",
     );
     reply.reply_to_push_id = None;
-    let ordinary =
-        crate::outgoing_mail_message(&reply, &sender, fixture.host.config.local.owner).unwrap();
+    let ordinary = collaboration_runtime::outgoing_mail_message(
+        &reply,
+        &sender,
+        fixture.host.config.local.owner,
+    )
+    .unwrap();
     assert_ne!(
         reply_digest,
         *ordinary.digest(),
         "reply link was outside the item digest"
     );
     assert!(
-        crate::received_mail_push(&ordinary, recorded_at())
+        collaboration_runtime::received_mail_push(&ordinary, recorded_at())
             .unwrap()
             .unwrap()
             .reply_to_push_id

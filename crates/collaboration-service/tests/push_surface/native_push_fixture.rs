@@ -1,14 +1,17 @@
 //! One native physical owner supplies delivery witnesses and public push readers.
 use super::{SERVICE_ID, native_delivery, native_mail_owner, served_api};
 use automation_storage::AutomationStore;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, PushDeliveryState, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, ServiceIdentity, SessionMessageDelivery,
-};
+use collaboration_service::ServiceIdentity;
 use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use std::sync::{
@@ -18,7 +21,7 @@ use std::sync::{
 use tokio::sync::Mutex as TokioMutex;
 
 pub(super) struct RecordingDelivery {
-    pub(super) requests: Mutex<Vec<collaboration_service::layer_zero::DeliveryRequest>>,
+    pub(super) requests: Mutex<Vec<collaboration_contracts::layer_zero::DeliveryRequest>>,
     store: Arc<InteractionStore>,
     pub(super) stored_before_delivery: AtomicBool,
     planned_outcome: Mutex<Option<DeliveryOutcome>>,
@@ -42,9 +45,9 @@ impl RecordingDelivery {
 impl SessionMessageDelivery for RecordingDelivery {
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let record = self
                 .store
@@ -183,7 +186,7 @@ pub(super) async fn setup() -> (
             .expect("native push store"),
     );
     let delivery = Arc::new(RecordingDelivery::new(store.clone()));
-    let machine = collaboration_service::MachineIdentity::new(
+    let machine = collaboration_contracts::MachineIdentity::new(
         UuidIdentity::try_from(SERVICE_ID.to_owned()).expect("service UUID"),
         Some("push-surface-test"),
     )
@@ -247,11 +250,11 @@ pub(super) async fn setup_without_push_store() -> (
 }
 
 pub(super) struct RunningPresence;
-impl collaboration_service::TargetPresenceProbe for RunningPresence {
+impl collaboration_contracts::TargetPresenceProbe for RunningPresence {
     fn presence(
         &self,
         _: &SessionRef,
-    ) -> DeliveryFuture<'_, collaboration_service::TargetPresence> {
-        Box::pin(async { Ok(collaboration_service::TargetPresence::Running) })
+    ) -> DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
+        Box::pin(async { Ok(collaboration_contracts::TargetPresence::Running) })
     }
 }

@@ -84,7 +84,7 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     std::fs::set_permissions(root, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
-    let fleet = collaboration_service::FleetClient::open(
+    let fleet = collaboration_runtime::FleetClient::open(
         root,
         std::sync::Arc::new(native_project_fixture::UnsettledRegistration),
         None,
@@ -100,7 +100,7 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: Some(native_project_fixture::offline_inputs(
             offline_endpoint.local_addr()?,
-            collaboration_service::load_installation_peer(root)?,
+            collaboration_runtime::load_installation_peer(root)?,
         )?),
         directory: root.to_path_buf(),
         codex_home: root.to_path_buf(),
@@ -167,7 +167,7 @@ async fn subscription_restart_contains_project_failure(
     identity_file.sync_all()?;
     drop(identity_file);
     assert_eq!(
-        collaboration_service::load_installation_peer(fixture._directory.path())?,
+        collaboration_runtime::load_installation_peer(fixture._directory.path())?,
         fixture_peer
     );
     let (healthy, _) = fixture.project().await?;
@@ -287,7 +287,7 @@ async fn subscription_restart_contains_project_failure(
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: Some(native_project_fixture::offline_inputs(
             offline_endpoint.local_addr()?,
-            collaboration_service::load_installation_peer(&root)?,
+            collaboration_runtime::load_installation_peer(&root)?,
         )?),
         directory: root.clone(),
         codex_home: root.clone(),

@@ -68,8 +68,11 @@ impl Runtime {
         cache.close().await;
         central.release()?;
         wait_welcome(ready).await?;
-        collaboration_service::ProjectRegistration::start(projects.as_ref(), &creation.project_id)
-            .await?;
+        collaboration_contracts::ProjectRegistration::start(
+            projects.as_ref(),
+            &creation.project_id,
+        )
+        .await?;
         let writer = projects.ensure(&creation.project_id).await?;
         assert!(matches!(
             timeout(BOUND, writer.runtime.wait_registration()).await??,

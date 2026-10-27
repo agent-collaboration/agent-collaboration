@@ -32,7 +32,7 @@ pub(super) async fn wait_published_project(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
     epoch: u64,
-) -> Result<Arc<collaboration_service::NativeProjectStore>, Box<dyn std::error::Error + Send + Sync>>
+) -> Result<Arc<collaboration_runtime::NativeProjectStore>, Box<dyn std::error::Error + Send + Sync>>
 {
     timeout(BOUND, async {
         loop {
@@ -211,7 +211,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
 
 #[tokio::test]
 async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> TestResult {
-    use collaboration_service::ProjectClaim;
+    use collaboration_contracts::ProjectClaim;
     use fleet_sync_session::SessionClientStore;
     use fleet_sync_tokio_runner::{InstallStatus, NativeWriterRuntime};
     let fixture = claim_fixture::ClaimFixture::start().await?;

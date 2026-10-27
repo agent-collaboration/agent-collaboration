@@ -113,7 +113,7 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
             let bytes = std::fs::read(&path)?;
             let modified = std::fs::metadata(&path)?.modified()?;
             match fixture._registry.existing_project(&project).await {
-                Err(collaboration_service::ProjectRegistryError::Storage(
+                Err(collaboration_runtime::ProjectRegistryError::Storage(
                     message_board_storage::ProjectStorageError::Writer(
                         fleet_sync_writer::OpenError::SchemaUnsupported {
                             form: fleet_sync_writer::SchemaForm::SchemaTooNew { .. },

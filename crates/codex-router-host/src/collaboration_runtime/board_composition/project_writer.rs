@@ -2,7 +2,8 @@
 use super::project_writers::ProjectLifecycleSignal;
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation, BoardProjectSchema};
 use board_sync_protocol::BoardConsumerProtocol;
-use collaboration_service::{NativeProjectStore, ProjectStoreRegistry};
+use collaboration_runtime::NativeProjectStore;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_lease::{HolderError, WriterState};
 use fleet_sync_protocol::{PieceRefusal, ReceiverId};
 use fleet_sync_tokio_runner::{NativeWriterRuntime, SessionRequests, WriterSessionCalls};

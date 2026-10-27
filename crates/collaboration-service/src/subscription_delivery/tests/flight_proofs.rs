@@ -396,7 +396,7 @@ async fn reopen_board(fixture: OwnerFixture) -> OwnerFixture {
         crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
             registry: registry.clone(),
             fleet: fixture.admission.fleet.clone(),
-            identity: crate::MachineIdentity::new(
+            identity: collaboration_contracts::MachineIdentity::new(
                 SERVICE_ID.to_owned().try_into().unwrap(),
                 Some("Owner-test-machine"),
             )

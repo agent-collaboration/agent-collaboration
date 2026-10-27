@@ -14,9 +14,10 @@ use collaboration_client::protocol::{
     TimingRequest, WakeMutationRequest, WakeSendRequest, WakeShowRequest,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 use tokio::sync::Mutex;

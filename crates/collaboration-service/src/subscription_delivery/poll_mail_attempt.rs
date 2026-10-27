@@ -1,12 +1,14 @@
 //! Submit exactly one SDK Poll callback to its session's existing reader owner.
 use super::super::reader_delivery_owner::poll_unsent;
-use super::*;
+use super::{
+    ReaderDeliveryCommand, SessionRef, SubscriptionDeliveryService, oneshot, reader_for_target,
+};
 
 impl SubscriptionDeliveryService {
     pub(crate) async fn attempt_poll_mail_once(
         &self,
-        item: Box<fleet_sync_protocol::DeliveryItem<crate::RouterDeliveryTypes>>,
-    ) -> crate::NativeDeliveryResult {
+        item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
+    ) -> collaboration_contracts::NativeDeliveryResult {
         let target: SessionRef = match item.recipient().address.clone().try_into() {
             Ok(target) => target,
             Err(_) => return poll_unsent("invalid Poll recipient"),
@@ -35,8 +37,8 @@ impl SubscriptionDeliveryService {
         // A lost answer after the reader accepted the external handover request
         // stays Unknown. It must never be turned into a second waiter delivery.
         tokio::select! {
-            () = self.inner.shutdown.cancelled() => crate::NativeDeliveryResult::unknown(),
-            outcome = response => outcome.unwrap_or_else(|_| crate::NativeDeliveryResult::unknown()),
+            () = self.inner.shutdown.cancelled() => collaboration_contracts::NativeDeliveryResult::unknown(),
+            outcome = response => outcome.unwrap_or_else(|_| collaboration_contracts::NativeDeliveryResult::unknown()),
         }
     }
 }

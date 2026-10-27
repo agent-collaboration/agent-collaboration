@@ -1,5 +1,7 @@
 //! The existing reader cadence prompts the native custody owner; it never delivers a second copy.
-use super::*;
+#[cfg(test)]
+use super::OwnerObservation;
+use super::{BoardError, PRESENCE_INTERVAL, ReaderDeliveryOwner, TargetPresence};
 
 impl ReaderDeliveryOwner {
     pub(super) async fn resume_native_held_mail(

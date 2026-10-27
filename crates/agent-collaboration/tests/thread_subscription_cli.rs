@@ -15,11 +15,15 @@ use collaboration_service as mail_service;
 mod native_mail_owner;
 use collaboration_client::CollaborationClient;
 use collaboration_client::board::*;
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe,
-};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
 use serde_json::Value;
 use serde_json::json;

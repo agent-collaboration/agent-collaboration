@@ -1,6 +1,8 @@
 //! Fleet state prompts local archive admission; only native Copy acknowledgement permits the report.
 use super::project_writers::ProjectWriters;
-use collaboration_service::{FleetClient, ProjectAdmission, ProjectArchiveObservation};
+use collaboration_runtime::FleetClient;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectArchiveObservation;
 use message_board::ProjectId;
 use std::{
     io,
@@ -86,7 +88,7 @@ pub(super) async fn report_observation(
     let Some(copied) = copied else {
         return Ok(());
     };
-    let through = collaboration_service::project_replication_cursor(&store, copied, position.epoch)
+    let through = collaboration_runtime::project_replication_cursor(&store, copied, position.epoch)
         .await
         .map_err(io::Error::other)?;
     if through.epoch < position.epoch || through.position < position.position {

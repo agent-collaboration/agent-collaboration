@@ -1,5 +1,9 @@
 //! Inline cleanup of copied held snapshots after every covering root has ended.
-use super::*;
+#[cfg(test)]
+use super::OwnerObservation;
+use super::{
+    BoardError, Identity, PushRecord, ReaderDeliveryOwner, SubscriptionScope, target_session,
+};
 use collaboration_protocol::PushKind;
 
 impl ReaderDeliveryOwner {

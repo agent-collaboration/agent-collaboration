@@ -7,7 +7,7 @@ use std::panic::{AssertUnwindSafe, resume_unwind};
 type ArchiveResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 async fn observed_fact(
-    store: &collaboration_service::NativeProjectStore,
+    store: &collaboration_runtime::NativeProjectStore,
     board: &BoardId,
 ) -> ArchiveResult<Fact> {
     // FL-6 permits a missed/coalesced hint. Allow PD3's connected Fleet repair

@@ -1,8 +1,9 @@
 //! Scripted external clients preserve old receipts; this is not native-emitter proof.
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeObservedOutcome;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt};
-use collaboration_service::{
-    NativeDeliveryResult, NativeObservedOutcome, NativeRefusalCode, UnsentCause,
-};
 
 pub fn scripted(receipt: DeliveryReceipt) -> NativeDeliveryResult {
     let DeliveryReceipt {

@@ -71,7 +71,7 @@ impl<'service> SessionOperations<'service> {
         }
         let store = self.local_journal(&request.endpoint)?;
         let unavailable = JournalFailure::Unavailable(JournalUnavailableKind::Unavailable);
-        let Ok(snapshot_id) = crate::new_service_uuid() else {
+        let Ok(snapshot_id) = collaboration_runtime::new_service_uuid() else {
             return Err(unavailable);
         };
         let Ok(at) = collaboration_protocol::ObservationTimestamp::try_from(

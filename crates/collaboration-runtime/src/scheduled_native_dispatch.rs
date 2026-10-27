@@ -1,0 +1,335 @@
+//! Native scheduled submission waits for idleness and records intent before starting a turn.
+use crate::NativeControlBackend;
+use agent_automation::{
+    CessationEvidence, PreparationEffect, RouteEffectEvidence, SubmissionEffect,
+};
+use codex_native_integration::{NativeConnectionError, NativeOperation, NativeProtocolConnection};
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::RunAcceptance;
+use collaboration_contracts::RunEvidenceDisposition;
+use collaboration_contracts::RunEvidenceSink;
+use collaboration_contracts::RunSubmission;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::ScheduledRunSubmission;
+use collaboration_protocol::{
+    AcceptedResumeEffect, DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason,
+    MessageInputKind, MessageRepresentation, NativeExecution, NativeInputDisposition,
+    NativeInputOperation, NativeSendAcceptance, NativeSendReceipt, RunExecution,
+};
+use serde_json::{Value, json};
+
+pub(crate) struct ScheduledNativeDispatchInputs<'a> {
+    pub backend: &'a NativeControlBackend,
+    pub run: ScheduledRunSubmission,
+    pub sink: &'a dyn RunEvidenceSink,
+    pub held_connection: Option<&'a mut NativeProtocolConnection>,
+    pub approval_broker: Option<&'a std::sync::Weak<dyn codex_acp_adapter::ApprovalBroker>>,
+}
+
+pub(crate) async fn dispatch(
+    inputs: ScheduledNativeDispatchInputs<'_>,
+) -> Result<RunSubmission, DeliveryContractError> {
+    let ScheduledNativeDispatchInputs {
+        backend,
+        run,
+        sink,
+        held_connection,
+        approval_broker,
+    } = inputs;
+    let run_id = run.run_id.clone();
+    let (message_text, client_user_message_id, load_policy) = match run.payload {
+        ScheduledRunPayload::Existing { prepared } => (
+            prepared.line,
+            prepared.push_id.as_str().to_owned(),
+            prepared.load_policy,
+        ),
+        ScheduledRunPayload::Fresh { task_input } => {
+            (task_input, run_id.as_str().to_owned(), LoadPolicy::MayLoad)
+        }
+    };
+    let RouteEffectEvidence::CodexAppServer(mut effects) = run.recorded else {
+        return Err(DeliveryContractError::InvalidEvidence);
+    };
+    if effects.target.as_ref() != Some(&run.target) || run.target.endpoint != backend.endpoint {
+        return Err(DeliveryContractError::InvalidEvidence);
+    }
+    let admission = backend
+        .gate
+        .acquire()
+        .map_err(|_| DeliveryContractError::ClientOperation)?;
+    if let DeliveryPrecondition::EndpointGeneration { expected } = &run.precondition
+        && expected != admission.generation()
+    {
+        return Ok(RunSubmission::Rejected(DeliveryRejection {
+            reason: DeliveryRejectionReason::StaleGeneration,
+            next_action: DeliveryNextAction::InspectTarget,
+            client_code: None,
+            detail: Some("Scheduled target generation changed before submission".into()),
+            claims: None,
+            native_failure: None,
+        }));
+    }
+    let schemas = admission
+        .schemas()
+        .ok_or(DeliveryContractError::ClientOperation)?;
+    let held_unmaterialized = held_connection.is_some();
+    let mut opened_connection = None;
+    if held_connection.is_none() {
+        let Ok(connection) = NativeProtocolConnection::connect(admission.backend_path()).await
+        else {
+            return Ok(RunSubmission::NotStartedBusy);
+        };
+        opened_connection = Some(connection);
+    }
+    let connection = match held_connection {
+        Some(connection) => connection,
+        None => opened_connection
+            .as_mut()
+            .ok_or(DeliveryContractError::ClientOperation)?,
+    };
+    let thread_id = String::from(run.target.session_id.clone());
+    if !held_unmaterialized {
+        let read = connection
+            .request_validated(
+                &schemas,
+                NativeOperation::ReadThread,
+                json!({"threadId":thread_id,"includeTurns":false}),
+            )
+            .await;
+        let Ok(read) = read else {
+            return Ok(RunSubmission::NotStartedBusy);
+        };
+        if read.pointer("/thread/id").and_then(Value::as_str) != Some(thread_id.as_str()) {
+            return Err(DeliveryContractError::InvalidEvidence);
+        }
+        let cold = match read.pointer("/thread/status/type").and_then(Value::as_str) {
+            Some("active") => return Ok(RunSubmission::NotStartedBusy),
+            Some("notLoaded") if load_policy == LoadPolicy::LoadedOnly => {
+                return Ok(RunSubmission::NotStartedBusy);
+            }
+            Some("notLoaded") => true,
+            Some("idle") => false,
+            _ => return Ok(RunSubmission::NotStartedBusy),
+        };
+        let prepared = match crate::native_recorded_policy::prepare_recorded_native_policy(
+            approval_broker,
+            &run.target,
+            read.pointer("/thread/cwd").and_then(Value::as_str),
+        )
+        .await
+        {
+            Ok(prepared) => prepared,
+            Err(_) => {
+                effects.submission = SubmissionEffect::NotDispatched;
+                sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                    .await?;
+                return Ok(policy_rejected());
+            }
+        };
+        if cold || prepared.is_some() {
+            let parameters = prepared.as_ref().map_or_else(
+                || json!({"threadId":thread_id,"excludeTurns":true}),
+                |profile| {
+                    if cold {
+                        profile.native_parameters()
+                    } else {
+                        profile.native_parameters_for_loaded_thread()
+                    }
+                },
+            );
+            effects.resume = PreparationEffect::Unknown;
+            if matches!(
+                sink.record(RouteEffectEvidence::CodexAppServer(effects.clone()))
+                    .await?,
+                RunEvidenceDisposition::AdmissionRefused
+            ) {
+                return Ok(RunSubmission::NotStartedBusy);
+            }
+            let resumed = connection
+                .request_validated(&schemas, NativeOperation::ResumeThread, parameters)
+                .await;
+            let resumed = match resumed {
+                Ok(value) => {
+                    effects.resume = PreparationEffect::Accepted;
+                    value
+                }
+                Err(NativeConnectionError::Rejected { .. }) => {
+                    effects.resume = PreparationEffect::Rejected;
+                    sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                        .await?;
+                    return Ok(RunSubmission::NotStartedBusy);
+                }
+                Err(NativeConnectionError::InvalidInput | NativeConnectionError::Unavailable) => {
+                    effects.resume = PreparationEffect::NotDispatched;
+                    sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                        .await?;
+                    return Ok(RunSubmission::NotStartedBusy);
+                }
+                Err(_) => return Ok(RunSubmission::Unknown),
+            };
+            if resumed.pointer("/thread/id").and_then(Value::as_str) != Some(thread_id.as_str()) {
+                sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                    .await?;
+                return Ok(RunSubmission::Unknown);
+            }
+            if let Some(profile) = prepared {
+                match profile.validate_response(&resumed).await {
+                    Ok(differences) => effects.permission_differences = differences,
+                    Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown) => {
+                        effects.submission = SubmissionEffect::NotDispatched;
+                        sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                            .await?;
+                        return Ok(RunSubmission::Unknown);
+                    }
+                    Err(_) => {
+                        effects.submission = SubmissionEffect::NotDispatched;
+                        sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                            .await?;
+                        return Ok(policy_rejected());
+                    }
+                }
+            }
+            sink.record(RouteEffectEvidence::CodexAppServer(effects.clone()))
+                .await?;
+            if cold {
+                return Ok(RunSubmission::NotStartedBusy);
+            }
+        }
+    }
+    let retired = admission.retirement();
+    if retired.is_cancelled() {
+        effects.submission = SubmissionEffect::NotDispatched;
+        sink.record(RouteEffectEvidence::CodexAppServer(effects))
+            .await?;
+        return Ok(RunSubmission::NotStartedBusy);
+    }
+    effects.generation = Some(admission.generation().clone());
+    effects.submission = SubmissionEffect::Dispatching;
+    effects.client_user_message_id = Some(client_user_message_id.clone());
+    effects.cessation = CessationEvidence::Unconfirmed;
+    let timing = match sink
+        .record(RouteEffectEvidence::CodexAppServer(effects.clone()))
+        .await?
+    {
+        RunEvidenceDisposition::Recorded {
+            timing: Some(timing),
+        } => timing,
+        RunEvidenceDisposition::Recorded { timing: None } => {
+            return Err(DeliveryContractError::InvalidEvidence);
+        }
+        RunEvidenceDisposition::AdmissionRefused => return Ok(RunSubmission::NotStartedBusy),
+    };
+    let response = tokio::time::timeout(std::time::Duration::from_secs(30), async {
+        tokio::select! {
+            biased;
+            _ = retired.cancelled() => Err(NativeConnectionError::OutcomeUnknown),
+            result = connection.request_validated(
+                &schemas,
+                NativeOperation::StartTurn,
+                json!({"threadId":thread_id,"input":[{"type":"text","text":message_text.as_str()}],
+                    "clientUserMessageId":client_user_message_id.as_str(),
+                    "effort":run.inputs.execution_configuration.effort.as_deref().unwrap_or_default()}),
+            ) => result,
+        }
+    })
+    .await
+    .unwrap_or(Err(NativeConnectionError::OutcomeUnknown));
+    let outcome = match response {
+        Ok(response) => {
+            let Some(turn_id) = response
+                .pointer("/turn/id")
+                .and_then(Value::as_str)
+                .filter(|turn_id| !turn_id.is_empty())
+            else {
+                effects.submission = SubmissionEffect::Unknown;
+                sink.record(RouteEffectEvidence::CodexAppServer(effects))
+                    .await?;
+                return Ok(RunSubmission::Unknown);
+            };
+            effects.submission = SubmissionEffect::Accepted;
+            effects.native_turn_id = Some(turn_id.into());
+            let receipt = NativeSendReceipt {
+                permission_differences: effects.permission_differences.clone(),
+                target: run.target.clone(),
+                generation: admission.generation().clone(),
+                input_kind: MessageInputKind::Agent,
+                representation: MessageRepresentation::DeclaredAgentText,
+                client_user_message_id: client_user_message_id
+                    .clone()
+                    .try_into()
+                    .map_err(|_| DeliveryContractError::InvalidEvidence)?,
+                resume_effect: if effects.resume == PreparationEffect::Accepted {
+                    AcceptedResumeEffect::Accepted
+                } else {
+                    AcceptedResumeEffect::NotRequested
+                },
+                acceptance: NativeSendAcceptance::NativeInputAccepted {
+                    operation: NativeInputOperation::TurnStart,
+                    disposition: NativeInputDisposition::StartedOrSteered,
+                    turn_id: turn_id
+                        .to_owned()
+                        .try_into()
+                        .map_err(|_| DeliveryContractError::InvalidEvidence)?,
+                },
+            };
+            let execution = RunExecution::CodexAppServer(NativeExecution {
+                target: run.target,
+                turn_id: turn_id.to_owned(),
+                started_at: crate::observation_timestamp::timestamp(timing.dispatch_started_at_ms)
+                    .map_err(|_| DeliveryContractError::InvalidEvidence)?,
+                deadline_at: crate::observation_timestamp::timestamp(timing.deadline_at_ms)
+                    .map_err(|_| DeliveryContractError::InvalidEvidence)?,
+                effective_timeout_seconds: timing
+                    .effective_timeout_seconds
+                    .try_into()
+                    .map_err(|_| DeliveryContractError::InvalidEvidence)?,
+            });
+            RunSubmission::Started(Box::new(RunAcceptance {
+                execution,
+                receipt: receipt.into(),
+            }))
+        }
+        Err(NativeConnectionError::Rejected { .. }) => {
+            effects.submission = SubmissionEffect::Rejected;
+            RunSubmission::Rejected(DeliveryRejection {
+                reason: DeliveryRejectionReason::Unknown,
+                next_action: DeliveryNextAction::InspectTarget,
+                client_code: None,
+                detail: Some("Native scheduled start was rejected.".into()),
+                claims: None,
+                native_failure: None,
+            })
+        }
+        Err(NativeConnectionError::InvalidInput | NativeConnectionError::Unavailable) => {
+            effects.submission = SubmissionEffect::NotDispatched;
+            RunSubmission::Rejected(DeliveryRejection {
+                reason: DeliveryRejectionReason::EndpointUnavailable,
+                next_action: DeliveryNextAction::RetryLater,
+                client_code: None,
+                detail: Some("Native scheduled start was not dispatched.".into()),
+                claims: None,
+                native_failure: None,
+            })
+        }
+        Err(_) => {
+            effects.submission = SubmissionEffect::Unknown;
+            RunSubmission::Unknown
+        }
+    };
+    sink.record(RouteEffectEvidence::CodexAppServer(effects))
+        .await?;
+    Ok(outcome)
+}
+
+fn policy_rejected() -> RunSubmission {
+    RunSubmission::Rejected(DeliveryRejection {
+        reason: DeliveryRejectionReason::SettingsUnresolved,
+        next_action: DeliveryNextAction::InspectTarget,
+        client_code: None,
+        detail: Some("Native scheduled target settings do not match its recorded policy".into()),
+        claims: None,
+        native_failure: None,
+    })
+}

@@ -1,6 +1,8 @@
 //! Real borrowed owner, Inbox, journal, runner and native actors; only carrier answers wait.
 use super::native::{Runtime, accepted};
-use crate::{MailPushDelivery, RouterConsumerProtocol, RouterDeliveryTypes};
+use crate::MailPushDelivery;
+use collaboration_contracts::RouterConsumerProtocol;
+use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{CarrierAcceptance, MailSender};
 use collaboration_protocol::{PushDeliveryState, PushId};
 use durable_steps::{
@@ -58,7 +60,7 @@ impl DeliveryConsumer<TursoScope<'_, RunnerHost>> for RunnerConsumer {
         scope: &mut TursoScope<'_, RunnerHost>,
         item: &DeliveryItem<RouterDeliveryTypes>,
     ) -> Result<(), DeliveryError> {
-        crate::project_received_mail(scope, item, self.now()).await
+        collaboration_runtime::project_received_mail(scope, item, self.now()).await
     }
 
     async fn on_outcome(
@@ -66,9 +68,10 @@ impl DeliveryConsumer<TursoScope<'_, RunnerHost>> for RunnerConsumer {
         scope: &mut TursoScope<'_, RunnerHost>,
         item: ItemId,
         outcome: &RecipientOutcome<CarrierAcceptance>,
-        observation: Option<&crate::RouterLocalObservation>,
+        observation: Option<&collaboration_contracts::RouterLocalObservation>,
     ) -> Result<(), DeliveryError> {
-        crate::project_mail_outcome(scope, item, outcome, observation, self.now()).await
+        collaboration_runtime::project_mail_outcome(scope, item, outcome, observation, self.now())
+            .await
     }
 
     async fn release_gate(

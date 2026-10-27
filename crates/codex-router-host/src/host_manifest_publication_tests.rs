@@ -28,7 +28,7 @@ async fn differing_enrollment_peer_refuses_before_publishing_the_host() {
     let root = tempfile::tempdir().expect("peer mismatch Host fixture");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host fixture");
-    let original = collaboration_service::load_installation_peer(root.path()).expect("owned peer");
+    let original = collaboration_runtime::load_installation_peer(root.path()).expect("owned peer");
     let other =
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("other enrollment peer");
     assert_ne!(original, other);
@@ -59,7 +59,7 @@ async fn differing_enrollment_peer_refuses_before_publishing_the_host() {
     assert!(!root.path().join("service.json").exists());
     assert!(!root.path().join("control.sock").exists());
     assert_eq!(
-        collaboration_service::load_installation_peer(root.path()).expect("unchanged peer"),
+        collaboration_runtime::load_installation_peer(root.path()).expect("unchanged peer"),
         original
     );
 }
@@ -89,7 +89,7 @@ async fn installation_rpc_returns_the_same_persisted_peer_after_a_host_restart()
         assert_eq!(identity.peer_id.as_str(), peer.to_string());
         assert_eq!(&identity.service_id, runtime.service_id());
         assert_eq!(
-            collaboration_service::load_installation_peer(root.path()).expect("persisted peer"),
+            collaboration_runtime::load_installation_peer(root.path()).expect("persisted peer"),
             peer
         );
         assert_eq!(service_manifest(root.path()).version, 3);

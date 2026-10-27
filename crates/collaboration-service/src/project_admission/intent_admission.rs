@@ -1,8 +1,16 @@
 //! Router-owned intent transitions, unavailable to public request deserialization.
 use super::intent_handoff::{IntentHandoffInput, freeze_intent_handoff, record_intent_handoff};
-use super::{ProjectAdmission, ProjectAdmissionError, request_gate::*};
+use super::{
+    ProjectAdmission, ProjectAdmissionError,
+    request_gate::{ReadyRequest, RequestGate, RequestGateInput},
+};
 use chrono::Utc;
-use message_board::*;
+use message_board::{
+    CanonicalHash, ChangeOutcome, FeedCursor, Identity, IntentClaim, IntentRecipient,
+    IntentRefusal, IntentState, NotifyIntentId, ProjectId, ProtocolVersion, Record, RecordEnvelope,
+    RecordTime, RecordedActor, Refusal, RequestId, RequestLedgerEntry, RequestResult,
+    ResolvedRecipient, RouterComponent, ServiceId, StoredDecision, WriteReply,
+};
 use message_board_storage::ProjectWriteTransaction;
 use serde::Serialize;
 use sha2::{Digest, Sha256};

@@ -8,7 +8,7 @@ use collaboration_protocol::{
     ProviderSettingsFailureKind, ProviderSettingsMappingStatus, ProviderSettingsResult,
     ProviderSettingsSetRequest, SessionRef,
 };
-use collaboration_service::ProviderSessionRecord;
+use collaboration_runtime::ProviderSessionRecord;
 
 #[allow(clippy::result_large_err)]
 pub(super) async fn set(

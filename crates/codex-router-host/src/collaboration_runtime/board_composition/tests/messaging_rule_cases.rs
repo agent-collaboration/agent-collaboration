@@ -3,7 +3,7 @@
 use super::*;
 use board_central_test_support::{ObjectAddress, RuntimeControl};
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_protocol::{DatabaseId, DeliveryItem, ItemId, TransferId};
 use serde_json::json;
 

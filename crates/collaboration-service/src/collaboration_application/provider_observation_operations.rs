@@ -1,7 +1,10 @@
 //! Provider Session observation: bounded, resumable reads of the same hub attached faces use.
 //! Following a Session is a chain of these reads, each resuming after the last event.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::{HubEvent, ServiceIdentity, SessionEventAttachment, SessionEventHubError};
+use crate::ServiceIdentity;
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionEventAttachment;
+use collaboration_contracts::SessionEventHubError;
 use collaboration_protocol::{
     BoundedObservationRequest, BoundedObservationResult, ChannelDescription, CodexGeneration,
     EndpointAvailability, ObservationEndReason, ObservationEventNotification,

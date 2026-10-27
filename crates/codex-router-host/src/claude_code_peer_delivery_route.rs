@@ -7,16 +7,23 @@ use claude_code_peer_messaging::{
     ClaudeCodePeerSocket, ClaudeCodeSessionRegistry, PeerRegistryError, PeerSessionLookup,
     PeerSessionRecord, PeerSocketUnsentCause, PeerSocketWriteOutcome,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeObservedOutcome;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::NativeRouteClaim;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
     CodexGeneration, DeliveryClientReceipt, DeliveryNextAction, DeliveryPeerClaim,
     DeliveryRejection, DeliveryRejectionReason, EndpointRef, MessageDelivery, SessionReachability,
     SessionRef,
-};
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, DeliveryPrecondition, NativeDeliveryResult,
-    NativeObservedOutcome, NativeRefusalCode, NativeRouteClaim, RoutePresence,
-    SessionDeliveryRoute, UnsentCause,
 };
 use std::sync::Arc;
 
@@ -301,7 +308,7 @@ impl LiveSessionOwnershipCheck for ClaudeCodePeerDeliveryRoute {
 }
 
 impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
-    fn scheduled_runs(&self) -> Option<Arc<dyn collaboration_service::ScheduledRunRoute>> {
+    fn scheduled_runs(&self) -> Option<Arc<dyn collaboration_contracts::ScheduledRunRoute>> {
         Some(Arc::new(self.clone()))
     }
     fn reachability(&self) -> SessionReachability {
@@ -365,7 +372,7 @@ impl SessionDeliveryRoute for ClaudeCodePeerDeliveryRoute {
 
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         evidence: &'a dyn AttemptEvidenceSink,
     ) -> DeliveryFuture<'a, NativeDeliveryResult> {
         Box::pin(async move {

@@ -18,7 +18,7 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
                 interactions: fixture.interactions.clone(),
                 actors: runtime.service.clone(),
                 presence: fixture.presence.clone(),
-                machine: crate::MachineIdentity::new(
+                machine: collaboration_contracts::MachineIdentity::new(
                     SERVICE_ID.to_owned().try_into().unwrap(),
                     None,
                 )

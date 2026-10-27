@@ -1,5 +1,8 @@
 //! Adapt SDK delivery calls onto the already prepared machine session.
-use super::*;
+use super::{
+    AtomicStore, CallEnvelope, CallFailure, CallTarget, DeliveryItemRef, MailCallRouter, MailHost,
+    MailSender, NotSentReason, RouterDeliveryTypes, StoreError, TursoScope, Value, Weak,
+};
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer,
 };

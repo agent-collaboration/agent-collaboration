@@ -1,7 +1,7 @@
 //! Map the actual library refusal; writer state is never queried while a write is held.
 use super::ProjectAdmissionError;
 use fleet_sync_writer::{OpenError, SchemaForm, WriteRefusal};
-use message_board::*;
+use message_board::{EpochNumber, RequestResult, SchemaRefusal, TransferId};
 use message_board_storage::ProjectStorageError;
 
 pub(super) fn refusal_result(
@@ -9,9 +9,9 @@ pub(super) fn refusal_result(
 ) -> Result<RequestResult, ProjectAdmissionError> {
     let storage = match &error {
         ProjectAdmissionError::Storage(storage)
-        | ProjectAdmissionError::Registry(crate::ProjectRegistryError::Storage(storage)) => {
-            Some(storage)
-        }
+        | ProjectAdmissionError::Registry(collaboration_runtime::ProjectRegistryError::Storage(
+            storage,
+        )) => Some(storage),
         _ => None,
     };
     if let Some(storage) = storage

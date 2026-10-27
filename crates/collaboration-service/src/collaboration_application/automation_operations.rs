@@ -92,7 +92,7 @@ impl<'service> AutomationOperations<'service> {
         let read = store
             .lock()
             .await
-            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+            .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(
                 &request.run_id,
             )
             .await;
@@ -261,7 +261,7 @@ type StoredRun = agent_automation::RunRecord<
     SessionRef,
     EndpointRef,
     CodexGeneration,
-    crate::stored_run_receipt::StoredRunReceipt,
+    collaboration_runtime::stored_run_receipt::StoredRunReceipt,
 >;
 
 async fn recover_summary(
@@ -272,7 +272,7 @@ async fn recover_summary(
     store
         .lock()
         .await
-        .recover_summary::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(
+        .recover_summary::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(
             &SummaryRecoveryRequest {
                 operation_id: request.operation_id,
                 run_id: request.run_id,

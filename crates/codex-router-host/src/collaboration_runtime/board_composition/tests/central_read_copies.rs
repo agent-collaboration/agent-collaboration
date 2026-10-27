@@ -1,8 +1,8 @@
 //! Real session and snapshot installation; directory policy remains a fixture input.
 use super::*;
-use collaboration_service::{
-    CollaborationApplication, ProjectReplicationPosition, ServiceIdentity,
-};
+use collaboration_contracts::ProjectReplicationPosition;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
 use fleet_sync_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use runtime_primitives::{Clock, SystemClock};
@@ -249,7 +249,7 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
             .await?
     );
     assert_eq!(
-        collaboration_service::ProjectRegistration::start(
+        collaboration_contracts::ProjectRegistration::start(
             runtime.projects.as_ref(),
             &runtime.project
         )

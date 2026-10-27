@@ -6,7 +6,7 @@
 //! the reply the test scripted. Connections that carry no request, such as the client's
 //! reachability probe, are skipped.
 
-use collaboration_service::ManifestPublication;
+use collaboration_runtime::ManifestPublication;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::{

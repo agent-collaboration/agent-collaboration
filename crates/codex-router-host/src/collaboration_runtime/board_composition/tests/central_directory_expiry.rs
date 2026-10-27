@@ -73,7 +73,7 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
         .central
         .additional_machine(
             &reader_origin,
-            collaboration_service::load_installation_peer(&root)?,
+            collaboration_runtime::load_installation_peer(&root)?,
         )
         .await?;
     let reader_identity = MachineIdentity::new(

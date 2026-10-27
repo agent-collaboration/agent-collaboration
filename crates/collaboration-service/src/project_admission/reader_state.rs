@@ -1,6 +1,9 @@
 //! Mutable caller state is read after every decision, including ledger replay.
 use super::{ProjectAdmission, ProjectAdmissionError};
-use message_board::*;
+use message_board::{
+    BoardOperation, FeedCursor, FeedPosition, Identity, ProjectId, ProjectRequest, ReadScope,
+    ReaderState, RecordKind, RecordRef, RequestResult, RoleSubject, ThreadId, TrailSubject,
+};
 use message_board_storage::{ProjectSnapshot, StoreSchemaState};
 
 impl ProjectAdmission {
@@ -16,9 +19,9 @@ impl ProjectAdmission {
             // Losing the readable copy must not replace its native write
             // refusal with a failure from this optional companion lookup.
             Err(ProjectAdmissionError::Registry(
-                crate::ProjectRegistryError::Unavailable { .. }
-                | crate::ProjectRegistryError::Installing { .. }
-                | crate::ProjectRegistryError::Quarantined { .. },
+                collaboration_runtime::ProjectRegistryError::Unavailable { .. }
+                | collaboration_runtime::ProjectRegistryError::Installing { .. }
+                | collaboration_runtime::ProjectRegistryError::Quarantined { .. },
             )) if matches!(result, RequestResult::NotWriter { .. }) => Ok(None),
             outcome => outcome,
         }
@@ -67,7 +70,7 @@ async fn reader_snapshot(
     project: &ProjectId,
     reader: &Identity,
     subject: RecordRef,
-    mut snapshot: crate::ProjectReadSnapshot,
+    mut snapshot: collaboration_runtime::ProjectReadSnapshot,
 ) -> Result<ReaderState, ProjectAdmissionError> {
     let scope = if subject.kind == RecordKind::Thread {
         ReadScope::Thread {

@@ -3,7 +3,9 @@ use super::super::SubscriptionClock;
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
 use crate as mail_service;
-use crate::{CollaborationApplication, ServiceIdentity, TargetPresence};
+use crate::CollaborationApplication;
+use crate::ServiceIdentity;
+use collaboration_contracts::TargetPresence;
 #[path = "follow_admission_proofs.rs"]
 mod follow_admission_proofs;
 #[path = "incoming_poll_session.rs"]
@@ -84,8 +86,11 @@ async fn native_application(
             interactions,
             actors: runtime.service.clone(),
             presence: fixture.presence.clone(),
-            machine: crate::MachineIdentity::new(SERVICE_ID.to_owned().try_into().unwrap(), None)
-                .unwrap(),
+            machine: collaboration_contracts::MachineIdentity::new(
+                SERVICE_ID.to_owned().try_into().unwrap(),
+                None,
+            )
+            .unwrap(),
             clock: fixture.clock.clone(),
         },
     )
@@ -121,9 +126,12 @@ fn reference_for_request(
         activity: None,
         created_at: chrono::Utc::now(),
     };
-    let item =
-        crate::outgoing_mail_message(&draft, &SERVICE_ID.to_owned().try_into().unwrap(), peer)
-            .unwrap();
+    let item = collaboration_runtime::outgoing_mail_message(
+        &draft,
+        &SERVICE_ID.to_owned().try_into().unwrap(),
+        peer,
+    )
+    .unwrap();
     DeliveryItemRef {
         item: item.id(),
         digest: item.digest().clone(),
@@ -268,9 +276,12 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
     };
     let push_id = draft.push_id.clone();
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    let item =
-        crate::outgoing_mail_message(&draft, &SERVICE_ID.to_owned().try_into().unwrap(), peer)
-            .unwrap();
+    let item = collaboration_runtime::outgoing_mail_message(
+        &draft,
+        &SERVICE_ID.to_owned().try_into().unwrap(),
+        peer,
+    )
+    .unwrap();
     let reference = DeliveryItemRef {
         item: item.id(),
         digest: item.digest().clone(),

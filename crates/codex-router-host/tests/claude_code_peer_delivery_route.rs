@@ -11,16 +11,22 @@ use agent_automation::{
 };
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
 use codex_router_host::ClaudeCodePeerDeliveryRoute;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::RouteClaim;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
     DeliveryRejectionReason, EndpointId, EndpointRef, MessageDelivery, MessageText, PushId,
     SessionId, SessionReachability, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliationContext, DeliveryFuture, DeliveryPrecondition,
-    RouteClaim, RoutePresence, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::SessionDeliveryRouter;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path, sync::Arc};
@@ -110,7 +116,7 @@ fn delivery(mode: MessageDelivery) -> PreparedDeliveryRequest {
         payload: PreparedPush {
             push_id,
             line,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target,
         mode,
@@ -155,7 +161,7 @@ async fn prepared_push_reaches_peer_route_as_the_exact_router_line() {
         payload: PreparedPush {
             push_id,
             line: line.clone(),
-            load_policy: collaboration_service::LoadPolicy::LoadedOnly,
+            load_policy: collaboration_contracts::LoadPolicy::LoadedOnly,
         },
         target: target(),
         mode: MessageDelivery::Auto,
@@ -218,8 +224,8 @@ async fn peer_queue_rejects_but_idle_steer_writes_to_the_live_socket() {
         .expect("queue response");
     assert_eq!(
         queued.unsent_cause(),
-        Some(collaboration_service::UnsentCause::Refused(
-            collaboration_service::NativeRefusalCode::Rejection(
+        Some(collaboration_contracts::UnsentCause::Refused(
+            collaboration_contracts::NativeRefusalCode::Rejection(
                 DeliveryRejectionReason::QueueUnsupported
             )
         ))
@@ -272,7 +278,7 @@ async fn live_unknown_peer_protocol_reports_live_elsewhere() {
 
     assert_eq!(
         claim.unsent_cause(),
-        Some(collaboration_service::UnsentCause::for_rejection(
+        Some(collaboration_contracts::UnsentCause::for_rejection(
             DeliveryRejectionReason::LiveElsewhere
         ))
     );
@@ -325,7 +331,7 @@ async fn registry_read_failure_preserves_the_legacy_receipt_with_processing_fail
 
     assert_eq!(
         claim.unsent_cause(),
-        Some(collaboration_service::UnsentCause::ProcessingFailure)
+        Some(collaboration_contracts::UnsentCause::ProcessingFailure)
     );
     assert_eq!(
         serde_json::to_value(claim.into_claim()).expect("claim JSON"),
@@ -339,7 +345,7 @@ async fn registry_read_failure_preserves_the_legacy_receipt_with_processing_fail
     ] {
         assert_eq!(
             result.unsent_cause(),
-            Some(collaboration_service::UnsentCause::ProcessingFailure)
+            Some(collaboration_contracts::UnsentCause::ProcessingFailure)
         );
         let legacy = collaboration_protocol::DeliveryReceipt {
             outcome: DeliveryOutcome::Rejected(collaboration_protocol::DeliveryRejection {

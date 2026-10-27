@@ -2,7 +2,7 @@
 use super::notification_owner::ProjectNotificationFixture;
 use super::*;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, ItemId, RecipientOutcome};
 use message_board::{HandoffSeq, MailItemRef};
 use message_board_storage::MailHandoffItem;

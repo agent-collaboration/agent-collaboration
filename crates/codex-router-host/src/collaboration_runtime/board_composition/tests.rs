@@ -1,8 +1,8 @@
 //! Component proofs for the actual Host factory; process-level G2 remains separate.
 #![allow(clippy::panic_in_result_fn)]
 use super::*;
+use collaboration_contracts::ProjectRegistrationState;
 use collaboration_protocol::UuidIdentity;
-use collaboration_service::ProjectRegistrationState;
 use fleet_sync_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationRefusal};
 use fleet_sync_session::SessionClientStore;
 use fleet_sync_writer::WriterRegistrationOutcome;
@@ -71,18 +71,18 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 // No application row has replicated before the first write. This supplies that
 // input at the existing acknowledgement port; native authority stays real.
 struct EmptyProjectProgress;
-impl collaboration_service::ProjectReplicationPosition for EmptyProjectProgress {
+impl collaboration_contracts::ProjectReplicationPosition for EmptyProjectProgress {
     fn acknowledged_mail_changes<'port>(
         &'port self,
         _: &'port ProjectId,
-    ) -> collaboration_service::AcknowledgedMailChangesFuture<'port> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'port> {
         Box::pin(async { Ok(message_board_storage::AcknowledgedProjectChanges::default()) })
     }
     fn replicated_through<'port>(
         &'port self,
         _: &'port ProjectId,
         epoch: EpochNumber,
-    ) -> collaboration_service::ReplicatedPositionFuture<'port> {
+    ) -> collaboration_contracts::ReplicatedPositionFuture<'port> {
         Box::pin(async move {
             Ok(FeedCursor {
                 epoch,
@@ -524,7 +524,7 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
     assert!(
         matches!(
             refresh.synchronize().await,
-            Err(collaboration_service::FleetClientError::InvalidReply {
+            Err(collaboration_runtime::FleetClientError::InvalidReply {
                 field: "fleetCursor"
             })
         ),

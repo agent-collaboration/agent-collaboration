@@ -1,6 +1,6 @@
 //! Covered content reads report their internal mark result separately from the data.
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{BoardError, FeedCursor, Identity, ProjectId, ReadMarkOutcome, ReadScope};
 impl BoardOperations<'_> {
     pub(super) async fn finish_project_read(
         &self,

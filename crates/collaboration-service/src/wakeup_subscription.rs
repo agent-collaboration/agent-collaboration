@@ -164,10 +164,14 @@ impl WakeSubscriptionState {
                             kind: FireKind::WakeFired,
                             wakeup_id: fire.wakeup_id,
                             occurrence_id: fire.occurrence_id,
-                            due_at: crate::wakeup_projection::timestamp(fire.due_at_ms)
-                                .map_err(|_| io::Error::other("invalid due timestamp"))?,
-                            fired_at: crate::wakeup_projection::timestamp(fire.fired_at_ms)
-                                .map_err(|_| io::Error::other("invalid firing timestamp"))?,
+                            due_at: collaboration_runtime::observation_timestamp::timestamp(
+                                fire.due_at_ms,
+                            )
+                            .map_err(|_| io::Error::other("invalid due timestamp"))?,
+                            fired_at: collaboration_runtime::observation_timestamp::timestamp(
+                                fire.fired_at_ms,
+                            )
+                            .map_err(|_| io::Error::other("invalid firing timestamp"))?,
                         },
                     }
                 }

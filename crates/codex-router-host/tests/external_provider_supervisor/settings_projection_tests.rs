@@ -26,7 +26,7 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         let default_models = models.borrow().clone();
         ensure_eq!(
             default_models.as_slice(),
-            &[collaboration_service::ProviderModelEntry::try_new(
+            &[collaboration_runtime::ProviderModelEntry::try_new(
                 "provider-default".into(),
                 "provider default".into(),
                 "The provider selects its default model".into(),
@@ -80,12 +80,12 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
                 ensure_eq!(
                     advertised_models.as_slice(),
                     &[
-                        collaboration_service::ProviderModelEntry::try_new(
+                        collaboration_runtime::ProviderModelEntry::try_new(
                             "a".into(),
                             "a".into(),
                             "Advertised by the provider".into()
                         )?,
-                        collaboration_service::ProviderModelEntry::try_new(
+                        collaboration_runtime::ProviderModelEntry::try_new(
                             "b".into(),
                             "b".into(),
                             "Advertised by the provider".into()

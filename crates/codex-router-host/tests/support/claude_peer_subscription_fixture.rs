@@ -13,20 +13,27 @@ use claude_code_peer_messaging::{
     ClaudeCodePeerSocket, ClaudeCodeSessionRegistry, PeerSessionLookup, PeerSessionRecord,
 };
 use codex_router_host::ClaudeCodePeerDeliveryRoute;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     EndpointId as PeerEndpointId, EndpointRef, PushId, PushRecord, RouterOriginRef, SessionRef,
     UuidIdentity,
 };
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
+use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service as mail_service;
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, SessionDeliveryRouter, SessionMessageDelivery,
-    SubscriptionClock, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    TargetPresence, TargetPresenceProbe,
-};
-use collaboration_service::{
-    CollaborationApplication, FleetClient, ProjectAdmission, ProjectAdmissionProps,
-    ProjectStoreRegistry, ServiceIdentity, SubscriptionWindowStore,
-};
+use collaboration_service::BoardAvailability;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionClock;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SubscriptionWindowStore;
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use message_board::{SessionId as BoardSessionId, SessionRef as BoardSessionRef, *};
 use native_mail_owner::NativeMailOwner;

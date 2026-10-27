@@ -9,7 +9,9 @@ use collaboration_protocol::{
     ApiSelector, ApiSocketPath, ApiTransport, McpSelector, McpTransport, NonEmptyText,
     RouterExecutableRelation, SERVICE_MANIFEST_VERSION, ServiceManifest,
 };
-use collaboration_service::{CollaborationApplication, ManifestPublication, ServiceIdentity};
+use collaboration_runtime::ManifestPublication;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use rmcp::{
     ClientHandler, RoleClient, ServiceExt as _,

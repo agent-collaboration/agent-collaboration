@@ -29,7 +29,7 @@ impl OwnerFixture {
                         .await
                         .unwrap(),
                     ),
-                    identity: crate::MachineIdentity::new(
+                    identity: collaboration_contracts::MachineIdentity::new(
                         collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
                             .unwrap(),
                         Some("Owner-test-machine"),
@@ -171,7 +171,7 @@ impl OwnerFixture {
             let admission = ProjectAdmission::new(ProjectAdmissionProps {
                 registry: self.registry.clone(),
                 fleet: fleet.clone(),
-                identity: crate::MachineIdentity::new(
+                identity: collaboration_contracts::MachineIdentity::new(
                     collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
                     Some("Owner-test-machine"),
                 )

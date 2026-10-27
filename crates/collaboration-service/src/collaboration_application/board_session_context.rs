@@ -1,6 +1,10 @@
 //! Session context reads assignments and scope acknowledgements from associated projects.
 use super::{BoardOperations, presence_for_reader};
-use message_board::*;
+use message_board::{
+    BoardError, FactKind, Identity, ProjectId, Record, RepositoryRef, SessionContext,
+    SessionContextRequest, SessionRef, SessionRunningState, UnavailableReason,
+    normalize_git_origin_url,
+};
 use message_board_storage::StoreSchemaState;
 use std::{
     collections::BTreeSet,

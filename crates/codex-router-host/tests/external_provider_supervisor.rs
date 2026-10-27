@@ -7,6 +7,7 @@ use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor,
 };
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationCancelRequest,
     ConversationCloseRequest, ConversationCreateRequest, ConversationLoadRequest,
@@ -23,10 +24,11 @@ use collaboration_protocol::{
     ProviderSettingsFailureKind, ProviderSettingsSetRequest, ProviderTransport,
     ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    EndpointDirectory, NativeControlBackend, NativeGenerationGate, ProviderConversationBackend,
-    ProviderOperationStore, ServiceInteractionBroker,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ServiceInteractionBroker;
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::PathBuf, sync::Arc};
@@ -427,15 +429,15 @@ async fn approval_broker_fixture(
         root.path().join("approval-routes.json"),
     )
     .await?;
-    let route: Arc<dyn collaboration_service::SessionDeliveryRoute> =
-        Arc::new(collaboration_service::CodexAppServerDeliveryRoute::new(
+    let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
+        Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
             service_id.clone(),
             endpoints,
             native_backend,
-            Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
         ));
     broker.install_session_delivery(Arc::new(
-        collaboration_service::SessionDeliveryRouter::new(vec![route]),
+        collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
     ))?;
     let push_fixture =
         approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)

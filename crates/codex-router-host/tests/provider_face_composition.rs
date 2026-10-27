@@ -171,7 +171,7 @@ sys.stdin.read()
 
 #[tokio::test]
 async fn app_server_socket_creates_and_prompts_with_the_owner_identity() {
-    use collaboration_service::ProviderOperationStore;
+    use collaboration_runtime::ProviderOperationStore;
     use futures_util::{SinkExt, StreamExt};
     use serde_json::{Value, json};
     use tokio::{

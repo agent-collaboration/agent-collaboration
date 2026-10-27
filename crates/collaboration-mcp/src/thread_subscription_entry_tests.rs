@@ -1,12 +1,16 @@
 use crate::api_test_harness::{ServedApi, api_config};
 use crate::mcp_server::CollaborationMcpServer;
 use collaboration_client::CollaborationClient;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::UuidIdentity;
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe,
-};
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use message_board::{BoardId, Identity, PostId, ProjectId, RequestId, WorkspaceId};
 use rmcp::{ServerHandler as _, ServiceExt as _, handler::client::ClientHandler};
 use serde_json::{Value, json};

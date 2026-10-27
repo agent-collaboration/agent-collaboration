@@ -1,11 +1,15 @@
 //! Existing native publisher and custody owners attached to a real enrolled holder.
 use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
 use super::*;
-use collaboration_service::{
-    BoardAvailability, CollaborationApplication, MailPushDeliveryProps, NotificationPublisher,
-    ServiceIdentity, SessionDeliveryRouter, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
-};
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::MailPushDeliveryProps;
+use collaboration_service::NotificationPublisher;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use durable_steps::{AtomicStore, CallFailure, StoreError};
 use fleet_sync_protocol::ItemId;
 use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};

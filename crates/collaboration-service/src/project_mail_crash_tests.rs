@@ -100,16 +100,17 @@ async fn assert_atomic_project_admission(kind: ProjectCrashKind) {
             .is_none(),
         "uncommitted epoch survived SIGKILL"
     );
-    let fixture = crate::mail_delivery_projection::tests::fixture::Fixture::new().await;
+    let fixture = crate::mail_delivery_projection_tests::fixture::Fixture::new().await;
     let limits = fixture.host.config.local.limits;
     let store = InteractionAtomicStore::new(owner.clone(), fixture.host.clone());
     let (status, pending) = store
         .transaction(move |scope| {
             Box::pin(async move {
-                let status = Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
-                    .status(state.item)
-                    .await
-                    .map_err(durable_steps::StoreError::backend)?;
+                let status =
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
+                        .status(state.item)
+                        .await
+                        .map_err(durable_steps::StoreError::backend)?;
                 let pending = scope
                     .due(runtime_primitives::SyncTime::from_unix_millis(i64::MAX))
                     .await?;

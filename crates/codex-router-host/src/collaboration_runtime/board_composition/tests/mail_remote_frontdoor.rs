@@ -1,15 +1,22 @@
 //! Actual public producer, two authenticated peers and generic relay; external carrier I/O stands in.
 use super::*;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeObservedOutcome;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryClientReceipt, MailItemId, PushId, SessionReachability, SessionRef as RouterSessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    CollaborationApplication, DeliveryContractError, DeliveryFuture, MachineIdentity,
-    NativeDeliveryResult, NativeObservedOutcome, ServiceIdentity, SessionMessageDelivery,
-    TargetPresence, TargetPresenceProbe,
-};
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ServiceIdentity;
 use fleet_sync_protocol::DeliveryStatus;
 use runtime_primitives::SystemClock;
 use serde_json::json;
@@ -38,7 +45,7 @@ impl TargetPresenceProbe for CarrierStandIn {
 impl SessionMessageDelivery for CarrierStandIn {
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
     ) -> DeliveryFuture<'a, NativeDeliveryResult> {
         Box::pin(async move {
@@ -121,7 +128,7 @@ impl RecipientRuntime {
         let mail = mail_owner::MailOwner::open_for_machine(
             root,
             inputs.peer,
-            collaboration_service::MailDeliverySession {
+            collaboration_runtime::MailDeliverySession {
                 requests: requests.clone(),
                 welcomed: ready.clone(),
                 peer: inputs.peer,

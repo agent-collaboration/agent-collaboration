@@ -23,7 +23,7 @@ pub(crate) use settled_frontier::SettledMailPrefix;
 
 const INTENT_PAGE_SIZE: usize = 100;
 async fn publication_epoch(
-    store: &crate::NativeProjectStore,
+    store: &collaboration_runtime::NativeProjectStore,
 ) -> Result<message_board::EpochNumber, BoardError> {
     publication_epoch_if_writable(store)
         .await?
@@ -31,7 +31,7 @@ async fn publication_epoch(
 }
 
 async fn publication_epoch_if_writable(
-    store: &crate::NativeProjectStore,
+    store: &collaboration_runtime::NativeProjectStore,
 ) -> Result<Option<message_board::EpochNumber>, BoardError> {
     match store
         .writer_state()

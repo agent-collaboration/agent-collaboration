@@ -3,14 +3,17 @@ use codex_acp_adapter::{
     AcpSchemaCatalog, ApprovalBroker, ApprovalRoute, BrokeredApprovalOutcome,
     BrokeredApprovalRequest, PendingPermission,
 };
+use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
     ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, PushLineInput,
     RouterAccess, RouterLink, RouterOriginRef, SessionRef, render_push_line,
 };
-use collaboration_service::{
-    EndpointDirectory, MachineIdentity, ManifestPublication, NativeControlBackend,
-    NativeGenerationGate, ServiceIdentity, ServiceInteractionBroker,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ManifestPublication;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ServiceIdentity;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -56,16 +59,16 @@ struct ApprovalDeliveryCapture {
 
 struct AcceptedTypedNoticeDelivery;
 
-impl collaboration_service::SessionMessageDelivery for AcceptedTypedNoticeDelivery {
+impl collaboration_contracts::SessionMessageDelivery for AcceptedTypedNoticeDelivery {
     fn deliver<'a>(
         &'a self,
-        _: collaboration_service::layer_zero::DeliveryRequest,
-        _: &'a dyn collaboration_service::AttemptEvidenceSink,
-    ) -> collaboration_service::DeliveryFuture<'a, collaboration_service::NativeDeliveryResult>
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
+        _: &'a dyn collaboration_contracts::AttemptEvidenceSink,
+    ) -> collaboration_contracts::DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult>
     {
         Box::pin(async {
-            Ok(collaboration_service::NativeDeliveryResult::observed(
-                collaboration_service::NativeObservedOutcome::Started,
+            Ok(collaboration_contracts::NativeDeliveryResult::observed(
+                collaboration_contracts::NativeObservedOutcome::Started,
                 Some(collaboration_protocol::SessionReachability::CodexAppServer),
                 None,
             ))
@@ -74,10 +77,10 @@ impl collaboration_service::SessionMessageDelivery for AcceptedTypedNoticeDelive
 
     fn reconcile_attempt(
         &self,
-        _: collaboration_service::AttemptReconciliationContext,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::AttemptReconciliation>
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation>
     {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
 }
 
@@ -166,17 +169,17 @@ impl ApprovalFixture {
         )
         .await
         .expect("approval broker");
-        let route: Arc<dyn collaboration_service::SessionDeliveryRoute> =
-            Arc::new(collaboration_service::CodexAppServerDeliveryRoute::new(
+        let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
+            Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
                 service_id.clone(),
                 endpoints,
                 native_backend.clone(),
-                Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+                Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ));
-        let delivery: Arc<dyn collaboration_service::SessionMessageDelivery> = if typed_notice {
+        let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> = if typed_notice {
             Arc::new(AcceptedTypedNoticeDelivery)
         } else {
-            Arc::new(collaboration_service::SessionDeliveryRouter::new(vec![
+            Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
                 route,
             ]))
         };

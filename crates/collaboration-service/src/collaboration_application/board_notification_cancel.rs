@@ -1,5 +1,9 @@
 //! Requested notification cancellation reads authority without adding a project record.
-use super::*;
+use super::{
+    AuthorityRole, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage,
+    BoardNextAction, BoardOperation, BoardOperations, Identity, ProjectRequest, ProtocolVersion,
+    RoleRequirement, RoleSubject, admission_error,
+};
 use collaboration_protocol::RequestedCancelResult;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId};
 

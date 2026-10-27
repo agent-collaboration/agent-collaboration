@@ -2,7 +2,11 @@
 use super::board_paging::fingerprint;
 use super::board_record_paging::FeedPageSource;
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, FeedContent, FeedEntry, LocatedPost, Page, Post, PostListRequest, PostListResult,
+    PostListScope, PostPage, PostSearchRequest, PostSearchResult, PostSelection, ProjectId, Record,
+    SearchPostKind,
+};
 
 impl BoardOperations<'_> {
     pub(super) async fn projects_for_post_scope(

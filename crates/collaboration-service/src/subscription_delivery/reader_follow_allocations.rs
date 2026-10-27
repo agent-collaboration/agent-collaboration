@@ -1,5 +1,8 @@
 //! Due windows become proposals; admission and native publishing own every effect.
-use super::*;
+use super::{
+    BoardAvailability, BoardError, HashMap, Identity, ReaderDeliveryOwner, ReaderScanScope,
+    wall_deadline,
+};
 
 impl ReaderDeliveryOwner {
     pub(super) async fn expire_due_follow_memberships(&mut self) -> Result<(), BoardError> {

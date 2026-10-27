@@ -121,7 +121,9 @@ async fn hosted_refresh_keeps_equal_provider_and_codex_ids_as_two_rows() {
         EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
         SessionRef,
     };
-    use collaboration_service::{ProviderOperationStore, ProviderSessionRecord, ServiceIdentity};
+    use collaboration_runtime::ProviderOperationStore;
+    use collaboration_runtime::ProviderSessionRecord;
+    use collaboration_service::ServiceIdentity;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 

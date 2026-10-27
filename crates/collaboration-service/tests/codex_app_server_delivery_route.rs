@@ -9,18 +9,28 @@ use agent_automation::{
 };
 #[path = "../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
 mod native_permission_echo;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
+use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
     MessageInputKind, MessageRepresentation, MessageText, PushId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    CodexAppServerDeliveryRoute, DeliveryClientReceipt, DeliveryContractError, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NativeControlBackend,
-    NativeGenerationGate, ScheduledRunPayload, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::SessionDeliveryRouter;
 use futures_util::{SinkExt, StreamExt};
 use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};
@@ -94,7 +104,7 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
             .0
             .lock()
             .map(|mut records| records.push(evidence))
-            .map_err(|_| collaboration_service::DeliveryContractError::EvidencePersistence);
+            .map_err(|_| collaboration_contracts::DeliveryContractError::EvidencePersistence);
         Box::pin(async move { result })
     }
 }
@@ -241,7 +251,7 @@ async fn exercise_held_empty_thread(
         socket_path.clone(),
         Some(Arc::clone(&schemas)),
     )?;
-    let holder = Arc::new(collaboration_service::UnmaterializedThreadHolder::new());
+    let holder = Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new());
     let backend_config = NativeControlBackend {
         endpoint: target.endpoint.clone(),
         gate,
@@ -394,9 +404,10 @@ async fn exercise_held_empty_thread(
         return Err("closing session/new did not hold its empty native thread".into());
     }
     if let Some(scenario) = scenario {
-        use collaboration_service::{
-            RunEvidenceDisposition, RunEvidenceSink, RunSubmission, ScheduledRunExecution,
-        };
+        use collaboration_contracts::RunEvidenceDisposition;
+        use collaboration_contracts::RunEvidenceSink;
+        use collaboration_contracts::RunSubmission;
+        use collaboration_contracts::ScheduledRunExecution;
         struct ScheduledEvidenceSink {
             records: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
             refuse_dispatch: bool,
@@ -414,7 +425,7 @@ async fn exercise_held_empty_thread(
                     .is_err()
                 {
                     return Box::pin(async {
-                        Err(collaboration_service::DeliveryContractError::EvidencePersistence)
+                        Err(collaboration_contracts::DeliveryContractError::EvidencePersistence)
                     });
                 }
                 if dispatching && self.refuse_dispatch {
@@ -437,7 +448,7 @@ async fn exercise_held_empty_thread(
             "executionConfiguration":{"destination":{"kind":"ownedThread","target":target,"cwd":"/work"},
                 "executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}
         }))?;
-        let route = collaboration_service::CodexAppServerScheduledRuns::new(
+        let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
             backend_config.clone(),
             Arc::clone(&holder),
         );
@@ -470,7 +481,7 @@ async fn exercise_held_empty_thread(
         };
         let submission = route
             .submit_run(
-                collaboration_service::ScheduledRunSubmission {
+                collaboration_contracts::ScheduledRunSubmission {
                     run_id,
                     target: target.clone(),
                     payload: ScheduledRunPayload::Existing {
@@ -559,15 +570,16 @@ async fn exercise_held_empty_thread(
         return Err("queue did not use and retain the held native connection".into());
     }
     let routed: Arc<dyn SessionDeliveryRoute> = route;
-    let delivery_router = Arc::new(collaboration_service::SessionDeliveryRouter::new(vec![
+    let delivery_router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
         routed,
     ]));
-    let delivery: Arc<dyn collaboration_service::SessionMessageDelivery> = delivery_router.clone();
-    let presence: Arc<dyn collaboration_service::TargetPresenceProbe> = delivery_router;
+    let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> =
+        delivery_router.clone();
+    let presence: Arc<dyn collaboration_contracts::TargetPresenceProbe> = delivery_router;
     let automation_store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
-    let machine_identity = collaboration_service::MachineIdentity::new(
+    let machine_identity = collaboration_contracts::MachineIdentity::new(
         service_id.clone(),
         Some("held-thread-route-test"),
     )?;

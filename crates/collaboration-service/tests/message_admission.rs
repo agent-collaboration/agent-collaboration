@@ -1,13 +1,12 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe,
-};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/native_mail_owner.rs"]

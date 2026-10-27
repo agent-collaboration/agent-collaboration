@@ -1,5 +1,8 @@
 //! Native receipts remain intact while the library owns canonical custody outcomes.
-use crate::{NativeDeliveryResult, NativeRefusalCode, RouterDeliveryTypes, UnsentCause};
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeRefusalCode;
+use collaboration_contracts::RouterDeliveryTypes;
+use collaboration_contracts::UnsentCause;
 use collaboration_mail_protocol::CarrierAcceptance;
 use collaboration_protocol::DeliveryOutcome;
 use fleet_sync_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
@@ -74,7 +77,7 @@ fn processing_failed(kind: DeliveryFailureKind) -> LocalOutcome<CarrierAcceptanc
 }
 
 pub(crate) fn local_follow_outcome(
-    mut observation: crate::RouterLocalObservation,
+    mut observation: collaboration_contracts::RouterLocalObservation,
     retry_attempts: u32,
     now: SyncTime,
 ) -> LocalDelivery<RouterDeliveryTypes> {

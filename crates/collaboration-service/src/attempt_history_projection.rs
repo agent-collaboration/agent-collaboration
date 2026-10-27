@@ -8,10 +8,10 @@ pub(crate) async fn delivery(
     store: &mut AutomationStore,
     delivery_id: &agent_automation::DeliveryId,
     attempt: agent_automation::DeliveryAttempt<SessionRef, CodexGeneration>,
-    archived_receipt: Option<crate::stored_delivery_receipt::StoredDeliveryReceipt>,
+    archived_receipt: Option<collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>,
 ) -> Result<AttemptInspection, StorageError> {
     let current = store
-        .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(delivery_id)
+        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(delivery_id)
         .await?;
     let receipt = archived_receipt
         .or_else(|| {
@@ -21,7 +21,7 @@ pub(crate) async fn delivery(
                 .filter(|latest| latest.attempt_id == attempt.attempt_id)
                 .and(current.receipt)
         })
-        .map(crate::stored_delivery_receipt::StoredDeliveryReceipt::into_public);
+        .map(collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt::into_public);
     if attempt.effects.is_none() {
         let evidence = match attempt.outcome {
             agent_automation::AttemptOutcome::InProgress => DeliveryEvidence::Dispatching {
@@ -47,7 +47,7 @@ pub(crate) async fn delivery(
             evidence,
         });
     }
-    let effects = crate::delivery_route_projection::project(
+    let effects = collaboration_runtime::delivery_route_projection::project(
         attempt
             .effects
             .as_ref()
@@ -127,5 +127,6 @@ pub(crate) fn summary(
     })
 }
 fn timestamp(value: i64) -> Result<collaboration_protocol::ObservationTimestamp, StorageError> {
-    crate::wakeup_projection::timestamp(value).map_err(|_| StorageError::InvalidRecord)
+    collaboration_runtime::observation_timestamp::timestamp(value)
+        .map_err(|_| StorageError::InvalidRecord)
 }

@@ -43,8 +43,8 @@ impl ProjectWriters {
                 }
                 Ok(None)
                 | Err(
-                    collaboration_service::ProjectRegistryError::Unavailable { .. }
-                    | collaboration_service::ProjectRegistryError::Installing { .. },
+                    collaboration_runtime::ProjectRegistryError::Unavailable { .. }
+                    | collaboration_runtime::ProjectRegistryError::Installing { .. },
                 ) => {}
                 Err(error) => return Err(io::Error::other(error)),
             }

@@ -8,16 +8,26 @@
 mod native_permission_echo;
 use codex_acp_adapter::{AcpConnectionInputs, AcpStoredSessions, serve_acp_connection};
 use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, NonEmptyText, OperationId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    BoardAvailability, CodexAppServerDeliveryRoute, CodexConversationOperationRecorder,
-    EndpointDirectory, MachineIdentity, NativeControlBackend, NativeGenerationGate,
-    ProviderOperationStore, ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe, UnmaterializedThreadHolder,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_runtime::UnmaterializedThreadHolder;
+use collaboration_service::BoardAvailability;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use futures_util::{SinkExt, StreamExt};
 use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};

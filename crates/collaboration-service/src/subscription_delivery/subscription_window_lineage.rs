@@ -1,5 +1,8 @@
 //! Resolve local progress against one project snapshot before scanning or selecting it.
-use super::*;
+use super::{
+    BoardError, FeedCursor, SubscriptionDeliveryProgressProps, SubscriptionWindowStore,
+    WindowStoreError, invalid_window, project_registry_failure, project_storage_failure,
+};
 use message_board_storage::{CursorValidity, ProjectSnapshot};
 
 impl SubscriptionWindowStore {

@@ -1,6 +1,6 @@
 //! Decode the selected trail prefix only, retaining exact feed-range coverage.
 use super::{admission_error, board_paging::invalid_cursor};
-use message_board::*;
+use message_board::{BoardError, FeedContent, FeedCursor, FeedPosition, Record, WorkTrailRow};
 use message_board_storage::{FeedPageBounds, FeedPageDirection, ProjectSnapshot, TrailPageFilter};
 pub(super) struct TrailReadPrefix {
     pub rows: Vec<WorkTrailRow>,

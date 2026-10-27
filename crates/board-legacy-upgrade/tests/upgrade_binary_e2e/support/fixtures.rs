@@ -41,7 +41,7 @@ pub async fn prepare_for_cli(
     machine: &str,
 ) -> E2eResult<PreparedUpgrade> {
     let directory = codex_router_host::router_collaboration_directory(router_root);
-    let installation = collaboration_service::read_service_identity(&directory)?
+    let installation = collaboration_runtime::read_service_identity(&directory)?
         .ok_or_else(|| promote_error("fixture Router identity is absent"))?;
     let provenance = ImportProvenance {
         installation: ServiceId::try_from(String::from(installation))?,

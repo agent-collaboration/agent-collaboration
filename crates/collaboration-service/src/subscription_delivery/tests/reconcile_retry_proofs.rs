@@ -15,7 +15,7 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
         session_id: SessionId::try_from("closing-reader".to_owned())?,
     };
     let reader = reader_for_target(&target)?;
-    let routes = Arc::new(crate::SessionDeliveryRouter::new(Vec::new()));
+    let routes = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new()));
     let interactions = Arc::new(
         interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
             .await?,

@@ -1,5 +1,9 @@
 //! Resolve frozen control consequences through the SDK, without retaining an outcome copy.
-use super::*;
+use super::{
+    AtomicStore, CarrierAcceptance, DeliveryItemRef, Inbox, LocalCancelReference,
+    MailDeliveryRuntime, PeerId, RecipientOutcome, RouterDeliveryTypes, StoreError,
+    other_canonical_cancel,
+};
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_mail_protocol::CancelCause;
 use fleet_sync_delivery::{DeliveryTransactionFailure, Outbox, OutboxStatusState};

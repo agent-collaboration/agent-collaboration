@@ -4,13 +4,20 @@
     reason = "lint pass follows the crate split"
 )]
 use collaboration_client::{ClientError, MessageSendRequest, PublicMessageContent};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{CodexGeneration, EndpointDescription, SessionRef};
-use collaboration_service::{
-    BoardAvailability, CodexAppServerDeliveryRoute, MachineIdentity, NativeControlBackend,
-    NativeGenerationGate, ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::ServiceIdentity;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -109,7 +116,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .unwrap_or_else(|error| panic!("routes: {error}")),
     )
     .unwrap_or_else(|error| panic!("routes file: {error}"));
-    let broker = collaboration_service::ServiceInteractionBroker::load(
+    let broker = collaboration_runtime::ServiceInteractionBroker::load(
         service_id
             .to_owned()
             .try_into()
@@ -147,7 +154,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
             .unwrap_or_else(|error| panic!("service id: {error}")),
         identity.endpoint_directory(),
         native_backend,
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let delivery_router = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let delivery: Arc<dyn SessionMessageDelivery> = delivery_router.clone();

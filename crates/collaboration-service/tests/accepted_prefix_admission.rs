@@ -64,7 +64,7 @@ async fn a_filename_epoch_that_differs_from_the_native_file_is_refused() -> Resu
     )
     .await?;
     match target._registry.existing_project(&project).await {
-        Err(collaboration_service::ProjectRegistryError::Storage(
+        Err(collaboration_runtime::ProjectRegistryError::Storage(
             message_board_storage::ProjectStorageError::Writer(
                 fleet_sync_writer::OpenError::Corrupt { field },
             ),
@@ -102,13 +102,13 @@ async fn cold_metadata_from_another_project_is_refused_without_rewriting_the_fil
     .await?;
     let path = projects.join(other.as_str()).join("e1.sqlite");
     let before = tokio::fs::read(&path).await?;
-    let registry = collaboration_service::ProjectStoreRegistry::new(
+    let registry = collaboration_runtime::ProjectStoreRegistry::new(
         directory.path(),
         Some(board_fixture::fixture_peer()?),
         std::sync::Arc::new(runtime_primitives::SystemClock),
     );
     match registry.existing_project(&other).await {
-        Err(collaboration_service::ProjectRegistryError::Storage(
+        Err(collaboration_runtime::ProjectRegistryError::Storage(
             message_board_storage::ProjectStorageError::Writer(
                 fleet_sync_writer::OpenError::Corrupt { field },
             ),

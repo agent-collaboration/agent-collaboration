@@ -5,7 +5,7 @@ use crate::collaboration_runtime::board_composition::tests::notification_publish
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange};
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_delivery::OutboxStatusState;
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};

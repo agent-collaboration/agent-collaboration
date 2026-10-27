@@ -14,18 +14,18 @@ use message_board::{
 use message_board_storage::AcknowledgedProjectChanges;
 
 struct FrontierAcknowledgements(std::sync::Mutex<AcknowledgedProjectChanges>);
-impl crate::ProjectReplicationPosition for FrontierAcknowledgements {
+impl collaboration_contracts::ProjectReplicationPosition for FrontierAcknowledgements {
     fn acknowledged_mail_changes<'a>(
         &'a self,
         _: &'a ProjectId,
-    ) -> crate::AcknowledgedMailChangesFuture<'a> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'a> {
         Box::pin(async { Ok(self.0.lock().unwrap().clone()) })
     }
     fn replicated_through<'a>(
         &'a self,
         _: &'a ProjectId,
         epoch: EpochNumber,
-    ) -> crate::ReplicatedPositionFuture<'a> {
+    ) -> collaboration_contracts::ReplicatedPositionFuture<'a> {
         Box::pin(async move {
             Ok(FeedCursor {
                 epoch,

@@ -1,7 +1,7 @@
 //! A real process dies after snapshot rename and before Ready; the same attempt resumes.
 use super::*;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::ProjectClaim;
+use collaboration_contracts::ProjectClaim;
 use fleet_sync_protocol::{
     DatabaseId, Epoch, HolderChangeAnswer, LeaseAnswer, LeaseRequest, LeaseState, LeaseStatus,
     OperationAnswer, OperationRequest, PeerId, ReceiverId, ReplicationPosition,

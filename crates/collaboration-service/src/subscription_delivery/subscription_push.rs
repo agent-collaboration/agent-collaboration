@@ -1,10 +1,12 @@
 //! Store-first subscription records and their prepared Layer-0 delivery.
 use super::SubscriptionClock;
-use crate::{
-    DeliveryPrecondition, LoadPolicy, MachineIdentity, SessionMessageDelivery,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
 use agent_automation::AttemptId;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     DeliveryCorrelationId, DeliveryOutcome, DeliveryReceipt, MachineId, MessageDelivery,
     MessageText, PushActivityRange, PushActivitySnapshot, PushHeaderFacts, PushId, PushKind,

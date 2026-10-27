@@ -189,14 +189,14 @@ async fn reject_native(
         .ok_or("installation absent")?
         .peer_id
         .clone();
-    let registry = collaboration_service::ProjectStoreRegistry::new(
+    let registry = collaboration_runtime::ProjectStoreRegistry::new(
         stopped.directory(),
         Some(peer.as_str().to_owned().try_into()?),
         Arc::new(runtime_primitives::SystemClock),
     );
     run_scenario(
         registry,
-        async |registry: &mut collaboration_service::ProjectStoreRegistry| {
+        async |registry: &mut collaboration_runtime::ProjectStoreRegistry| {
             let store = registry.open_project(&project).await?;
             let mut read = store.snapshot().await?;
             let projects = read.records(RecordKind::Project).await?;
@@ -223,7 +223,7 @@ async fn reject_native(
             registry.orphan_project(&project).await?;
             Ok(())
         },
-        async |registry: collaboration_service::ProjectStoreRegistry| {
+        async |registry: collaboration_runtime::ProjectStoreRegistry| {
             registry.close().await.map_err(Into::into)
         },
         || Ok(()),

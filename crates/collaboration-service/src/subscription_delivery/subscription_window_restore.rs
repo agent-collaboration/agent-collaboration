@@ -1,5 +1,8 @@
 //! Scoped startup discovery retains transient project identities until an owner can be created.
-use super::*;
+use super::{
+    BoardError, DateTime, HashSet, Identity, ProjectId, ProjectSubscriptionRecord,
+    SubscriptionWindowStore, Utc, WindowStoreError, unavailable,
+};
 
 #[derive(Default)]
 pub struct SubscriptionStartupRestoration {

@@ -9,7 +9,7 @@ fn message_features_do_not_import_client_routes() {
         ),
         (
             "timed wake",
-            include_str!("../src/wakeup_delivery_sender.rs"),
+            include_str!("../../collaboration-runtime/src/wakeup_delivery_sender.rs"),
         ),
         (
             "subscription push",
@@ -17,7 +17,7 @@ fn message_features_do_not_import_client_routes() {
         ),
         (
             "interaction notice",
-            include_str!("../src/interaction_broker.rs"),
+            include_str!("../../collaboration-runtime/src/interaction_broker.rs"),
         ),
         (
             "subscription admission",
@@ -29,11 +29,11 @@ fn message_features_do_not_import_client_routes() {
         ),
         (
             "scheduled run worker",
-            include_str!("../src/scheduled_run_worker.rs"),
+            include_str!("../../collaboration-runtime/src/scheduled_run_worker.rs"),
         ),
         (
             "run reconciliation",
-            include_str!("../src/run_reconciliation.rs"),
+            include_str!("../../collaboration-runtime/src/run_reconciliation.rs"),
         ),
         (
             "schedule activation",

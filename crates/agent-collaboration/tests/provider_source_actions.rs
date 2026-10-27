@@ -9,7 +9,8 @@ use collaboration_protocol::{
     OperationId, ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt as _, time::Duration};
 

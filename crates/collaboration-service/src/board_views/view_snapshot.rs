@@ -1,6 +1,10 @@
 //! One native snapshot supplies only the current-state operands used by each view.
 use crate::ServiceIdentity;
-use message_board::*;
+use message_board::{
+    AuthorityRole, BoardError, ContinuationCardRequest, CopySource, CurrentWriter, FeedCursor,
+    FeedPosition, Identity, MergeTime, ProjectId, Record, RecordId, RecordKind, RecordRef,
+    RoleAssignment, RoleSubject, Task, TaskLink, TrailSubject, WriterObservation,
+};
 use message_board_storage::{PendingTrailSelection, StoredProjectRecord};
 use std::collections::BTreeMap;
 

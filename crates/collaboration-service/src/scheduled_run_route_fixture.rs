@@ -13,9 +13,12 @@ impl FixtureTiming {
 }
 
 pub(crate) async fn apply_push_handoff(worker: &ScheduledRunWorker) -> TestResult<()> {
-    crate::PushHandoffWorker::new(Arc::clone(&worker.store), Arc::clone(&worker.interactions))
-        .apply_pending()
-        .await?;
+    collaboration_runtime::PushHandoffWorker::new(
+        Arc::clone(&worker.store),
+        Arc::clone(&worker.interactions),
+    )
+    .apply_pending()
+    .await?;
     Ok(())
 }
 
@@ -129,8 +132,8 @@ pub(crate) async fn provider_worker_fixture_at(
         interactions,
         execution: fake,
         backend: None,
-        configuration: crate::AutomationConfigurationHandle::default(),
-        machine_identity: crate::MachineIdentity::new(
+        configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
+        machine_identity: collaboration_contracts::MachineIdentity::new(
             service.to_owned().try_into()?,
             Some("Schedule Fixture"),
         )?,

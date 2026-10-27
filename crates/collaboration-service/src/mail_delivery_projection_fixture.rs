@@ -1,10 +1,17 @@
 //! Real Inbox, journal and owning store; only the external carrier answer stands in.
-use super::super::*;
+use chrono::{DateTime, Utc};
+use collaboration_contracts::RouterDeliveryTypes;
+use collaboration_mail_protocol::CarrierAcceptance;
+use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt};
 use collaboration_protocol::{PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft};
+use collaboration_runtime::{
+    project_cancelled_after_delivery, project_mail_outcome, project_received_mail,
+};
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, JournalScope, NotSentReason,
     StoreError, storage::TransactionScope, turso_store::TursoScope,
 };
+use fleet_sync_delivery::DeliveryError;
 use fleet_sync_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryLimits, DeliveryTaskConfig,
     GateDecision, Inbox, LocalDelivery, LocalDeliveryConfig, LocalItemAdmission, LocalOutcome,
@@ -14,9 +21,10 @@ use fleet_sync_protocol::{
     DeliveryEnvelope, DeliveryHeader, DeliveryItemRef, DeliverySeq, DeliveryStream, FetchEntry,
     FetchResult, PeerId, SyncTime,
 };
+use fleet_sync_protocol::{DeliveryItem, ItemId, RecipientOutcome};
 use interaction_storage::{
-    InteractionAtomicStore, InteractionStore, mark_mail_push_attempted_in_scope,
-    record_message_send_admission,
+    InteractionAtomicStore, InteractionStore, insert_mail_push_in_scope,
+    mark_mail_push_attempted_in_scope, record_message_send_admission,
 };
 use runtime_primitives::{Clock, IdSource, WakeFailure, WakeScheduler};
 use serde_json::json;
@@ -45,7 +53,7 @@ impl ProjectionConsumer {
     }
 }
 impl DeliveryConsumer<TursoScope<'_, ProjectionHost>> for ProjectionConsumer {
-    type Protocol = crate::RouterConsumerProtocol;
+    type Protocol = collaboration_contracts::RouterConsumerProtocol;
     async fn on_received(
         &self,
         scope: &mut TursoScope<'_, ProjectionHost>,
@@ -58,7 +66,7 @@ impl DeliveryConsumer<TursoScope<'_, ProjectionHost>> for ProjectionConsumer {
         scope: &mut TursoScope<'_, ProjectionHost>,
         item: ItemId,
         outcome: &RecipientOutcome<CarrierAcceptance>,
-        observation: Option<&crate::RouterLocalObservation>,
+        observation: Option<&collaboration_contracts::RouterLocalObservation>,
     ) -> Result<(), DeliveryError> {
         project_mail_outcome(scope, item, outcome, observation, self.now()).await
     }
@@ -306,7 +314,7 @@ impl Fixture {
         }
     }
     pub fn item(&self, draft: &PushRecordDraft) -> DeliveryItem<RouterDeliveryTypes> {
-        crate::outgoing_mail_message(
+        collaboration_runtime::outgoing_mail_message(
             draft,
             &"00000000-0000-4000-8000-000000000001"
                 .to_owned()
@@ -573,7 +581,7 @@ impl Fixture {
             .unwrap()
             .push_back(LocalDelivery {
                 outcome,
-                observation: crate::RouterLocalObservation {
+                observation: collaboration_contracts::RouterLocalObservation {
                     receipt,
                     scheduled_retry_at,
                     route_evidence: None,

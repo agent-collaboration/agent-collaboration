@@ -1,4 +1,4 @@
-use collaboration_service::connect_native_relay;
+use collaboration_runtime::connect_native_relay;
 use futures_util::{SinkExt, StreamExt};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::time::Duration;
@@ -87,7 +87,8 @@ async fn upgrades_both_transports_without_inserting_native_requests() {
 #[tokio::test]
 async fn native_upgrade_retains_its_admitted_generation_across_replacement() {
     use collaboration_protocol::CodexGeneration;
-    use collaboration_service::{NativeGenerationGate, NativeRelayListener};
+    use collaboration_runtime::NativeGenerationGate;
+    use collaboration_runtime::NativeRelayListener;
     use std::task::Poll;
 
     // Arrange: the real stable public listener and two distinct native backends.

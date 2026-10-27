@@ -8,11 +8,12 @@ mod native_authority;
 )]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 mod native_registry;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
-    ServiceIdentity,
-};
+use collaboration_service::CollaborationApplication;
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ServiceIdentity;
 use message_board::*;
 use runtime_primitives::{Clock, SyncTime, SystemClock};
 use serde_json::{Value, json};

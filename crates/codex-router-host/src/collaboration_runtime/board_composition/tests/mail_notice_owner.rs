@@ -1,11 +1,16 @@
 //! Observe SDK admission through the mail runtime's exact borrowed physical owner.
 use super::ledger::TestError;
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, MailDeliveryRuntime, MailDeliverySession,
-    MailPushDeliveryProps, SessionDeliveryRouter, SessionMessageDelivery,
-    SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
-    TargetPresenceProbe,
-};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::MailDeliverySession;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::BoardAvailability;
+use collaboration_service::MailDeliveryRuntime;
+use collaboration_service::MailPushDeliveryProps;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use durable_steps::{AtomicStore, CallFailure, StoreError};
 use durable_steps::{storage::TransactionScope, turso_store::TursoScope};
 use fleet_sync_delivery::{
@@ -32,7 +37,7 @@ type ObserverDatabase = <TursoScope<'static, ObserverHost> as TransactionScope>:
 type ArrangedSubmit = SubmitItem<
     ObserverStore,
     ObserverDatabase,
-    collaboration_service::RouterDeliveryTypes,
+    collaboration_contracts::RouterDeliveryTypes,
     AdmissionMarker,
 >;
 
@@ -40,25 +45,25 @@ type ArrangedSubmit = SubmitItem<
 // The actual MailDeliveryRuntime registers and executes its own real consumer.
 struct AdmissionMarker;
 impl DeliveryConsumer<TursoScope<'_, ObserverHost>> for AdmissionMarker {
-    type Protocol = collaboration_service::RouterConsumerProtocol;
+    type Protocol = collaboration_contracts::RouterConsumerProtocol;
     async fn release_gate(
         &self,
         _: &mut TursoScope<'_, ObserverHost>,
-        _: &DeliveryItem<collaboration_service::RouterDeliveryTypes>,
+        _: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
     ) -> Result<GateDecision, DeliveryError> {
         panic!("arrangement marker must never execute a release gate")
     }
     async fn deliver_locally(
         &self,
-        _: &DeliveryItem<collaboration_service::RouterDeliveryTypes>,
+        _: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
         _: runtime_primitives::CallId,
-    ) -> LocalDelivery<collaboration_service::RouterDeliveryTypes> {
+    ) -> LocalDelivery<collaboration_contracts::RouterDeliveryTypes> {
         panic!("arrangement marker must never execute native delivery")
     }
     fn may_cancel(
         &self,
         _: &collaboration_mail_protocol::MailSender,
-        _: &DeliveryHeader<collaboration_service::RouterDeliveryTypes>,
+        _: &DeliveryHeader<collaboration_contracts::RouterDeliveryTypes>,
     ) -> bool {
         panic!("arrangement marker must never authorize cancellation")
     }
@@ -79,19 +84,19 @@ impl MailOwner {
         fleet_sync_delivery::OutboxStatus<collaboration_mail_protocol::CarrierAcceptance>,
         TestError,
     > {
-        let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+        let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            minimum_settlement_allowance::<collaboration_service::RouterDeliveryTypes>()?,
+            minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
         Ok(self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_service::RouterDeliveryTypes>::new(scope, limits)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
                         .status(item)
                         .await
                         .map_err(delivery_rollback)
@@ -187,17 +192,17 @@ impl MailOwner {
         >,
         TestError,
     > {
-        let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+        let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            minimum_settlement_allowance::<collaboration_service::RouterDeliveryTypes>()?,
+            minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
         Ok(self.store.transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Inbox::<_, collaboration_service::RouterDeliveryTypes>::new(scope, peer, limits)
+                fleet_sync_delivery::Inbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, peer, limits)
                     .local_outcome(item).await.map_err(delivery_rollback)
             })
         }).await?)
@@ -255,27 +260,29 @@ impl MailOwner {
     }
     pub async fn enqueue(
         &self,
-        item: DeliveryItem<collaboration_service::RouterDeliveryTypes>,
+        item: DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
         relay: PeerId,
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         let id = item.id();
-        let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+        let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            minimum_settlement_allowance::<collaboration_service::RouterDeliveryTypes>()?,
+            minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
         let operation = self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let (answer, admitted) =
-                        Outbox::<_, collaboration_service::RouterDeliveryTypes>::new(scope, limits)
-                            .enqueue_and_admit::<ArrangedSubmit>(item, relay)
-                            .await
-                            .map_err(delivery_rollback)?;
+                    let (answer, admitted) = Outbox::<
+                        _,
+                        collaboration_contracts::RouterDeliveryTypes,
+                    >::new(scope, limits)
+                    .enqueue_and_admit::<ArrangedSubmit>(item, relay)
+                    .await
+                    .map_err(delivery_rollback)?;
                     if !matches!(answer, fleet_sync_delivery::OutboxAdmission::Queued { .. })
                         || admitted.is_none()
                     {
@@ -293,7 +300,7 @@ impl MailOwner {
     }
     pub async fn enqueue_with_epoch(
         &self,
-        item: DeliveryItem<collaboration_service::RouterDeliveryTypes>,
+        item: DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
         epoch: message_board::EpochNumber,
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         use durable_steps::{Task as _, storage::JournalStorage as _};
@@ -366,19 +373,19 @@ impl MailOwner {
             .await?)
     }
     pub async fn status_cursor(&self) -> Result<u64, TestError> {
-        let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+        let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            minimum_settlement_allowance::<collaboration_service::RouterDeliveryTypes>()?,
+            minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
         Ok(self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_service::RouterDeliveryTypes>::new(scope, limits)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
                         .status_cursor()
                         .await
                         .map(|cursor| cursor.value())

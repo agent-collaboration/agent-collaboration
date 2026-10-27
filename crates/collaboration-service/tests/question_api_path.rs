@@ -1,7 +1,8 @@
 use collaboration_protocol::{EndpointRef, QuestionAnswerParams, QuestionResponse, QuestionState};
-use collaboration_service::{
-    NativeControlBackend, NativeGenerationGate, ServiceIdentity, ServiceInteractionBroker,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ServiceIdentity;
 use message_board::{HumanId, Identity, SessionEndpointRef, SessionId, SessionRef};
 use serde_json::json;
 #[path = "support/served_api.rs"]
@@ -111,10 +112,10 @@ async fn question_list_and_answer_cross_the_real_api() {
     .await
     .expect("rejected action leaves durable row");
     assert!(matches!(
-        serde_json::from_str::<collaboration_service::InteractionHistoryRecord>(&unchanged)
+        serde_json::from_str::<collaboration_runtime::InteractionHistoryRecord>(&unchanged)
             .expect("pending durable record"),
-        collaboration_service::InteractionHistoryRecord::Question {
-            state: collaboration_service::QuestionHistoryState::Pending,
+        collaboration_runtime::InteractionHistoryRecord::Question {
+            state: collaboration_runtime::QuestionHistoryState::Pending,
             ..
         }
     ));
@@ -159,10 +160,10 @@ async fn question_list_and_answer_cross_the_real_api() {
     .fetch_one(&mut observer)
     .await
     .expect("actual answer persisted through public MCP route");
-    let stored: collaboration_service::InteractionHistoryRecord =
+    let stored: collaboration_runtime::InteractionHistoryRecord =
         serde_json::from_str(&record_json).expect("typed stored answer");
-    let collaboration_service::InteractionHistoryRecord::Question {
-        state: collaboration_service::QuestionHistoryState::Answered { content },
+    let collaboration_runtime::InteractionHistoryRecord::Question {
+        state: collaboration_runtime::QuestionHistoryState::Answered { content },
         ..
     } = stored
     else {
