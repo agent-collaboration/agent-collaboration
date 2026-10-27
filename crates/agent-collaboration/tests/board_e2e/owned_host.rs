@@ -209,7 +209,35 @@ impl BoardHost {
         project: &str,
         cancel: fleet_sync_protocol::ItemId,
     ) -> FixtureResult<bool> {
-        let mut request = serde_json::to_vec(&json!({"project": project, "cancel": cancel}))?;
+        let reply = self
+            .query_project(
+                json!({"kind":"localCancelDelivery", "project": project, "cancel": cancel}),
+            )
+            .await?;
+        if reply.get("kind") != Some(&json!("localCancelDelivery"))
+            || reply.get("cancel") != Some(&json!(cancel))
+        {
+            return Err("owned Host Local cancel observation identity mismatch".into());
+        }
+        reply
+            .get("recorded")
+            .and_then(Value::as_bool)
+            .ok_or_else(|| "owned Host omitted Local cancel observation".into())
+    }
+
+    #[allow(dead_code)] // Only takeover targets drive the private project sender.
+    pub async fn replicate_project(&mut self, project: &str) -> FixtureResult {
+        let reply = self
+            .query_project(json!({"kind":"replicateProject", "project":project}))
+            .await?;
+        if reply != json!({"kind":"projectReplicated", "project":project}) {
+            return Err("owned Host project replication identity mismatch".into());
+        }
+        Ok(())
+    }
+
+    async fn query_project(&mut self, query: Value) -> FixtureResult<Value> {
+        let mut request = serde_json::to_vec(&query)?;
         request.push(b'\n');
         self.child
             .stdin
@@ -221,16 +249,7 @@ impl BoardHost {
         if self.output.read_line(&mut line).await? == 0 {
             return Err("owned Host exited before Local cancel observation".into());
         }
-        let reply: Value = serde_json::from_str(&line)?;
-        if reply.get("kind") != Some(&json!("localCancelDelivery"))
-            || reply.get("cancel") != Some(&json!(cancel))
-        {
-            return Err("owned Host Local cancel observation identity mismatch".into());
-        }
-        reply
-            .get("recorded")
-            .and_then(Value::as_bool)
-            .ok_or_else(|| "owned Host omitted Local cancel observation".into())
+        Ok(serde_json::from_str(&line)?)
     }
 
     pub async fn cli_output(&self, arguments: &[&OsStr]) -> FixtureResult<std::process::Output> {

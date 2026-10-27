@@ -17,6 +17,10 @@ use collaboration_protocol::PushDeliveryState;
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem};
 use serde_json::{Value, json};
 
+#[path = "takeover_copy_progress.rs"]
+mod copy_progress;
+use copy_progress::{cancelled_after_copy, copy_project};
+
 struct HeldFollow {
     follow: FollowMembership,
     item: DeliveryItem<BoardDeliveryTypes>,
@@ -27,6 +31,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     fixture.create().await?;
     let follow =
         FollowMembership::arrange(fixture, recipients::session(second.host()?).await?).await?;
+    copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
@@ -38,10 +43,9 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     let range = follow
         .post(fixture, "held follow cancellation range")
         .await?;
-    let item = submitted_item(
-        &controls::held_call(fixture, ObjectAddress::Registry, "central.mailbox-submit").await?,
-    )?;
+    let item = submitted_item(&copy_progress::held_submit(fixture).await?)?;
     follow.assert_frozen(&item, &range)?;
+    copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::resume(fixture, ObjectAddress::Registry).await?;
     sender_status(fixture.host()?, &item.id().as_uuid().to_string(), "held").await?;
@@ -68,6 +72,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     let captured = readbacks::handoff_capture(&stopped, &fixture.project, item.id()).await?;
     drop(stopped);
     fixture.reopen_host().await?;
+    copy_project(fixture).await?;
     controls::confirm_copy_ack(fixture, captured).await?;
     Ok(HeldFollow {
         follow,
@@ -137,12 +142,7 @@ async fn prove_remote(
             None
         }
         EndPrefix::Retained => {
-            sender_status(
-                fixture.host()?,
-                &seed.item.id().as_uuid().to_string(),
-                "cancelled",
-            )
-            .await?;
+            cancelled_after_copy(fixture, seed.item.id()).await?;
             settled_view(fixture.host()?, &fixture.project).await?;
             None
         }

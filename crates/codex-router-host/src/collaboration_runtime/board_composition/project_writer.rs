@@ -43,8 +43,9 @@ pub(super) struct ProjectWriter {
     authority_changes: watch::Receiver<()>,
     lifecycle_signals: mpsc::UnboundedSender<ProjectLifecycleSignal>,
     #[cfg(any(test, feature = "runtime-test-support"))]
-    replication_events:
-        OnceCell<mpsc::Sender<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>>,
+    replication_events: watch::Sender<
+        Option<mpsc::Sender<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>>,
+    >,
 }
 
 impl ProjectWriter {
@@ -112,7 +113,7 @@ impl ProjectWriter {
             authority_changes,
             lifecycle_signals,
             #[cfg(any(test, feature = "runtime-test-support"))]
-            replication_events: OnceCell::new(),
+            replication_events: watch::channel(None).0,
         })
     }
 
@@ -153,9 +154,7 @@ impl ProjectWriter {
         let (events, mut received) =
             mpsc::channel::<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>(128);
         #[cfg(any(test, feature = "runtime-test-support"))]
-        self.replication_events
-            .set(events.clone())
-            .map_err(|_| io::Error::other("project replication observer already started"))?;
+        self.replication_events.send_replace(Some(events.clone()));
         let project = project.clone();
         let mut stopped = self.stop.subscribe();
         let mut authority = self.authority_changes.clone();
@@ -238,8 +237,13 @@ impl ProjectWriter {
     ) -> io::Result<()> {
         let output = self
             .replication_events
-            .get()
-            .ok_or_else(|| io::Error::other("project replication observer has not started"))?;
+            .subscribe()
+            .wait_for(Option::is_some)
+            .await
+            .map_err(io::Error::other)?
+            .as_ref()
+            .cloned()
+            .ok_or_else(|| io::Error::other("project replication observer closed"))?;
         loop {
             // Share the background sender's per-copy lock and deliver its real
             // events to the same observer. The test never fabricates an ACK or

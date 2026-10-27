@@ -1,4 +1,4 @@
-//! Test-only stdin queries observe committed Local cancellation through its owner.
+//! Test-only stdin queries drive real project copies and observe committed Local cancellation.
 use codex_router_host::CollaborationRuntime;
 use fleet_sync_protocol::ItemId;
 use serde::Deserialize;
@@ -7,9 +7,15 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct LocalCancelQuery {
-    project: message_board::ProjectId,
-    cancel: ItemId,
+#[serde(tag = "kind", rename_all = "camelCase")]
+enum ProjectQuery {
+    ReplicateProject {
+        project: message_board::ProjectId,
+    },
+    LocalCancelDelivery {
+        project: message_board::ProjectId,
+        cancel: ItemId,
+    },
 }
 
 pub async fn serve_until_shutdown(runtime: &mut CollaborationRuntime) -> io::Result<()> {
@@ -28,17 +34,21 @@ pub async fn serve_until_shutdown(runtime: &mut CollaborationRuntime) -> io::Res
             input_open = false;
             continue;
         };
-        let query: LocalCancelQuery = serde_json::from_str(&line).map_err(io::Error::other)?;
-        runtime
-            .runtime_test_replicate_project(&query.project)
-            .await?;
-        let recorded = runtime
-            .runtime_test_has_local_cancel_delivery(query.cancel)
-            .await?;
-        let mut reply = serde_json::to_vec(&serde_json::json!({
-            "kind": "localCancelDelivery", "cancel": query.cancel, "recorded": recorded,
-        }))
-        .map_err(io::Error::other)?;
+        let query: ProjectQuery = serde_json::from_str(&line).map_err(io::Error::other)?;
+        let reply = match query {
+            ProjectQuery::ReplicateProject { project } => {
+                runtime.runtime_test_replicate_project(&project).await?;
+                serde_json::json!({"kind": "projectReplicated", "project": project})
+            }
+            ProjectQuery::LocalCancelDelivery { project, cancel } => {
+                runtime.runtime_test_replicate_project(&project).await?;
+                let recorded = runtime
+                    .runtime_test_has_local_cancel_delivery(cancel)
+                    .await?;
+                serde_json::json!({"kind": "localCancelDelivery", "cancel": cancel, "recorded": recorded})
+            }
+        };
+        let mut reply = serde_json::to_vec(&reply).map_err(io::Error::other)?;
         reply.push(b'\n');
         output.write_all(&reply).await?;
         output.flush().await?;
