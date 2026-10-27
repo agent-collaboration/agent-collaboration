@@ -87,6 +87,8 @@ jobs:
           pnpm --dir verification run format:check
       - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
+      - name: Test main cache pruning
+        run: bash scripts/tests/test_main_cache_pruning.sh
       - name: Test tool bootstrap
         id: tool_bootstrap
         background: true
@@ -132,8 +134,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'
-          cache: pnpm
-          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+          package-manager-cache: false
       - name: Check Quota and Sessions verification TypeScript
         id: tui_verification
         background: true
@@ -241,8 +242,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'
-          cache: pnpm
-          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+          package-manager-cache: false
       - name: Install native adapter test dependencies
         run: |
           pnpm --dir scripts/verification/tui install --frozen-lockfile
@@ -523,6 +523,24 @@ jobs:
           path: |
             ${{ runner.temp }}/transport-build.jsonl
             release-source/target/cargo-timings/
+
+  prune-caches:
+    name: Prune superseded main caches
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # needs waits for rust-cache post saves, including successful jobs when
+    # another validation job failed. The workflow serializes main producers.
+    needs: [static, wasm, test, e2e, release-cache]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prune superseded main cache keys
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/tooling/prune-main-caches.sh --apply
 
   validated:
     name: Validate Rust workspace
