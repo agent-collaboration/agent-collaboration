@@ -240,8 +240,14 @@ impl HostRuntime {
         update_inputs: ManagedUpdateInputs,
         instance: HostInstance,
     ) -> Result<HostExit, HostError> {
-        Self::run_acquired_with_progress(config, child_launch_plans, update_inputs, instance, None)
-            .await
+        Box::pin(Self::run_acquired_with_progress(
+            config,
+            child_launch_plans,
+            update_inputs,
+            instance,
+            None,
+        ))
+        .await
     }
 
     pub async fn run_acquired_with_progress(
