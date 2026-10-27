@@ -40,6 +40,8 @@ Observed on Sunclaw in the isolated checkout at product source `424fbc238`, 2026
 | Supported `build:pty`, then `pnpm --dir verification test` | Both exited 0; 848 passed, zero failed/skipped, including all 13 PTY cases | Harness behavior and scripted regression cases on this Mac |
 | `cargo check --locked -p acp-client-runtime --tests` | Exit 0; one existing unused-import warning | This package and its test targets compile |
 | `cargo test --locked -p acp-client-runtime submitted_prompt_tests` | Exit 0; four passed, zero failed | Actual actor/SDK behavior with the scripted provider |
-| `cargo check --locked -p codex-router-host --tests` | Exit 0 | Host and its test targets compile after the #173 crate move |
+| `cargo check --locked -p codex-router-host --tests` | Exit 0; cached dependency-template diagnostics appeared before compilation | Host and its test targets compile after the #173 crate move |
 
 The full Rust workspace/lint gates and new menus remain unverified. These checks do not run real Claude/Cursor conversations or observe the actual terminal menus. The four old test-helper crate qualifiers found during this inventory were corrected to `collaboration-contracts`; the Sunclaw Host check now validates that correction compiles. It does not execute those Host tests. Sunclaw currently has no usable Developer ID signing identity for a new debug Router; no new Router was launched by these checks.
+
+The Host log begins with diagnostics about unrendered `{{project-name}}` and template conditionals in cached `workers-rs` manifests. Cargo then checks the declared Host targets and exits 0. The origin of those non-fatal diagnostics has not been established here; the run is not described as diagnostic-free.
