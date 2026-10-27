@@ -1,7 +1,7 @@
 {
   "status": "runtime-verification-blocked-by-owner",
   "base": "02ceeade",
-  "finalSourcePatchSha256": "e8aedf4344021ae9b667216294bcbdc5e56f4f4d8ed4ca7346b69231d5e0d154",
+  "finalSourcePatchSha256": "413343337dfb8ec623c8680d0f3fed54ac3307cfe7ae1aade024ddb51eff25d2",
   "testSweepStartPatchSha256": "294caaa004ce93b9aad6d94e690413d2a70daaeb48d8fdef3062096b34b52c0a",
   "changesAfterSweepStarted": {
     "files": [
@@ -417,5 +417,9 @@
   "finalCleanup": {
     "command": "cargo clean --workspace --profile dev",
     "result": "Removed 6953 files, 8.9GiB total"
-  }
+  },
+  "preCommitAbbreviatedPatchSha256": "e8aedf4344021ae9b667216294bcbdc5e56f4f4d8ed4ca7346b69231d5e0d154",
+  "sourceCodeCommit": "59553749c1ef5f9fe5f7aafc7a6af26b6bf4929e",
+  "sourcePatchDigestCommand": "git diff --full-index 02ceeade 59553749c1ef5f9fe5f7aafc7a6af26b6bf4929e -- Cargo.toml clippy.toml crates prototypes",
+  "sourcePatchDigestFormat": "full object ids; independent of Git automatic abbreviation length"
 }

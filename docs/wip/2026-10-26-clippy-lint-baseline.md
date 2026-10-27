@@ -97,3 +97,5 @@ Every location is listed in the [exception inventory](2026-10-26-clippy-lint-bas
 - No push, PR, release, merge, production process replacement, or independent reviewer observation is claimed. The Fleet Lead owns integration, the second lint pass, and final CI acceptance.
 
 Cargo also prints nonfatal diagnostics about template manifests in its cached workers-rs checkout; the recorded static commands still exit 0. No workspace Clippy finding remains.
+
+The proof hash uses `git diff --full-index` so Git's automatic object-id abbreviation does not change the digest after committing.
