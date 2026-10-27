@@ -206,13 +206,10 @@ impl BoardHost {
     #[allow(dead_code)] // Only takeover targets need the private replay observation.
     pub async fn local_cancel_delivery_recorded(
         &mut self,
-        project: &str,
         cancel: fleet_sync_protocol::ItemId,
     ) -> FixtureResult<bool> {
         let reply = self
-            .query_project(
-                json!({"kind":"localCancelDelivery", "project": project, "cancel": cancel}),
-            )
+            .query_project(json!({"kind":"localCancelDelivery", "cancel": cancel}))
             .await?;
         if reply.get("kind") != Some(&json!("localCancelDelivery"))
             || reply.get("cancel") != Some(&json!(cancel))
@@ -234,6 +231,33 @@ impl BoardHost {
             return Err("owned Host project replication identity mismatch".into());
         }
         Ok(())
+    }
+
+    #[allow(dead_code)] // Only the settled takeover branch needs the absence barrier.
+    pub async fn drain_project_publisher(&mut self, project: &str) -> FixtureResult {
+        let reply = self
+            .query_project(json!({"kind":"drainProjectPublisher","project":project}))
+            .await?;
+        if reply != json!({"kind":"projectPublisherIdle","project":project}) {
+            return Err("owned Host publisher completion identity mismatch".into());
+        }
+        Ok(())
+    }
+
+    #[allow(dead_code)] // Only retained takeover cases inspect the verified seed floor.
+    pub async fn seeded_handoff_frontier(&mut self, project: &str) -> FixtureResult<Value> {
+        let reply = self
+            .query_project(json!({"kind":"seededHandoffFrontier","project":project}))
+            .await?;
+        if reply.get("kind") != Some(&json!("seededHandoffFrontier"))
+            || reply.get("project") != Some(&json!(project))
+        {
+            return Err("owned Host seed frontier observation identity mismatch".into());
+        }
+        reply
+            .get("frontier")
+            .cloned()
+            .ok_or_else(|| "owned Host seed frontier is absent".into())
     }
 
     async fn query_project(&mut self, query: Value) -> FixtureResult<Value> {

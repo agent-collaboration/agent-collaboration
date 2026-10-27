@@ -146,6 +146,23 @@ pub struct CollaborationRuntime {
 }
 impl CollaborationRuntime {
     #[cfg(feature = "runtime-test-support")]
+    pub async fn runtime_test_drain_project_publisher(
+        &self,
+        project: &message_board::ProjectId,
+    ) -> io::Result<()> {
+        let publisher = self
+            .notification_publisher
+            .as_ref()
+            .ok_or_else(|| io::Error::other("test project publisher is unavailable"))?;
+        publisher
+            .queue_project(project.clone())
+            .await
+            .map_err(io::Error::other)?;
+        publisher.wait_project_idle_for_test(project).await;
+        Ok(())
+    }
+
+    #[cfg(feature = "runtime-test-support")]
     pub async fn runtime_test_replicate_project(
         &self,
         project: &message_board::ProjectId,
