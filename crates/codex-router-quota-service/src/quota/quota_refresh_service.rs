@@ -921,10 +921,11 @@ where
 }
 
 mod quota_refresh_helpers;
+pub use quota_refresh_helpers::quota_refresh_error_class;
 use quota_refresh_helpers::{
     SupersededResponsesFloorRead, begin_credit_refresh_attempt_for_current_generation,
     begin_responses_refresh_attempt_before_resolution,
     notify_weekly_floor_from_latest_committed_responses, quota_refresh_diagnostic_account_label,
-    quota_refresh_error_class, record_superseded_account_refresh,
-    responses_refresh_attempt_for_resolved_generation, weekly_quota_floor_intent,
+    record_superseded_account_refresh, responses_refresh_attempt_for_resolved_generation,
+    weekly_quota_floor_intent,
 };

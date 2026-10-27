@@ -12,14 +12,11 @@ workspace = true
 default = []
 test-support = []
 quota-reset-test-harness = []
-keychain-test-support = ["codex-router-secret-store/keychain-test-guard", "codex-router-secret-store/test-support"]
 
 [dependencies]
 sqlx = { workspace = true, features = ["sqlite"] }
-base64.workspace = true
 chrono.workspace = true
 codex-router-auth = { path = "../codex-router-auth", version = "0.1.4" }
-codex-native-integration.workspace = true
 codex-router-core.workspace = true
 codex-router-proxy = { path = "../codex-router-proxy", version = "0.1.4" }
 codex-router-selection = { path = "../codex-router-selection", version = "0.1.4" }
@@ -32,20 +29,13 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
-tokio-util.workspace = true
 tracing.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
 tracing-subscriber.workspace = true
-codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.96" }
 tempfile = "3.27.0"
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }
 codex-router-auth = { path = "../codex-router-auth", version = "0.1.4", features = ["sync-rusqlite-fixtures", "test-support"] }
 codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["sync-rusqlite-fixtures"] }
-futures-util.workspace = true
-rustix.workspace = true
-tokio-tungstenite.workspace = true
-toml = "1.1.2"
-tungstenite = "0.28.0"
 tokio = { workspace = true, features = ["test-util"] }

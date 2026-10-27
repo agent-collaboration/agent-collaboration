@@ -24,11 +24,7 @@ const LAYER_POLICY: [(&str, &[&str]); 11] = [
     ("codex-router-tui", &[]),
     (
         "codex-router-quota-tui",
-        &[
-            "codex-router-quota-service",
-            "codex-router-tui",
-            "codex-router-selection",
-        ],
+        &["codex-router-quota-service", "codex-router-tui"],
     ),
     (
         "codex-router-cli",

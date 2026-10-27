@@ -135,6 +135,29 @@ pub enum QuotaCommandError {
     Stdout(std::io::Error),
 }
 
+impl QuotaCommandError {
+    /// Preserves refresh classification across the CLI and service error boundary.
+    pub fn refresh_error_class(
+        &self,
+    ) -> codex_router_state::quota_snapshot::QuotaRefreshErrorClass {
+        use codex_router_state::quota_snapshot::QuotaRefreshErrorClass;
+        match self {
+            Self::Service(error) => {
+                codex_router_quota_service::quota::quota_refresh_service::quota_refresh_error_class(
+                    error,
+                )
+            }
+            Self::ResetComposition(_)
+            | Self::ResetSessionTaskFailed
+            | Self::AsyncDispatchRequired
+            | Self::InvalidFormat { .. }
+            | Self::CredentialResolverOpen(_)
+            | Self::StateStore(_)
+            | Self::Stdout(_) => QuotaRefreshErrorClass::ProviderError,
+        }
+    }
+}
+
 /// Follow-up composition requested by a quota command.
 /// Runs every quota command under the process-owned async runtime.
 pub(crate) async fn run_quota_command(

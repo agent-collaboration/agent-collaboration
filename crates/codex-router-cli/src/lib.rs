@@ -156,20 +156,6 @@ pub async fn run_quota_reset_test_harness() -> i32 {
     0
 }
 
-/// Runs the compiled sessions-picker PTY harness without loading Codex session state.
-///
-/// The installed `codex-router` binary does not reference this feature-gated entry point.
-#[cfg(feature = "quota-reset-test-harness")]
-#[doc(hidden)]
-pub fn run_sessions_picker_test_harness() -> i32 {
-    let result = agent_collaboration::run_sessions_picker_test_harness();
-    if let Err(error) = result {
-        let _ = writeln!(std::io::stderr(), "{error}");
-        return 2;
-    }
-    0
-}
-
 fn run_sync_process_args(args: Vec<OsString>) -> i32 {
     let _telemetry_guard = telemetry::init_from_env(telemetry::TelemetryMode::EnvironmentOnly);
     let run_span = telemetry::run_span();

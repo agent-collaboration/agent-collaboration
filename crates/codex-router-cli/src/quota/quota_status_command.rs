@@ -1,5 +1,3 @@
-#[cfg(feature = "quota-reset-test-harness")]
-use super::record_storyboard_quota_error;
 use super::{
     AccountId, AccountStatus, Arc, AsyncCreditUsagePolicyMutationStore, AsyncSqliteStateStore,
     AsyncWeeklyQuotaFloorMutationStore, CreditUsagePolicySaveError, CreditUsagePolicySaver,
@@ -13,6 +11,8 @@ use super::{
 };
 #[cfg(test)]
 use crate::quota::{AccountRecord, SystemTime, UNIX_EPOCH};
+#[cfg(feature = "quota-reset-test-harness")]
+use codex_router_quota_service::quota::quota_status_metrics::record_storyboard_quota_error;
 
 pub(super) async fn render_quota_status(
     stdout: &mut impl Write,

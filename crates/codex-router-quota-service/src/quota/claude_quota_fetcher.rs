@@ -27,6 +27,10 @@ impl ClaudeQuotaFetcher {
     }
 
     #[cfg(any(test, feature = "test-support"))]
+    #[expect(
+        clippy::expect_used,
+        reason = "test-support fixture preserves its existing fail-fast client setup"
+    )]
     pub fn new_with_endpoint_for_test(
         timeout: Duration,
         usage_endpoint: impl Into<String>,

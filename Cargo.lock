@@ -1244,7 +1244,6 @@ dependencies = [
 name = "codex-router-cli"
 version = "0.1.105"
 dependencies = [
- "agent-collaboration",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",
@@ -1426,6 +1425,7 @@ dependencies = [
 name = "codex-router-quota-reset-test-harness"
 version = "0.1.105"
 dependencies = [
+ "agent-collaboration",
  "axum",
  "base64 0.22.1",
  "codex-router-cli",
@@ -1442,20 +1442,15 @@ dependencies = [
 name = "codex-router-quota-service"
 version = "0.1.105"
 dependencies = [
- "base64 0.22.1",
  "chrono",
- "codex-native-integration",
  "codex-router-auth",
  "codex-router-core",
  "codex-router-proxy",
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
- "codex-router-test-support",
- "futures-util",
  "opentelemetry",
  "reqwest 0.12.28",
- "rustix 1.1.4",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1463,12 +1458,8 @@ dependencies = [
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "toml 1.1.2+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
- "tungstenite 0.28.0",
  "unicode-width 0.2.2",
 ]
 
@@ -1479,9 +1470,6 @@ dependencies = [
  "chrono",
  "codex-router-core",
  "codex-router-quota-service",
- "codex-router-secret-store",
- "codex-router-selection",
- "codex-router-state",
  "codex-router-tui",
  "crossterm",
  "futures-util",

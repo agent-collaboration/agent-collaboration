@@ -3,6 +3,9 @@ use codex_router_selection::burn_down::RoutingReason;
 
 use super::*;
 
+#[path = "quota_status_formatting_test.rs"]
+mod quota_status_formatting_test;
+
 const NOW: u64 = 1_700_000_000;
 
 #[path = "quota_refresh_provider_test.rs"]

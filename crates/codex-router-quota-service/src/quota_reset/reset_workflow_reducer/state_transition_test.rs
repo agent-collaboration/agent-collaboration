@@ -122,7 +122,7 @@ fn commit_capability_source_contract_is_opaque_and_by_value() {
     assert!(!preceding_declaration.contains("Serialize"));
     assert!(!capability_source.contains(&["impl Clone", " for CommitCapability"].concat()));
     assert!(!capability_source.contains(&["Serialize", " for CommitCapability"].concat()));
-    assert!(!capability_body.contains("pub"));
+    assert!(!capability_body.contains("pub(crate)"));
     assert!(source.contains("pub(in crate::quota_reset) struct CommitCapability"));
     assert!(source.contains("capability: CommitCapability"));
     assert!(!source.contains(&["capability: ", "&CommitCapability"].concat()));

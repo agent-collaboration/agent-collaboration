@@ -353,3 +353,53 @@ async fn reset_session_join_failure_is_a_sanitized_command_error() {
         "integrated quota reset session task failed"
     );
 }
+
+#[test]
+fn cli_error_boundary_preserves_refresh_classification_and_messages() {
+    use crate::credential_runtime::CliCredentialResolverOpenError;
+    use codex_router_quota_service::quota_reset::QuotaResetError;
+    use codex_router_state::quota_snapshot::QuotaRefreshErrorClass;
+    let cases = [
+        (
+            QuotaCommandError::ResetComposition(QuotaResetError::CredentialStoreUnavailable),
+            "encrypted credential store could not be initialized",
+        ),
+        (
+            QuotaCommandError::ResetSessionTaskFailed,
+            "integrated quota reset session task failed",
+        ),
+        (
+            QuotaCommandError::AsyncDispatchRequired,
+            "quota commands require the async CLI dispatcher",
+        ),
+        (
+            QuotaCommandError::InvalidFormat {
+                value: "invalid".to_owned(),
+            },
+            "invalid quota status format: invalid",
+        ),
+        (
+            QuotaCommandError::CredentialResolverOpen(CliCredentialResolverOpenError::Runtime(
+                std::io::Error::other("fixture open failure"),
+            )),
+            "fixture open failure",
+        ),
+        (
+            QuotaCommandError::StateStore(StateStoreError::Sqlite {
+                message: "fixture state failure".to_owned(),
+            }),
+            "sqlite state store failed: fixture state failure",
+        ),
+        (
+            QuotaCommandError::Stdout(std::io::Error::other("fixture write failure")),
+            "failed to write stdout: fixture write failure",
+        ),
+    ];
+    for (error, expected_message) in cases {
+        assert_eq!(
+            error.refresh_error_class(),
+            QuotaRefreshErrorClass::ProviderError
+        );
+        assert_eq!(crate::CliError::from(error).to_string(), expected_message);
+    }
+}

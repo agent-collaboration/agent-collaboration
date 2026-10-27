@@ -105,3 +105,32 @@ pub fn credit_usage_compact_summary(usage: &CreditUsageStatus) -> String {
         CreditAvailability::Available { balance: None } => format!("available {freshness}"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use codex_router_core::credit_usage::CreditAvailability;
+    #[test]
+    fn compact_credit_summary_formats_exact_decimal_without_changing_observation() {
+        use codex_router_core::credit_usage::{
+            CreditBalance, CreditProviderObservation, CreditSpendControl,
+        };
+        let usage = CreditUsageStatus {
+            freshness: CreditUsageFreshness::Fresh,
+            provider_observation: CreditProviderObservation::new(
+                CreditAvailability::Available {
+                    balance: Some(CreditBalance::new("62500.0000000000000000").unwrap()),
+                },
+                CreditSpendControl::Clear,
+                None,
+            ),
+            ..CreditUsageStatus::default()
+        };
+        let original = usage.clone();
+        assert_eq!(credit_usage_compact_summary(&usage), "62.5k fresh");
+        assert_eq!(
+            usage, original,
+            "presentation cannot change provider precision"
+        );
+    }
+}

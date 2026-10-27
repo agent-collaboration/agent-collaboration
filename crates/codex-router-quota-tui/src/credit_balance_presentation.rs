@@ -53,30 +53,4 @@ mod tests {
             assert!(CreditBalance::new(invalid).is_err());
         }
     }
-
-    use crate::quota_browse_presentation_test::quota_two_account_view_model;
-    use codex_router_core::credit_usage::CreditAvailability;
-    use codex_router_quota_service::credit_usage_summary::credit_usage_compact_summary;
-    use codex_router_quota_service::quota::CreditUsageFreshness;
-    #[test]
-    fn compact_credit_summary_formats_exact_decimal_without_changing_observation() {
-        use codex_router_core::credit_usage::{
-            CreditBalance, CreditProviderObservation, CreditSpendControl,
-        };
-        let mut usage = quota_two_account_view_model().rows[0].credit_usage.clone();
-        usage.freshness = CreditUsageFreshness::Fresh;
-        usage.provider_observation = CreditProviderObservation::new(
-            CreditAvailability::Available {
-                balance: Some(CreditBalance::new("62500.0000000000000000").unwrap()),
-            },
-            CreditSpendControl::Clear,
-            None,
-        );
-        let original = usage.clone();
-        assert_eq!(credit_usage_compact_summary(&usage), "62.5k fresh");
-        assert_eq!(
-            usage, original,
-            "presentation cannot change provider precision"
-        );
-    }
 }

@@ -180,7 +180,7 @@ pub struct ValidatedCreditInventory {
 }
 
 impl ValidatedCreditInventory {
-    pub fn len(&self) -> usize {
+    pub(in crate::quota_reset) fn len(&self) -> usize {
         self.credits.len()
     }
 
