@@ -204,6 +204,11 @@ async fn arrange_remote_end(
         .ok_or("old store")?;
     let cancel = timeout(BOUND, async {
         loop {
+            fixture
+                .holder
+                .projects
+                .replicate_project_for_test(&fixture.project)
+                .await?;
             queue_old_publisher(fixture).await?;
             let mut read = store.snapshot().await?;
             let child = read
@@ -224,6 +229,11 @@ async fn arrange_remote_end(
     .await??;
     timeout(BOUND, async {
         loop {
+            fixture
+                .holder
+                .projects
+                .replicate_project_for_test(&fixture.project)
+                .await?;
             let marks = fixture
                 .holder
                 .projects
@@ -291,6 +301,31 @@ async fn lose_actual_submit_answer(
     item: ItemId,
 ) -> TestResult {
     timeout(BOUND, async {
+        // Publication is eligible only after the successor's real copy ACK.
+        // Drive that prefix before opening the HTTP held-dispatch observation;
+        // neither wait needs to race the background sender's retry cadence.
+        loop {
+            fixture
+                .successor
+                .projects
+                .replicate_project_for_test(&fixture.project)
+                .await?;
+            let marks = fixture
+                .successor
+                .projects
+                .acknowledged_mail_changes(&fixture.project)
+                .await?;
+            if marks.max_handoff_seq == Some(2) && marks.max_expansion_seq == Some(1) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        fixture
+            .successor
+            .notifications
+            .publisher
+            .queue_project(fixture.project.clone())
+            .await?;
         let held = fixture
             .holder
             .central

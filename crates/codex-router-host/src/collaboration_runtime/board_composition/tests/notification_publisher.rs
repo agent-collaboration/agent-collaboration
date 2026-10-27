@@ -152,13 +152,14 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
         .map_err(|_| io::Error::other("receiver gate closed"))?;
     timeout(BOUND, async {
         loop {
+            projects.replicate_project_for_test(&seed.project).await?;
             if replication
                 .acknowledged_mail_changes(&seed.project)
                 .await?
                 .max_handoff_seq
                 == Some(1)
             {
-                return Ok::<_, BoardError>(());
+                return TestResult::Ok(());
             }
             tokio::task::yield_now().await;
         }
@@ -170,7 +171,10 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
         std::time::Duration::from_secs(10),
         central.notifications.wait_submission(seed.item),
     )
-    .await;
+    .await
+    .map_err(|_| {
+        io::Error::other("eligible remote handoff stayed pending after its native acknowledgement")
+    });
     publisher.shutdown().await;
     actors.shutdown().await;
     drop(app);
@@ -188,10 +192,6 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
         .close()
         .await?;
     central.stop().await?;
-    assert!(
-        publication.is_ok(),
-        "eligible remote handoff stayed pending after its native acknowledgement"
-    );
     assert_eq!(
         publication?,
         Some(fleet_sync_protocol::Epoch::new(seed.epoch.get())?)

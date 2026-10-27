@@ -234,7 +234,10 @@ async fn assert_remote_successor(
         let host = second.host_mut()?;
         // Rejected already held before takeover; only this committed row proves replay.
         tokio::time::timeout(BOUND, async {
-            while !host.local_cancel_delivery_recorded(cancel).await? {}
+            while !host
+                .local_cancel_delivery_recorded(&fixture.project, cancel)
+                .await?
+            {}
             FixtureResult::Ok(())
         })
         .await??;

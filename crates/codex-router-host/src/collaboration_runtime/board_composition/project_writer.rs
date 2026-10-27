@@ -42,6 +42,9 @@ pub(super) struct ProjectWriter {
     tasks: Mutex<WriterTasks>,
     authority_changes: watch::Receiver<()>,
     lifecycle_signals: mpsc::UnboundedSender<ProjectLifecycleSignal>,
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    replication_events:
+        OnceCell<mpsc::Sender<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>>,
 }
 
 impl ProjectWriter {
@@ -108,6 +111,8 @@ impl ProjectWriter {
             tasks: Mutex::new(WriterTasks::Prepared),
             authority_changes,
             lifecycle_signals,
+            #[cfg(any(test, feature = "runtime-test-support"))]
+            replication_events: OnceCell::new(),
         })
     }
 
@@ -147,6 +152,10 @@ impl ProjectWriter {
         let sender_stopped = self.stop.subscribe();
         let (events, mut received) =
             mpsc::channel::<Result<ReplicationEvents, fleet_sync_writer::CopyFailure>>(128);
+        #[cfg(any(test, feature = "runtime-test-support"))]
+        self.replication_events
+            .set(events.clone())
+            .map_err(|_| io::Error::other("project replication observer already started"))?;
         let project = project.clone();
         let mut stopped = self.stop.subscribe();
         let mut authority = self.authority_changes.clone();
@@ -220,6 +229,36 @@ impl ProjectWriter {
         });
         *owned = WriterTasks::Running(tasks);
         Ok(())
+    }
+
+    #[cfg(any(test, feature = "runtime-test-support"))]
+    pub(super) async fn replicate_available_for_test(
+        &self,
+        receiver: ReceiverId,
+    ) -> io::Result<()> {
+        let output = self
+            .replication_events
+            .get()
+            .ok_or_else(|| io::Error::other("project replication observer has not started"))?;
+        loop {
+            // Share the background sender's per-copy lock and deliver its real
+            // events to the same observer. The test never fabricates an ACK or
+            // replaces the ACK-to-publisher wiring it is exercising.
+            let events = self
+                .sender
+                .replicate_once(receiver)
+                .await
+                .map_err(io::Error::other)?;
+            let acknowledged = events
+                .iter()
+                .any(|event| matches!(event, ReplicationEvents::Acknowledged { .. }));
+            for event in events {
+                output.send(Ok(event)).await.map_err(io::Error::other)?;
+            }
+            if !acknowledged {
+                return Ok(());
+            }
+        }
     }
 
     #[cfg(all(test, feature = "runtime-test-support"))]

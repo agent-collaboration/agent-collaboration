@@ -206,9 +206,10 @@ impl BoardHost {
     #[allow(dead_code)] // Only takeover targets need the private replay observation.
     pub async fn local_cancel_delivery_recorded(
         &mut self,
+        project: &str,
         cancel: fleet_sync_protocol::ItemId,
     ) -> FixtureResult<bool> {
-        let mut request = serde_json::to_vec(&json!({"cancel": cancel}))?;
+        let mut request = serde_json::to_vec(&json!({"project": project, "cancel": cancel}))?;
         request.push(b'\n');
         self.child
             .stdin

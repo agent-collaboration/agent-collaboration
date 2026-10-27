@@ -8,6 +8,7 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LocalCancelQuery {
+    project: message_board::ProjectId,
     cancel: ItemId,
 }
 
@@ -28,6 +29,9 @@ pub async fn serve_until_shutdown(runtime: &mut CollaborationRuntime) -> io::Res
             continue;
         };
         let query: LocalCancelQuery = serde_json::from_str(&line).map_err(io::Error::other)?;
+        runtime
+            .runtime_test_replicate_project(&query.project)
+            .await?;
         let recorded = runtime
             .runtime_test_has_local_cancel_delivery(query.cancel)
             .await?;
