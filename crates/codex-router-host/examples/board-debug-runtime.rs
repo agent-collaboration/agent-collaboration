@@ -12,6 +12,8 @@ mod local_cancel_observation;
 #[cfg(feature = "runtime-test-support")]
 #[path = "board-debug-runtime/mail_faults.rs"]
 mod mail_faults;
+#[path = "board-debug-runtime/shutdown_signals.rs"]
+mod shutdown_signals;
 use std::{
     error::Error,
     io,
@@ -92,6 +94,17 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let manifest: ServiceManifest =
         serde_json::from_slice(&std::fs::read(directory.join("service.json"))?)?;
+    let mut shutdown_signals = match shutdown_signals::ShutdownSignals::register_handlers() {
+        Ok(signals) => signals,
+        Err(error) => {
+            return match runtime.shutdown().await {
+                Ok(()) => Err(error.into()),
+                Err(cleanup) => {
+                    Err(format!("shutdown signal setup: {error}; cleanup: {cleanup}").into())
+                }
+            };
+        }
+    };
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     let hold_before_serve = directory.join("fixture-hold-before-serve").is_file();
     println!(
@@ -100,29 +113,31 @@ async fn main() -> Result<(), Box<dyn Error>> {
             "mcpUrl":manifest.mcp.url,"nativeBackend":"absent"})
     );
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    if hold_before_serve {
+    let outcome = if hold_before_serve {
         println!(
             "{}",
             serde_json::json!({"kind":"boardDebugRuntimeBeforeServeHeld","directory":directory})
         );
-        std::future::pending::<()>().await;
-    }
-    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-    let outcome = local_cancel_observation::serve_until_shutdown(&mut runtime).await;
+        // Stay before query-loop entry until the real, already-armed signal
+        // owner receives shutdown. No stdin EOF or elapsed delay releases it.
+        wait_for_shutdown(&mut runtime, &mut shutdown_signals).await
+    } else {
+        local_cancel_observation::serve_until_shutdown(&mut runtime, &mut shutdown_signals).await
+    };
     #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
-    let outcome = wait_for_shutdown(&mut runtime).await;
+    let outcome = wait_for_shutdown(&mut runtime, &mut shutdown_signals).await;
     let shutdown = runtime.shutdown().await;
     outcome?;
     shutdown?;
     Ok(())
 }
 
-#[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
-async fn wait_for_shutdown(runtime: &mut CollaborationRuntime) -> io::Result<()> {
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+async fn wait_for_shutdown(
+    runtime: &mut CollaborationRuntime,
+    shutdown_signals: &mut shutdown_signals::ShutdownSignals,
+) -> io::Result<()> {
     tokio::select! {
-        result = tokio::signal::ctrl_c() => result,
-        _ = terminate.recv() => Ok(()),
+        result = shutdown_signals.wait_for_signal() => result,
         error = runtime.listener_failure() => Err(io::Error::other(error)),
     }
 }
