@@ -1,8 +1,7 @@
 use super::{
-    ArgumentParser, CliCredentialResolverOpenError, CliError, CredentialResolverError, Error,
-    PathBuf, QuotaRefreshOptions, QuotaStatusOptions, StateStoreError, Write,
-    effective_human_quota_format, refresh_quota, render_interactive_quota_status,
-    render_quota_status,
+    ArgumentParser, CliCredentialResolverOpenError, CliError, Error, PathBuf, QuotaRefreshOptions,
+    QuotaStatusOptions, StateStoreError, Write, effective_human_quota_format, refresh_quota,
+    render_interactive_quota_status, render_quota_status,
 };
 
 /// Quota CLI command.
@@ -109,7 +108,7 @@ pub enum QuotaStatusFormat {
 pub enum QuotaCommandError {
     /// Integrated reset session composition failed before terminal entry.
     #[error(transparent)]
-    ResetComposition(#[from] crate::quota_reset::QuotaResetError),
+    ResetComposition(#[from] codex_router_quota_service::quota_reset::QuotaResetError),
     /// The command-owned reset session panicked or was cancelled unexpectedly.
     #[error("integrated quota reset session task failed")]
     ResetSessionTaskFailed,
@@ -122,45 +121,15 @@ pub enum QuotaCommandError {
         /// Raw value.
         value: String,
     },
-    /// Quota refresh base URL is not one of the allowlisted provider URLs.
-    #[error("quota refresh base URL is not allowed: {base_url}")]
-    DisallowedBaseUrl {
-        /// Rejected base URL.
-        base_url: String,
-    },
-    /// Quota refresh is not implemented for allowed providers in this slice.
-    #[error("quota refresh provider execution is not implemented in Plan 1A")]
-    RefreshNotImplemented,
-    /// Quota refresh provider request failed before a response status was available.
-    #[error("quota refresh request failed: {message}")]
-    ProviderRequest {
-        /// Redacted request failure.
-        message: String,
-    },
-    /// Quota refresh provider returned a non-success response.
-    #[error("quota refresh provider returned HTTP {status}")]
-    ProviderStatus {
-        /// Provider HTTP status.
-        status: u16,
-    },
-    /// Quota refresh provider response did not contain usable quota data.
-    #[error("quota refresh provider response was unusable: {message}")]
-    ProviderResponse {
-        /// Redacted response failure.
-        message: String,
-    },
+    /// Quota service failed.
+    #[error(transparent)]
+    Service(#[from] codex_router_quota_service::quota_service_error::QuotaServiceError),
     /// Credential resolver dependencies failed to open.
     #[error(transparent)]
     CredentialResolverOpen(#[from] CliCredentialResolverOpenError),
-    /// Credential resolution failed before provider quota refresh.
-    #[error(transparent)]
-    CredentialResolver(#[from] CredentialResolverError),
     /// State-store operation failed.
     #[error(transparent)]
     StateStore(#[from] StateStoreError),
-    /// Failed to initialize the serve-owned background refresh executor.
-    #[error("failed to initialize quota history runtime: {0}")]
-    BackgroundWorkerInitialization(std::io::Error),
     /// Stdout write failed.
     #[error("failed to write stdout: {0}")]
     Stdout(std::io::Error),
@@ -175,7 +144,8 @@ pub(crate) async fn run_quota_command(
     stdout_is_terminal: bool,
     stdout_terminal_width: Option<usize>,
 ) -> Result<(), QuotaCommandError> {
-    let reset_session_factory = crate::quota_reset::FixedOriginInteractiveResetSessionFactory;
+    let reset_session_factory =
+        codex_router_quota_service::quota_reset::FixedOriginInteractiveResetSessionFactory;
     run_quota_command_with_reset_session_factory(
         stdout,
         command,
@@ -183,6 +153,7 @@ pub(crate) async fn run_quota_command(
         stdout_is_terminal,
         stdout_terminal_width,
         &reset_session_factory,
+        codex_router_auth::live_quota::DEFAULT_CHATGPT_BACKEND_BASE_URL,
     )
     .await
 }
@@ -193,7 +164,8 @@ pub(crate) async fn run_quota_command_with_reset_session_factory(
     stdin_is_terminal: bool,
     stdout_is_terminal: bool,
     stdout_terminal_width: Option<usize>,
-    reset_session_factory: &dyn crate::quota_reset::InteractiveResetSessionFactory,
+    reset_session_factory: &dyn codex_router_quota_service::quota_reset::InteractiveResetSessionFactory,
+    credit_usage_base_url: &str,
 ) -> Result<(), QuotaCommandError> {
     match command {
         QuotaCommand::Help(help_text) => {
@@ -215,6 +187,7 @@ pub(crate) async fn run_quota_command_with_reset_session_factory(
                     all_limits,
                     now_unix_seconds,
                     reset_session_factory,
+                    credit_usage_base_url,
                 )
                 .await?;
             } else {

@@ -6,7 +6,43 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 4] = [
+const LAYER_POLICY: [(&str, &[&str]); 11] = [
+    ("codex-router-quota", &[]),
+    ("codex-router-selection", &["codex-router-quota"]),
+    (
+        "codex-router-proxy",
+        &["codex-router-quota", "codex-router-selection"],
+    ),
+    (
+        "codex-router-quota-service",
+        &[
+            "codex-router-quota",
+            "codex-router-selection",
+            "codex-router-proxy",
+        ],
+    ),
+    ("codex-router-tui", &[]),
+    (
+        "codex-router-quota-tui",
+        &[
+            "codex-router-quota-service",
+            "codex-router-tui",
+            "codex-router-selection",
+        ],
+    ),
+    (
+        "codex-router-cli",
+        &[
+            "codex-router-quota-service",
+            "codex-router-quota-tui",
+            "codex-router-tui",
+            "codex-router-host",
+            "codex-router-proxy",
+            "codex-router-selection",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
     ("collaboration-contracts", &[]),
     ("collaboration-runtime", &["collaboration-contracts"]),
     (

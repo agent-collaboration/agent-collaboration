@@ -1,14 +1,15 @@
+#[cfg(feature = "quota-reset-test-harness")]
+use super::record_storyboard_quota_error;
 use super::{
     AccountId, AccountStatus, Arc, AsyncCreditUsagePolicyMutationStore, AsyncSqliteStateStore,
-    AsyncWeeklyQuotaFloorMutationStore, CredentialStoreAvailability, CreditUsagePolicySaveError,
-    CreditUsagePolicySaver, CreditUsageRefreshError, CreditUsageRefresher,
-    HttpQuotaRefreshProvider, Path, PathBuf, QuotaCommandError, QuotaCredentialResources,
-    QuotaStatusFormat, QuotaStatusViewModelLoader, QuotaTableStyle, StateStoreError,
-    WeeklyQuotaFloorBasisPoints, WeeklyQuotaFloorSaveError, WeeklyQuotaFloorSaver, Write,
-    current_unix_seconds, load_quota_status_report_async,
+    AsyncWeeklyQuotaFloorMutationStore, CreditUsagePolicySaveError, CreditUsagePolicySaver,
+    CreditUsageRefreshError, CreditUsageRefresher, HttpQuotaRefreshProvider, Path, PathBuf,
+    QuotaCommandError, QuotaCredentialResources, QuotaStatusFormat, QuotaTableStyle,
+    StateStoreError, WeeklyQuotaFloorBasisPoints, WeeklyQuotaFloorSaveError, WeeklyQuotaFloorSaver,
+    Write, current_unix_seconds, load_quota_status_report_async,
     load_quota_status_report_with_availability_async, quota_status_view_model,
-    refresh_quota_with_dependencies, run_quota_status_view, write_quota_json, write_quota_plain,
-    write_quota_table_with_style,
+    quota_status_view_model_loader, refresh_quota_with_dependencies, run_quota_status_view,
+    write_quota_json, write_quota_plain, write_quota_table_with_style,
 };
 #[cfg(test)]
 use crate::quota::{AccountRecord, SystemTime, UNIX_EPOCH};
@@ -34,8 +35,8 @@ pub(super) async fn render_quota_status(
             stdout_terminal_width,
             QuotaTableStyle::TerminalColor,
         ),
-        QuotaStatusFormat::Plain => write_quota_plain(stdout, &report),
-        QuotaStatusFormat::Json => write_quota_json(stdout, &report),
+        QuotaStatusFormat::Plain => write_quota_plain(stdout, &report).map_err(Into::into),
+        QuotaStatusFormat::Json => write_quota_json(stdout, &report).map_err(Into::into),
     }
 }
 
@@ -44,7 +45,8 @@ pub(super) async fn render_interactive_quota_status(
     stdout_terminal_width: Option<usize>,
     all_limits: bool,
     now_unix_seconds: u64,
-    reset_session_factory: &dyn crate::quota_reset::InteractiveResetSessionFactory,
+    reset_session_factory: &dyn codex_router_quota_service::quota_reset::InteractiveResetSessionFactory,
+    credit_usage_base_url: &str,
 ) -> Result<(), QuotaCommandError> {
     let width = stdout_terminal_width.unwrap_or(100).max(40);
     let credential_resources = QuotaCredentialResources::open(&router_root).await;
@@ -70,7 +72,8 @@ pub(super) async fn render_interactive_quota_status(
         .transpose()?;
     let weekly_floor_saver = weekly_quota_floor_saver(router_root.join("state.sqlite"));
     let credit_policy_saver = credit_usage_policy_saver(router_root.join("state.sqlite"));
-    let credit_usage_refresher = reset_session_factory.credit_usage_refresher(&router_root);
+    let credit_usage_refresher =
+        interactive_credit_usage_refresher(router_root.clone(), credit_usage_base_url.to_owned());
     let (reset_session_ports, shutdown_sender, session_task) = match reset_session {
         Some(reset_session) => {
             let shutdown_sender = reset_session.ports.intent_sender.clone();
@@ -94,14 +97,14 @@ pub(super) async fn render_interactive_quota_status(
     .await;
     if let Some(shutdown_sender) = shutdown_sender {
         let _ = shutdown_sender
-            .send(crate::quota_reset::reset_session_supervisor::ResetSessionIntent::Shutdown)
+            .send(codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionIntent::Shutdown)
             .await;
         drop(shutdown_sender);
     }
     if let Some(session_task) = session_task {
         match await_reset_session_task(session_task).await? {
-            crate::quota_reset::reset_session_supervisor::ResetSessionOutcome::Cancelled
-            | crate::quota_reset::reset_session_supervisor::ResetSessionOutcome::Finished(_) => {}
+            codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome::Cancelled
+            | codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome::Finished(_) => {}
         }
     }
     render_result.map_err(QuotaCommandError::Stdout)
@@ -267,66 +270,15 @@ fn render_safe_weekly_floor_error(error: StateStoreError) -> WeeklyQuotaFloorSav
 
 pub(super) async fn await_reset_session_task(
     session_task: tokio::task::JoinHandle<
-        crate::quota_reset::reset_session_supervisor::ResetSessionOutcome,
+        codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome,
     >,
-) -> Result<crate::quota_reset::reset_session_supervisor::ResetSessionOutcome, QuotaCommandError> {
+) -> Result<
+    codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome,
+    QuotaCommandError,
+> {
     session_task
         .await
         .map_err(|_join_error| QuotaCommandError::ResetSessionTaskFailed)
-}
-
-pub(super) fn quota_status_view_model_loader(
-    router_root: PathBuf,
-    all_limits: bool,
-    unicode_bars: bool,
-    width: usize,
-    credential_store_availability: CredentialStoreAvailability,
-) -> QuotaStatusViewModelLoader {
-    Arc::new(move || {
-        let router_root = router_root.clone();
-        let credential_store_availability = credential_store_availability.clone();
-        Box::pin(async move {
-            let report = load_quota_status_report_with_availability_async(
-                &router_root,
-                all_limits,
-                current_unix_seconds(),
-                unicode_bars,
-                credential_store_availability,
-            )
-            .await;
-            let report = match report {
-                Ok(report) => report,
-                Err(_error) => {
-                    #[cfg(feature = "quota-reset-test-harness")]
-                    record_storyboard_quota_error("report_reload", &_error);
-                    return None;
-                }
-            };
-            Some(quota_status_view_model(&report, report.rows(), width))
-        })
-    })
-}
-
-#[cfg(feature = "quota-reset-test-harness")]
-fn record_storyboard_quota_error(stage: &'static str, error: &QuotaCommandError) {
-    // Discriminants contain no payload. Their interpretation is bound to the
-    // captured source, unlike raw error messages containing account/SQL data.
-    let state_variant = match error {
-        QuotaCommandError::StateStore(error) => Some(std::mem::discriminant(error)),
-        _ => None,
-    };
-    let sqlite_busy = matches!(
-        error,
-        QuotaCommandError::StateStore(StateStoreError::Sqlite { message })
-            if message.contains("database is locked") || message.contains("database is busy")
-    );
-    tracing::warn!(
-        target: "quota_storyboard_diagnostic",
-        stage,
-        quota_error_variant = ?std::mem::discriminant(error),
-        state_error_variant = ?state_variant,
-        sqlite_busy,
-    );
 }
 
 pub(super) fn effective_human_quota_format(
@@ -343,40 +295,6 @@ pub(super) fn effective_human_quota_format(
 #[cfg(test)]
 mod weekly_floor_save_error_tests {
     use super::*;
-
-    #[cfg(feature = "quota-reset-test-harness")]
-    #[test]
-    fn storyboard_quota_diagnostics_omit_error_payloads() {
-        let path =
-            std::env::temp_dir().join(format!("quota-diagnostic-{}.log", std::process::id()));
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .expect("fresh diagnostic fixture file");
-        let subscriber = tracing_subscriber::fmt()
-            .with_env_filter("off,quota_storyboard_diagnostic=warn")
-            .with_writer(file)
-            .without_time()
-            .with_ansi(false)
-            .finish();
-        tracing::subscriber::with_default(subscriber, || {
-            record_storyboard_quota_error(
-                "report_reload",
-                &QuotaCommandError::StateStore(StateStoreError::CorruptQuotaSnapshot {
-                    account_id: "private-account-sentinel".to_owned(),
-                    field: "private-field-sentinel",
-                }),
-            );
-        });
-        let evidence = std::fs::read_to_string(&path).expect("retained diagnostic");
-        std::fs::remove_file(path).expect("diagnostic fixture cleanup");
-        assert!(evidence.contains("report_reload"));
-        assert!(evidence.contains("quota_error_variant"));
-        assert!(evidence.contains("state_error_variant"));
-        assert!(!evidence.contains("private-account-sentinel"));
-        assert!(!evidence.contains("private-field-sentinel"));
-    }
 
     #[test]
     fn tui_weekly_floor_errors_are_closed_and_redacted() {

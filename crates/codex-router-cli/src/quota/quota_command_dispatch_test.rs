@@ -65,7 +65,8 @@ fn interactive_quota_requires_effective_table_format_and_both_terminals() {
 
 #[test]
 fn interactive_quota_component_uses_the_process_async_runtime() {
-    let component_source = include_str!("../presentation/quota/quota_status_component.rs");
+    let component_source =
+        include_str!("../../../codex-router-quota-tui/src/quota_status_component.rs");
 
     for forbidden_runtime_owner in ["tokio::runtime::Builder", ".block_on(", "spawn_blocking"] {
         assert!(
@@ -80,10 +81,10 @@ fn quota_command_modules_keep_runtime_wrappers_in_background_worker_only() {
     let quota_command_sources = concat!(
         include_str!("quota_command_dispatch.rs"),
         include_str!("quota_refresh_command.rs"),
-        include_str!("quota_refresh_history.rs"),
-        include_str!("quota_refresh_service.rs"),
+        include_str!("../../../codex-router-quota-service/src/quota/quota_refresh_history.rs"),
+        include_str!("../../../codex-router-quota-service/src/quota/quota_refresh_service.rs"),
         include_str!("quota_status_command.rs"),
-        include_str!("quota_status_loader.rs"),
+        include_str!("../../../codex-router-quota-service/src/quota/quota_status_loader.rs"),
     );
 
     for forbidden_runtime_owner in [
@@ -298,7 +299,9 @@ fn installed_quota_parser_rejects_harness_listener_before_dispatch() {
 async fn non_interactive_dispatch_never_constructs_an_injected_reset_session() {
     struct RejectingResetSessionFactory;
 
-    impl crate::quota_reset::InteractiveResetSessionFactory for RejectingResetSessionFactory {
+    impl codex_router_quota_service::quota_reset::InteractiveResetSessionFactory
+        for RejectingResetSessionFactory
+    {
         #[expect(
             clippy::panic_in_result_fn,
             reason = "Contract asserts; setup may fail."
@@ -307,16 +310,11 @@ async fn non_interactive_dispatch_never_constructs_an_injected_reset_session() {
             &self,
             _router_root: &Path,
             _credential_store: codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore,
-        ) -> Result<crate::quota_reset::InteractiveResetSession, crate::quota_reset::QuotaResetError>
-        {
+        ) -> Result<
+            codex_router_quota_service::quota_reset::InteractiveResetSession,
+            codex_router_quota_service::quota_reset::QuotaResetError,
+        > {
             panic!("non-interactive quota dispatch must not construct a reset session");
-        }
-
-        fn credit_usage_refresher(
-            &self,
-            _router_root: &Path,
-        ) -> crate::presentation::quota::CreditUsageRefresher {
-            panic!("non-interactive quota dispatch must not compose a credit refresher");
         }
     }
 
@@ -328,6 +326,7 @@ async fn non_interactive_dispatch_never_constructs_an_injected_reset_session() {
             false,
             None,
             &RejectingResetSessionFactory,
+            codex_router_auth::live_quota::DEFAULT_CHATGPT_BACKEND_BASE_URL,
         )
         .await
         .expect("non-interactive dispatch");
@@ -338,7 +337,7 @@ async fn non_interactive_dispatch_never_constructs_an_injected_reset_session() {
 async fn reset_session_join_failure_is_a_sanitized_command_error() {
     // Arrange
     let session_task = tokio::spawn(std::future::pending::<
-        crate::quota_reset::reset_session_supervisor::ResetSessionOutcome,
+        codex_router_quota_service::quota_reset::reset_session_supervisor::ResetSessionOutcome,
     >());
     session_task.abort();
 

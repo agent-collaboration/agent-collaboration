@@ -1254,6 +1254,8 @@ dependencies = [
  "codex-router-core",
  "codex-router-host",
  "codex-router-proxy",
+ "codex-router-quota-service",
+ "codex-router-quota-tui",
  "codex-router-secret-store",
  "codex-router-selection",
  "codex-router-state",
@@ -1434,6 +1436,62 @@ dependencies = [
  "regex",
  "sha2 0.10.9",
  "tokio",
+]
+
+[[package]]
+name = "codex-router-quota-service"
+version = "0.1.105"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "codex-native-integration",
+ "codex-router-auth",
+ "codex-router-core",
+ "codex-router-proxy",
+ "codex-router-secret-store",
+ "codex-router-selection",
+ "codex-router-state",
+ "codex-router-test-support",
+ "futures-util",
+ "opentelemetry",
+ "reqwest 0.12.28",
+ "rustix 1.1.4",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "toml 1.1.2+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+ "tungstenite 0.28.0",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
+name = "codex-router-quota-tui"
+version = "0.1.105"
+dependencies = [
+ "chrono",
+ "codex-router-core",
+ "codex-router-quota-service",
+ "codex-router-secret-store",
+ "codex-router-selection",
+ "codex-router-state",
+ "codex-router-tui",
+ "crossterm",
+ "futures-util",
+ "iocraft",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]

@@ -68,7 +68,6 @@ pub(crate) use cli_argument_parsing::ArgumentParser;
 use cli_argument_parsing::{CliCommand, ProfileCommand, TokenCommand};
 
 const DEFAULT_MAX_SNAPSHOT_AGE_SECONDS: u64 = 300;
-const DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS: u64 = 180;
 const DEFAULT_SESSION_PIN_IDLE_TTL_SECONDS: u64 = DEFAULT_SESSION_PIN_IDLE_TTL.as_secs();
 const LOCAL_TOKEN_ENV_VAR: &str = "CODEX_ROUTER_TOKEN";
 const DEFAULT_ROUTER_ROOT_DIR: &str = ".codex-router";
