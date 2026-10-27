@@ -1,0 +1,968 @@
+{
+  "source": "424fbc238",
+  "base": "0e82c135ae211182f2f2ce67d36fd90bb58db1a7",
+  "historicalSource": "5f5c49a4e29bc9a542965d4006f922038dc816a7",
+  "historicalBaseline": "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7",
+  "rows": [
+    {
+      "path": ".agents/skills/verify-codex-router/SKILL.md",
+      "group": "Old custom driver",
+      "currentPath": ".agents/skills/verify-codex-router/SKILL.md",
+      "status": "Present, unchanged from #173",
+      "purpose": "Indexes established Router verification journeys. The current #173 version contains no native-capabilities registration or old example gate.",
+      "originalReason": "Makes the new J1-J4 verifier discoverable beside the existing ACP journey and defines apparatus checks as separate from runtime proof.",
+      "reasonBasis": "recorded",
+      "historicalPurpose": "Registers the native-capabilities journey in the project verification index and lists Rust example gates.",
+      "dispositionNote": "The native-capabilities entry existed at 5f5c49a4 and was removed; the shared skill itself remains.",
+      "displayName": "verify-codex-router/SKILL.md"
+    },
+    {
+      "path": ".agents/skills/verify-codex-router/references/native-capabilities.md",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Defines the J1-J4 target, controlled fixtures, qualification, drive sequence, evidence, and limits.",
+      "originalReason": "Provides the operating contract for proving provider-owned discovery, selection, command invocation, history, and metadata through the installed client and declared candidate.",
+      "reasonBasis": "recorded",
+      "displayName": "native-capabilities.md"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/apparatus_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests paging, parser limits, fixture materialization, provider facts, and recorder reading with temporary evidence.",
+      "originalReason": "Checks that verification helpers reject malformed or misleading inputs; comments expressly limit these tests to apparatus proof.",
+      "reasonBasis": "source",
+      "displayName": "apparatus_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/bounded_process.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Runs one child with time and output bounds, stopping only that child on timeout or overflow.",
+      "originalReason": "Keeps CLI reads bounded so an unexpected child cannot hang or consume unbounded output.",
+      "reasonBasis": "source",
+      "displayName": "bounded_process.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/catalogue_oracle.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Checks J1 skill and plugin discovery against provider-owned files and exports, including explicit unsupported and rejected cases.",
+      "originalReason": "Prevents the candidate's own response from defining expected catalogue contents and distinguishes unsupported from successful behavior.",
+      "reasonBasis": "recorded",
+      "displayName": "catalogue_oracle.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/command_options.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Parses the verifier's strict subcommands and options for materialization, J1-J4, and process observations.",
+      "originalReason": "Rejects unknown, repeated, or missing arguments before a journey can touch its declared evidence paths.",
+      "reasonBasis": "source",
+      "displayName": "command_options.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/command_reload_probe.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Removes the owned second fixture skill, requests the provider's native reload command, and checks successive command lists.",
+      "originalReason": "Makes replacement observable through a real provider input while restoring exactly the fixture bytes even on failure.",
+      "reasonBasis": "recorded",
+      "displayName": "command_reload_probe.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/conversation_oracle.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Checks J2-J4 structured selections, rejection, native effects, command lists, display operations, and retained metadata.",
+      "originalReason": "Separates what the installed client submitted and what the provider did from UI labels or Router receipts.",
+      "reasonBasis": "recorded",
+      "displayName": "conversation_oracle.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/conversation_oracle_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Exercises J2-J4 oracles with valid and deliberately wrong synthetic evidence.",
+      "originalReason": "Demonstrates sensitivity to dropped or corrupted selection, false native effects, metadata-as-prose, and display-triggered operations; these are not product proof.",
+      "reasonBasis": "source",
+      "displayName": "conversation_oracle_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/driver_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests process ownership, bounded child output, strict options, terminal parsing, and PTY driver behavior using harmless local children.",
+      "originalReason": "Validates the driver mechanics independently without exercising a Codex client or Router.",
+      "reasonBasis": "source",
+      "displayName": "driver_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/global_claude_binding.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Independently resolves which eligible global Claude executable the Host would select from a supplied PATH.",
+      "originalReason": "Qualifies the actual native executable binding without executing it or changing PATH.",
+      "reasonBasis": "source",
+      "displayName": "global_claude_binding.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/history_oracle.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Checks that canonical native command/task history retains the original user facts and identities through read and resume.",
+      "originalReason": "Detects missing, altered, fabricated, or duplicated history rows while allowing provider echoes as distinct original facts.",
+      "reasonBasis": "recorded",
+      "displayName": "history_oracle.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/history_oracle_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests canonical history checks against preserved and corrupted evidence, including dollar signs, Unicode, and newlines.",
+      "originalReason": "Shows the history oracle detects byte-level changes; its fixtures do not establish native history behavior.",
+      "reasonBasis": "source",
+      "displayName": "history_oracle_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/installed_client_terminal.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Drives an installed Codex TUI in a private PTY and captures bounded screen/input evidence.",
+      "originalReason": "The selected skill is produced by the client's picker binding and Tab interaction, which a simple prompt argument cannot reproduce.",
+      "reasonBasis": "recorded",
+      "displayName": "installed_client_terminal.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/journey_run.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Shares plan qualification, owned evidence output, Codex invocation, session recorder, and cleanup across journeys.",
+      "originalReason": "Keeps each run tied to one declared candidate and limits process signaling to its own client child.",
+      "reasonBasis": "source",
+      "displayName": "journey_run.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/metadata_oracle.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Checks retained ACP metadata stays outside assistant text while genuine prose survives history views and terminal captures.",
+      "originalReason": "Carries the merged metadata presentation check into the J4 Rust verifier so the broader native-capabilities changes preserve that behavior.",
+      "reasonBasis": "recorded",
+      "displayName": "metadata_oracle.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/metadata_oracle_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests metadata and genuine prose checks across live/reopened evidence, wrapped terminal text, and offset provenance.",
+      "originalReason": "Ensures the metadata oracle catches presentation and evidence-provenance mistakes without claiming a client run.",
+      "reasonBasis": "source",
+      "displayName": "metadata_oracle_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/native_exports.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Reads provider-owned CLI exports and the installed client's own recorded session, with bounded output and private evidence writes.",
+      "originalReason": "Supplies independent reference facts for catalogue checks and captures what the client actually sent.",
+      "reasonBasis": "source",
+      "displayName": "native_exports.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/native_file_facts.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Reads native skill flags, source roles, plugin facts, and marketplace manifests from provider-owned files.",
+      "originalReason": "Lets catalogue expectations come from the native provider's installation and loader inputs rather than the candidate's answer.",
+      "reasonBasis": "source",
+      "displayName": "native_file_facts.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/native_fixture.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Materializes controlled skill files and canaries into a prepared genuine linked worktree, plus an empty comparison directory.",
+      "originalReason": "Creates a provider-owned test input while refusing overwrites and avoiding installation or global configuration changes.",
+      "reasonBasis": "recorded",
+      "displayName": "native_fixture.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/native_journeys.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Implements J1-J4 orchestration over the installed client and Router public surfaces, then passes raw observations to independent oracles.",
+      "originalReason": "Joins real discovery, selection, command, and history paths while keeping their deciding evidence in separate oracle functions.",
+      "reasonBasis": "recorded",
+      "displayName": "native_journeys.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/oracle_test_support.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Provides reusable controlled evidence builders and temporary filesystem setups for oracle tests.",
+      "originalReason": "Keeps synthetic test inputs consistent and isolated; these builders are test support, not runtime observations.",
+      "reasonBasis": "source",
+      "displayName": "oracle_test_support.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/ordinary_completion_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests how J2 judges the ordinary turn's completion from public provider events.",
+      "originalReason": "Covers a client display limitation without treating missing terminal rendering as evidence that the provider turn did not complete.",
+      "reasonBasis": "recorded",
+      "displayName": "ordinary_completion_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/plugin_catalogue_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests plugin catalogue, marketplace manifest, plugin details, management rejection, and plugin skill sample oracles.",
+      "originalReason": "Rejects substituted or fabricated plugin evidence and preserves explicit limits for native management support.",
+      "reasonBasis": "source",
+      "displayName": "plugin_catalogue_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/process_identity.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Observes process tables and records stable PID, parent, real UID, group, birth, and executable identities without signaling.",
+      "originalReason": "Lets qualification and cleanup evidence distinguish owned processes from foreign or reused PIDs while keeping observation separate from control.",
+      "reasonBasis": "source",
+      "displayName": "process_identity.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/qualification_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests candidate root/socket/build qualification, Claude binding, config observations, and owned-process checks.",
+      "originalReason": "Fails closed when the verifier is pointed at an unqualified or differently bound target; these are qualification apparatus tests.",
+      "reasonBasis": "source",
+      "displayName": "qualification_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/router_evidence.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Reads app-server replies, bounded public event observations, Router operation rows, and health from the candidate.",
+      "originalReason": "Collects public/read-only evidence for the oracles and avoids treating partial event pages or health readiness as behavioral proof.",
+      "reasonBasis": "source",
+      "displayName": "router_evidence.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/router_queue_observation.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Reads the declared Session's existing delivery queue through the Host's private ACP channel and queue-list route.",
+      "originalReason": "Allows negative selection/queue checks without adding, cancelling, or reordering queued inputs.",
+      "reasonBasis": "source",
+      "displayName": "router_queue_observation.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/skill_catalogue_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests skill catalogue membership, source role, disabled status, workspace scope, and explicit unsupported outcomes.",
+      "originalReason": "Makes wrong path, borrowed workspace, false disabled facts, and malformed source evidence fail at the oracle boundary.",
+      "reasonBasis": "source",
+      "displayName": "skill_catalogue_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/skill_source_membership_tests.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tests Claude 2.1.310 native source membership for immediate skill entries and recursive legacy command Markdown, including symlinks.",
+      "originalReason": "Binds catalogue acceptance to the provider loader's actual source roles instead of treating physical containment as sufficient.",
+      "reasonBasis": "source",
+      "displayName": "skill_source_membership_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/target_qualification.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Refuses a run unless the declared candidate source, binaries, identities, endpoint, fixture, and provider binding qualify.",
+      "originalReason": "Keeps live observations attached to the exact Lead-started candidate and rejects mismatched evidence targets.",
+      "reasonBasis": "recorded",
+      "displayName": "target_qualification.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/provider_native_capability_verification/verification_models.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Defines strict plan, fixture, provider, process, RPC, event, history, and observation data views consumed by the verifier.",
+      "originalReason": "Constrains evidence decoding to the declared target and used fields while preserving raw replies as authoritative records.",
+      "reasonBasis": "source",
+      "displayName": "verification_models.rs"
+    },
+    {
+      "path": "crates/codex-router-host/examples/verify-provider-native-capabilities.rs",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Cargo example executable dispatching materialize, J1-J4, process-capture, and process-check commands; embeds its driver and oracle test modules.",
+      "originalReason": "Provides one runnable verifier target and keeps unit sensitivity tests alongside the implementation they exercise.",
+      "reasonBasis": "inference",
+      "displayName": "verify-provider-native-capabilities.rs"
+    },
+    {
+      "path": "scripts/verification/fixtures/provider_native_capabilities/router-native-arguments/SKILL.md",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Defines an argument-sensitive native skill that returns a body-only canary while preserving dollar signs, Unicode, and newlines.",
+      "originalReason": "Separates actual application of the selected skill body from an echoed command label or fixed marker.",
+      "reasonBasis": "recorded",
+      "displayName": "router-native-arguments/SKILL.md"
+    },
+    {
+      "path": "scripts/verification/fixtures/provider_native_capabilities/router-native-second/SKILL.md",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Defines a second controlled skill used to form rejected multi-skill selections and a removable command-list entry.",
+      "originalReason": "Supports negative selection and replacement cases with a known native fixture identity.",
+      "reasonBasis": "recorded",
+      "displayName": "router-native-second/SKILL.md"
+    },
+    {
+      "path": "scripts/verification/native-capabilities.sh",
+      "group": "Old custom driver",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Changes to repository root and invokes the locked Rust example target with its arguments.",
+      "originalReason": "Gives the verifier a stable documented command without installing or replacing a binary.",
+      "reasonBasis": "source",
+      "displayName": "native-capabilities.sh"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/agent_session_client/submitted_prompt_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/acp-client-runtime/src/agent_session_client/submitted_prompt_tests.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Exercises the real ACP actor with a scripted provider to check submitted text, independent native user groups, rejection and sink failures.",
+      "retentionReason": "Retains the regression for lost submitted input independently of provider echo behavior.",
+      "displayName": "submitted_prompt_tests.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/agent_session_client/turn_admission_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/acp-client-runtime/src/agent_session_client/turn_admission_tests.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Checks cancellation and successor-turn isolation; shares the no-interaction fixture and now expects the retained submitted user item.",
+      "retentionReason": "Preserves successor/cancellation assertions while accommodating the new submitted user item.",
+      "displayName": "turn_admission_tests.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/claude_filesystem_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested Claude skill-file discovery, precedence and malformed-source handling in the removed reader.",
+      "displayName": "claude_filesystem_tests.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/cursor_filesystem_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested Cursor command/skill file discovery and source errors in the removed reader.",
+      "displayName": "cursor_filesystem_tests.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/tests/provider_input_events.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/acp-client-runtime/tests/provider_input_events.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Checks that canonical submitted input and provider-emitted user-message groups remain distinct events.",
+      "retentionReason": "Pins the event identities expected by the submitted-input fix.",
+      "displayName": "provider_input_events.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/agent-collaboration/tests/board_e2e/owned_host.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/agent-collaboration/tests/board_e2e/owned_host.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Starts and stops each test-owned Host and checks that its ready URL matches its own service manifest.",
+      "retentionReason": "Keeps identity-based listener qualification instead of rejecting a valid test-owned port by number.",
+      "displayName": "owned_host.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/agent-collaboration/tests/board_records_e2e.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/agent-collaboration/tests/board_records_e2e.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Runs persisted board journeys and the listener-identity counterexamples, including the opt-in valid-port case.",
+      "retentionReason": "Permanently challenges the listener predicate with accepted/rejected identities and an opt-in real counterexample.",
+      "displayName": "board_records_e2e.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/mail_notice_owner.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/mail_notice_owner.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Supplies the test-owned mail store and read-only pending-submission observations for recovery assertions.",
+      "retentionReason": "Makes actual pending submissions inspectable without claiming or executing them.",
+      "displayName": "mail_notice_owner.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/notification_authority_recovery.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/codex-router-host/src/collaboration_runtime/board_composition/tests/notification_authority_recovery.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Checks mail-notification recovery through the owning store and the actual pending outbox submissions.",
+      "retentionReason": "Preserves recovery/replay regressions using actual owning-store evidence.",
+      "displayName": "notification_authority_recovery.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/codex-router-host/src/external_provider_supervisor/provider_native_catalogue_table_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed supervisor catalogue-source outcome combinations.",
+      "displayName": "provider_native_catalogue_table_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/external_provider_supervisor/provider_native_catalogue_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed supervisor route for reading native provider catalogues.",
+      "displayName": "provider_native_catalogue_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/external_provider_supervisor/provider_native_selection_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested rejection and dispatch of selections prepared by the removed catalogue integration.",
+      "displayName": "provider_native_selection_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/claude_plugins_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed Claude plugin export, enablement and detail translation.",
+      "displayName": "claude_plugins_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/claude_project_roots_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested project/worktree root selection for the removed Claude filesystem integration.",
+      "displayName": "claude_project_roots_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/claude_skills_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested installed and project Claude skill enumeration in the removed integration.",
+      "displayName": "claude_skills_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested provider context and source qualification for the removed native catalogue.",
+      "displayName": "provider_native_capabilities_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_selected_input_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed translation from a Codex skill/plugin selection to provider input.",
+      "displayName": "provider_selected_input_tests.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/tailscale_exposure/tests.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/codex-router-host/src/tailscale_exposure/tests.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Tests foreground-lease cleanup using a private Rust child that registers its interrupt handler before advertising readiness.",
+      "retentionReason": "Replaces a racy signal fixture with a private Rust child while retaining own/foreign lease cleanup assertions.",
+      "displayName": "tailscale_exposure/tests.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/codex-router-host/src/tailscale_process/tests.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/codex-router-host/src/tailscale_process/tests.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Tests normal child shutdown and cancelled observations with a private Rust Serve fixture that handles interrupts deterministically.",
+      "retentionReason": "Replaces the normal signal fixture with a private Rust child while retaining process ownership/shutdown assertions.",
+      "displayName": "tailscale_process/tests.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/codex-router-host/tests/acp_metadata_projection.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/codex-router-host/tests/acp_metadata_projection.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Exercises actual ACP decoding and Host projection against scripted metadata, checking live and replay text separately.",
+      "retentionReason": "Prevents submitted-input changes from losing metadata or leaking it into assistant prose.",
+      "displayName": "acp_metadata_projection.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/codex-router-proxy/src/proxy_tests/request_local_websocket_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/codex-router-proxy/src/proxy_tests/request_local_websocket_tests.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Checks WebSocket recovery while observing durable account acquisition and release before shutting down the test runtime.",
+      "retentionReason": "Makes acquisition/release assertions while the write owner is live, preserving the existing recovery outcome.",
+      "displayName": "request_local_websocket_tests.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server_catalogue_source_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed app-server translation of catalogue-source outcomes.",
+      "displayName": "router_session_app_server_catalogue_source_tests.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server_native_capabilities_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed app-server native skill-list integration.",
+      "displayName": "router_session_app_server_native_capabilities_tests.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server_plugin_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed app-server plugin catalogue/detail projection.",
+      "displayName": "router_session_app_server_plugin_tests.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server_selected_input_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Tested the removed app-server selected-skill/plugin input translation.",
+      "displayName": "router_session_app_server_selected_input_tests.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server_test_support.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/collaboration-runtime/src/router_session_app_server_test_support.rs",
+      "status": "Moved in base or renumbered",
+      "purpose": "Provides shared scripted command/event fixtures for app-server tests; the new runtime home is identical to #173.",
+      "dispositionNote": "Moved; identical to #173 at the new home. The earlier branch verification additions do not survive.",
+      "displayName": "router_session_app_server_test_support.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server_tests.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/collaboration-runtime/src/router_session_app_server_tests.rs",
+      "status": "Moved in base or renumbered",
+      "purpose": "Tests the ordinary provider app-server protocol; the new runtime home is identical to #173.",
+      "dispositionNote": "Moved; identical to #173 at the new home. The earlier branch verification additions do not survive.",
+      "displayName": "router_session_app_server_tests.rs"
+    },
+    {
+      "path": "crates/collaboration-service/tests/codex_app_server_delivery_route.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/collaboration-service/tests/codex_app_server_delivery_route.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Tests message delivery through held Codex connections; the surviving change adds receipt/binding/backend diagnostics when the existing assertion fails.",
+      "retentionReason": "Improves diagnosis of the existing held-connection assertion; no extra passing condition or product mechanism.",
+      "displayName": "codex_app_server_delivery_route.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/collaboration-service/tests/codex_app_server_held_thread_route.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/collaboration-service/tests/codex_app_server_held_thread_route.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Tests held-thread message delivery and permissions; the surviving change adds the same failure diagnostics without changing the pass condition.",
+      "retentionReason": "Improves diagnosis of the existing held-thread assertion; no extra passing condition or product mechanism.",
+      "displayName": "codex_app_server_held_thread_route.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/collaboration-service/tests/public_observation_recovery.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/collaboration-service/tests/public_observation_recovery.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Tests public lifecycle recovery; the surviving change retains progress and task-state diagnostics when the original readiness deadline fails.",
+      "retentionReason": "Keeps the original readiness deadline and reports where the fixture/observer stopped on failure.",
+      "displayName": "public_observation_recovery.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/collaboration-service/tests/support/acp_provider_backend.rs",
+      "group": "Product regression tests",
+      "currentPath": "crates/collaboration-service/tests/support/acp_provider_backend.rs",
+      "status": "Present, unchanged from #173",
+      "purpose": "Provides a scripted ACP provider backend for service tests; this branch leaves the base file unchanged.",
+      "displayName": "acp_provider_backend.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/claude_legacy_commands.rs",
+      "group": "Embedded reader tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Converts Claude 2.1.310 legacy command Markdown files into skill catalogue entries, with canonical names, bounded scanning, and explicit candidate errors; it does not execute commands.",
+      "originalReason": "Legacy files need a separate provider-specific interpretation path while retaining their native command names and directory structure.",
+      "reasonBasis": "source",
+      "displayName": "claude_legacy_commands.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/claude_plugin_export.rs",
+      "group": "Embedded reader tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Decodes Claude 2.1.310's `plugin list --json` export and validates the regular installed-plugin key format and scope.",
+      "originalReason": "The plugin list is a version-specific native export, distinct from skill files and consumer-facing plugin identifiers.",
+      "reasonBasis": "source",
+      "displayName": "claude_plugin_export.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/claude_plugin_skills.rs",
+      "group": "Embedded reader tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Reads skill roots for installed Claude plugins after setup has qualified plugin name, root order, enablement, and wrapper conditions.",
+      "originalReason": "Plugin skill roots have different native names and qualification inputs from ordinary Claude skills.",
+      "reasonBasis": "source",
+      "displayName": "claude_plugin_skills.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/claude_skill_frontmatter.rs",
+      "group": "Embedded reader tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Parses supported Claude skill frontmatter into declared metadata facts and errors on unsupported or invalid YAML and invocation flags; it does not infer enablement or native loading from absence.",
+      "originalReason": "Separating parsed declarations from effective setup state prevents file contents from being mistaken for provider enablement.",
+      "reasonBasis": "source",
+      "displayName": "claude_skill_frontmatter.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/claude_project_context.rs",
+      "group": "Embedded reader tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Qualifies Claude project/worktree context and locally configured skill roots from the pinned native setup sources.",
+      "originalReason": "Workspace-level skill visibility depends on native project context and settings, not only the path of an individual skill file.",
+      "reasonBasis": "source",
+      "displayName": "claude_project_context.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/cursor_executable.rs",
+      "group": "Embedded reader tests",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Captures and revalidates identity for the exact Cursor executable used by the provider launch, including qualified versioned launcher resolution.",
+      "originalReason": "Cursor ACP does not advertise a version in its initialize capabilities, so the Host checks the launch's executable source instead of searching for a global Cursor command.",
+      "reasonBasis": "source",
+      "displayName": "cursor_executable.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/agent_session_client.rs",
+      "group": "Test/module wiring",
+      "currentPath": "crates/acp-client-runtime/src/agent_session_client.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Owns the ACP client/session operations; the surviving addition mounts the submitted-input regression module.",
+      "retentionReason": "Makes the permanent submitted-input regressions part of the runtime test target.",
+      "displayName": "agent_session_client.rs",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/claude_filesystem.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Implemented filesystem traversal and metadata interpretation for the removed Claude skill reader.",
+      "displayName": "claude_filesystem.rs"
+    },
+    {
+      "path": "crates/acp-client-runtime/src/native_capabilities/cursor_filesystem.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Implemented filesystem traversal and metadata interpretation for the removed Cursor command/skill reader.",
+      "displayName": "cursor_filesystem.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/external_provider_supervisor/provider_native_catalogue.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Connected supervisor requests to the removed native catalogue and selection helpers.",
+      "displayName": "provider_native_catalogue.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Assembled provider-specific filesystem/export catalogue reads in Host; this integration was removed.",
+      "displayName": "provider_native_capabilities.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/claude_plugins.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Translated installed Claude plugin exports and plugin-owned skill roots for the removed integration.",
+      "displayName": "claude_plugins.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_native_capabilities/claude_skills.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Combined ordinary and plugin Claude skill sources for the removed integration.",
+      "displayName": "claude_skills.rs"
+    },
+    {
+      "path": "crates/codex-router-host/src/provider_selected_input.rs",
+      "group": "Test/module wiring",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Resolved and validated catalogue-backed skill/plugin selections before provider dispatch; this path was removed.",
+      "displayName": "provider_selected_input.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/router_session_app_server.rs",
+      "group": "Test/module wiring",
+      "currentPath": "crates/collaboration-runtime/src/router_session_app_server.rs",
+      "status": "Moved in base or renumbered",
+      "purpose": "Implements the provider app-server front door in its new runtime home; no branch additions survive there.",
+      "dispositionNote": "Moved; identical to #173 at the new home. The earlier branch verification additions do not survive.",
+      "displayName": "router_session_app_server.rs"
+    },
+    {
+      "path": "crates/collaboration-service/src/session_command_port.rs",
+      "group": "Test/module wiring",
+      "currentPath": "crates/collaboration-contracts/src/session_command_port.rs",
+      "status": "Moved in base or renumbered",
+      "purpose": "Defines provider-neutral session command traits in the contracts crate; no branch additions survive there.",
+      "dispositionNote": "Moved; identical to #173 at the new home. The earlier branch verification additions do not survive.",
+      "displayName": "session_command_port.rs"
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "group": "CI and dependencies",
+      "currentPath": ".github/workflows/ci.yml",
+      "status": "Present, unchanged from #173",
+      "purpose": "Runs the repository validation workflow; this branch preserves the #173 workflow unchanged.",
+      "displayName": "ci.yml"
+    },
+    {
+      "path": "Cargo.lock",
+      "group": "CI and dependencies",
+      "currentPath": "Cargo.lock",
+      "status": "Present, unchanged from #173",
+      "purpose": "Locks Rust dependency resolution; this branch preserves the #173 lockfile unchanged.",
+      "displayName": "Cargo.lock"
+    },
+    {
+      "path": "Cargo.toml",
+      "group": "CI and dependencies",
+      "currentPath": "Cargo.toml",
+      "status": "Present, unchanged from #173",
+      "purpose": "Defines the Rust workspace, shared dependencies and lint policy; no branch changes survive in this file.",
+      "displayName": "Workspace root/Cargo.toml"
+    },
+    {
+      "path": "crates/acp-client-runtime/Cargo.toml",
+      "group": "CI and dependencies",
+      "currentPath": "crates/acp-client-runtime/Cargo.toml",
+      "status": "Present, unchanged from #173",
+      "purpose": "Declares runtime dependencies/features; no branch changes survive in this manifest.",
+      "displayName": "acp-client-runtime/Cargo.toml"
+    },
+    {
+      "path": "crates/codex-router-host/Cargo.toml",
+      "group": "CI and dependencies",
+      "currentPath": "crates/codex-router-host/Cargo.toml",
+      "status": "Present, unchanged from #173",
+      "purpose": "Declares Host dependencies/features; no branch changes survive in this manifest.",
+      "displayName": "codex-router-host/Cargo.toml"
+    },
+    {
+      "path": "docs/specs/2026-10-23-provider-native-capabilities/observations-evidence.md",
+      "group": "Old verification documents",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Linked observations and retained evidence for the rejected native-catalogue verification.",
+      "displayName": "observations-evidence.md"
+    },
+    {
+      "path": "docs/specs/2026-10-23-provider-native-capabilities/observations.md",
+      "group": "Old verification documents",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Summarized historical native-catalogue observations and their unresolved limits.",
+      "displayName": "observations.md"
+    },
+    {
+      "path": "docs/specs/2026-10-23-provider-native-capabilities/verification-design.html",
+      "group": "Old verification documents",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Was the prepared HTML reader for the rejected native-catalogue proof design.",
+      "displayName": "verification-design.html"
+    },
+    {
+      "path": "docs/specs/2026-10-23-provider-native-capabilities/verification-design.md",
+      "group": "Old verification documents",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Specified the rejected native-catalogue verification targets, checks and evidence limits.",
+      "displayName": "verification-design.md"
+    },
+    {
+      "path": "docs/specs/2026-10-23-provider-native-capabilities/verification-design.source.html",
+      "group": "Old verification documents",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Was the authoring shell that embedded the old verification-design Markdown.",
+      "displayName": "verification-design.source.html"
+    },
+    {
+      "path": "docs/specs/2026-10-23-provider-native-capabilities/verification-overview.md",
+      "group": "Old verification documents",
+      "currentPath": null,
+      "status": "Removed",
+      "purpose": "Explained the historical native-catalogue verification journeys and their proof boundaries.",
+      "displayName": "verification-overview.md"
+    },
+    {
+      "path": "verification/terminal/pty-process.ts",
+      "group": "TypeScript PTY support",
+      "currentPath": "verification/terminal/pty-process.ts",
+      "status": "Changed in surviving branch",
+      "purpose": "Controls one real OS PTY child: input, resize, bounded raw output, exit and child-only cleanup.",
+      "retentionReason": "Supports the smaller real-PTY foundation and its checks; it does not establish menu behavior.",
+      "displayName": "pty-process.ts",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "verification/terminal/pty-process.test.ts",
+      "group": "TypeScript PTY support",
+      "currentPath": "verification/terminal/pty-process.test.ts",
+      "status": "Changed in surviving branch",
+      "purpose": "Contains the 13 permanent PTY/entry tests, including wrong-program and alternate-Codex-home refusal.",
+      "retentionReason": "Supports the smaller real-PTY foundation and its checks; it does not establish menu behavior.",
+      "displayName": "pty-process.test.ts",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "verification/terminal/codex-pty.ts",
+      "group": "TypeScript PTY support",
+      "currentPath": "verification/terminal/codex-pty.ts",
+      "status": "Changed in surviving branch",
+      "purpose": "Runs only Codex version/help through a real PTY and records executable/output identity and named config stability.",
+      "retentionReason": "Supports the smaller real-PTY foundation and its checks; it does not establish menu behavior.",
+      "displayName": "codex-pty.ts",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "verification/package.json",
+      "group": "TypeScript PTY support",
+      "currentPath": "verification/package.json",
+      "status": "Changed in surviving branch",
+      "purpose": "Pins node-pty and exposes focused/aggregate terminal verification commands.",
+      "retentionReason": "Supports the smaller real-PTY foundation and its checks; it does not establish menu behavior.",
+      "displayName": "package.json",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "verification/pnpm-lock.yaml",
+      "group": "TypeScript PTY support",
+      "currentPath": "verification/pnpm-lock.yaml",
+      "status": "Changed in surviving branch",
+      "purpose": "Locks the TypeScript/native PTY dependency resolution.",
+      "retentionReason": "Supports the smaller real-PTY foundation and its checks; it does not establish menu behavior.",
+      "displayName": "pnpm-lock.yaml",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "verification/pnpm-workspace.yaml",
+      "group": "TypeScript PTY support",
+      "currentPath": "verification/pnpm-workspace.yaml",
+      "status": "Changed in surviving branch",
+      "purpose": "Permits the pinned native PTY dependency build script.",
+      "retentionReason": "Supports the smaller real-PTY foundation and its checks; it does not establish menu behavior.",
+      "displayName": "pnpm-workspace.yaml",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "docs/upstream-workarounds/uw-6-node-pty-macos-spawn-helper.md",
+      "group": "TypeScript PTY support",
+      "currentPath": "docs/upstream-workarounds/uw-8-node-pty-macos-spawn-helper.md",
+      "status": "Moved in base or renumbered",
+      "purpose": "Documents the observed macOS spawn-helper permission defect, supported source-build route and removal condition; now UW-8.",
+      "displayName": "uw-6-node-pty-macos-spawn-helper.md"
+    },
+    {
+      "path": "docs/upstream-workarounds/README.md",
+      "group": "TypeScript PTY support",
+      "currentPath": "docs/upstream-workarounds/README.md",
+      "status": "Changed in surviving branch",
+      "purpose": "Adds the node-pty workaround to the shared upstream-issue index.",
+      "retentionReason": "Keeps the dependency defect and its removal condition inspectable.",
+      "displayName": "README.md",
+      "retentionReasonBasis": "source"
+    },
+    {
+      "path": "crates/board-legacy-upgrade/src/upgrade_prepare.rs",
+      "group": "Legacy fixture repair",
+      "currentPath": "crates/board-legacy-upgrade/src/upgrade_prepare.rs",
+      "status": "Changed in surviving branch",
+      "purpose": "Copies shared SQLite inputs into per-test temporary directories before the existing upgrade-reader checks.",
+      "retentionReason": "Isolates shared fixture readers without weakening the production open-file guard.",
+      "displayName": "upgrade_prepare.rs",
+      "retentionReasonBasis": "source"
+    }
+  ]
+}
