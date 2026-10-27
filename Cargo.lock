@@ -1321,6 +1321,7 @@ dependencies = [
  "claude-code-peer-messaging",
  "codex-native-integration",
  "codex-router-core",
+ "codex-router-host",
  "codex-router-secret-store",
  "codex-router-test-support",
  "collaboration-central-conformance",
