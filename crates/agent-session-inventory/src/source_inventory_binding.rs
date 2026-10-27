@@ -89,12 +89,9 @@ impl SourceInventoryBinding {
 
     /// A declared fixture membership stands in for the producer in picker-only tests.
     #[cfg(any(test, feature = "test-support"))]
-    #[cfg_attr(
-        not(test),
-        expect(
-            clippy::unwrap_used,
-            reason = "test fixture uses a literal valid inventory generation"
-        )
+    #[expect(
+        clippy::unwrap_used,
+        reason = "test fixture uses a literal valid inventory generation"
     )]
     pub fn native_fixture(endpoint: EndpointRef) -> Self {
         Self {

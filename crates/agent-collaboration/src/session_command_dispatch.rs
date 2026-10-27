@@ -10,11 +10,10 @@ use crate::session_environment::{codex_home, current_provider_for_picker, sessio
 use agent_session_inventory::picker_data_query::SessionsPickerRoot;
 use agent_session_inventory::sessions::{
     ProcessSessionsCommandRunner, RouterRegistryRead, SessionActionSelection, SessionPickerRecord,
-    SessionRecordQuery, SessionsCommand, SessionsCommandError, SessionsCommandRunner,
-    SessionsFormat, SessionsLaunchTarget, discover_repository_identity, human_session_row,
-    load_session_records, load_session_records_for_query_with_identity, normalize_path,
-    run_claude_sessions_command, stored_model_choice_from_record, validate_exact_uuid_session_id,
-    validate_resume_session_id,
+    SessionRecord, SessionRecordQuery, SessionsCommand, SessionsCommandError,
+    SessionsCommandRunner, SessionsFormat, SessionsLaunchTarget, discover_repository_identity,
+    human_session_row, load_session_records, load_session_records_for_query_with_identity,
+    normalize_path, run_claude_sessions_command, validate_exact_uuid_session_id,
 };
 use agent_session_inventory::{
     session_picker_record_loader::session_picker_record_loader,
@@ -457,3 +456,31 @@ impl SessionsPicker for TerminalSessionsPicker {
 mod stored_model_terminal_fixture;
 #[cfg(feature = "quota-reset-test-harness")]
 pub(crate) use stored_model_terminal_fixture::run_stored_model_terminal_fixture;
+
+/// Projects one catalog record into the launch-time model choice, warning once when a
+/// stored value cannot be quoted as a TOML basic string.
+fn stored_model_choice_from_record(record: &SessionRecord) -> ResumeModelChoice {
+    let model = record.model.as_deref();
+    let reasoning_effort = record.reasoning_effort.as_deref();
+    if ResumeModelChoice::rejects_stored_value(model, reasoning_effort) {
+        eprintln!(
+            "agent-sessions: stored model or reasoning effort for session {} contains characters that cannot be passed to Codex; resuming without it",
+            record.session_id
+        );
+    }
+    ResumeModelChoice::from_stored_values(model, reasoning_effort)
+}
+
+fn validate_resume_session_id(session_id: &str) -> Result<(), SessionsCommandError> {
+    let trimmed = session_id.trim();
+    if trimmed.is_empty()
+        || trimmed != session_id
+        || trimmed.starts_with('-')
+        || trimmed
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+    {
+        return Err(SessionsCommandError::UnsafeSessionId);
+    }
+    Ok(())
+}

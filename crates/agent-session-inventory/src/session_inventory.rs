@@ -103,34 +103,6 @@ const SESSION_MODEL_CHOICE_MAX_CHARS: usize = 32;
 const SESSION_CONVERSATION_SNIPPET_MAX_CHARS: usize = 180;
 const DEFAULT_SESSION_RECORD_LIMIT: usize = 100;
 
-/// Projects one catalog record into the launch-time model choice, warning once when a
-/// stored value cannot be quoted as a TOML basic string.
-pub fn stored_model_choice_from_record(record: &SessionRecord) -> ResumeModelChoice {
-    let model = record.model.as_deref();
-    let reasoning_effort = record.reasoning_effort.as_deref();
-    if ResumeModelChoice::rejects_stored_value(model, reasoning_effort) {
-        eprintln!(
-            "agent-sessions: stored model or reasoning effort for session {} contains characters that cannot be passed to Codex; resuming without it",
-            record.session_id
-        );
-    }
-    ResumeModelChoice::from_stored_values(model, reasoning_effort)
-}
-
-pub fn validate_resume_session_id(session_id: &str) -> Result<(), SessionsCommandError> {
-    let trimmed = session_id.trim();
-    if trimmed.is_empty()
-        || trimmed != session_id
-        || trimmed.starts_with('-')
-        || trimmed
-            .chars()
-            .any(|character| character.is_control() || character.is_whitespace())
-    {
-        return Err(SessionsCommandError::UnsafeSessionId);
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 #[path = "session_commands/session_projection_tests.rs"]
 pub mod tests;
@@ -139,5 +111,3 @@ use crate::picker_data_query::{SessionsPickerDataQuery, SessionsPickerRoot};
 
 #[cfg(test)]
 use crate::session_picker_record_loader::session_picker_record_loader;
-#[cfg(test)]
-use crate::test_support::fake_api_support;

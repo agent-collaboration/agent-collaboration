@@ -41,6 +41,12 @@ enum SourceProviderFixture {
     ManagedAndNative(Vec<serde_json::Value>),
 }
 
+#[expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "shared source fixture setup and teardown assert valid literal records and required resources"
+)]
 impl SourceApiFixture {
     pub async fn start(service: &str, model: &str) -> Self {
         Self::start_with_provider(service, model, false).await

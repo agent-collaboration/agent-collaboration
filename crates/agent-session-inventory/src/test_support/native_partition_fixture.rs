@@ -22,6 +22,12 @@ pub enum NativeScenario {
     PrefixHeldUnavailable,
 }
 
+#[expect(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "native fault replies deliberately assert scripted requests and reject unexpected branches"
+)]
 pub(super) async fn reply(
     state: &Arc<PeerState>,
     request: &Value,

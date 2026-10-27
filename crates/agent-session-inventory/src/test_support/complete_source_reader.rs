@@ -1,6 +1,10 @@
 use crate::sessions::SessionPickerRecord;
 /// A test consumer exhausts real page continuations to preserve terminal scan oracles.
 /// Production progressive publication is separately exercised through the actual worker/UI.
+#[expect(
+    clippy::expect_used,
+    reason = "test page consumer asserts that qualified results retain their binding"
+)]
 pub async fn read_complete_source(
     loader: crate::source_inventory_request::SourceInventoryLoader,
     initial: crate::source_inventory_request::SourceInventoryRequest,

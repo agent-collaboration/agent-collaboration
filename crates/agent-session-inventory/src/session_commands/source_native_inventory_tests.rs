@@ -1,6 +1,6 @@
 //! Actual API target qualification, without executing a vendor or routed preflight.
 use super::*;
-use crate::sessions::fake_api_support::{FakeCollaborationApi, FakeReply};
+use crate::test_support::fake_api_support::{FakeCollaborationApi, FakeReply};
 use serde_json::{Value, json};
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const EPOCH: &str = "00000000-0000-4000-8000-000000000002";

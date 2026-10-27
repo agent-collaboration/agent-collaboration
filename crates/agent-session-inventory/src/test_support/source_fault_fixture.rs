@@ -59,6 +59,11 @@ pub struct ReadPeer {
     task: tokio::task::JoinHandle<std::io::Result<()>>,
 }
 
+#[expect(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    reason = "shared fault peer setup and bounded synchronization assert fixture invariants"
+)]
 impl ReadPeer {
     pub async fn start(scenario: ReplyScenario) -> Self {
         Self::start_bound(scenario, SERVICE).await
@@ -187,6 +192,12 @@ impl Drop for HeldReplyGuard {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "fault replies deliberately assert the scripted request shape and reject unexpected methods"
+)]
 async fn reply(State(state): State<Arc<PeerState>>, Json(request): Json<Value>) -> Json<Value> {
     let method = request
         .pointer("/params/name")
