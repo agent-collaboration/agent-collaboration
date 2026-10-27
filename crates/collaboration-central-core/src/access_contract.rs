@@ -71,18 +71,42 @@ pub enum AccessRefusal {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AccessPolicy {
-    pub team_domain: String,
+    pub issuer: String,
+    pub jwks_url: String,
     pub session_audience: String,
     pub admin_audience: String,
     pub owner_identity: String,
 }
 impl AccessPolicy {
-    pub fn validate(&self) -> Result<(), AccessRefusal> {
-        if !self.team_domain.ends_with(".cloudflareaccess.com")
-            || self
-                .team_domain
+    /// Cloudflare deployment configuration keeps its original validation and URLs.
+    pub fn cloudflare(
+        team_domain: String,
+        session_audience: String,
+        admin_audience: String,
+        owner_identity: String,
+    ) -> Result<Self, AccessRefusal> {
+        if !team_domain.ends_with(".cloudflareaccess.com")
+            || team_domain
                 .bytes()
                 .any(|c| !c.is_ascii_alphanumeric() && c != b'-' && c != b'.')
+        {
+            return Err(AccessRefusal::InvalidCaller);
+        }
+        let issuer = format!("https://{team_domain}");
+        let policy = Self {
+            jwks_url: format!("{issuer}/cdn-cgi/access/certs"),
+            issuer,
+            session_audience,
+            admin_audience,
+            owner_identity,
+        };
+        policy.validate()?;
+        Ok(policy)
+    }
+
+    pub fn validate(&self) -> Result<(), AccessRefusal> {
+        if !valid_key_url(&self.issuer)
+            || !valid_key_url(&self.jwks_url)
             || self.session_audience.is_empty()
             || self.admin_audience.is_empty()
             || self.session_audience == self.admin_audience
@@ -94,12 +118,25 @@ impl AccessPolicy {
     }
     #[must_use]
     pub fn issuer(&self) -> String {
-        format!("https://{}", self.team_domain)
+        self.issuer.clone()
     }
     #[must_use]
     pub fn certs_url(&self) -> String {
-        format!("{}/cdn-cgi/access/certs", self.issuer())
+        self.jwks_url.clone()
     }
+}
+
+fn valid_key_url(value: &str) -> bool {
+    url::Url::parse(value).is_ok_and(|url| {
+        matches!(url.scheme(), "http" | "https")
+            && url.host_str().is_some()
+            && url.username().is_empty()
+            && url.password().is_none()
+            && url.query().is_none()
+            && url.fragment().is_none()
+            && value.trim() == value
+            && !value.chars().any(char::is_control)
+    })
 }
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AccessJwk {

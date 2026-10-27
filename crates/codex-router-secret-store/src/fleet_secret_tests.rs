@@ -124,6 +124,32 @@ fn unmarked_file_store_cannot_write_fleet_secrets() -> TestResult {
 }
 
 #[test]
+fn central_signing_and_handoff_secrets_use_encryption_and_refuse_unmarked_plaintext() -> TestResult
+{
+    use crate::central_credentials::CentralSecretKind;
+    let root = tempfile::tempdir()?;
+    let (store, trace) = production_store(root.path())?;
+    let files = FileSecretStore::open(root.path())?;
+    for kind in [
+        CentralSecretKind::SigningKey,
+        CentralSecretKind::OwnerCredential,
+        CentralSecretKind::EnrollmentCredential,
+    ] {
+        let key = kind.secret_key()?;
+        assert!(
+            files
+                .write_secret(&key, &SecretString::new(CANARIES[0]))
+                .is_err()
+        );
+        let before = trace.events().len();
+        store.write_staged(&key, &SecretString::new(CANARIES[0]))?;
+        assert_ciphertext_write(root.path(), &trace, before, &key)?;
+        assert_eq!(store.read_secret(&key)?.expose_secret(), CANARIES[0]);
+    }
+    Ok(())
+}
+
+#[test]
 fn fleet_key_validation_and_generic_dispatch_fail_closed_for_every_backend() -> TestResult {
     use crate::fleet_secret_key::{FleetSecretKey, FleetSecretKind};
     let root = tempfile::tempdir()?;

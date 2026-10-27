@@ -57,15 +57,10 @@ impl SessionTransport for ReqwestSessionTransport {
         if !matches!(endpoint.scheme(), "ws" | "wss" | "http" | "https") {
             return Err(ConnectFailure::InvalidEndpoint);
         }
-        let request = self
-            .client
-            .get(endpoint)
-            .header("cf-access-client-id", self.access.client_id.clone())
-            .header("cf-access-client-secret", self.access.client_secret.clone())
-            .header(
-                reqwest::header::AUTHORIZATION,
-                sensitive_header(credential.expose())?,
-            );
+        let request = self.access.apply(self.client.get(endpoint)).header(
+            reqwest::header::AUTHORIZATION,
+            sensitive_header(credential.expose())?,
+        );
         let response = timeout(self.connect_timeout, request.upgrade().send())
             .await
             .map_err(|_| ConnectFailure::Unavailable)?

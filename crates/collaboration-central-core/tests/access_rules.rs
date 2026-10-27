@@ -3,7 +3,8 @@ use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_central_core::*;
 fn policy() -> AccessPolicy {
     AccessPolicy {
-        team_domain: "test.cloudflareaccess.com".into(),
+        issuer: "https://test.cloudflareaccess.com".into(),
+        jwks_url: "https://test.cloudflareaccess.com/cdn-cgi/access/certs".into(),
         session_audience: "session-aud".into(),
         admin_audience: "admin-aud".into(),
         owner_identity: "owner@example.test".into(),
