@@ -20,7 +20,7 @@ use collaboration_protocol::{
 
 /// Conversation operations over the Host's provider backend and Codex operation records.
 pub struct ConversationOperations {
-    pub(super) identity: crate::RouterIdentity,
+    pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) provider_conversations:
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
     pub(super) provider_operations:
@@ -64,7 +64,7 @@ macro_rules! submitted_operations {
 
 impl ConversationOperations {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         provider_conversations: Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
         provider_operations: Option<
             std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,

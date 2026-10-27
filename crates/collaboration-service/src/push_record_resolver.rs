@@ -1,5 +1,5 @@
 //! Resolves local push links, applies reported-caller access rules, and expands stored ranges.
-use crate::RouterIdentity;
+use collaboration_contracts::RouterIdentity;
 use collaboration_protocol::{
     MachineId, PushActivityRangeRead, PushId, PushKind, PushLineInput, PushOrigin, PushRecord,
     PushRecordNotice, RouterLink, SessionRef, render_push_line,

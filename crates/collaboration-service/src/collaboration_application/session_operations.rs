@@ -16,7 +16,7 @@ use collaboration_protocol::{
 };
 use serde_json::{Map, Value, json};
 pub struct SessionOperations {
-    identity: crate::RouterIdentity,
+    identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native: NativeSessionControl,
     codex_inventory: crate::codex_session_inventory::CodexSessionInventory,
@@ -25,7 +25,7 @@ pub struct SessionOperations {
 }
 impl SessionOperations {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         native: NativeSessionControl,
         codex_inventory: crate::codex_session_inventory::CodexSessionInventory,

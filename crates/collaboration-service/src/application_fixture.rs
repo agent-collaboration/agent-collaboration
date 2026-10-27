@@ -412,8 +412,8 @@ impl ApplicationFixture {
         clippy::expect_used,
         reason = "This test-only builder validates these values when they are configured."
     )]
-    pub fn router_identity(&self) -> crate::RouterIdentity {
-        crate::RouterIdentity::new(
+    pub fn router_identity(&self) -> collaboration_contracts::RouterIdentity {
+        collaboration_contracts::RouterIdentity::new(
             self.service_id.clone(),
             self.service_epoch.clone(),
             self.installation_peer,

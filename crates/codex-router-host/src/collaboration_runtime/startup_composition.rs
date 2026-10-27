@@ -134,7 +134,7 @@ impl CollaborationRuntime {
                 None
             }
         };
-        let identity = collaboration_service::RouterIdentity::new(
+        let identity = collaboration_contracts::RouterIdentity::new(
             service_id.clone(),
             service_epoch.clone(),
             Some(installation_peer),

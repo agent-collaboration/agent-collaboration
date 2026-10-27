@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 /// Native session operations admitted by the Router's current generation.
 #[derive(Clone)]
 pub struct NativeSessionControl {
-    identity: crate::RouterIdentity,
+    identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native_backend: Option<collaboration_runtime::NativeControlBackend>,
     approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
@@ -21,7 +21,7 @@ pub struct NativeSessionControl {
 
 impl NativeSessionControl {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
         approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,

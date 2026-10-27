@@ -127,7 +127,7 @@ fn cursor_after(row: &ProviderInventoryRow, cursor: &ProviderInventoryCursor) ->
 
 /// Pages a provider endpoint's hosted sessions, or Claude Code's live terminal sessions.
 pub struct ProviderSessionInventory {
-    identity: crate::RouterIdentity,
+    identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     provider_operations: Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
     provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
@@ -139,7 +139,7 @@ pub struct ProviderSessionInventory {
 }
 impl ProviderSessionInventory {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         provider_operations: Option<
             std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,

@@ -61,3 +61,6 @@ pub use router_delivery_types::{
 };
 #[cfg(test)]
 mod mail_fetch_budget_tests;
+
+mod router_identity;
+pub use router_identity::{RouterIdentity, RouterIdentityError};

@@ -23,7 +23,7 @@ use tokio::sync::Mutex;
 
 /// Automation operations over automation storage, the Host's configuration and scheduled runs.
 pub struct AutomationOperations {
-    pub(super) identity: crate::RouterIdentity,
+    pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) automation:
         Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
     pub(super) configuration: collaboration_runtime::AutomationConfigurationHandle,
@@ -41,7 +41,7 @@ impl AutomationOperations {
         reason = "Constructor injection keeps each independently owned capability explicit instead of recreating a service locator."
     )]
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         automation: Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
         configuration: collaboration_runtime::AutomationConfigurationHandle,
         configuration_backend: Option<std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>>,

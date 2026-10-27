@@ -21,7 +21,7 @@ mod message_status_operations;
 
 /// Direct-message operations over the push store and the subscription delivery owner.
 pub struct MessageOperations {
-    pub(super) identity: crate::RouterIdentity,
+    pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(super) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
     pub(super) display_names: collaboration_runtime::SessionDisplayNameCache,
@@ -30,7 +30,7 @@ pub struct MessageOperations {
 
 impl MessageOperations {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
         mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
         display_names: collaboration_runtime::SessionDisplayNameCache,

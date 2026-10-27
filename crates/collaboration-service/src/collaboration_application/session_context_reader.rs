@@ -2,7 +2,7 @@
 use message_board::{RepositoryRef, SessionRef, normalize_git_origin_url};
 use std::path::{Path, PathBuf};
 pub struct SessionContextReader {
-    identity: crate::RouterIdentity,
+    identity: collaboration_contracts::RouterIdentity,
     native: super::session_native_control::NativeSessionControl,
     provider_operations: Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
     claude_code_sessions:
@@ -10,7 +10,7 @@ pub struct SessionContextReader {
 }
 impl SessionContextReader {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         native: super::session_native_control::NativeSessionControl,
         provider_operations: Option<
             std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,

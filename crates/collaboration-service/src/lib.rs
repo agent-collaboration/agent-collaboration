@@ -13,8 +13,6 @@ pub use project_admission::{
     ProjectAdmissionError, ProjectAdmissionProps, ProjectArchiveObservation,
 };
 pub use project_commit_publication::after_project_commit_publish_and_reconcile;
-mod router_identity;
-pub use router_identity::{RouterIdentity, RouterIdentityError};
 #[cfg(any(test, feature = "runtime-test-support"))]
 mod application_fixture;
 #[cfg(any(test, feature = "runtime-test-support"))]

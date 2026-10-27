@@ -1,5 +1,5 @@
 //! Immutable validated facts identifying one Router installation and run.
-use collaboration_contracts::MachineIdentity;
+use crate::MachineIdentity;
 use collaboration_protocol::UuidIdentity;
 use fleet_sync_protocol::PeerId;
 
@@ -54,7 +54,7 @@ pub enum RouterIdentityError {
 #[cfg(test)]
 mod tests {
     use super::{RouterIdentity, RouterIdentityError};
-    use collaboration_contracts::MachineIdentity;
+    use crate::MachineIdentity;
     use collaboration_protocol::UuidIdentity;
     use fleet_sync_protocol::PeerId;
 

@@ -288,7 +288,7 @@ impl MailDeliveryRuntime {
     /// Refuses attaching mail to a different installation or physical interaction owner.
     pub fn validate_owner(
         &self,
-        identity: &crate::RouterIdentity,
+        identity: &collaboration_contracts::RouterIdentity,
         interactions: Option<&Arc<interaction_storage::InteractionStore>>,
     ) -> Result<(), String> {
         if self.service.as_str() == String::from(identity.service_id().clone())

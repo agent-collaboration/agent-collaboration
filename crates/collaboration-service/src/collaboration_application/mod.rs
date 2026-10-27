@@ -124,7 +124,7 @@ mod result_byte_budget_tests;
 #[cfg(test)]
 #[path = "thread_wait_budget_tests.rs"]
 mod thread_wait_budget_tests;
-use crate::RouterIdentity;
+use collaboration_contracts::RouterIdentity;
 
 /// Constructed operation families serving one Router installation and run.
 #[derive(Clone)]

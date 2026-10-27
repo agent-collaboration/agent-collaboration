@@ -173,7 +173,7 @@ fn active_turn_id(status: &Value) -> Option<&str> {
 ///
 /// A stored page is recorded in the lifecycle journal only once it fits `budget`.
 pub struct CodexSessionInventory {
-    identity: crate::RouterIdentity,
+    identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     native_backend: Option<collaboration_runtime::NativeControlBackend>,
     display_names: collaboration_runtime::SessionDisplayNameCache,
@@ -181,7 +181,7 @@ pub struct CodexSessionInventory {
 }
 impl CodexSessionInventory {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
         display_names: collaboration_runtime::SessionDisplayNameCache,

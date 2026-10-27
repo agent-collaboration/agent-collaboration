@@ -18,14 +18,14 @@ pub type ObservedEventSink = tokio::sync::mpsc::UnboundedSender<ObservationEvent
 
 /// Observation operations over the provider Session event hub.
 pub struct ObservationOperations {
-    pub(super) identity: crate::RouterIdentity,
+    pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
     pub(super) directory: collaboration_runtime::EndpointDirectory,
 }
 
 impl ObservationOperations {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
         directory: collaboration_runtime::EndpointDirectory,
     ) -> Self {

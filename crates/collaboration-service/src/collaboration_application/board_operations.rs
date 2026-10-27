@@ -67,7 +67,7 @@ mod board_trail_reads;
 mod board_view_operations;
 
 pub struct BoardOperations {
-    pub(super) identity: crate::RouterIdentity,
+    pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
     pub(super) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
     pub(super) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
@@ -86,7 +86,7 @@ impl BoardOperations {
         reason = "Constructor injection keeps each independently owned capability explicit instead of recreating a service locator."
     )]
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
         project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
         notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,

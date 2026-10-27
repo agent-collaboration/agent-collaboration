@@ -6,13 +6,13 @@ use lifecycle_observation::{AddressPage, JournalBounds, JournalError, JournalPag
 use serde_json::json;
 
 pub struct JournalOperations {
-    identity: crate::RouterIdentity,
+    identity: collaboration_contracts::RouterIdentity,
     directory: collaboration_runtime::EndpointDirectory,
     journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
 }
 impl JournalOperations {
     pub fn new(
-        identity: crate::RouterIdentity,
+        identity: collaboration_contracts::RouterIdentity,
         directory: collaboration_runtime::EndpointDirectory,
         journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
     ) -> Self {
