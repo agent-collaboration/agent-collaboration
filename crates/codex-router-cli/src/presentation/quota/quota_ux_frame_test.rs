@@ -3,37 +3,24 @@ use super::*;
 
 #[tokio::test]
 async fn normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds() {
-    let mut fitting_statuses = Vec::new();
     for width in [32usize, 40, 48] {
         let mut model = super::super::quota_storyboard_fixture_test::fixture_model();
         use crate::presentation::quota::quota_status_symbols::{
             QuotaAccountStatus, QuotaRowStatus,
         };
-        if width < 48 {
-            model.rows[0].status = QuotaRowStatus::Account(if width == 32 {
-                QuotaAccountStatus::Blocked
-            } else {
-                QuotaAccountStatus::Available
-            });
-        }
-        let mut component = element!(QuotaStatusComponent(view_model:model,width,height:24usize));
-        let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(
-            futures_util::stream::pending::<TerminalEvent>(),
-        ));
-        tokio::pin!(frames);
-        let canvas = tokio::time::timeout(
-            std::time::Duration::from_secs(2),
-            crate::presentation::quota::quota_frame_observation::next_current_frame(
-                frames.as_mut(),
-            ),
+        model.rows[0].status = QuotaRowStatus::Account(if width == 32 {
+            QuotaAccountStatus::Blocked
+        } else {
+            QuotaAccountStatus::Available
+        });
+        let frame = render_quota_capture_model_at(
+            model,
+            width,
+            24,
+            vec![provider_filter_key(KeyCode::Esc)],
         )
-        .await
-        .unwrap()
-        .unwrap()
-        .expect("normal fixture initial paint");
-        let frame = canvas.to_string();
-        println!("NORMAL STORYBOARD ACTUAL{width}x24 START:\n{frame}");
-        assert_eq!((canvas.width(), canvas.height()), (width, 24), "{frame}");
+        .await;
+        assert_eq!(frame.lines().count(), 24, "{frame}");
         assert!(
             frame
                 .lines()
@@ -41,161 +28,150 @@ async fn normal_storyboard_phone_start_keeps_selected_label_in_physical_bounds()
             "{frame}"
         );
         assert!(
-            frame.contains("Quota status") && frame.contains("東京") && frame.contains('❯'),
-            "the selected normal-fixture account must be identifiable inside the physical viewport: {frame}"
+            frame.contains("Quota status") && frame.contains("Help") && frame.contains("❯ 東京"),
+            "{frame}"
         );
-        if width < 48 {
-            let header = frame
-                .lines()
-                .find(|line| {
-                    line.contains("Account") && line.contains("Status") && line.contains("Quota")
-                })
-                .expect("phone headers must remain whole, not Accoun/t or Stat/us");
-            let (account_start, status_start, quota_start, account_width, status_width) =
-                if width == 32 {
-                    (3, 14, 22, 10, 7)
-                } else {
-                    (3, 17, 27, 13, 9)
-                };
-            for (label, expected) in [
-                ("Account", account_start),
-                ("Status", status_start),
-                ("Quota", quota_start),
-            ] {
-                let prefix = header
-                    .get(..header.find(label).unwrap())
-                    .expect("matched label starts on a UTF-8 boundary");
-                assert_eq!(
-                    unicode_width::UnicodeWidthStr::width(prefix),
-                    expected,
-                    "literal paired header/row origins at {width}: {frame}"
-                );
-            }
-            let selected_row = phone_account_region(&frame, "東京", Some("Claude"));
-            let account = quota_column_words(&selected_row, account_start, account_width);
-            assert_eq!(
-                account, "東京 OpenAI Research Account Alpha Long Name ◎ OpenAI",
-                "selected account name/provider order excludes headers and other accounts: {frame}"
-            );
-            let status = quota_column_words(&selected_row, status_start, status_width);
-            fitting_statuses.push((width, status.clone(), frame.clone()));
-            for fact in ["1 client", "2 resets", "Credits 62.5k fresh"] {
-                assert!(
-                    status.contains(fact),
-                    "status facts stay in Status, missing {fact} at {width}: {frame}"
-                );
-            }
-        }
-    }
-    for (width, status, frame) in fitting_statuses {
+        let region = phone_account_region(&frame, "東京", Some("Claude"));
+        let account = region.split("Quota left · reset in").next().unwrap();
         assert!(
-            status.starts_with(if width == 32 {
-                "blocked "
+            account.contains(if width == 32 {
+                "⊘ blocked"
             } else {
-                "available "
+                "✓ available"
             }),
-            "a complete fitting status label stays readable in its actual row: {frame}"
+            "fitting literal status in Account: {region}"
+        );
+        assert!(
+            frame.contains("Account") && frame.contains("Quota left · reset in"),
+            "folded group headings stay whole: {frame}"
         );
     }
 }
 #[tokio::test]
 async fn phone_account_rows_keep_full_content_and_selection_under_aligned_headers() {
-    for (width, account_width, status_start, status_width, quota_start) in
-        [(32usize, 10, 14, 7, 22), (40, 13, 17, 9, 27)]
-    {
+    for width in [32usize, 40, 48] {
+        let mut positions = Vec::new();
         for focused_index in [0usize, 1] {
             let mut model = super::super::quota_storyboard_fixture_test::fixture_model();
             for (index, row) in model.rows.iter_mut().enumerate() {
                 row.selected = index == focused_index;
             }
-            // A tall physical canvas exposes both complete natural rows. The
-            // separate24-row case above keeps the real phone viewport honest.
-            let mut component =
-                element!(QuotaStatusComponent(view_model:model,width,height:80usize));
-            let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(
-                futures_util::stream::pending::<TerminalEvent>(),
-            ));
-            tokio::pin!(frames);
-            let canvas = tokio::time::timeout(
-                std::time::Duration::from_secs(2),
-                crate::presentation::quota::quota_frame_observation::next_current_frame(
-                    frames.as_mut(),
-                ),
+            let frame = render_quota_capture_model_at(
+                model,
+                width,
+                80,
+                vec![provider_filter_key(KeyCode::Esc)],
             )
-            .await
-            .unwrap()
-            .unwrap()
-            .expect("full natural account rows");
-            let frame = canvas.to_string();
-            assert_eq!((canvas.width(), canvas.height()), (width, 80), "{frame}");
-            for (name, next_name, expected) in [
+            .await;
+            for (name, next_name, full_name, provider, clients, percent) in [
                 (
                     "東京",
                     Some("Claude"),
-                    "東京 OpenAI Research Account Alpha Long Name ◎ OpenAI",
+                    "東京 OpenAI Research Account Alpha Long Name",
+                    "◎ OpenAI",
+                    "1 client",
+                    "99%",
                 ),
                 (
                     "Claude",
                     None,
-                    "Claude Research Account Beta Full Name ◆ Claude",
+                    "Claude Research Account Beta Full Name",
+                    "◆ Claude",
+                    "0 clients",
+                    "70%",
                 ),
             ] {
                 let region = phone_account_region(&frame, name, next_name);
-                assert_eq!(
-                    quota_column_words(&region, 3, account_width),
-                    expected,
-                    "each complete identity stays in its own account row: {frame}"
+                let words = region
+                    .replace(['│', '┃'], " ")
+                    .split_whitespace()
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                for fact in [
+                    full_name,
+                    provider,
+                    clients,
+                    "2 resets",
+                    percent,
+                    "Weekly pace",
+                    "Extra",
+                ] {
+                    assert!(
+                        words.contains(fact),
+                        "{fact} attributable at {width}: {region}"
+                    );
+                }
+                let account_words = words.split("Quota left · reset in").next().unwrap();
+                let quota_words = words
+                    .split_once("Quota left · reset in")
+                    .unwrap()
+                    .1
+                    .split("Weekly pace")
+                    .next()
+                    .unwrap();
+                let extra_words = words.split_once("Extra").unwrap().1;
+                assert!(
+                    account_words.contains("✓ available"),
+                    "status belongs to Account: {region}"
                 );
-            }
-            for (name, selected) in [("東京", focused_index == 0), ("Claude", focused_index == 1)]
-            {
+                for fact in if name == "東京" {
+                    ["83% · week · 7d 0h", "99% · 5h · 5h 0m"]
+                } else {
+                    ["75% · week · 6d 0h", "70% · 5h · 4h 0m"]
+                } {
+                    assert!(
+                        quota_words.contains(fact),
+                        "window belongs to Quota: {region}"
+                    );
+                }
+                assert!(
+                    extra_words.contains("2 resets"),
+                    "reset belongs to Extra: {region}"
+                );
+                if name == "東京" {
+                    assert!(
+                        extra_words.contains("62.5k credits"),
+                        "credits belong to Extra: {region}"
+                    );
+                }
                 let line = frame.lines().find(|line| line.contains(name)).unwrap();
-                assert_eq!(
-                    unicode_width::UnicodeWidthStr::width(
-                        line.get(..line.find(name).unwrap())
-                            .expect("matched account starts on a UTF-8 boundary")
-                    ),
-                    3,
-                    "selected and unselected names align under Account: {frame}"
-                );
+                positions.push((
+                    name,
+                    focused_index,
+                    unicode_width::UnicodeWidthStr::width(line.split_once(name).unwrap().0),
+                ));
                 assert_eq!(
                     line.contains('❯'),
-                    selected,
-                    "fixed two-cell gutter: {frame}"
+                    (name == "東京") == (focused_index == 0),
+                    "{frame}"
                 );
             }
-            let status = quota_column_words(&frame, status_start, status_width);
-            for fact in ["1 client", "0 clients", "2 resets", "Credits 62.5k fresh"] {
-                assert!(
-                    status.contains(fact),
-                    "{fact} stays attributable to Status: {frame}"
-                );
-            }
-            let quota = quota_column_words(&frame, quota_start, if width == 32 { 8 } else { 11 });
-            for fact in [
-                "alpha detail",
-                "beta detail",
-                "Weekly",
-                "5h",
-                "83%",
-                "99%",
-                "Weekly pace",
-            ] {
-                assert!(
-                    quota.contains(fact),
-                    "all vertical quota facts stay in Quota: {fact}: {frame}"
-                );
-            }
-            let expected_pace = if width == 32 {
-                "Unknown"
-            } else {
-                "burn unavailable"
-            };
+            let lines = frame.lines().collect::<Vec<_>>();
+            let beta = lines
+                .iter()
+                .position(|line| line.contains("Claude"))
+                .unwrap();
+            let heading = beta - 2;
+            assert_eq!(
+                lines[heading].trim_matches(['│', '┃', ' ']),
+                "Account",
+                "{frame}"
+            );
             assert!(
-                quota.contains(expected_pace),
-                "pace words remain readable in Quota: {frame}"
+                lines[heading - 3].contains("2 resets"),
+                "C5 exactly two empty rows, not three: {frame}"
+            );
+            assert!(
+                lines[heading - 1].trim_matches(['│', '┃', ' ']).is_empty()
+                    && lines[heading - 2].trim_matches(['│', '┃', ' ']).is_empty(),
+                "C5 two rows between accounts: {frame}"
             );
         }
+        assert_eq!(
+            positions[0].2, positions[2].2,
+            "selection cannot move Alpha"
+        );
+        assert_eq!(positions[1].2, positions[3].2, "selection cannot move Beta");
     }
 }
 
@@ -224,7 +200,8 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
         receiver.recv().await.map(|event| (event, receiver))
     });
     let model = super::super::quota_storyboard_fixture_test::fixture_model();
-    let mut component = element!(QuotaStatusComponent(view_model:model,width:0usize,height:0usize));
+    let terminal_width_reader: fn() -> Option<usize> = || None;
+    let mut component = element!(QuotaStatusComponent(view_model:model,width:0usize,terminal_width_reader:Some(terminal_width_reader),height:0usize));
     let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let journey = async {
@@ -253,9 +230,7 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
             let frame = canvas.to_string();
             assert_eq!((canvas.width(), canvas.height()), (width, 24), "{frame}");
             assert!(
-                frame.lines().any(|line| line.contains("Account")
-                    && line.contains("Status")
-                    && line.contains("Quota")),
+                frame.contains("Account") && frame.contains("Quota left · reset in"),
                 "headers survive resize: {frame}"
             );
             sender.send(provider_filter_key(KeyCode::Down)).unwrap();
@@ -271,16 +246,20 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
                 "real navigation reveals second account: {frame}"
             );
             if width < 48 {
-                let (start, columns) = if width == 32 { (22, 8) } else { (27, 11) };
                 let mut reached = false;
                 for _ in 0..10 {
-                    let quota = quota_column_words(&frame, start, columns).replace(' ', "");
-                    let expected_pace = if width == 32 {
-                        "Unknown"
-                    } else {
-                        "burnunavailable"
-                    };
-                    if quota.contains("70%") && quota.contains(expected_pace) {
+                    let beta =
+                        phone_account_region(&frame, "Claude", None).replace(['│', '┃'], " ");
+                    let quota = beta
+                        .split_once("Quota left · reset in")
+                        .map(|(_, tail)| tail.split("Weekly pace").next().unwrap().replace(' ', ""))
+                        .unwrap_or_default();
+                    let expected_pace = "burnunavailable";
+                    let pace = beta
+                        .split_once("Weekly pace")
+                        .map(|(_, tail)| tail.split("Extra").next().unwrap().replace(' ', ""))
+                        .unwrap_or_default();
+                    if quota.contains("70%") && pace.contains(expected_pace) {
                         reached = true;
                         break;
                     }
@@ -429,7 +408,7 @@ async fn interactive_details_attributes_status_and_reason_without_repeating_iden
     );
 }
 
-// Freeze unrelated OS-width polling while the mock sends explicit resize events.
+// The nominated test reader isolates synthetic resize events from the physical TTY.
 #[tokio::test(start_paused = true)]
 async fn live_terminal_resize_preserves_physical_bounds_and_active_details() {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -437,7 +416,8 @@ async fn live_terminal_resize_preserves_physical_bounds_and_active_details() {
         receiver.recv().await.map(|event| (event, receiver))
     });
     let viewport_trace = super::super::super::quota_viewport_trace::QuotaViewportTrace::default();
-    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,height:0usize,viewport_trace:Some(viewport_trace.clone())));
+    let terminal_width_reader: fn() -> Option<usize> = || None;
+    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,terminal_width_reader:Some(terminal_width_reader),height:0usize,viewport_trace:Some(viewport_trace.clone())));
     let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
     tokio::pin!(frames);
     let mut phase = 0;
@@ -578,4 +558,70 @@ async fn short_sidecar_keeps_complete_activity_reachable_through_actual_details(
             "missing {fact} after scrolling real Details: {dialog}"
         );
     }
+}
+
+#[tokio::test(start_paused = true)]
+async fn nominated_width_reader_controls_initial_and_periodic_component_width() {
+    let read_123_columns: fn() -> Option<usize> = || Some(123);
+    assert_component_width_reader(Some(read_123_columns), 123, 123).await;
+    let read_137_columns: fn() -> Option<usize> = || Some(137);
+    assert_component_width_reader(Some(read_137_columns), 137, 137).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn no_physical_reader_preserves_synthetic_component_resize_past_sampler_tick() {
+    assert_component_width_reader(Some(|| None), 32, 96).await;
+}
+
+async fn assert_component_width_reader(
+    reader: Option<fn() -> Option<usize>>,
+    initial: usize,
+    after_tick: usize,
+) {
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut component = element!(QuotaStatusComponent(view_model:quota_two_account_view_model(),width:0usize,height:24usize,terminal_width_reader:reader));
+    let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+    tokio::pin!(frames);
+    let journey = async {
+        let canvas = crate::presentation::quota::quota_frame_observation::next_current_frame(
+            frames.as_mut(),
+        )
+        .await
+        .unwrap()
+        .unwrap();
+        assert_eq!(
+            canvas.width(),
+            initial,
+            "actual component must use nominated initial reader"
+        );
+        sender.send(TerminalEvent::Resize(96, 24)).unwrap();
+        let resized = crate::presentation::quota::quota_frame_observation::next_matching_frame(
+            frames.as_mut(),
+            Duration::from_millis(250),
+            |canvas| canvas.width() == 96 && canvas.height() == 24,
+        )
+        .await
+        .unwrap();
+        assert_eq!((resized.width(), resized.height()), (96, 24));
+        tokio::time::advance(Duration::from_millis(81)).await;
+        sender.send(provider_filter_key(KeyCode::F(1))).unwrap();
+        let after = crate::presentation::quota::quota_frame_observation::next_matching_frame(
+            frames.as_mut(),
+            Duration::from_millis(250),
+            |canvas| canvas.width() == after_tick && canvas.to_string().contains("Quota Help"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            after.width(),
+            after_tick,
+            "actual component sampler must use the same nominated reader"
+        );
+    };
+    tokio::time::timeout(Duration::from_secs(2), journey)
+        .await
+        .expect("bounded actual component reader proof");
 }

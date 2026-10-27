@@ -1,12 +1,12 @@
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Quota status                                                                            Clients unknown · Fresh 10 · Stale 0 · Data unknown 0  Details  Help │
-│ Pool-wide: responses  Accounts 10 · Usable 10 · Reserve 0 · Blocked 0 · Pool unknown 0 · Excluded 0                                                          │
+│ Quota status                                                                                                                              Pool details  Help │
 │ Filters ▾  Provider: All · Disabled: Shown · 10/10 accounts                                                                                                  │
 │ ┌──────────────────────────────────────────────────────────────────────────────────────────┐  ┌────────────────────────────────────────────────────────────┐ │
-│ │    Account                          Status                 Quota                         │  │ Selected account                                           │ │
-│ │  ❯ acct00                           ✓ available            account 00 detail           ┃ │  │ acct00                                                     │ │
-│ │    ◎ OpenAI                         0 clients              Weekly                      │ │  │ Status      available                                      │ │
-│ │                                     2 resets               █████ 83% left reset 7d     │ │  │ Reason      account 00 detail                              │ │
-│ │                                     Credits unknown        5h                          │ │  │ Quota windows                                              │ │
+│ │   Account           Quota left · reset in         Weekly pace        Extra               │  │ Selected account                                           │ │
+│ │   ───────────────── ───────────────────────────── ────────────────── ──────────────────  │  │ acct00                                                     │ │
+│ │ ❯ acct00            █████░░ 83% · week · 7d 0h    burn unavailable   Credits unknown   ┃ │  │ Status      available                                      │ │
+│ │   ◎ OpenAI · 0      ██████░ 99% · 5h · 5h 0m                         2 resets          │ │  │ Reason      account 00 detail                              │ │
+│ │   clients                                                                              │ │  │ Quota windows                                              │ │
 │ └──────────────────────────────────────────────────────────────────────────────────────────┘  └────────────────────────────────────────────────────────────┘ │
+│ F4 Details  F3 Filters  F5 Pool  F1 Help  Ctrl+R Options                                                                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

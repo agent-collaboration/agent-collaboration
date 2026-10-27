@@ -165,7 +165,11 @@ async fn ineligible_fork_destination_disables_the_existing_parent_action() {
             .text_style()
             .unwrap()
             .color,
-        Some(Color::DarkGrey),
+        Some(Color::Rgb {
+            r: 166,
+            g: 175,
+            b: 189
+        }),
         "the existing history-on-source guard must also be visible on the parent action: {frame}"
     );
 }

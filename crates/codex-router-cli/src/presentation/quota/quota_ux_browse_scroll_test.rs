@@ -1,4 +1,5 @@
 //! Keyboard paging reveals a tall account without changing the selected account.
+use super::super::quota_group_observation_test::AlphaGroupObservation;
 use super::*;
 use iocraft::Canvas;
 
@@ -19,11 +20,7 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
         let model = super::super::quota_storyboard_fixture_test::fixture_model();
         assert_eq!(model.rows[0].credit_usage_summary, "62.5k fresh");
         assert_eq!(model.rows[0].reset_pace.semantic_label, "burn unavailable");
-        let expected_pace = if width == 32 {
-            "Unknown"
-        } else {
-            "burnunavailable"
-        };
+        let expected_pace = "burnunavailable";
         let mut component = element!(QuotaStatusComponent(view_model:model,width,height));
         let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);
@@ -31,20 +28,22 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
         let initial_text = initial.to_string();
         let mut canvas = initial;
         let (mut credits, mut short, mut pace_label, mut pace_value) = (None, None, None, None);
+        let mut observed = AlphaGroupObservation::default();
         let mut final_page = 0;
         for page in 0..=12 {
             let text = canvas.to_string();
-            let quota_words = alpha_browse_quota_words(&text);
-            if credits.is_none() && text.contains("62.5k") {
+            observed.observe(&canvas);
+            let quota_words = observed.quota.clone();
+            if credits.is_none() && observed.extra.contains("62.5k credits") {
                 credits = Some(page);
             }
             if short.is_none() && quota_words.contains("99%") && quota_words.contains("5h") {
                 short = Some(page);
             }
-            if pace_label.is_none() && quota_words.contains("Weekly pace") {
+            if pace_label.is_none() && !observed.pace.trim().is_empty() {
                 pace_label = Some(page);
             }
-            if pace_value.is_none() && quota_words.replace(' ', "").contains(expected_pace) {
+            if pace_value.is_none() && observed.pace.replace(' ', "").contains(expected_pace) {
                 pace_value = Some(page);
             }
             println!(
@@ -62,48 +61,14 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
             sender.send(provider_filter_key(KeyCode::PageDown)).unwrap();
             canvas = browse_canvas(frames.as_mut(), "next exact fixture page").await;
         }
-        let mut end_back_pose = None;
-        if pace_value.is_none() {
-            // End aligns the whole list's bottom; reversing a page can expose
-            // Alpha's complete value across the forward page boundary.
-            sender.send(provider_filter_key(KeyCode::End)).unwrap();
-            canvas = browse_canvas(frames.as_mut(), "list End before reverse page pose").await;
-            let mut crossed_beta_start = false;
-            for backwards in 0..=12 {
-                let text = canvas.to_string();
-                let quota_words = alpha_browse_quota_words(&text);
-                println!(
-                    "NORMAL BROWSE END-BACK {width}x{height} pages={backwards} quota={quota_words:?}:\n{text}"
-                );
-                // Reverse paging first witnesses Beta's own start. Earlier
-                // content is Alpha's tail in the unchanged two-row ordering;
-                // Beta's end-of-list pace cannot satisfy this observation.
-                let beta_start_visible = text.contains("Claude");
-                let alpha_tail = crossed_beta_start && !beta_start_visible;
-                crossed_beta_start |= beta_start_visible;
-                let has_alpha_fact = text.contains("62.5k") || quota_words.contains("99%");
-                if (has_alpha_fact || alpha_tail)
-                    && quota_words.replace(' ', "").contains(expected_pace)
-                {
-                    end_back_pose = Some(backwards);
-                    break;
-                }
-                assert!(backwards < 12, "bounded reverse page scan for Alpha pace");
-                sender.send(provider_filter_key(KeyCode::PageUp)).unwrap();
-                canvas = browse_canvas(frames.as_mut(), "reverse End page to Alpha pace").await;
-            }
-        }
         assert!(
-            credits.is_some()
-                && short.is_some()
-                && pace_label.is_some()
-                && (pace_value.is_some() || end_back_pose.is_some()),
+            credits.is_some() && short.is_some() && pace_label.is_some() && pace_value.is_some(),
             "all row-owned Alpha facts remain observable"
         );
         println!(
-            "NORMAL BROWSE POSITIONS {width}x{height}: credits={credits:?} short={short:?} pace_label={pace_label:?} pace_value={pace_value:?} end_back_pose={end_back_pose:?}"
+            "NORMAL BROWSE POSITIONS {width}x{height}: credits={credits:?} short={short:?} pace_label={pace_label:?} pace_value={pace_value:?}"
         );
-        if final_page > 0 || end_back_pose.is_some() {
+        if final_page > 0 {
             sender.send(provider_filter_key(KeyCode::Home)).unwrap();
             canvas = browse_canvas(frames.as_mut(), "restore exact fixture top").await;
         }
@@ -137,11 +102,10 @@ async fn supported_page_sequences_match_end_back_pose_and_exact_home_return() {
         let end_back_frame = browse_canvas(frames.as_mut(), "reference End PageUp")
             .await
             .to_string();
-        if width == 32 {
-            let alpha_words = alpha_browse_quota_words(&end_back_frame);
-            assert!(end_back_frame.contains("62.5k") && alpha_words.contains("99%"));
-            assert!(alpha_words.split_whitespace().any(|word| word == "Unknown"));
-        }
+        assert_ne!(
+            end_frame, initial,
+            "short viewport must reach a real non-top pose"
+        );
         if end_back_frame == initial {
             // Denser content can make one reverse page reach the top already.
             // Exercise Home from the independently witnessed non-top End pose,
@@ -202,43 +166,6 @@ async fn supported_page_sequences_match_end_back_pose_and_exact_home_return() {
     }
 }
 
-fn alpha_browse_quota_words(text: &str) -> String {
-    let lines = text.lines().collect::<Vec<_>>();
-    let header = lines
-        .iter()
-        .position(|line| {
-            line.contains("Account") && line.contains("Status") && line.contains("Quota")
-        })
-        .expect("fixed account headers");
-    let quota_start = unicode_width::UnicodeWidthStr::width(
-        lines[header].split_once("Quota").expect("Quota column").0,
-    );
-    // Stop at the first Beta name. Its facts cannot satisfy Alpha's
-    // lower-content evidence even though both accounts have pace data.
-    let first_beta = lines
-        .iter()
-        .position(|line| line.contains("Claude"))
-        .unwrap_or(lines.len() - 1);
-    lines[header + 1..first_beta]
-        .iter()
-        .map(|line| {
-            let mut column = 0;
-            line.chars()
-                .filter(|character| {
-                    let previous = column;
-                    column += unicode_width::UnicodeWidthChar::width(*character).unwrap_or(0);
-                    previous >= quota_start
-                        && !matches!(character, '│' | '┃' | '┘' | '└' | '─' | '╯' | '╰')
-                })
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join(" ")
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
 #[tokio::test]
 async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_account() {
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -260,7 +187,9 @@ async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_
         !initial_text.contains("62.5k"),
         "the regression must reach the short viewport"
     );
-    assert!(initial_text.contains("東京") && initial_text.contains("Weekly"));
+    assert!(initial_text.contains("東京") && initial_text.contains("Account"));
+    let mut observed = AlphaGroupObservation::default();
+    observed.observe(&initial);
     let mut reached_weekly = false;
     let mut reached_credit = false;
     let mut reached_short_quota = false;
@@ -276,20 +205,14 @@ async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_
         println!("BROWSE PAGE down{page}:\n{text}");
         assert_eq!((canvas.width(), canvas.height()), (48, 12));
         assert!(
-            text.lines().any(|line| line.contains("Account")
-                && line.contains("Status")
-                && line.contains("Quota")),
-            "headers remain fixed: {text}"
+            text.contains("Quota status") && text.contains("Pool details"),
+            "C5 surface controls stay fixed while group headings scroll: {text}"
         );
-        reached_weekly |= text.contains("83%");
-        reached_credit |= text.contains("62.5k");
-        reached_short_quota |= text.contains("99%");
-        reached_pace |= text
-            .replace(['│', '┃'], " ")
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-            .contains("alpha pace");
+        observed.observe(&canvas);
+        reached_weekly |= observed.quota.contains("83% · week · 7d 0h");
+        reached_credit |= observed.extra.contains("62.5k credits");
+        reached_short_quota |= observed.quota.contains("99% · 5h · 5h 0m");
+        reached_pace |= observed.pace.contains("alpha pace");
         if reached_weekly && reached_credit && reached_short_quota && reached_pace {
             break;
         }
@@ -314,10 +237,14 @@ async fn constrained_browse_pages_reveal_compact_credits_and_return_to_the_same_
         "paging must not retarget: {details}"
     );
     sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
-    browse_canvas(frames.as_mut(), "return from Details").await;
-    // The same number of reverse pages restores the first-row identity.
-    let mut restored = String::new();
+    let returned = browse_canvas(frames.as_mut(), "return from Details").await;
+    // Modal chrome may reflow and reveal the unchanged focus on close. Do not
+    // wait for a repaint from PageUp when that reflow already restored Home.
+    let mut restored = returned.to_string();
     for _ in 0..4 {
+        if restored == initial_text {
+            break;
+        }
         sender.send(provider_filter_key(KeyCode::PageUp)).unwrap();
         let canvas = browse_canvas(frames.as_mut(), "PageUp restores account identity").await;
         restored = canvas.to_string();

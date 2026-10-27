@@ -174,15 +174,15 @@ pub(super) fn render_picker_view(
     .into_any();
     let viewport_width = u16::try_from(model.width).unwrap_or(u16::MAX);
     let viewport_height = u16::try_from(picker_height).unwrap_or(u16::MAX);
-    let dialog = if let Some(pending) = &model.source_action.pending {
-        Some(super::super::source_action_view::checking_dialog(
-            pending,
+    let dialog = if model.show_help {
+        Some(super::super::picker_help_view::render_help(
+            model,
             model_state,
             picker_height,
         ))
-    } else if model.show_help {
-        Some(super::super::picker_help_view::render_help(
-            model,
+    } else if let Some(pending) = &model.source_action.pending {
+        Some(super::super::source_action_view::checking_dialog(
+            pending,
             model_state,
             picker_height,
         ))
@@ -194,18 +194,43 @@ pub(super) fn render_picker_view(
             picker_height,
         ))
     } else if model.provider_filter_draft.is_some() {
-        let ((_, frame_width), _) = DialogPresentation::default().resolve(
-            viewport_width.saturating_sub(4),
-            viewport_height.saturating_sub(2),
+        let short_filters = viewport_height < 16 && viewport_width >= 48;
+        let presentation = if short_filters {
+            DialogPresentation::FullScreen
+        } else {
+            match DialogPresentation::default() {
+                DialogPresentation::Sized { width, height } => DialogPresentation::Sized {
+                    width,
+                    height: if viewport_width <= 48 {
+                        codex_router_tui::DialogAxisSize::cells(viewport_height.saturating_sub(2))
+                    } else {
+                        height
+                    },
+                },
+                DialogPresentation::FullScreen => DialogPresentation::FullScreen,
+            }
+        };
+        let margins = if short_filters {
+            DialogMargins::default()
+        } else {
+            DialogMargins {
+                top: 1,
+                right: 2,
+                bottom: 1,
+                left: 2,
+            }
+        };
+        let ((_, frame_width), _) = presentation.resolve(
+            viewport_width.saturating_sub(margins.left + margins.right),
+            viewport_height.saturating_sub(margins.top + margins.bottom),
         );
         Some(element! {
             DialogFrame(width: viewport_width, height: viewport_height, keyboard_owner: codex_router_tui::DialogKeyboardOwner::Caller,
                 title: "Session filters".to_owned(), help_action: Some(super::super::picker_help_view::help_action(model_state)),
                 scroll_keys:if model.provider_choice.is_open() {codex_router_tui::DialogScrollKeys::Disabled}else {codex_router_tui::DialogScrollKeys::Pages},
-                presentation: DialogPresentation::default(),
-                margins: DialogMargins { top: 1, right: 2, bottom: 1, left: 2 },
+                presentation, margins,
                 actions: super::super::provider_filter_view::render_provider_actions(model, model_state, apply_filters)) {
-                #(super::super::provider_filter_view::render_provider_chooser(model, model_state,usize::from(frame_width.saturating_sub(4))))
+                #(super::super::provider_filter_view::render_provider_chooser(model, model_state,usize::from(frame_width.saturating_sub(4)), short_filters))
             }
         }.into_any())
     } else if model.details_dialog.is_some() {

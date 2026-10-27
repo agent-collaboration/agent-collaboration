@@ -1,7 +1,7 @@
 //! Conformance-only commands address the same physical object as normal traffic.
 
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::FrameId;
+use fleet_sync_protocol::{FrameId, ItemId, PeerId};
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroU64;
 
@@ -30,6 +30,7 @@ impl RuntimeControlRequest {
                 | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
                 | RuntimeControl::DropNextSelectedObjectReply { .. }
+                | RuntimeControl::DropHeldDispatchReply
                 | RuntimeControl::AwaitDroppedObjectReply
                 | RuntimeControl::Observe,
                 _,
@@ -84,15 +85,18 @@ pub enum RuntimeControl {
         destination: ObjectAddress,
         call: DispatchCallSelector,
     },
+    /// Bind the reply fault to the current held dispatch, without releasing it.
+    DropHeldDispatchReply,
     AwaitDroppedObjectReply,
     Observe,
 }
 
-/// Closed outer invocation kinds used to select a fault amid concurrent traffic.
+/// Select an invocation kind or one immutable mailbox item amid concurrent traffic.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DispatchCallSelector {
     MailboxSubmit,
+    MailboxSubmitFor { origin: PeerId, item: ItemId },
     InstallationPeer,
     ForwardRoute,
     CopyWrite,

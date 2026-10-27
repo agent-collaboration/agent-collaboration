@@ -264,7 +264,10 @@ async fn compact_details_facts_remain_reachable_with_captured_context_at_all_gri
             .expect("bounded Details component navigation");
             // Only the captured modal may prove facts, never browse text behind it.
             let dialog_text = dialog_text(&frame, dialog_bounds(&frame, "Session details"));
-            let compact = dialog_text.split_whitespace().collect::<String>();
+            let compact = dialog_text
+                .chars()
+                .filter(|character| !character.is_whitespace() && !matches!(character, '│' | '┃'))
+                .collect::<String>();
             let visible: [bool; 10] = std::array::from_fn(|index| {
                 compact.contains(&required[index].split_whitespace().collect::<String>())
             });

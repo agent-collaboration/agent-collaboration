@@ -1,5 +1,5 @@
 #[path = "credit_balance_presentation.rs"]
-mod credit_balance_presentation;
+pub(super) mod credit_balance_presentation;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;

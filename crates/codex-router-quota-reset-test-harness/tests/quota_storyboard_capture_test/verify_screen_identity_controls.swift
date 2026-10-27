@@ -176,8 +176,42 @@ extension VerifyScreenImage {
           x: x ?? original.bounds.minX, y: y ?? original.bounds.minY,
           width: original.bounds.width, height: original.bounds.height))
     }
+    // 2026-10-23 C1/C5: wide browse has Account beside "Quota left · reset in";
+    // folded browse repeats a lone Account heading above every account block.
+    let quotaNeighbour = ScreenTextRegion(
+      text: "Quota left • reset in", bounds: CGRect(x: 0.43, y: 0.75, width: 0.40, height: 0.04))
+    let foldedTopHeading = ScreenTextRegion(
+      text: "Account", bounds: CGRect(x: 0.10, y: 0.95, width: 0.21, height: 0.04))
+    let foldedUnselected = [
+      ScreenTextRegion(text: "OpenAI", bounds: CGRect(x: 0.10, y: 0.90, width: 0.20, height: 0.035)),
+      ScreenTextRegion(text: "Beta", bounds: CGRect(x: 0.33, y: 0.90, width: 0.13, height: 0.035)),
+    ]
+    // An offscreen heading must not be replaced by a name's own "Account" word,
+    // even when that word happens to align with the Account column.
+    let nameWordRow = [
+      ScreenTextRegion(text: "Research", bounds: CGRect(x: 0.00, y: 0.80, width: 0.09, height: 0.04)),
+      ScreenTextRegion(text: "Account", bounds: CGRect(x: 0.10, y: 0.80, width: 0.21, height: 0.04)),
+    ]
     let nameCases: [(String, [ScreenTextRegion], [Double], Bool)] = [
       ("selected-name-wrapped", nameHeader + nameBody + neighbors, [0.71], true),
+      ("selected-name-wide-quota-heading", [nameHeader[0], quotaNeighbour] + nameBody, [0.71], true),
+      ("selected-name-folded-lone-heading", [nameHeader[0]] + nameBody, [0.71], true),
+      (
+        "selected-name-folded-second-block",
+        [foldedTopHeading] + foldedUnselected + [nameHeader[0]] + nameBody, [0.71], true
+      ),
+      (
+        "selected-name-folded-unselected-block-gutterless",
+        [foldedTopHeading] + foldedUnselected + [nameHeader[0]] + nameBody, [0.90], false
+      ),
+      ("selected-name-name-word-is-not-heading", nameWordRow + nameBody, [0.71], false),
+      (
+        "selected-name-heading-neighbour-too-close",
+        [
+          nameHeader[0],
+          ScreenTextRegion(text: "Alpha", bounds: CGRect(x: 0.32, y: 0.75, width: 0.13, height: 0.04)),
+        ] + nameBody, [0.71], false
+      ),
       (
         "selected-name-ocr-order", nameHeader + neighbors + Array(nameBody.reversed()), [0.71], true
       ),
@@ -234,13 +268,17 @@ extension VerifyScreenImage {
         hasSelectedText: { !$0.text.hasPrefix("•") }, hasBlankOverlap: { _, _ in false })
       let result = observe(
         checkpoint: .componentQuotaNextAccount,
-        recognizedLines: ["Quota status", "Claude Research Account Beta Full Name", "Claude"],
+        recognizedLines: [
+          "Quota status", "Claude Research Account Beta Full Name", "Claude",
+          "F4 Details F3 Filters · F5 Pool F1 Help · Ctrl+R Options",
+        ],
         regions: [
           ScreenTextRegion(
             text: "Quota status", bounds: CGRect(x: 0.03, y: 0.92, width: 0.37, height: 0.04)),
+          // C6: the current header keeps only the client count and its actions.
           ScreenTextRegion(
-            text: "Accounts 2 · Usable 2",
-            bounds: CGRect(x: 0.04, y: 0.84, width: 0.64, height: 0.033)),
+            text: "Clients 1 Pool details Help",
+            bounds: CGRect(x: 0.5, y: 0.92, width: 0.45, height: 0.04)),
           nameHeader[0],
         ],
         selectedAccountName: selected)
@@ -819,64 +857,5 @@ extension VerifyScreenImage {
     return (
       nameCases.count + alphaCases.count + fortyCases.count + fortyEightCases.count + wordContentCases.count + 1 + malformedWordBoxes.count + tagValueCases.count + helpCases.count + helpTopCases.count + helpRowCases.count + returnCases.count + 2 + attributionCases.count,
       failures)
-  }
-}
-
-extension VerifyScreenImage {
-  static func checkNativeFieldMatchingControls() -> (count: Int, failures: [String]) {
-    func region(_ text: String, _ x: Double, _ y: Double, _ width: Double = 0.2) -> ScreenTextRegion {
-      ScreenTextRegion(text: text, bounds: CGRect(x: x, y: y, width: width, height: 0.04))
-    }
-    let base = [region("Weekly floor", 0.08, 0.8, 0.3), region("[alpha-tag]", 0.08, 0.73, 0.5),
-      region("Floor", 0.08, 0.64, 0.11), region("1%", 0.4, 0.64, 0.07),
-      region("Cancel", 0.08, 0.2), region("Save", 0.35, 0.2),
-      region("0% disables protection maximum 15%", 0.08, 0.5, 0.8)]
-    func changed(_ index: Int, _ value: ScreenTextRegion) -> [ScreenTextRegion] {
-      var result = base; result[index] = value; return result
-    }
-    let cases: [(String, [ScreenTextRegion], Bool, Bool)] = [
-      ("floor-active-one", base, true, true),
-      ("floor-recognition-order", Array(base.reversed()), true, true),
-      ("floor-width-brackets", changed(1, region("［alpha-tag］", 0.08, 0.73, 0.5)), true, true),
-      ("floor-zero", changed(3, region("0%", 0.4, 0.64, 0.07)), true, false),
-      ("floor-two", changed(3, region("2%", 0.4, 0.64, 0.07)), true, false),
-      ("floor-guidance-fifteen", changed(3, region("15%", 0.4, 0.64, 0.07)), true, false),
-      ("floor-arrow-is-not-value", changed(3, region("4", 0.4, 0.64, 0.07)), true, false),
-      ("floor-background-one", changed(3, region("1%", 0.4, 0.9, 0.07)), true, false),
-      ("floor-other-row", changed(3, region("1%", 0.4, 0.5, 0.07)), true, false),
-      ("floor-duplicate-value", base + [base[3]], true, false),
-      ("floor-nearer-wrong", base + [region("0%", 0.3, 0.64, 0.07)], true, false),
-      ("floor-wrong-title", changed(0, region("Monthly floor", 0.08, 0.8, 0.3)), true, false),
-      ("floor-wrong-tag", changed(1, region("[beta-tag]", 0.08, 0.73, 0.5)), true, false),
-      ("floor-duplicate-field", base + [base[2]], true, false),
-      ("floor-no-yellow", base, false, false),
-      ("floor-invalid-bounds", changed(3, region("1%", .nan, 0.64, 0.07)), true, false),
-      ("floor-missing-action", base.enumerated().filter { $0.offset != 5 }.map(\.element), true, false),
-      ("floor-guidance-only", base.enumerated().filter { $0.offset != 3 }.map(\.element)
-        + [region("1%", 0.4, 0.5, 0.07)], true, false),
-    ]
-    var failures: [String] = []
-    for (name, rows, yellow, expected) in cases {
-      if (selectedFloorDraftValue(rows, selectedText: { _ in yellow }) == "1%") != expected {
-        failures.append(name)
-      }
-    }
-    let header = region("Account", 0.2, 0.8, 0.14)
-    let first = region("Claude", 0.2, 0.7, 0.12)
-    let continuation = region("Account", 0.21, 0.6, 0.14)
-    let firstColumn = accountSelectorBounds(header: header, row: first)
-    let continuationColumn = accountSelectorBounds(header: header, row: continuation)
-    if firstColumn?.minX != continuationColumn?.minX || firstColumn?.maxX != continuationColumn?.maxX
-      || abs((firstColumn?.minX ?? 0) - 0.16) > 0.0000001
-      || abs((firstColumn?.maxX ?? 0) - 0.2) > 0.0000001 { failures.append("fixed-selector-column") }
-    for (name, invalidHeader, row) in [
-      ("selector-wrong-header", region("Status", 0.2, 0.8), first),
-      ("selector-negative-column", region("Account", 0.01, 0.8, 0.14), first),
-      ("selector-over-header", header, region("Claude", 0.2, 0.9)),
-      ("selector-invalid-row", header, region("Claude", .nan, 0.7)),
-    ] {
-      if accountSelectorBounds(header: invalidHeader, row: row) != nil { failures.append(name) }
-    }
-    return (cases.count + 5, failures)
   }
 }

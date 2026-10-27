@@ -6,6 +6,11 @@ test -f crates/codex-router-quota-reset-test-harness/Cargo.toml
 : "${QUOTA_STORYBOARD_OUTPUT:?Nominate a fresh owned output directory}"
 : "${CARGO_TARGET_DIR:?Nominate the allocated private capture target}"
 : "${TMPDIR:?Nominate the allocated private task temp directory}"
+: "${QUOTA_STORYBOARD_NODE:?Nominate the exact Node executable for scripts/verification/tui}"
+: "${QUOTA_STORYBOARD_NODE_SHA256:?Nominate that Node executable SHA-256}"
+export QUOTA_STORYBOARD_NODE QUOTA_STORYBOARD_NODE_SHA256
+test -x "$QUOTA_STORYBOARD_NODE"
+test -d scripts/verification/tui/node_modules/zod
 export QUOTA_STORYBOARD_VHS="$QUOTA_STORYBOARD_TOOL_ROOT/vhs/vhs/0.12.1/bin/vhs"
 export QUOTA_STORYBOARD_TTYD="$QUOTA_STORYBOARD_TOOL_ROOT/ttyd/ttyd/1.7.7_14/bin/ttyd"
 export QUOTA_STORYBOARD_IMAGE_VERIFIER="$QUOTA_STORYBOARD_OUTPUT/verify-provider-filter-screen"
@@ -20,7 +25,11 @@ xcrun swiftc -parse-as-library -module-cache-path "$QUOTA_STORYBOARD_OUTPUT/swif
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_controls.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_identity_controls.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_native_field_controls.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_pace.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_visual.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_visual_controls.swift \
+    crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_reading_repairs.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_sessions_controls.swift \
     crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test/verify_screen_sessions.swift \
     -o "$QUOTA_STORYBOARD_IMAGE_VERIFIER"

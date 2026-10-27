@@ -226,8 +226,13 @@ async fn sessions_picker_stacked_details_wraps_conversation_without_preview_or_m
                 && text.contains("Conversation")
             {
                 let session_id = text
-                    .find("Session ID: 019ff0bb-5993-70d3-b1ba-f56724b94919")
+                    .find("019ff0bb-5993-70d3-b1ba-f56724b94919")
                     .expect("full captured ID");
+                let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+                assert!(
+                    normalized.contains("Session ID: 019ff0bb-5993-70d3-b1ba-f56724b94919"),
+                    "label/value attribution: {text}"
+                );
                 assert!(session_id < text.find("Conversation").unwrap(), "{text}");
                 assert!(
                     !text.contains("Preview") && !text.contains("Metadata"),

@@ -147,7 +147,7 @@ async fn sessions_help_click_opens_overlay_with_surface_and_section_styles() {
                 let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Sessions") && !line.contains("Sessions Help") && !line.contains("Sessions ·")).unwrap_or_else(|| panic!("actual Help section must be painted: {text}"));
                 let column = line.chars().position(|character| character == 'S').unwrap();
                 let section_style = canvas.cell(column, row).unwrap().text_style().unwrap();
-                assert_eq!(section_style.color, Some(Color::White));
+                assert_eq!(section_style.color, Some(Color::Rgb {r:156,g:188,b:251}));
                 assert_eq!(section_style.weight, Weight::Bold);
                 sender.send(ctrl_key('c')).unwrap();
                 return;
@@ -402,7 +402,14 @@ async fn sessions_help_hierarchy_preserves_selected_and_focused_action_styles() 
             assert!(style.underline, "{text}");
             let (column, row) = locate("Client");
             let style = canvas.cell(column, row).unwrap().text_style().unwrap();
-            assert_eq!(style.color, Some(Color::White));
+            assert_eq!(
+                style.color,
+                Some(Color::Rgb {
+                    r: 156,
+                    g: 188,
+                    b: 251
+                })
+            );
             assert_eq!(style.weight, Weight::Normal);
         } else {
             let (column, row) = locate("Codex");

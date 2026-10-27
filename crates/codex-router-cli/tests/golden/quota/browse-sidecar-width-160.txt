@@ -1,17 +1,16 @@
 ╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ Quota status                                                                             Clients unknown · Fresh 1 · Stale 0 · Data unknown 0  Details  Help │
-│ Pool-wide: responses  Accounts 1 · Usable 1 · Reserve 0 · Blocked 0 · Pool unknown 0 · Excluded 0                                                            │
+│ Quota status                                                                                                                              Pool details  Help │
 │ Filters ▾  Provider: All · Disabled: Shown · 1/1 accounts                                                                                                    │
 │ ┌──────────────────────────────────────────────────────────────────────────────────────────┐  ┌────────────────────────────────────────────────────────────┐ │
-│ │    Account                          Status                 Quota                         │  │ Selected account                                           │ │
-│ │  ❯ ssdev                            ✓ available            safest quota                  │  │ ssdev                                                      │ │
-│ │    ◎ OpenAI                         1 client               Weekly                        │  │ Status      available                                      │ │
-│ │                                     2 resets               █████ 83% left reset 7d       │  │ Reason      safest quota                                   │ │
-│ │                                     Credits unknown        5h                            │  │ Quota windows                                              │ │
-│ │                                                            █████ 99% left reset 5h       │  │ weekly      ████ 83% left, reset 7d                        │ │
-│ │                                                            Weekly pace                   │  │ 5h          █████ 99% left, reset 5h                       │ │
-│ │                                                            □□□□□□□│□□□□□□□  1.00x        │  │                                                            │ │
-│ │                                                            reset pace healthy            │  │ Reset pace                                                 │ │
+│ │   Account           Quota left · reset in         Weekly pace        Extra               │  │ Selected account                                           │ │
+│ │   ───────────────── ───────────────────────────── ────────────────── ──────────────────  │  │ ssdev                                                      │ │
+│ │ ❯ ssdev             █████░░ 83% · week · 7d 0h    healthy            Credits unknown     │  │ Status      available                                      │ │
+│ │   ◎ OpenAI · 1      ██████░ 99% · 5h · 5h 0m      1.00x reset pace   2 resets            │  │ Reason      safest quota                                   │ │
+│ │   client                                                                                 │  │ Quota windows                                              │ │
+│ │   ✓ available                                                                            │  │ weekly      ████ 83% left, reset 7d                        │ │
+│ │                                                                                          │  │ 5h          █████ 99% left, reset 5h                       │ │
+│ │                                                                                          │  │                                                            │ │
+│ │                                                                                          │  │ Reset pace                                                 │ │
 │ │                                                                                          │  │ weekly      □□□□□□□│□□□□□□□  1.00x reset pace healthy      │ │
 │ │                                                                                          │  │ sample      sample fresh 14s                               │ │
 │ │                                                                                          │  │ rate        0.10%/h                                        │ │
@@ -21,4 +20,5 @@
 │ │                                                                                          │  │ Activity                                                   │ │
 │ │                                                                                          │  │ clients     1 client                                       │ │
 │ └──────────────────────────────────────────────────────────────────────────────────────────┘  └────────────────────────────────────────────────────────────┘ │
+│ F4 Details  F3 Filters  F5 Pool  F1 Help  Ctrl+R Options                                                                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

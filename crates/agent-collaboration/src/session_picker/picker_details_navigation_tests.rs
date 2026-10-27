@@ -52,6 +52,10 @@ async fn details_horizontal_arrows_and_tabs_fork_the_captured_session_after_body
                         .unwrap();
                     phase = 1;
                 } else if phase == 1 && frame.contains("DETAIL_BODY 39") {
+                    assert!(
+                        frame.contains("Tab Focus · Enter Select · Esc Close"),
+                        "the concise shortcut row remains visible after body scroll: {frame}"
+                    );
                     // These must neither change the captured row nor invoke a
                     // background New/Fork action or modified arrow shortcut.
                     sender.send(ctrl_key('n')).unwrap();
@@ -172,9 +176,12 @@ async fn owner_details_navigation_enter_opens_focused_session_without_launching(
         "ordinary Enter inspects; it cannot resume or create: {outcome:?}"
     );
     assert!(
-        frames.iter().any(
-            |frame| frame.contains("Session details") && frame.contains("Session ID: thread-a")
-        ),
+        frames.iter().any(|frame| frame.contains("Session details")
+            && frame
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .contains("Session ID: thread-a")),
         "focused session details must open: {frames:?}"
     );
 }
@@ -531,5 +538,106 @@ async fn owner_c8_copy_path_keyboard_pointer_and_failure_use_the_existing_clipbo
         }
         assert!(outcome.is_none());
         assert_eq!(copied.lock().unwrap().as_slice(), [path]);
+    }
+}
+
+#[test]
+fn session_details_labels_are_distinct_from_full_original_values() {
+    let request = picker_request();
+    let record = &request.records[0];
+    let canvas =
+        super::super::picker_detail_view::render_details(record, 60, None, Size::Auto).render(None);
+    let frame = canvas.to_string();
+    let (row, line) = frame
+        .lines()
+        .enumerate()
+        .find(|(_, line)| line.contains("Session ID"))
+        .unwrap();
+    let column = unicode_width::UnicodeWidthStr::width(line.split_once("Session ID").unwrap().0);
+    assert_eq!(
+        canvas
+            .cell(column, row)
+            .unwrap()
+            .text_style()
+            .unwrap()
+            .color,
+        Some(Color::Rgb {
+            r: 156,
+            g: 188,
+            b: 251
+        }),
+        "C8 field labels have their own role: {frame}"
+    );
+    assert!(frame.contains("thread-a"), "{frame}");
+}
+
+#[tokio::test]
+async fn all_six_details_grids_keep_scrolling_body_and_all_actions_visible() {
+    for (width, height) in [
+        (120usize, 36usize),
+        (76, 30),
+        (48, 24),
+        (48, 12),
+        (40, 24),
+        (32, 24),
+    ] {
+        let mut request = picker_request();
+        request.records[0].full_title = "LONG ORIGINAL TITLE RETAINED WITHOUT RENAMING".repeat(4);
+        request.records[0].conversation.snippets = (0..40)
+            .map(|index| format!("ORIGINAL_HISTORY_ROW_{index}"))
+            .collect();
+        let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+            receiver.recv().await.map(|event| (event, receiver))
+        });
+        let mut component = element!(SessionsPickerComponent(request, width, height));
+        let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
+        tokio::pin!(frames);
+        let mut phase = 0;
+        let mut last_frame = String::new();
+        let journey = async {
+            while let Some(canvas) = super::next_current_canvas(frames.as_mut()).await.unwrap() {
+                let frame = canvas.to_string();
+                last_frame = frame.clone();
+                if phase == 0 {
+                    sender
+                        .send(details_key(KeyCode::F(4), KeyModifiers::empty()))
+                        .unwrap();
+                    phase = 1;
+                } else if phase == 1 && frame.contains("Session details") {
+                    let dialog = dialog_text(&frame, dialog_bounds(&frame, "Session details"));
+                    for action in ["Close", "Copy session ID", "Copy path", "Fork", "Resume"] {
+                        assert!(
+                            dialog.contains(action),
+                            "{action} footer at {width}x{height}: {dialog}"
+                        );
+                    }
+                    assert!(
+                        dialog.contains("Session ID:"),
+                        "C8 body retains a usable first fact at {width}x{height}: {dialog}"
+                    );
+                    sender
+                        .send(details_key(KeyCode::End, KeyModifiers::empty()))
+                        .unwrap();
+                    phase = 2;
+                } else if phase == 2 && frame.contains("ORIGINAL_HISTORY_ROW_39") {
+                    let dialog = dialog_text(&frame, dialog_bounds(&frame, "Session details"));
+                    for action in ["Close", "Copy session ID", "Copy path", "Fork", "Resume"] {
+                        assert!(
+                            dialog.contains(action),
+                            "scroll loses {action} at {width}x{height}: {dialog}"
+                        );
+                    }
+                    sender.send(ctrl_key('d')).unwrap();
+                    phase = 3;
+                }
+            }
+        };
+        tokio::time::timeout(Duration::from_secs(2), journey)
+            .await
+            .unwrap_or_else(|_| {
+                panic!("actual Details body/footer {width}x{height} phase{phase}: {last_frame}")
+            });
+        assert_eq!(phase, 3);
     }
 }

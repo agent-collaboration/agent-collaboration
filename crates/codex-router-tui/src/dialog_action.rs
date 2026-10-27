@@ -1,4 +1,4 @@
-use crate::UseDialogInteraction;
+use crate::{UiTextRole, UseDialogInteraction};
 use iocraft::prelude::*;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -33,7 +33,7 @@ pub fn DialogAction(props: &mut DialogActionProps, hooks: Hooks) -> impl Into<An
     let enabled = hooks.dialog_input_enabled() && props.enabled.unwrap_or(true);
     let mut handler = props.handler.take();
     let (color, weight) = if !enabled {
-        (Color::DarkGrey, Weight::Normal)
+        (UiTextRole::Disabled.color(), Weight::Normal)
     } else if props.has_focus {
         (Color::Yellow, Weight::Bold)
     } else {

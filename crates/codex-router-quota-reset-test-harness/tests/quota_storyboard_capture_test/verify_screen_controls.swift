@@ -9,9 +9,15 @@ extension VerifyScreenImage {
       ("reordered", ["Shown Provider: All Disabled:", "4/4 accounts"], false),
       ("missing-value", ["Provider: All Disabled:", "4/4 accounts"], false),
       ("wrong-count", ["Provider: All Disabled: Shown 4/40 accounts"], false),
-      ("forbidden-shortcut", ["Provider: All Disabled: Shown 4/4 accounts", "Ctrl+F"], false),
+      ("forbidden-sample-shortcut", ["Provider: All Disabled: Shown 4/4 accounts", "[/] Filters"], false),
+      ("forbidden-account-actions", ["Provider: All Disabled: Shown 4/4 accounts", "Account actions"], false),
+      ("no-footer-hints", ["Provider: All Disabled: Shown 4/4 accounts"], false),
+      ("no-footer-pool-hint", ["Provider: All Disabled: Shown 4/4 accounts"], false),
       ("blank", [], false),
     ]
+    // C9 browse footer from quota_help_rendering.rs; controls supply it unless
+    // the case is about its absence.
+    let browseFooter = "F4 Details F3 Filters · F5 Pool F1 Help · Ctrl+R Options"
     var failures: [String] = []
     let refreshedFactCases: [(String, ScreenCheckpoint, [String], Bool)] = [
       ("fresh-fact-value", .componentQuotaCreditsRefreshedFreshness, ["Freshness Fresh"], true),
@@ -54,11 +60,20 @@ extension VerifyScreenImage {
             || normalizedMarkerText($0.text) != "observation"
         }
         : []
+      // native FormField geometry: the Freshness label and its value
+      // share one row; the value word comes from the case line.
+      let freshnessRegions: [ScreenTextRegion] =
+        checkpoint == .componentQuotaCreditsRefreshedFreshness
+        ? [ScreenTextRegion(text: "Freshness", bounds: CGRect(x: 0.1501, y: 0.5587, width: 0.0750, height: 0.0201))]
+          + lines.flatMap { $0.split(separator: " ").dropFirst() }.map {
+            ScreenTextRegion(text: String($0), bounds: CGRect(x: 0.2822, y: 0.5557, width: 0.0441, height: 0.0232))
+          }
+        : []
       let result = observe(
         checkpoint: checkpoint,
         recognizedLines: ["Options · Credits", "alpha-tag"] + lines
           + (checkpoint == .componentQuotaCreditsRefreshedObservation ? ["Close"] : []),
-        regions: observationRegions)
+        regions: observationRegions + freshnessRegions)
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
         failures.append(name)
       }
@@ -170,13 +185,17 @@ extension VerifyScreenImage {
     let compactHeader = [
       ScreenTextRegion(
         text: "Quota status", bounds: CGRect(x: 0.02, y: 0.94, width: 0.2, height: 0.03)),
+      // C6: the current header keeps only the client count and its actions.
       ScreenTextRegion(
-        text: "Accounts 4 · Usable 0 · Pool unknown 1 · Excluded 3 · Data unknown 4",
-        bounds: CGRect(x: 0.02, y: 0.85, width: 0.95, height: 0.05)),
+        text: "Clients 0 Pool details Help",
+        bounds: CGRect(x: 0.6, y: 0.94, width: 0.35, height: 0.03)),
       ScreenTextRegion(text: "Account", bounds: CGRect(x: 0.02, y: 0.7, width: 0.2, height: 0.03)),
     ]
     for (name, lines, shouldPass) in cases {
-      let recognized = lines.isEmpty ? [] : ["Quota status", "Help", "Claude Delta"] + lines
+      let footer =
+        name == "no-footer-hints" ? [] : name == "no-footer-pool-hint"
+          ? ["F4 Details F3 Filters F1 Help · Ctrl+R Options"] : [browseFooter]
+      let recognized = lines.isEmpty ? [] : ["Quota status", "Help", "Claude Delta"] + lines + footer
       let result = observe(
         checkpoint: .compactQuotaAll, recognizedLines: recognized,
         regions: lines.isEmpty ? [] : compactHeader)
@@ -225,6 +244,23 @@ extension VerifyScreenImage {
       (
         "provider-query-premature-apply",
         ["Account provider: zznomatchzz", "No matching choices", "Cancel Apply"], false
+      ),
+      // C7 end caret: one caret glyph (or its bar-like OCR reading) may follow.
+      (
+        "provider-query-caret",
+        ["Account provider: zznomatchzz▏", "No matching choices", "Cancel Select"], true
+      ),
+      (
+        "provider-query-caret-ocr-bar",
+        ["Account provider: zznomatchzz|", "No matching choices", "Cancel Select"], true
+      ),
+      (
+        "provider-query-extra-character",
+        ["Account provider: zznomatchzzx", "No matching choices", "Cancel Select"], false
+      ),
+      (
+        "provider-query-two-trailing-glyphs",
+        ["Account provider: zznomatchzzl|", "No matching choices", "Cancel Select"], false
       ),
     ]
     for (name, lines, shouldPass) in providerQueryCases {
@@ -276,73 +312,11 @@ extension VerifyScreenImage {
     ) -> ScreenTextRegion {
       ScreenTextRegion(text: text, bounds: CGRect(x: x, y: y, width: width, height: height))
     }
+    // Surface chrome passed to observe() by controls that judge other markers.
     let normalHeader = [
       region("Quota status", 0.02, 0.94, 0.2, 0.03),
-      region("Accounts 2 · Usable 2", 0.02, 0.85, 0.7, 0.03),
       region("Account", 0.02, 0.7, 0.2, 0.03),
     ]
-    let headerCases: [(String, [ScreenTextRegion], Bool)] = [
-      ("header-current-named", normalHeader, true),
-      (
-        "header-opaque-with-correct-body-words",
-        [
-          normalHeader[0], normalHeader[2],
-          region("Σ 2 · ✓ 2", 0.02, 0.85), region("Accounts 2 · Usable 2", 0.02, 0.5, 0.7),
-        ], false
-      ),
-      (
-        "header-wrong-count",
-        [
-          normalHeader[0], normalHeader[2],
-          region("Accounts 20 · Usable 2", 0.02, 0.85, 0.7),
-        ], false
-      ),
-      ("header-contradictory-counts", normalHeader + [region("Accounts 9", 0.02, 0.8)], false),
-      ("header-repeated-counts", normalHeader + [region("Accounts 2", 0.02, 0.8)], false),
-      ("header-missing-table-boundary", Array(normalHeader.prefix(2)), false),
-      (
-        "header-body-is-not-header",
-        [
-          normalHeader[0], normalHeader[2],
-          region("Accounts 2 · Usable 2", 0.02, 0.5, 0.7),
-        ], false
-      ),
-      ("header-ignores-conflicting-body", normalHeader + [region("Accounts 99", 0.02, 0.5)], true),
-      ("header-duplicate-title", normalHeader + [normalHeader[0]], false),
-      ("header-invalid-geometry", normalHeader + [region("Accounts 2", -0.1, 0.8)], false),
-    ]
-    for (name, regions, shouldPass) in headerCases {
-      let passed = missingQuotaHeaderCounts(checkpoint: .componentQuotaBrowse, regions: regions)
-        .isEmpty
-      if passed != shouldPass { failures.append(name) }
-    }
-    // Native boxes from the retained 120x36 cancelled original. One census
-    // shares the title row; another is split beside the pool-wide label.
-    let nativeCensusHeader = [
-      region("Quota status", 0.016313212642740636, 0.9455587389684814, 0.10114192495921696, 0.022922636103151817),
-      region("Account", 0.058712286237160745, 0.8365372328592812, 0.05875813669326061, 0.02033527669387425),
-      region("Clients 0 · Fresh 0 · Stale 0 · Data unknown 4", 0.4747145155655248, 0.9484240686485196, 0.38336052202283843, 0.02005730659025784),
-      region("Pool-wide: responses", 0.016313212928221882, 0.916905444448424, 0.16639477977161501, 0.025787965616045905),
-      region("Accounts 4 · Usable 0 · Reserve 0 · Blocked 0 · Pool unknown", 0.1990212130505708, 0.9197707740210124, 0.5024469820554649, 0.022922635420004056),
-      region("1. Excluded 3", 0.6998368699564981, 0.919770773686724, 0.12561174551386622, 0.02005730659025784),
-    ]
-    let mergedCensus = region(
-      "Accounts 4 · Usable 0 · Pool unknown 1 · Excluded 3", 0.2, 0.919, 0.7, 0.022)
-    let containedFreshness = region("Data unknown 4", 0.47, 0.946, 0.38, 0.02)
-    let censusCases: [(String, [ScreenTextRegion], Bool)] = [
-      ("native-census-top-edge-and-row-order", nativeCensusHeader, true),
-      ("native-census-top-edge", Array(nativeCensusHeader.prefix(3)) + [mergedCensus], true),
-      ("native-census-row-order", [nativeCensusHeader[0], nativeCensusHeader[1], containedFreshness] + Array(nativeCensusHeader.suffix(3)), true),
-      ("census-wrong-pool-count", Array(nativeCensusHeader.prefix(5)) + [region("9. Excluded 3", 0.7, 0.919, 0.125, 0.02)], false),
-      ("census-next-row-is-not-a-value", Array(nativeCensusHeader.prefix(5)) + [region("1. Excluded 3", 0.7, 0.86, 0.125, 0.02)], false),
-      ("census-wrong-data-count", [nativeCensusHeader[0], nativeCensusHeader[1], region("Data unknown 40", 0.47, 0.946, 0.38, 0.02), mergedCensus], false),
-      ("census-outside-title-edge", [nativeCensusHeader[0], nativeCensusHeader[1], region("Data unknown 4", 0.47, 0.94844, 0.38, 0.02005730659025784), mergedCensus], false),
-      ("census-duplicate-pool-count", nativeCensusHeader + [region("Pool unknown 1", 0.2, 0.88, 0.2, 0.02)], false),
-    ]
-    for (name, regions, shouldPass) in censusCases {
-      let passed = missingQuotaHeaderCounts(checkpoint: .compactQuotaCancelled, regions: regions).isEmpty
-      if passed != shouldPass { failures.append(name) }
-    }
     let labels = [region("Account provider", 0.1, 0.5), region("Disabled accounts", 0.1, 0.375)]
     let values = [region("OpenAI Y", 0.4, 0.5), region("Shown ▾", 0.4, 0.375)]
     let stale = [
@@ -364,6 +338,24 @@ extension VerifyScreenImage {
         "colon-nearest-wrong-value",
         labels + [values[0], region("Hidden :", 0.35, 0.375, 0.1), region("Shown :", 0.6, 0.375)],
         false
+      ),
+      // Native boxes of the calibration-004 120x36 compact chooser: the
+      // underlined disclosure attaches to the value ("Shown:").
+      (
+        "native-attached-colon-disclosure",
+        [
+          region("Account provider", 0.1485, 0.6619, 0.1354, 0.0287),
+          region("Disabled accounts", 0.1501, 0.6418, 0.1419, 0.0229),
+          region("OpenAI •", 0.3230, 0.6617, 0.0702, 0.0290),
+          region("Shown:", 0.3208, 0.6350, 0.0667, 0.0365),
+        ], true
+      ),
+      ("wrong-attached-colon-value", labels + [values[0], region("Hidden:", 0.4, 0.375)], false),
+      ("attached-letter-disclosure", labels + [values[0], region("Shownr", 0.4, 0.375)], false),
+      ("attached-colon-extra-word", labels + [values[0], region("Shown:Hidden", 0.4, 0.375)], false),
+      (
+        "attached-colon-wrong-adjacent-row",
+        labels + [region("OpenAI", 0.4, 0.375), region("Shown:", 0.4, 0.5)], false
       ),
       ("observed-r-disclosure", labels + [values[0], region("Shown r", 0.4, 0.375)], true),
       ("wrong-r-value", labels + [values[0], region("Hidden r", 0.4, 0.375)], false),
@@ -481,6 +473,22 @@ extension VerifyScreenImage {
         failures.append(name)
       }
     }
+    // native Credit usage no-match geometry (C7 nested query).
+    func policyNoMatchControlRegions(_ content: [String]) -> [ScreenTextRegion] {
+      let boxes: [String: CGRect] = [
+        "Credit usage": CGRect(x: 0.1485, y: 0.6905, width: 0.1028, height: 0.0287),
+        "Use credits": CGRect(x: 0.1501, y: 0.5587, width: 0.0914, height: 0.0229),
+        "Search: zznomatchzz": CGRect(x: 0.3002, y: 0.5559, width: 0.1615, height: 0.0258),
+        "Search: another": CGRect(x: 0.3002, y: 0.5559, width: 0.1615, height: 0.0258),
+        "No matching choices": CGRect(x: 0.2985, y: 0.5272, width: 0.1599, height: 0.0258),
+        "Cancel": CGRect(x: 0.1468, y: 0.3066, width: 0.0538, height: 0.0258),
+        "Select": CGRect(x: 0.2153, y: 0.3066, width: 0.0506, height: 0.0229),
+        "Save": CGRect(x: 0.2153, y: 0.3066, width: 0.0506, height: 0.0229),
+      ]
+      return (["Credit usage"] + content).compactMap { text in
+        boxes[text].map { ScreenTextRegion(text: text, bounds: $0) }
+      }
+    }
     let expandedPolicyCases: [(String, ScreenCheckpoint, [String], Bool)] = [
       (
         "expanded-policy-select", .componentQuotaPolicyChoice, ["Use credits:", "Cancel Select"],
@@ -492,19 +500,19 @@ extension VerifyScreenImage {
       ),
       (
         "empty-policy-select", .componentQuotaPolicyNoMatch,
-        ["Use credits: zznomatchzz", "No matching choices", "Cancel Select"], true
+        ["Use credits", "Search: zznomatchzz", "No matching choices", "Cancel", "Select"], true
       ),
       (
         "empty-policy-save-is-wrong-action", .componentQuotaPolicyNoMatch,
-        ["Use credits: zznomatchzz", "No matching choices", "Cancel Save"], false
+        ["Use credits", "Search: zznomatchzz", "No matching choices", "Cancel", "Save"], false
       ),
       (
         "empty-policy-missing-field-query", .componentQuotaPolicyNoMatch,
-        ["No matching choices", "Cancel Select"], false
+        ["Use credits", "No matching choices", "Cancel", "Select"], false
       ),
       (
         "empty-policy-wrong-query", .componentQuotaPolicyNoMatch,
-        ["Use credits: another", "No matching choices", "Cancel Select"], false
+        ["Use credits", "Search: another", "No matching choices", "Cancel", "Select"], false
       ),
     ]
     for (name, checkpoint, content, shouldPass) in expandedPolicyCases {
@@ -513,7 +521,7 @@ extension VerifyScreenImage {
         checkpoint: checkpoint,
         recognizedLines: ["Credit usage"] + (choice ? ["alpha-tag", "Disallow", "Allow"] : [])
           + content,
-        regions: choice ? creditChoiceControlRegions() : [],
+        regions: choice ? creditChoiceControlRegions() : policyNoMatchControlRegions(content),
         selectedDecision: choice ? "allow" : nil)
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != shouldPass {
         failures.append(name)
@@ -536,7 +544,11 @@ extension VerifyScreenImage {
         "returned-with-result-overlay", .componentQuotaReturned,
         ["Quota status OpenAI", "Options Resets Success reset completed Close"], false
       ),
-      ("actual-returned-browse", .componentQuotaReturned, ["Quota status OpenAI"], true),
+      ("actual-returned-browse", .componentQuotaReturned, ["Quota status OpenAI", browseFooter], true),
+      (
+        "returned-with-options-dialog", .componentQuotaReturned,
+        ["Quota status OpenAI", "Options · Resets", "Review", browseFooter], false
+      ),
     ]
     for (name, checkpoint, lines, shouldPass) in resetTailCases {
       let result = observe(checkpoint: checkpoint, recognizedLines: lines, regions: normalHeader)
@@ -786,7 +798,8 @@ extension VerifyScreenImage {
       }
     }
     let lowerCases: [(ScreenCheckpoint, String, Bool)] = [
-      (.componentQuotaBrowseCreditWindow, "62.5k", true),
+      (.componentQuotaBrowseCreditWindow, "62.5k credits", true),
+      (.componentQuotaBrowseCreditWindow, "62.5k", false),
       (.componentQuotaBrowseCreditWindow, "62,500 5h 99%", false),
       (.componentQuotaBrowseCreditWindow, "5h 99%", false),
       (.componentQuotaBrowsePaceHeading, "5h 99% Weekly pace", true),
@@ -803,7 +816,8 @@ extension VerifyScreenImage {
     ]
     for (checkpoint, text, expected) in lowerCases {
       let result = observe(
-        checkpoint: checkpoint, recognizedLines: ["Quota status", text], regions: normalHeader)
+        checkpoint: checkpoint, recognizedLines: ["Quota status", text, browseFooter],
+        regions: normalHeader)
       if (result.missingMarkers.isEmpty && result.unexpectedMarkers.isEmpty) != expected {
         failures.append("lower-context-" + text)
       }
@@ -818,14 +832,21 @@ extension VerifyScreenImage {
     failures.append(contentsOf: idleReturnControls.failures)
     let sessionsOwnerControls = checkSessionsOwnerCorrectionControls()
     failures.append(contentsOf: sessionsOwnerControls.failures)
-    let compactPaceControls = checkCompactPaceControls()
-    failures.append(contentsOf: compactPaceControls.failures)
+    let selectedPaceControls = checkSelectedPaceControls()
+    failures.append(contentsOf: selectedPaceControls.failures)
+    let visualRefinementControls = checkVisualRefinementControls()
+    failures.append(contentsOf: visualRefinementControls.failures)
     let nativeFieldControls = checkNativeFieldMatchingControls()
     failures.append(contentsOf: nativeFieldControls.failures)
+    let readingRepairControls = checkReadingRepairControls()
+    failures.append(contentsOf: readingRepairControls.failures)
+    let wrappedWindowControls = checkWrappedWindowIdentityControls()
+    failures.append(contentsOf: wrappedWindowControls.failures)
     let controlCaseCounts: [Int] = [
       cases.count, choiceCases.count, fieldCases.count, geometryCases.count, focusCases.count,
       policyCases.count, expandedPolicyCases.count, resetTailCases.count, helpBodyCases.count,
-      headerCases.count, censusCases.count, decisionCases.count, stackedPolicyCases.count, floorHeadingCases.count,
+      visualRefinementControls.count,
+      decisionCases.count, stackedPolicyCases.count, floorHeadingCases.count,
       providerQueryCases.count, floorAssociationCases.count, decisionGeometryCases.count,
       retainedSessionsControls.count, lastVoucherCases.count,
       optionsTitleCases.count,
@@ -836,9 +857,11 @@ extension VerifyScreenImage {
       refreshedBalanceCases.count,
       refreshedFactCases.count,
       decisionEdgeCases.count,
-      compactPaceControls.count,
+      selectedPaceControls.count,
       idleReturnControls.count,
       sessionsOwnerControls.count,
+      readingRepairControls.count,
+      wrappedWindowControls.count,
     ]
     let controlCaseCount: Int = controlCaseCounts.reduce(1, +)
     let controlReport: [String: String] = [

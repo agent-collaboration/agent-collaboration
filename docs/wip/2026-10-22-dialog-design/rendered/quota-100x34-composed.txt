@@ -1,0 +1,34 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Quota                                                                                   [?] Help │
+│                                                                                                  │
+│ [/] Filters  All providers · Disabled shown                                                      │
+│   ss-retail-relay-claude      Weekly            ██████ 92% left                                  │
+│   OpenAI · 2 clients          Resets            6d 16h                                           │
+│   ✓ Available                 5-hour            No data reported                                 │
+│                               Weekly pace       Healthy · 0.89x                                  │
+│                                                                                                  │
+│ ❯ ssdev                       Weekly            ██████ 92% left                                  │
+│   OpenAI · 2 clients          Resets            6d 16h                                           │
+│   ★ Preferred                 5-hour            No data reported                                 │
+│                               Weekly pace       Healthy · 0.89x                                  │
+│                                                                                                  │
+│   ss-retail-relay-claude      Weekly            ██████ 92% left                                  │
+│   OpenAI · 2 clients          Resets            6d 16h                                           │
+│   ✓ Available                 5-hour            No data reported                                 │
+│                               Weekly pace       Healthy · 0.89x                                  │
+│                                                                                                  │
+│   ssdev                       Weekly            ██████ 92% left                                  │
+│   OpenAI · 2 clients          Resets            6d 16h                                           │
+│   ✓ Available                 5-hour            No data reported                                 │
+│                               Weekly pace       Healthy · 0.89x                                  │
+│                                                                                                  │
+│   ss-retail-relay-claude      Weekly            ██████ 92% left                                  │
+│   OpenAI · 2 clients          Resets            6d 16h                                           │
+│   ✓ Available                 5-hour            No data reported                                 │
+│                               Weekly pace       Healthy · 0.89x                                  │
+│                                                                                                  │
+│   ssdev                       Weekly            ██████ 92% left                                  │
+│   OpenAI · 2 clients          Resets            6d 16h                                           │
+│   ✓ Available                 5-hour            No data reported                                 │
+│ [enter] Details  [a] Account actions                                                             │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
