@@ -1,13 +1,9 @@
-#![expect(
-    clippy::expect_used,
-    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
-)]
-
 use collaboration_runtime::load_installation_peer;
 
 use collaboration_runtime::load_service_identity;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn private_identity_root() -> tempfile::TempDir {
     let directory = tempfile::tempdir().expect("identity fixture directory");
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))

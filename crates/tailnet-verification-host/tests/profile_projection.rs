@@ -1,8 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions fail these tests while fixture errors propagate through Result."
-)]
-
 use std::fs;
 use std::os::unix::fs::{PermissionsExt, symlink};
 
@@ -28,6 +23,10 @@ struct ProfileCase {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn matches_ten_original_disposable_profile_scenarios() -> Result<(), Box<dyn std::error::Error>> {
     let cases: Vec<ProfileCase> = serde_json::from_str(include_str!("profile-cases.json"))?;
     for case in cases {

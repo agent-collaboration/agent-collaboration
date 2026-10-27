@@ -1,8 +1,4 @@
 #![deny(clippy::too_many_lines)]
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 
 #[path = "upload_support/central_fixture.rs"]
 mod central_fixture;

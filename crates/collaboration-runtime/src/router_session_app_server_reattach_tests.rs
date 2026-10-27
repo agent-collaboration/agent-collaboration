@@ -7,6 +7,10 @@ use tokio_tungstenite::client_async;
 
 /// A missed terminal event must settle the TUI after broadcast lag.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn lag_replays_missed_item_and_turn_completion() -> Result<(), Box<dyn std::error::Error>> {
     use session_event_model::{InputId, SessionItem, SessionItemKind, StopReason, TurnOutcome};
     use tokio::time::{Duration, timeout};
@@ -171,6 +175,10 @@ impl SessionEventHub for ObservedConcreteHub {
 /// A concrete Hub epoch reset closes the old broadcast stream. The same
 /// app-server socket must attach to the new epoch and forward the next Turn.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
 -> Result<(), Box<dyn std::error::Error>> {
     use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
@@ -281,6 +289,10 @@ async fn concrete_hub_epoch_resync_reattaches_same_tui_socket()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
 -> Result<(), Box<dyn std::error::Error>> {
     use session_event_model::{SessionItem, SessionItemKind};
@@ -419,6 +431,10 @@ async fn resume_running_turn_uses_one_snapshot_and_receives_later_deltas()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn resync_reattaches_and_forwards_the_next_turn() -> Result<(), Box<dyn std::error::Error>> {
     use tokio::time::{Duration, timeout};
 
@@ -494,6 +510,10 @@ async fn resync_reattaches_and_forwards_the_next_turn() -> Result<(), Box<dyn st
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn turn_events_keep_flowing_while_prompt_submission_is_in_flight()
 -> Result<(), Box<dyn std::error::Error>> {
     use tokio::{
@@ -570,6 +590,10 @@ async fn turn_events_keep_flowing_while_prompt_submission_is_in_flight()
 /// A resolved historical approval must not become a fresh server request on
 /// reattach. The next client request is an ordering barrier for attach replay.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn reattach_does_not_reissue_resolved_approval() -> Result<(), Box<dyn std::error::Error>> {
     use crate::{NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker};
     use session_event_model::{

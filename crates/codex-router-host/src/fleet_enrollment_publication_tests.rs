@@ -1,8 +1,4 @@
 //! Reference integrity and metadata publication use the existing encrypted test-store owner.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions prove retained bytes and rejected reference shapes."
-)]
 #![deny(clippy::too_many_lines)]
 use super::*;
 use codex_router_core::redaction::SecretString;
@@ -10,6 +6,10 @@ use std::{error::Error, os::unix::fs::PermissionsExt, path::Path};
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn cloudflare_enrollment_roundtrips_the_existing_exact_document_bytes() -> TestResult {
     let previous = r#"{"endpoint":"wss://central.example.invalid/v1/session","access":{"clientId":"fixture.access","clientSecretKey":"fleet_access_client_secret.550e8400-e29b-41d4-a716-446655440000.550e8400-e29b-41d4-a716-446655440001"},"credentialKey":"fleet_machine_credential.550e8400-e29b-41d4-a716-446655440000.550e8400-e29b-41d4-a716-446655440001","peer":"019f0000-0000-7000-8000-000000001f15","receiver":"019f0000-0000-7000-8000-000000000010","relay":"019f0000-0000-7000-8000-000000005240","expiresAt":null}"#;
     let document: FleetEnrollmentDocument = serde_json::from_str(previous)?;
@@ -19,6 +19,10 @@ fn cloudflare_enrollment_roundtrips_the_existing_exact_document_bytes() -> TestR
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn self_hosted_reference_is_explicit_and_older_access_readers_refuse_it() -> TestResult {
     let value = serde_json::json!({"kind":"selfHosted","assertionKey":"fleet_machine_assertion.550e8400-e29b-41d4-a716-446655440000.550e8400-e29b-41d4-a716-446655440001"});
     let access: FleetAccess = serde_json::from_value(value.clone())?;
@@ -71,6 +75,10 @@ fn document(root: &Path) -> TestResult<FleetEnrollmentDocument> {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn metadata_publication_is_private_and_contains_references_without_plaintext() -> TestResult {
     let root = tempfile::tempdir()?;
     let document = document(root.path())?;
@@ -101,6 +109,10 @@ fn metadata_publication_is_private_and_contains_references_without_plaintext() -
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn missing_secret_preserves_previous_metadata_before_temporary_write() -> TestResult {
     let root = tempfile::tempdir()?;
     let document = document(root.path())?;
@@ -121,6 +133,10 @@ fn missing_secret_preserves_previous_metadata_before_temporary_write() -> TestRe
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn secret_reference_pair_rejects_cross_purpose_installation_and_generation() -> TestResult {
     let root = tempfile::tempdir()?;
     let original = document(root.path())?;
@@ -155,6 +171,10 @@ fn secret_reference_pair_rejects_cross_purpose_installation_and_generation() -> 
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn failed_rename_observes_private_nonsecret_temp_and_preserves_old_file() -> TestResult {
     let root = tempfile::tempdir()?;
     let original = document(root.path())?;
@@ -203,6 +223,10 @@ fn failed_rename_observes_private_nonsecret_temp_and_preserves_old_file() -> Tes
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn directory_sync_failure_keeps_published_metadata_and_secrets_readable() -> TestResult {
     let root = tempfile::tempdir()?;
     let document = document(root.path())?;

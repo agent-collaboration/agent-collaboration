@@ -44,6 +44,10 @@ async fn invoke_claim(
 
 #[tokio::test]
 #[ignore = "requires an explicitly prebuilt absolute BOARD_CLAIM_CLI_BINARY; run this journey explicitly"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_cli_installs_the_imported_prefix_and_reports_native_not_found() -> TestResult {
     let binary = std::path::PathBuf::from(std::env::var("BOARD_CLAIM_CLI_BINARY")?);
     assert!(

@@ -1,8 +1,4 @@
 //! Equal versions identify committed lease facts, independently of display time.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 use super::*;
 use fleet_admission::{DirectoryLease, DirectoryLeaseState};
 
@@ -37,6 +33,10 @@ impl ProjectReadCopySource for CountedUnavailableSource {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn completed_authority_never_pulls_or_initializes_a_read_slot() -> TestResult {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let source = Arc::new(CountedUnavailableSource(AtomicUsize::new(0)));
@@ -59,6 +59,10 @@ async fn completed_authority_never_pulls_or_initializes_a_read_slot() -> TestRes
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn equal_version_refresh_publishes_the_incoming_expiry_display() -> TestResult {
     let held = held_metadata()?;
     let mut expired = held.clone();
@@ -78,6 +82,10 @@ fn equal_version_refresh_publishes_the_incoming_expiry_display() -> TestResult {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn equal_version_conflicting_committed_lease_facts_are_corrupt() -> TestResult {
     let stored = held_metadata()?;
     let mut holder = stored.clone();

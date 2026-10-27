@@ -1,8 +1,4 @@
 //! The retained Fleet obligations run on current owner and normal-session routes.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 #[path = "upload_support/central_fixture.rs"]
 #[expect(
     dead_code,
@@ -46,6 +42,10 @@ async fn counts(root: &std::path::Path) -> TestResult<FleetApplicationCounts> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_imported_fleet_bundle_is_atomic_and_retains_first_records_on_replay_and_conflict()
 -> TestResult {
     // Arrange: D's actual bundle, not a second synthetic Fleet transformation.

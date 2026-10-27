@@ -6,6 +6,10 @@ use fleet_sync_protocol::{ItemId, RecipientOutcome};
 use message_board::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;

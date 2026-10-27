@@ -5,8 +5,7 @@ mod board_cli_execution;
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
     dead_code,
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli, cli_with_session};

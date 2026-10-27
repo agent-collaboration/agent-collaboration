@@ -4,6 +4,10 @@ use fleet_sync_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, Replication
 use runtime_primitives::{Clock, SystemClock};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize_next() -> TestResult
 {
     // Arrange P, then Q's actual accepted directory input at the crash interval

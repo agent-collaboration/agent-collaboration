@@ -27,6 +27,10 @@ async fn receive_reply(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn turn_commands_keep_steer_and_interrupt_arrival_order()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

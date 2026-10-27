@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
-)]
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 
@@ -9,10 +5,6 @@ mod native_delivery;
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 
@@ -49,6 +41,7 @@ use native_push_fixture::{
     setup_without_push_store,
 };
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -59,6 +52,7 @@ fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn send_params(target: &SessionRef, sender: &SessionRef, text: &str) -> Value {
     serde_json::to_value(SessionMessageSendParams {
         item_id: None,

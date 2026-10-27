@@ -38,6 +38,7 @@ impl RecordingDelivery {
         }
     }
 
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     pub(super) fn set_outcome(&self, outcome: DeliveryOutcome) {
         *self.planned_outcome.lock().expect("planned outcome") = Some(outcome);
     }
@@ -98,12 +99,14 @@ pub(super) struct ControlHarness {
     pub(super) lifetime: PushFixtureLifetime,
 }
 impl ControlHarness {
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     pub(super) fn start(identity: ApplicationFixture) -> Self {
         Self {
             served: served_api::ServedApi::start(identity).expect("serve the API"),
             lifetime: PushFixtureLifetime::NoDeliveryOwner,
         }
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     pub(super) async fn call(&mut self, method: &str, params: Value) -> Value {
         let (tool, params) = match method {
             "message/send" => ("message_send", message_send_arguments(params)),
@@ -115,6 +118,7 @@ impl ControlHarness {
         };
         stored_receipt(self.served.call(tool, params).await.expect("API call"))
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     pub(super) async fn close(self) {
         self.served.stop().await.expect("service exit");
         match self.lifetime {
@@ -167,6 +171,7 @@ fn stored_receipt(response: Value) -> Value {
     json!({ "result": receipt })
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) async fn setup() -> (
     tempfile::TempDir,
     Arc<InteractionStore>,
@@ -228,6 +233,7 @@ pub(super) async fn setup() -> (
     (directory, store, delivery, control)
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) async fn setup_without_push_store() -> (
     tempfile::TempDir,
     Arc<InteractionStore>,

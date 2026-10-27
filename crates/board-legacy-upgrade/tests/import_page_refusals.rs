@@ -1,8 +1,4 @@
 //! Invalid owner requests must not poison or publish the retained native seed.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 #[path = "upload_support/central_fixture.rs"]
 #[expect(
     dead_code,
@@ -41,6 +37,10 @@ async fn request(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn owner_page_refusals_leave_staged_bytes_unchanged_and_the_valid_import_resumes()
 -> TestResult {
     let prepared = prepare("legacy-complete.sqlite").await?;

@@ -48,6 +48,10 @@ async fn directory_lease(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> TestResult {
     // Arrange an actual native Copy and committed Registry grant through Claim.
     let fixture = claim_fixture::ClaimFixture::start().await?;

@@ -1,8 +1,4 @@
 //! Native outbox/port proof; the recording port stands in for A3c's Host runtime.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 use collaboration_contracts::ProjectRegistration;
 use collaboration_contracts::ProjectRegistrationError;
 use collaboration_contracts::ProjectRegistrationFuture;
@@ -73,6 +69,10 @@ impl ProjectRegistration for RecordingRegistration {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn settled_directory_requests_are_durable_before_registration_and_recovered_after_reopen()
 -> TestResult {
     let directory = tempfile::tempdir()?;

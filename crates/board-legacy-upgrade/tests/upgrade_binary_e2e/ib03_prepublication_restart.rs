@@ -6,6 +6,10 @@ use codex_router_test_support::scenario_finalization::run_scenario;
 use collaboration_central_core::AdminImportPhase;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_resumes_staged_import_after_central_reopens() -> E2eResult {
     let fixture = InterruptedImport::start("ib03-owner", "ib03-machine").await?;
     let source = SourceSnapshot::capture(&fixture.fixture.source)?;

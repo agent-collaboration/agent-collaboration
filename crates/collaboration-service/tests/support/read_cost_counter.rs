@@ -1,9 +1,4 @@
 //! Observe real SQLx statements and storage decodes without replacing either path.
-#![expect(
-    clippy::unwrap_used,
-    clippy::panic,
-    reason = "A broken test counter must fail the proof."
-)]
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, OnceLock},
@@ -12,12 +7,13 @@ use tracing::field::{Field, Visit};
 use tracing::instrument::WithSubscriber;
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 #[path = "sql_cost_classification.rs"]
-mod sql_cost_classification;
+pub(crate) mod sql_cost_classification;
+use sql_cost_classification::DataStatementCounts;
 // Only the two data-budget proofs use per-kind equality.
-pub use sql_cost_classification::DataStatementCounts;
+
 use sql_cost_classification::StatementTables;
 #[path = "alarm_read_costs.rs"]
-mod alarm_read_costs;
+pub(crate) mod alarm_read_costs;
 // Only operation-cost proof targets consume observations.
 
 const CORE_CANONICAL_INPUT: &str =
@@ -59,6 +55,7 @@ fn counter() -> &'static Mutex<ReadCostState> {
     COUNTER.get_or_init(|| Mutex::new(ReadCostState::default()))
 }
 // Legacy process-wide proof targets still use a before/after delta.
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn current_cost() -> ReadCost {
     counter().lock().unwrap().cost
 }
@@ -84,6 +81,7 @@ impl Visit for ObservedSqlQuery {
     }
     fn record_debug(&mut self, _: &Field, _: &dyn std::fmt::Debug) {}
 }
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 fn only_library_bookkeeping(statement: &str) -> bool {
     static CLASSIFIED: OnceLock<Mutex<BTreeMap<String, bool>>> = OnceLock::new();
     *CLASSIFIED
@@ -97,6 +95,7 @@ fn only_library_bookkeeping(statement: &str) -> bool {
         })
 }
 // Only query-plan proof targets consume the captured SQL.
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn observed_statements() -> Vec<String> {
     counter().lock().unwrap().statements.clone()
 }
@@ -110,6 +109,7 @@ impl Visit for DecodeKind {
     fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
 }
 
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn project_open_attempts(project: &str) -> u64 {
     counter()
         .lock()
@@ -120,6 +120,7 @@ pub fn project_open_attempts(project: &str) -> u64 {
         .unwrap_or(0)
 }
 
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn project_statements(project: &str) -> u64 {
     counter()
         .lock()
@@ -155,9 +156,11 @@ struct ReadCostState {
 pub struct ReadCostObservation(Arc<Mutex<ReadCostState>>);
 
 impl ReadCostObservation {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn cost(&self) -> ReadCost {
         self.0.lock().unwrap().cost
     }
+    #[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
     pub fn data_statement_counts(&self) -> DataStatementCounts {
         let mut data = DataStatementCounts::default();
         let mut other = Vec::new();
@@ -172,6 +175,7 @@ impl ReadCostObservation {
         eprintln!("informational non-data SQL: {other:?}");
         data
     }
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn project_statements(&self, project: &str) -> u64 {
         self.0
             .lock()
@@ -181,6 +185,7 @@ impl ReadCostObservation {
             .copied()
             .unwrap_or(0)
     }
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn statements(&self) -> Vec<String> {
         self.0.lock().unwrap().statements.clone()
     }
@@ -202,6 +207,7 @@ where
     TSubscriber:
         tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_new_span(
         &self,
         attributes: &tracing::span::Attributes<'_>,
@@ -214,6 +220,8 @@ where
             context.span(id).unwrap().extensions_mut().insert(project);
         }
     }
+    #[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_event(&self, event: &tracing::Event<'_>, context: Context<'_, TSubscriber>) {
         let mut state = self.0.as_ref().map_or_else(
             || counter().lock().unwrap(),
@@ -280,6 +288,7 @@ where
         }
     }
 }
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn install() {
     tracing_subscriber::registry()
         .with(
@@ -327,5 +336,3 @@ pub fn install() {
         .try_init()
         .unwrap();
 }
-
-pub use alarm_read_costs::{AlarmRunCosts, observe_alarm_costs};

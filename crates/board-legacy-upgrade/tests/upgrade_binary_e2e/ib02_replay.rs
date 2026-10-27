@@ -13,6 +13,10 @@ const PROJECTS: [&str; 3] = [
 ];
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_replay_ignores_relabel_but_conflicts_on_changed_description() -> E2eResult {
     let fixture = CliImportFixture::new("legacy-complete.sqlite")?;
     let source = SourceSnapshot::capture(&fixture.source)?;
@@ -91,6 +95,10 @@ async fn actual_cli_replay_ignores_relabel_but_conflicts_on_changed_description(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_publishes_a_zero_post_project_with_only_its_project_state() -> E2eResult {
     let fixture = CliImportFixture::new("legacy-complete.sqlite")?;
     set_description_variants(&fixture.source)?;
@@ -200,6 +208,10 @@ async fn snapshots(root: &Path) -> E2eResult<PublishedState> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_cli_answer(
     output: &std::process::Output,
     report_path: &Path,
@@ -256,6 +268,10 @@ async fn assert_project_description(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn set_description_variants(source: &Path) -> E2eResult {
     let maximum = "λ\0\n".repeat(4096);
     assert_eq!(maximum.len(), message_board::MAX_DESCRIPTION_BYTES);

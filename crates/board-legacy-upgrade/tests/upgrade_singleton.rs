@@ -1,8 +1,4 @@
 //! Offline upgrade and the running Host share the shipped singleton artifact.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 
 use codex_router_host::{HostCoordinationPaths, HostInstance, router_collaboration_directory};
@@ -19,6 +15,10 @@ fn coordination(root: &Path) -> HostCoordinationPaths {
     HostCoordinationPaths::for_router_root(root)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn write_identity(root: &Path) -> TestResult {
     create_host_identity(root)?;
     assert!(!root.join("service-identity.json").exists());
@@ -54,6 +54,10 @@ async fn upgrade(source: &Path, root: &Path, report: &Path, dry_run: bool) -> Te
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn real_upgrade_refuses_a_running_host_without_touching_its_socket() -> TestResult {
     // Arrange: a real Host owns the exact artifacts used by the upgrade.
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
@@ -83,6 +87,10 @@ async fn real_upgrade_refuses_a_running_host_without_touching_its_socket() -> Te
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn real_upgrade_refuses_the_lock_type_used_by_the_shipped_host() -> TestResult {
     // Arrange: the v0.1.98 open / try_lock steps, without using the extracted guard.
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
@@ -111,6 +119,10 @@ async fn real_upgrade_refuses_the_lock_type_used_by_the_shipped_host() -> TestRe
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn dry_run_uses_disposable_authority_without_contending_with_the_source_host() -> TestResult {
     // Arrange: dry run may read the explicit Router identity while the Host runs.
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;

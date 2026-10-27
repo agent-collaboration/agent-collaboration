@@ -8,6 +8,10 @@ use message_board::{HandoffSeq, MailItemRef};
 use message_board_storage::MailHandoffItem;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_retirement()
 -> Result<(), TestError> {
     // Arrange the actual default Host writer, receiver, mail owner and event loop.

@@ -53,6 +53,10 @@ impl ReplicatedSchema for FutureBoardSchema {
 
 #[tokio::test]
 #[cfg(feature = "runtime-test-support")]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() -> TestResult {
     use collaboration_service::ApplicationFixture;
     use message_board::public_replies as public;
@@ -200,6 +204,10 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_schema_too_new_preserves_the_actual_copy_identity_and_supported_version()
 -> TestResult {
     let fixture = Box::pin(ClaimFixture::start()).await?;

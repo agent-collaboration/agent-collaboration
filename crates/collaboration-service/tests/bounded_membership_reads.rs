@@ -4,21 +4,17 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
-    unused_imports,
     dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
-use read_cost_counter::{DataStatementCounts, ReadCost, ReadCostObservation};
+use read_cost_counter::sql_cost_classification::DataStatementCounts;
+use read_cost_counter::{ReadCost, ReadCostObservation};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -52,12 +48,12 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
     }
     // Arrange the reader owner only after setup, so no earlier request can
     // retain a different observation. Native admission and reconciliation stay real.
-    let board_fixture::FixturePollServices {
+    let board_fixture::board_poll_services::FixturePollServices {
         identity,
         delivery,
         native,
         publisher,
-    } = board_fixture::fixture_poll_services(
+    } = board_fixture::board_poll_services::fixture_poll_services(
         fixture._directory.path(),
         &fixture._admission,
         collaboration_service::ApplicationFixture::new(

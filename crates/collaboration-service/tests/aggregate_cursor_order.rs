@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
@@ -35,12 +31,12 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
         directory.path(),
-        Arc::new(board_fixture::PendingRegistration),
+        Arc::new(board_fixture::native_registry::PendingRegistration),
         &origin,
     )
     .await?;
     let fleet = Arc::new(fleet);
-    let registry = board_fixture::new_registry(directory.path())?;
+    let registry = board_fixture::native_registry::new_registry(directory.path())?;
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
         registry: registry.clone(),
         fleet: fleet.clone(),
@@ -86,7 +82,7 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
         request["projectId"] = json!(project);
         request["boardId"] = json!(board);
         request["title"] = json!(title);
-        board_fixture::prepare_registered_creation(
+        board_fixture::registered_project::prepare_registered_creation(
             &fleet,
             &registry,
             &serde_json::from_value(request.clone())?,

@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
 #[expect(
@@ -17,9 +13,8 @@ pub mod board_fixture;
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
-    unused_imports,
     dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
@@ -108,12 +103,12 @@ async fn lookup_costs(size: usize) -> Result<(ReadCost, ReadCost), TestError> {
     for index in 1..=size {
         let sibling = ProjectId::try_from(format!("00000000-0000-7000-8000-{index:012x}"))?;
         assert!(sibling < project);
-        let seed = board_fixture::new_registry(fixture._directory.path())?;
+        let seed = board_fixture::native_registry::new_registry(fixture._directory.path())?;
         let input: ProjectCreateRequest = serde_json::from_value(json!({
             "requestId":RequestId::generate(),"protocolVersion":1,"actor":fixture.actor,
             "projectId":sibling,"boardId":fixture.board,"title":sibling.as_str()
         }))?;
-        board_fixture::prepare_registered_creation(
+        board_fixture::registered_project::prepare_registered_creation(
             &fixture._fleet,
             &seed,
             &input,

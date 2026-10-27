@@ -354,6 +354,10 @@ mod preparation_tests {
     use super::*;
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn empty_legacy_project_roundtrips_unknown_metadata_without_a_creation_fact()
     -> Result<(), Box<dyn std::error::Error>> {
         let source = read_legacy(
@@ -415,6 +419,10 @@ mod preparation_tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn collision_detection_keeps_both_ids_and_never_renames()
     -> Result<(), Box<dyn std::error::Error>> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");

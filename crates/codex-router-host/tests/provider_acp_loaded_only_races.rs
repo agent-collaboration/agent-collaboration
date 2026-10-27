@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Real-provider races where LoadedOnly must refuse a newly unloaded session.
 
 #[path = "support/provider_fixture_launch.rs"]
@@ -62,6 +58,7 @@ fn no_load_fixture() -> ExternalProviderLaunch {
     provider_fixture_launch::launch("provider-loaded-route-agent.ts", vec!["idle".to_owned()])
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn store_with_session_record(
     root: &Path,
     target: &SessionRef,

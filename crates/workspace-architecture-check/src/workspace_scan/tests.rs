@@ -1,11 +1,10 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "test assertions report contract failures; Result propagates setup errors"
-)]
-
 use super::{TargetSelector, WorkspaceMetadata, workspace_targets};
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn metadata_selects_members_libs_and_all_bin_only_targets() -> Result<(), serde_json::Error> {
     let metadata: WorkspaceMetadata = serde_json::from_str(
         r#"{

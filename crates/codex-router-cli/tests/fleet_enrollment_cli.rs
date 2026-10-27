@@ -1,8 +1,5 @@
 //! Exercise the installed command vocabulary through the actual CLI executable.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)] // Assertions prove the public result; fixture I/O remains fallible.
+// Assertions prove the public result; fixture I/O remains fallible.
 #![deny(clippy::too_many_lines)]
 use std::{
     error::Error,
@@ -30,6 +27,10 @@ fn command(root: &Path, arguments: &[&str]) -> Result<Output, Box<dyn Error>> {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn fleet_status_of_an_absent_file_is_public_metadata_only() -> TestResult {
     let root = tempfile::tempdir()?;
     let output = command(root.path(), &["status"])?;
@@ -48,6 +49,10 @@ fn fleet_status_of_an_absent_file_is_public_metadata_only() -> TestResult {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn fleet_enroll_requires_explicit_expiry_and_preserves_existing_file() -> TestResult {
     let root = tempfile::tempdir()?;
     let fleet = root.path().join("fleet");

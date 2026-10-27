@@ -1,14 +1,14 @@
 //! Maintenance holds the shipped Host lock while leaving socket publication to HostInstance.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions must fail the proof."
-)]
 use codex_router_host::{
     HostCoordinationPaths, HostInstance, HostInstanceLock, InstanceAcquireError,
 };
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn maintenance_authority_blocks_host_start_and_preserves_the_socket_artifact()
 -> Result<(), Box<dyn std::error::Error>> {
     // Arrange: pin a stale socket so both its path and inode remain observable.

@@ -6,13 +6,8 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 // This Host restart proof uses the shared board setup, not every fixture journey.
 #[expect(
-    unused_imports,
     dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 mod board_fixture;
 #[path = "support/native_project_fixture.rs"]
@@ -130,7 +125,6 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
 }
 
 #[tokio::test]
-
 async fn pending_corrupt_feed_is_contained_during_subscription_restart()
 -> Result<(), board_fixture::TestError> {
     Box::pin(subscription_restart_contains_project_failure(

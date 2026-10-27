@@ -20,11 +20,13 @@ use tokio::sync::Mutex;
 pub(super) type InspectionResult<TResult> = Result<TResult, AutomationInspectionFailure>;
 
 impl AutomationOperations {
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub(super) fn inspection_store(&self) -> InspectionResult<&Arc<Mutex<AutomationStore>>> {
         self.store().ok_or_else(failure::unavailable)
     }
 
     /// Pages instruction documents, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn instruction_list(
         &self,
         request: AutomationPageRequest,
@@ -44,6 +46,7 @@ impl AutomationOperations {
     }
 
     /// Pages schedules, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_list(
         &self,
         request: AutomationPageRequest,
@@ -63,6 +66,7 @@ impl AutomationOperations {
     }
 
     /// Pages one schedule's Runs, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_list(
         &self,
         request: RunListRequest,
@@ -82,6 +86,7 @@ impl AutomationOperations {
     }
 
     /// Pages one instruction's revisions, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn revision_list(
         &self,
         request: RevisionListRequest,
@@ -101,6 +106,7 @@ impl AutomationOperations {
     }
 
     /// Pages deliveries, optionally of one wake, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_list(
         &self,
         request: DeliveryListRequest,
@@ -119,6 +125,7 @@ impl AutomationOperations {
         .await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn list_collection<TRecord: DeserializeOwned>(
         &self,
         selection: CollectionSelection,
@@ -224,6 +231,7 @@ impl AutomationOperations {
     }
 
     /// Reconciles a delivery from exact native queue evidence; input is never resent.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_reconcile(
         &self,
         request: DeliveryShowRequest,
@@ -259,6 +267,7 @@ impl AutomationOperations {
     }
 
     /// Reconciles a Run from exact native evidence; work is never started or interrupted.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_reconcile(
         &self,
         request: RunShowRequest,
@@ -281,6 +290,7 @@ impl AutomationOperations {
     }
 
     /// Shows an operation's original receipt; nothing is resubmitted.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_show(
         &self,
         request: OperationShowRequest,
@@ -290,6 +300,7 @@ impl AutomationOperations {
     }
 
     /// Reconciles an unsettled configuration operation through the Host, then shows its receipt.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_reconcile(
         &self,
         request: OperationShowRequest,
@@ -298,6 +309,7 @@ impl AutomationOperations {
         self.inspect_operation(request, true, budget).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn inspect_operation(
         &self,
         request: OperationShowRequest,
@@ -376,6 +388,7 @@ struct CollectionSelection {
 }
 
 /// Records are projected as JSON so pages can be measured; the page returns them typed.
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 pub(super) fn typed_records<TRecord: DeserializeOwned>(
     records: Vec<Value>,
 ) -> InspectionResult<Vec<TRecord>> {
@@ -426,6 +439,7 @@ fn valid_id(collection: &AutomationCollection, value: &str) -> bool {
     }
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn read_delivery(
     store: &Arc<Mutex<AutomationStore>>,
     request: &DeliveryShowRequest,
@@ -444,6 +458,7 @@ async fn read_delivery(
         .map_err(failure::storage)
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn read_run(
     store: &Arc<Mutex<AutomationStore>>,
     request: &RunShowRequest,
@@ -463,6 +478,7 @@ async fn read_run(
         .map_err(failure::storage)
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn bounded_reconciliation<TResult: serde::Serialize>(
     result: TResult,
     budget: ResultByteBudget,

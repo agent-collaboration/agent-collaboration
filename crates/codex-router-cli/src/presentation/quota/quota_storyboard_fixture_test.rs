@@ -356,6 +356,10 @@ fn write_fixture_receipt(path: Option<&std::path::Path>, receipt: &str) -> std::
 
 #[tokio::test(flavor = "current_thread")]
 #[ignore = "actual PTY fixture requires explicit scenario and exclusive declared capture target"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     let scenario = FixtureScenario::from_environment()?;
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {

@@ -1,7 +1,6 @@
 use super::*;
 
 #[test]
-
 fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));

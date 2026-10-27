@@ -11,6 +11,10 @@ struct RecordingUpkeepRefreshClient {
 }
 
 impl CredentialRefreshClient for RecordingUpkeepRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         account_id: &AccountId,
@@ -147,6 +151,10 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         ))
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_provider_credentials(
         &self,
         provider: Provider,
@@ -287,6 +295,10 @@ struct HeldUpkeepRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldUpkeepRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,
@@ -381,6 +393,10 @@ struct HeldQueuedUpkeepRefreshClient {
 }
 
 impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         account_id: &AccountId,

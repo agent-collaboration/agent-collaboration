@@ -283,6 +283,10 @@ async fn verified_schema_copy(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_verified_different_application_layout_is_refused_by_the_board_catalog() -> TestResult {
     let root = tempfile::tempdir()?;
     let (project, copy) = verified_schema_copy(root.path(), SourceSchema::DifferentLayout).await?;
@@ -296,6 +300,10 @@ async fn a_verified_different_application_layout_is_refused_by_the_board_catalog
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_verified_newer_application_version_is_refused_without_running_board_migrations()
 -> TestResult {
     let root = tempfile::tempdir()?;

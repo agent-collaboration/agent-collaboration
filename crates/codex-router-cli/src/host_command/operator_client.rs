@@ -233,6 +233,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn streaming_client_delivers_progress_before_terminal_frame()
     -> Result<(), Box<dyn std::error::Error>> {
         let socket = std::env::temp_dir().join(format!(
@@ -311,6 +315,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn replacement_progress_accepts_multiple_frames_before_eof()
     -> Result<(), Box<dyn std::error::Error>> {
         let socket = std::env::temp_dir().join(format!(
@@ -352,6 +360,10 @@ mod tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn updated_app_server_progress_survives_missing_terminal_for_recovery_classification()
     -> Result<(), Box<dyn std::error::Error>> {
         let socket = std::env::temp_dir().join(format!(

@@ -1,8 +1,4 @@
 //! Resolve dependency kinds so SDK ownership holds across indirect crate paths.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -158,6 +154,10 @@ fn resolved_graph() -> Result<NonDevDependencyGraph, Box<dyn std::error::Error +
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn acp_client_cannot_reach_router_service_or_protocol_crates() -> TestResult {
     let graph = resolved_graph()?;
     let client = graph
@@ -177,6 +177,10 @@ fn acp_client_cannot_reach_router_service_or_protocol_crates() -> TestResult {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn only_acp_role_owners_have_direct_production_sdk_edges() -> TestResult {
     let graph = resolved_graph()?;
     for member in &graph.workspace_members {
@@ -197,6 +201,10 @@ fn only_acp_role_owners_have_direct_production_sdk_edges() -> TestResult {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn every_indirect_sdk_path_crosses_an_acp_role_owner() -> TestResult {
     let graph = resolved_graph()?;
     for member in &graph.workspace_members {

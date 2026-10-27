@@ -32,6 +32,10 @@ async fn first_submit_attempt(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pending_project_submission_uses_its_recorded_epoch_after_owner_restart()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -66,6 +70,10 @@ async fn pending_project_submission_uses_its_recorded_epoch_after_owner_restart(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_new_project_admission_uses_its_own_epoch_and_missing_authority_never_sends()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -96,6 +104,10 @@ async fn a_new_project_admission_uses_its_own_epoch_and_missing_authority_never_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn session_and_human_submissions_carry_no_project_epoch() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let mut harness = MailHarness::open_manual(directory.path(), None).await?;

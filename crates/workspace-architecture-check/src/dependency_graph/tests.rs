@@ -1,11 +1,10 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "test assertions report contract failures; Result propagates setup errors"
-)]
-
 use super::{ItemEdge, ModuleGraph, parse_use_edges};
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn parser_retains_only_uses_and_deduplicates_edges() -> Result<(), crate::ArchitectureError> {
     let edges = parse_use_edges(
         r##"digraph {
@@ -32,6 +31,10 @@ fn parser_retains_only_uses_and_deduplicates_edges() -> Result<(), crate::Archit
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn parser_decodes_quoted_endpoints() -> Result<(), crate::ArchitectureError> {
     let edges = parse_use_edges(
         r#"digraph {
@@ -62,6 +65,10 @@ fn parser_rejects_broken_or_incomplete_tool_output() {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn fold_discards_root_internal_and_external_edges() -> Result<(), crate::ArchitectureError> {
     let graph = ModuleGraph::from_dot(
         r#"digraph {
@@ -105,6 +112,10 @@ fn fold_discards_root_internal_and_external_edges() -> Result<(), crate::Archite
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn sccs_separate_cycles_from_one_way_bridges() -> Result<(), crate::ArchitectureError> {
     let graph = ModuleGraph::from_dot(
         r#"digraph {

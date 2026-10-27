@@ -267,6 +267,10 @@ struct CountingKeychainAccess {
 }
 
 impl KeychainAccess for CountingKeychainAccess {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn read_secret(
         &self,
         service: &str,
@@ -284,6 +288,10 @@ impl KeychainAccess for CountingKeychainAccess {
             .cloned())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn add_secret(
         &self,
         service: &str,

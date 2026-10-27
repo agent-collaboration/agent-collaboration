@@ -1,18 +1,10 @@
 //! Measure actual JSON pieces and snapshot pages; count-based paging is unchanged.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 #[path = "support/project_description.rs"]
@@ -89,6 +81,10 @@ impl ReplicationTransport<BoardConsumerProtocol> for EncodingCopy {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn maximum_descriptions_survive_encoded_capture_and_populated_history_snapshots()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;

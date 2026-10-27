@@ -116,14 +116,14 @@ fn claim_refusal(reason: HolderChangeRefusal) -> io::Result<ProjectClaimRefusal>
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 mod refusal_tests {
     use super::*;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn claim_refusals_preserve_frozen_native_details_and_name_only_the_archive_gate() -> TestResult
     {
         let id = "019f0000-0000-7000-8000-000000009710";

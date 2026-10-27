@@ -3,6 +3,10 @@ use super::*;
 use serde_json::json;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn thread_start_uses_the_client_existing_working_directory()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -26,6 +30,10 @@ async fn thread_start_uses_the_client_existing_working_directory()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn thread_start_rejects_a_missing_client_directory_before_create()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -53,6 +61,10 @@ async fn thread_start_rejects_a_missing_client_directory_before_create()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn thread_start_requires_an_explicit_client_directory()
 -> Result<(), Box<dyn std::error::Error>> {
     let backend = ScriptedSessionBackend::new()?;
@@ -83,6 +95,10 @@ async fn thread_start_requires_an_explicit_client_directory()
 /// Oracle: pinned Codex tui/src/config_update.rs:225-235, 346-375 and
 /// tui/src/onboarding/onboarding_screen.rs:687-725.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn remote_trust_read_is_narrow_and_trust_write_is_refused() -> Result<(), Box<dyn std::error::Error>>
 {
     let directory = tempfile::tempdir()?;
@@ -134,6 +150,10 @@ fn remote_trust_read_is_narrow_and_trust_write_is_refused() -> Result<(), Box<dy
 /// Oracle: Codex tui/src/config_update.rs:235-261,294-375. A remote TUI
 /// needs a project layer whenever the trusted key differs from its literal cwd.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn canonical_trust_key_produces_a_project_layer() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let home = directory.path().join("codex-home");
@@ -167,6 +187,10 @@ fn canonical_trust_key_produces_a_project_layer() -> Result<(), Box<dyn std::err
 
 /// Oracle: pinned Codex tui/src/config_update.rs:235-261, 294-375.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn repository_root_trust_is_visible_to_remote_tui() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let home = directory.path().join("codex-home");
@@ -211,6 +235,10 @@ fn repository_root_trust_is_visible_to_remote_tui() -> Result<(), Box<dyn std::e
 /// Oracle: pinned Codex tui/src/config_update.rs:294-375. Without a saved
 /// decision the remote TUI must still receive the repository trust target.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn untrusted_repository_root_remains_the_remote_trust_target()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -242,6 +270,10 @@ fn untrusted_repository_root_remains_the_remote_trust_target()
 /// Oracle: pinned Codex tui/src/app_server_session.rs:2172-2181 omits cwd
 /// when --cd was absent. The face returns a typed instruction to relaunch.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn omitted_tui_cwd_gets_a_typed_launch_instruction() -> Result<(), Box<dyn std::error::Error>>
 {
     use futures_util::{SinkExt, StreamExt};

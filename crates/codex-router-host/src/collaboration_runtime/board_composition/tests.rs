@@ -1,8 +1,4 @@
 //! Component proofs for the actual Host factory; process-level G2 remains separate.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
-)]
 use super::*;
 use collaboration_contracts::ProjectRegistrationState;
 use collaboration_protocol::UuidIdentity;
@@ -103,6 +99,10 @@ pub(super) fn identity() -> Result<MachineIdentity, Box<dyn std::error::Error + 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn absent_enrollment_constructs_no_machine_session_or_resume_file() -> TestResult {
     // E26 requires no session for None. A constructor that starts an anonymous
     // client or mints enrollment would create this file and fail the oracle.
@@ -190,6 +190,10 @@ async fn assert_rejected_receipt_read(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("router");
@@ -249,6 +253,10 @@ async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_first_record()
 -> TestResult {
     // Directory settlement is a typed fixture input. Host bootstrap, registration,
@@ -426,6 +434,10 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_registration_refusal_moves_an_empty_file_and_replays_the_original_reason()
 -> TestResult {
     let _ = tracing_subscriber::fmt()

@@ -5,10 +5,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
 #[expect(
@@ -18,9 +14,8 @@ pub mod board_fixture;
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
-    unused_imports,
     dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
@@ -34,8 +29,12 @@ async fn reject_and_move_creation(
     request: Value,
 ) -> Result<Value, TestError> {
     let creation: ProjectCreateRequest = serde_json::from_value(request.clone())?;
-    board_fixture::settle_accepted_creation(&fixture._fleet, &creation, &fixture.record_origin()?)
-        .await?;
+    board_fixture::registered_project::settle_accepted_creation(
+        &fixture._fleet,
+        &creation,
+        &fixture.record_origin()?,
+    )
+    .await?;
     // The directory policy and this native gate refusal are controlled inputs.
     // No application row is written before the empty database is moved aside.
     let store = fixture._registry.open_project(project).await?;

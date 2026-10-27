@@ -1,13 +1,13 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 use board_legacy_upgrade::UpgradeError;
 use message_board::*;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn descriptions_roundtrip_exactly_in_native_project_state_and_title_only_directory()
 -> TestResult {
     let maximum = "λ\0\n".repeat(4096);
@@ -68,6 +68,10 @@ async fn descriptions_roundtrip_exactly_in_native_project_state_and_title_only_d
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn invalid_legacy_description_is_a_topic_named_typed_refusal_without_truncation() -> TestResult
 {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;

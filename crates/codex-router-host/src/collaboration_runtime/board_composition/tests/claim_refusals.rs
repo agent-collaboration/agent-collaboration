@@ -11,6 +11,10 @@ use super::claim_fixture::ClaimFixture;
 mod future_schema;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_not_found_and_archived_refusals_create_no_local_writer() -> TestResult {
     let fixture = Box::pin(ClaimFixture::start()).await?;
     let proof = async {
@@ -52,6 +56,10 @@ async fn claim_not_found_and_archived_refusals_create_no_local_writer() -> TestR
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_already_held_preserves_the_native_peer_without_another_seed() -> TestResult {
     let fixture = Box::pin(ClaimFixture::start()).await?;
     let proof = async {
@@ -89,6 +97,10 @@ async fn claim_already_held_preserves_the_native_peer_without_another_seed() -> 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_observes_real_retirement_in_progress_then_retired_without_seeding() -> TestResult {
     let fixture = Box::pin(ClaimFixture::start()).await?;
     let project = ProjectId::generate();

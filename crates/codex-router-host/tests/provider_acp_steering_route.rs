@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! A running Claude prompt identifies the operation receiving a steered message.
 #[path = "support/provider_fixture_launch.rs"]
 mod provider_fixture_launch;
@@ -63,6 +59,7 @@ impl AttemptEvidenceSink for RecordedEvidence {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -74,12 +71,14 @@ fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn non_creator_agent(target: &SessionRef) -> SessionRef {
     let mut sender = target.clone();
     sender.session_id = SessionId::try_from("other-session".to_owned()).expect("sender ID");
     sender
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
@@ -117,6 +116,7 @@ fn steering_fixture(event_socket: &Path) -> ExternalProviderLaunch {
     )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn prepared_route(
     root: &Path,
     launch: ExternalProviderLaunch,
@@ -311,6 +311,7 @@ async fn unadvertised_steering_is_rejected_on_any_provider_endpoint() {
     supervisor.shutdown().await.expect("shutdown");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn request(target: SessionRef, mode: MessageDelivery) -> DeliveryRequest {
     let push_id =
         PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");

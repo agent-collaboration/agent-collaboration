@@ -41,6 +41,7 @@ impl AttemptEvidenceSink for RecordedEvidence {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -52,6 +53,7 @@ pub(super) fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
@@ -79,6 +81,7 @@ pub(super) fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn available_directory(
     target: &SessionRef,
     binding: &ProviderBindingIdentity,
@@ -144,6 +147,7 @@ pub(super) fn first_prompt_refusal_fixture(event_socket: &Path) -> ExternalProvi
     )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn request(target: SessionRef, text: &str) -> DeliveryRequest {
     let push_id =
         PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");

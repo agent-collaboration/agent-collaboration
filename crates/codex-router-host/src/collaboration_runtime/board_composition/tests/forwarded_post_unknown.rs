@@ -2,6 +2,10 @@
 use super::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_unknown_answer_retries_the_original_post_identity() -> TestResult {
     let holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = claimed_project(&holder).await?;

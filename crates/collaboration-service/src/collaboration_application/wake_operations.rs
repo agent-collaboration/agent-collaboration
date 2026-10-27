@@ -55,6 +55,7 @@ impl WakeOperations {
         self
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     fn store(
         &self,
         context: &WakeFailureContext,
@@ -69,6 +70,7 @@ impl WakeOperations {
     }
 
     /// Creates a wake, or replays the wake an earlier request with this operation created.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub(crate) async fn wake_send_local(
         &self,
         request: WakeSendRequest,
@@ -127,6 +129,7 @@ impl WakeOperations {
     }
 
     /// Shows one wake as of now.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub(crate) async fn wake_show_local(
         &self,
         request: WakeShowRequest,
@@ -157,6 +160,7 @@ impl WakeOperations {
     }
 
     /// Lists wakes newest first; the page shrinks until its response fits `budget`.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_list(
         &self,
         request: AutomationPageRequest,
@@ -292,6 +296,7 @@ impl WakeOperations {
     }
 
     /// Pauses a wake; deliveries already handed to a native thread are not recalled.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub(crate) async fn wake_pause_local(
         &self,
         request: WakeMutationRequest,
@@ -300,6 +305,7 @@ impl WakeOperations {
     }
 
     /// Resumes a paused wake.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub(crate) async fn wake_resume_local(
         &self,
         request: WakeMutationRequest,
@@ -308,6 +314,7 @@ impl WakeOperations {
     }
 
     /// Cancels a wake; a cancelled wake is never implicitly recreated.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub(crate) async fn wake_cancel_local(
         &self,
         request: WakeMutationRequest,
@@ -315,6 +322,7 @@ impl WakeOperations {
         self.mutate(request, WakeAction::Cancel).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn mutate(
         &self,
         request: WakeMutationRequest,
@@ -366,6 +374,7 @@ impl WakeOperations {
     }
 
     /// Shows one wake delivery and its retained native evidence.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_show(
         &self,
         request: DeliveryShowRequest,

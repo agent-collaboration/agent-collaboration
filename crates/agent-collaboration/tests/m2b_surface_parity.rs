@@ -5,8 +5,7 @@ mod board_cli_execution;
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
     dead_code,
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 pub mod board_fixture;
 use board_cli_execution::cli;
@@ -48,7 +47,6 @@ async fn replay_role(
 }
 
 #[tokio::test]
-
 async fn six_role_names_and_holder_qualified_releases_match_cli_and_mcp() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, stream) = fixture.project().await?;

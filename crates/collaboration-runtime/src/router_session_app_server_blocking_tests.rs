@@ -18,6 +18,10 @@ impl CodexProjectTrustLookup for RecordingTrustLookup {
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn config_read_runs_filesystem_trust_lookup_off_the_executor()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

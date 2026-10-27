@@ -107,6 +107,10 @@ impl ResetServiceProvider for FakeProvider {
             .expect("scripted inventory")
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn prepare_consume(
         &self,
         _auth: &LiveResetAccountAuth,

@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
@@ -174,7 +170,7 @@ async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Tes
 
 async fn context_cost(
     size: usize,
-) -> Result<(ReadCost, read_cost_counter::AlarmRunCosts), TestError> {
+) -> Result<(ReadCost, read_cost_counter::alarm_read_costs::AlarmRunCosts), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, workstream) = fixture.project().await?;
     let session: SessionRef = serde_json::from_value(
@@ -252,7 +248,7 @@ async fn context_cost(
         .connect()
         .await?;
     let statements_before = read_cost_counter::observed_statements().len();
-    let alarms = read_cost_counter::observe_alarm_costs();
+    let alarms = read_cost_counter::alarm_read_costs::observe_alarm_costs();
     let before = current_cost();
     let result = fixture
         .api

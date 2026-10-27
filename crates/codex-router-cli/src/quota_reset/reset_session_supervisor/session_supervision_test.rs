@@ -245,6 +245,10 @@ struct ScriptedResetClock {
 }
 
 impl ResetClock for ScriptedResetClock {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn now_unix_seconds(&self) -> Result<u64, RenderSafeFailure> {
         self.times
             .lock()

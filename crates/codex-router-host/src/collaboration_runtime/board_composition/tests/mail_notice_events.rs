@@ -1,8 +1,4 @@
 //! SDK-generated hints cross the real pump and the Host's existing event owner.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions are test oracles; Result propagates real I/O failures."
-)]
 use super::super::fleet_service::{BOUND, TestFleet};
 use super::*;
 use fleet_sync_protocol::{DeliveryStream, GateAnswer, OperationAnswer, OperationRequest};
@@ -24,6 +20,10 @@ mod harness;
 use harness::MailHarness;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pre_welcome_hint_is_deferred_then_admitted_with_both_welcome_streams_before_ack()
 -> Result<(), TestError> {
     let mut harness = MailHarness::open(true).await?;
@@ -53,6 +53,10 @@ async fn pre_welcome_hint_is_deferred_then_admitted_with_both_welcome_streams_be
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn five_minute_pass_admits_both_streams_without_a_notice_and_waits_while_unwelcomed()
 -> Result<(), TestError> {
     let mut harness = MailHarness::open(false).await?;
@@ -131,6 +135,10 @@ mod status_catch_up;
 mod submission_epochs;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn sdk_generated_notice_before_welcome_allows_a_real_durable_client_acknowledgement()
 -> Result<(), TestError> {
     // Arrange a real central, real client resume file and a separate native

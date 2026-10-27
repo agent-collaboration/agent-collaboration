@@ -165,6 +165,10 @@ async fn claimed_project(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_admits_both_post_families_and_replays_at_the_holder() -> TestResult {
     let holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = claimed_project(&holder).await?;
@@ -375,6 +379,10 @@ async fn non_holder_sender_admits_both_post_families_and_replays_at_the_holder()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_reports_offline_holder_presence_without_queuing() -> TestResult {
     let mut holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = claimed_project(&holder).await?;
@@ -464,6 +472,10 @@ async fn non_holder_sender_reports_offline_holder_presence_without_queuing() -> 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_reports_an_imported_unheld_project() -> TestResult {
     let holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
@@ -511,6 +523,10 @@ async fn non_holder_sender_reports_an_imported_unheld_project() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_without_a_machine_session_refuses_without_queuing() -> TestResult {
     let directory = tempfile::tempdir()?;
     let board = open_board_admission(directory.path(), identity()?, None).await?;

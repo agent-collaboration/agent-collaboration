@@ -1,12 +1,12 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 use message_board::*;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn retained_post_without_creation_activity_refuses_without_changing_source() -> TestResult {
     // Arrange: activity 8 is an unreferenced reply creation in the shipped fixture.
     let (_directory, path) = fixture_copy("legacy-complete.sqlite")?;
@@ -39,6 +39,10 @@ async fn retained_post_without_creation_activity_refuses_without_changing_source
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn supplied_legacy_fixture_produces_all_three_project_imports()
 -> Result<(), Box<dyn std::error::Error>> {
     // Arrange: retained X2 input built through the shipped ffced1c1 BoardStore.
@@ -60,6 +64,10 @@ async fn supplied_legacy_fixture_produces_all_three_project_imports()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn imported_feed_keeps_dense_positions_unknown_times_and_root_join_cutoffs() -> TestResult {
     let prepared = prepare("legacy-complete.sqlite").await?;
     let report = prepared
@@ -114,6 +122,10 @@ async fn imported_feed_keeps_dense_positions_unknown_times_and_root_join_cutoffs
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn unchanged_input_rebuilds_identical_import_digests() -> TestResult {
     let first = prepare("legacy-reopened.sqlite").await?;
     let first_digests = first
@@ -157,6 +169,10 @@ async fn unchanged_input_rebuilds_identical_import_digests() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn source_bytes_and_modification_time_are_unchanged() -> TestResult {
     let (_directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let before = std::fs::read(&source)?;

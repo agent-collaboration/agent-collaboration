@@ -1,18 +1,10 @@
 //! The owning native mapping and public view keep failures and accepted-line epochs.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
@@ -105,6 +97,10 @@ async fn head(fixture: &BoardFixture, project: &ProjectId) -> Result<FeedCursor,
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_mapping_failure_is_board_unavailable_instead_of_zero_progress()
 -> Result<(), TestError> {
     let port = Arc::new(ProgressPort::default());
@@ -159,6 +155,10 @@ async fn native_mapping_failure_is_board_unavailable_instead_of_zero_progress()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledged_inherited_prefix_keeps_the_epoch_that_assigned_its_rows()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -220,6 +220,10 @@ async fn acknowledged_inherited_prefix_keeps_the_epoch_that_assigned_its_rows()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledgement_after_the_pinned_view_is_bounded_to_that_views_as_of()
 -> Result<(), TestError> {
     let port = Arc::new(ProgressPort::default());

@@ -22,6 +22,7 @@ fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalPro
     )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn save_direct_message(
     store: &InteractionStore,
     target: &SessionRef,

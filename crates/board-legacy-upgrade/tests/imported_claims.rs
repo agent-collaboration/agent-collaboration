@@ -1,8 +1,4 @@
 //! D's actual owner import must remain readable and claimable by normal sessions.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 #[path = "upload_support/central_fixture.rs"]
 #[expect(
     dead_code,
@@ -102,6 +98,10 @@ async fn claim(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn imported_copy_is_readable_unheld_then_real_claims_have_one_epoch_and_preserve_replay()
 -> TestResult {
     // Arrange: actual shipped-schema transformation and owner HTTP publication.
@@ -233,6 +233,10 @@ async fn imported_copy_is_readable_unheld_then_real_claims_have_one_epoch_and_pr
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn retirement_precedes_old_claim_and_completed_import_replay_after_server_restart()
 -> TestResult {
     // Arrange: import a genuinely archived legacy board through D's real path.
@@ -372,6 +376,10 @@ async fn retirement_precedes_old_claim_and_completed_import_replay_after_server_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_competing_claim_names_the_active_transfer_until_the_imported_fence_commits() -> TestResult
 {
     let prepared = prepare("legacy-complete.sqlite").await?;

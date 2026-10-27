@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use board_fixture::fixture_peer;
 use collaboration_contracts::MachineIdentity;
@@ -37,7 +33,7 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
         directory.path(),
-        Arc::new(board_fixture::PendingRegistration),
+        Arc::new(board_fixture::native_registry::PendingRegistration),
         &origin,
     )
     .await?;
@@ -86,7 +82,7 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
     create["projectId"] = json!(project);
     create["boardId"] = json!(board);
     create["title"] = json!("project");
-    board_fixture::prepare_registered_creation(
+    board_fixture::registered_project::prepare_registered_creation(
         &fleet,
         &registry,
         &serde_json::from_value(create.clone())?,
@@ -246,7 +242,7 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
     create_late["projectId"] = json!(late_project);
     create_late["boardId"] = json!(board);
     create_late["title"] = json!("late project");
-    board_fixture::prepare_registered_creation(
+    board_fixture::registered_project::prepare_registered_creation(
         &fleet,
         &registry,
         &serde_json::from_value(create_late.clone())?,

@@ -5,6 +5,10 @@ use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
 use std::os::unix::fs::PermissionsExt;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_lost_granted_frame_replays_the_same_public_attempt_and_exact_grant() -> TestResult {
     let fixture = Box::pin(ClaimFixture::start()).await?;
     let project = ProjectId::generate();

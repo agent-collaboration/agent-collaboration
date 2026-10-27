@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -26,12 +22,13 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
     for reason in ["tooNew", "mismatch"] {
         let project = ProjectId::generate();
         let workstream = WorkstreamId::generate();
-        let seed_registry = board_fixture::new_registry(fixture._directory.path())?;
+        let seed_registry =
+            board_fixture::native_registry::new_registry(fixture._directory.path())?;
         let input: ProjectCreateRequest = serde_json::from_value(json!({
             "requestId":RequestId::generate(),"protocolVersion":1,"actor":reader,
             "projectId":project,"boardId":fixture.board,"title":project.as_str()
         }))?;
-        board_fixture::prepare_registered_creation(
+        board_fixture::registered_project::prepare_registered_creation(
             &fixture._fleet,
             &seed_registry,
             &input,

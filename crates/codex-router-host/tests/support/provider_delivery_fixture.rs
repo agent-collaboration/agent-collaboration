@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Provider route decisions before any client effect.
 
 use super::provider_fixture_launch;
@@ -92,6 +88,7 @@ impl SessionDeliveryRoute for StaleRunningClaimRoute {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -103,6 +100,7 @@ pub(super) fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
@@ -130,6 +128,7 @@ pub(super) fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn available_directory(
     target: &SessionRef,
     binding: &ProviderBindingIdentity,
@@ -199,6 +198,7 @@ pub(super) fn exited_provider_fixture(
     )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn request(target: SessionRef, text: &str) -> PreparedDeliveryRequest {
     let push_id =
         PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");
@@ -224,6 +224,7 @@ pub(super) fn request(target: SessionRef, text: &str) -> PreparedDeliveryRequest
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn assert_uuid_v7_provider_reference(
     detail: &str,
     code_label: &str,

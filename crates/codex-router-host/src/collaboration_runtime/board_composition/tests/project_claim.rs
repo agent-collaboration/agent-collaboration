@@ -97,6 +97,10 @@ pub(in crate::collaboration_runtime::board_composition) async fn captured_board_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn imported_claim_seeds_verifies_renews_then_publishes_before_first_board_write() -> TestResult
 {
     let _ = tracing_subscriber::fmt()

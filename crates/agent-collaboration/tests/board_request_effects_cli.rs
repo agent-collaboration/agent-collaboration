@@ -4,11 +4,6 @@ mod board_cli_execution;
 // This case uses the Fleet-only portion of the shared fixture.
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
-    unused_imports,
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
-#[expect(
     dead_code,
     reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]

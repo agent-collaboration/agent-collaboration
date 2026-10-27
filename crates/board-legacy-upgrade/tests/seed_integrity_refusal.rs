@@ -1,8 +1,4 @@
 //! The real publisher preserves an injected typed server refusal over HTTP.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 use board_legacy_upgrade::{UpgradePublisher, UpgradeUploadError};
 use collaboration_central_core::{
@@ -13,6 +9,10 @@ use support::*;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn seed_integrity_refusal_is_a_typed_incomplete_project_not_a_success() -> TestResult {
     let prepared = prepare("legacy-complete.sqlite").await?;
     let project = prepared

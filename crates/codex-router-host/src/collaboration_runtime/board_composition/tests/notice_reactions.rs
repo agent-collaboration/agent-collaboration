@@ -126,6 +126,10 @@ impl Runtime {
             .load()
             .await?)
     }
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn accepted_renewal_count(&self) -> Result<i64, Box<dyn std::error::Error + Send + Sync>> {
         // KEEP_RESULT=false removes completed renewal rows. These are receipts
         // returned by the real SDK admission, never a scripted call counter.
@@ -202,6 +206,10 @@ fn page(notices: Vec<PositionedBoardNotice>) -> NoticeRead {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn duplicate_next_and_cold_restart_use_machine_progress_without_repeating_a_renewal()
 -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
@@ -260,6 +268,10 @@ async fn duplicate_next_and_cold_restart_use_machine_progress_without_repeating_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pushed_gap_reads_after_machine_progress_and_handles_the_missing_prefix() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
     runtime
@@ -291,6 +303,10 @@ async fn pushed_gap_reads_after_machine_progress_and_handles_the_missing_prefix(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn expired_cursor_prompts_real_native_renewal_and_synchronizes_before_the_pruned_floor()
 -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
@@ -332,6 +348,10 @@ async fn expired_cursor_prompts_real_native_renewal_and_synchronizes_before_the_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn invalid_cursor_recovers_then_reads_without_after_from_the_retained_start() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
     runtime.set_progress(90).await?;
@@ -374,6 +394,10 @@ async fn invalid_cursor_recovers_then_reads_without_after_from_the_retained_star
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn failed_handling_does_not_save_the_position_and_retry_uses_the_same_hint() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
     runtime.set_progress(5).await?;
@@ -413,6 +437,10 @@ async fn failed_handling_does_not_save_the_position_and_retry_uses_the_same_hint
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_noncontiguous_read_page_refuses_before_applying_or_saving_the_jump() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
     runtime
@@ -440,6 +468,10 @@ async fn a_noncontiguous_read_page_refuses_before_applying_or_saving_the_jump() 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn progress_write_failure_rehandles_the_hint_without_changing_lease_authority() -> TestResult
 {
     let runtime = Box::pin(Runtime::new()).await?;

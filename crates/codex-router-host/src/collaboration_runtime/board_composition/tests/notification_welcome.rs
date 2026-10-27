@@ -7,6 +7,10 @@ use collaboration_service::ApplicationFixture;
 use collaboration_runtime::SessionDeliveryRouter;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_hint_was_missed()
 -> Result<(), TestError> {
     let _ = tracing_subscriber::fmt()

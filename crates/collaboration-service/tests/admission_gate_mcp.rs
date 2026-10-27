@@ -6,14 +6,11 @@ pub mod accepted_snapshot;
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/native_authority.rs"]
 mod native_authority;
-use board_fixture::{BoardFixture, ControlledClock, TestError, accepted, fixture_peer};
+use board_fixture::controlled_clock::ControlledClock;
+use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use message_board::*;
 use runtime_primitives::{Clock, SystemClock};
 use serde_json::json;

@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
@@ -94,8 +90,12 @@ async fn accepted_directory_survives_reopen_and_pending_registration_records_not
     );
     // Reconnect the real owning central to supply the directory decision.
     let fixture = fixture.restart_read_fixture().await?;
-    board_fixture::settle_accepted_creation(&fixture._fleet, &request, &fixture.record_origin()?)
-        .await?;
+    board_fixture::registered_project::settle_accepted_creation(
+        &fixture._fleet,
+        &request,
+        &fixture.record_origin()?,
+    )
+    .await?;
     // Crash after the directory decision, before a Host has bootstrapped the native file.
     let fixture = fixture.restart_read_fixture().await?;
     assert_eq!(

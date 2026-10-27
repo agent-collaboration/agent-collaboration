@@ -153,7 +153,6 @@ async fn watch_status_rejects_negative_and_future_start_boundaries() -> Result<(
 }
 
 #[tokio::test]
-
 async fn scoped_bookmarks_reject_negative_and_future_boundaries() -> Result<(), TestError> {
     for thread_scope in [false, true] {
         let mut fixture = SubscriptionFixture::start().await?;
@@ -173,7 +172,6 @@ async fn scoped_bookmarks_reject_negative_and_future_boundaries() -> Result<(), 
 }
 
 #[tokio::test]
-
 async fn project_main_tracking_rejects_negative_and_future_boundaries() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     let scope = ReadScope::Project {

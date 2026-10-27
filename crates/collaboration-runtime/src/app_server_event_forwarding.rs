@@ -700,10 +700,6 @@ impl AppServerEventForwarding {
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "app_server_event_forwarding_tests.rs"]
 mod notification_wire_tests;
 

@@ -13,10 +13,6 @@ use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[path = "support/registered_route_project.rs"]
-#[expect(
-    clippy::expect_used,
-    reason = "Existing route fixture asserts fixed inputs and bounded settlement."
-)]
 mod registered_route_project;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;

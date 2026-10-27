@@ -2,6 +2,10 @@
 use super::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn status_rejects_malformed_or_unresolvable_metadata_without_http_or_mutation() -> TestResult
 {
     use std::os::unix::fs::PermissionsExt;
@@ -58,6 +62,10 @@ async fn status_rejects_malformed_or_unresolvable_metadata_without_http_or_mutat
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn explicit_debug_plaintext_declaration_uses_the_same_metadata_contract() -> TestResult {
     let fixture = ProducerFixture::start().await?;
     fixture.run(async |fixture| {

@@ -1,10 +1,6 @@
 //! Explicit preparation validates the request and persists the selected route's effects.
 //! The schedule operations call `prepare_schedule`; the module keeps its name because the
 //! delivery-boundary test scans this path for client-route imports.
-#![expect(
-    clippy::result_large_err,
-    reason = "typed failures are the published payloads, returned once per IO-bound request"
-)]
 use crate::collaboration_application::ScheduleOperationFailure;
 use agent_automation::RouteEffectEvidence;
 use automation_storage::{
@@ -29,6 +25,7 @@ type PreparationResult = Result<ScheduleSnapshot, ScheduleOperationFailure>;
 
 /// Prepares a schedule's reuse-thread destination through the selected route, persisting the
 /// route's effects. A retried operation returns its retained outcome.
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 pub(crate) async fn prepare_schedule(
     configuration: &collaboration_runtime::AutomationConfigurationHandle,
     service_id: &collaboration_protocol::UuidIdentity,
@@ -336,6 +333,7 @@ fn destination_cwd(destination: &DestinationPreparation) -> &str {
         | DestinationPreparation::Fork { cwd, .. } => cwd,
     }
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject_choice_field(
     params: &SchedulePrepareRequest,
     field: &str,
@@ -360,6 +358,7 @@ fn reject_choice_field(
     };
     Err(ScheduleOperationFailure::Preparation(failure))
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject_preselection(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
@@ -415,6 +414,7 @@ fn error(
         },
     }
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject(
     params: &SchedulePrepareRequest,
     kind: ScheduleFailureKind,
@@ -425,6 +425,7 @@ fn reject(
         params, kind, message, effects,
     )))
 }
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn finish_failure(
     store: &Arc<Mutex<AutomationStore>>,
     params: &SchedulePrepareRequest,
@@ -471,6 +472,7 @@ fn public_effects(effects: &RouteEffectEvidence<SessionRef, CodexGeneration>) ->
     }
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn reject_without_route(params: &SchedulePrepareRequest, message: &str) -> PreparationResult {
     let failure = ScheduleFailure {
         kind: ScheduleFailureKind::AutomationUnavailable,

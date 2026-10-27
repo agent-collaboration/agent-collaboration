@@ -2,6 +2,10 @@ use super::*;
 use session_event_model::SessionItemKind;
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn lost_turn_completion_has_a_typed_error_message() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
@@ -30,6 +34,10 @@ fn lost_turn_completion_has_a_typed_error_message() -> Result<(), Box<dyn std::e
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn item_completion_without_an_active_turn_is_not_sent() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
@@ -65,6 +73,10 @@ fn item_completion_without_an_active_turn_is_not_sent() -> Result<(), Box<dyn st
 
 /// Oracle: pinned Codex app-server-protocol v2/item.rs:1449-1457.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn reasoning_update_streams_summary_text_delta() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
@@ -112,6 +124,10 @@ fn reasoning_update_streams_summary_text_delta() -> Result<(), Box<dyn std::erro
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn snapshot_includes_the_running_turn_and_its_latest_items()
 -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
@@ -156,6 +172,10 @@ fn snapshot_includes_the_running_turn_and_its_latest_items()
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn plan_item_projects_only_one_plan_surface() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},
@@ -226,6 +246,10 @@ fn plan_item_projects_only_one_plan_surface() -> Result<(), Box<dyn std::error::
 /// Oracle: Codex 0.157.1 app-server-protocol v2/item.rs:1327-1336,
 /// 1405-1414,1427-1433 and protocol/common.rs:1936-1946.
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn item_lifecycle_uses_typed_v2_notifications() -> Result<(), Box<dyn std::error::Error>> {
     let session: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89","endpointId":"claude-local"},

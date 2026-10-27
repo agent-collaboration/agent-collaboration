@@ -1,11 +1,4 @@
 //! Command-line entry points for codex-router.
-#![cfg_attr(
-    test,
-    expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract assertions fail the test while fixture errors propagate."
-    )
-)]
 
 use std::ffi::OsString;
 use std::io::IsTerminal;

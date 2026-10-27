@@ -17,6 +17,10 @@ mod frozen_rows;
 use super::split_transport;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_frozen_envelope()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

@@ -1,8 +1,5 @@
 //! The CLI is the sole enrollment producer; central and production Host consume its output.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)] // Protocol assertions; every owned process is stopped before propagating errors.
+// Protocol assertions; every owned process is stopped before propagating errors.
 #![deny(clippy::too_many_lines)]
 use board_central_test_support::EnrollmentTestCentral;
 use chrono::{Duration as ChronoDuration, Utc};
@@ -27,6 +24,10 @@ type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 const BOUND: Duration = Duration::from_secs(30);
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_enrollment_command_attaches_production_host_and_creates_project() -> TestResult {
     let fixture = ProducerFixture::start().await?;
     fixture
@@ -121,6 +122,10 @@ async fn create_and_read_project(client: &CollaborationClient) -> TestResult {
     ));
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn require_accepted(reply: WriteReply) -> TestResult {
     assert!(
         matches!(
@@ -197,6 +202,10 @@ fn project_requests() -> TestResult<(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn central_rejects_changed_machine_credential_without_edge_rewriting() -> TestResult {
     let fixture = ProducerFixture::start().await?;
     fixture
@@ -252,6 +261,10 @@ async fn central_rejects_changed_machine_credential_without_edge_rewriting() -> 
         .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_produced_enrollment(
     router_root: &std::path::Path,
     central: &EnrollmentTestCentral,

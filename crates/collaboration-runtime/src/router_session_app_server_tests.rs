@@ -35,6 +35,10 @@ async fn scripted_exchange(
 /// Oracle: Codex TUI remote requirements sections 0 and 1b, grounded in
 /// app-server-client/src/remote.rs and app/startup.rs at e72da2b538.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn startup_methods_have_the_exact_remote_wire_shapes()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -127,6 +131,10 @@ async fn startup_methods_have_the_exact_remote_wire_shapes()
 /// Oracle: Codex TUI remote requirements sections 4 and 1b. Thread IDs
 /// must be UUIDs, and the required Thread fields must be returned on start.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn thread_start_list_read_resume_use_port_and_hub() -> Result<(), Box<dyn std::error::Error>>
 {
     let backend = ScriptedSessionBackend::new()?;
@@ -183,6 +191,10 @@ async fn thread_start_list_read_resume_use_port_and_hub() -> Result<(), Box<dyn 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn durable_unloaded_session_has_a_stable_uuid_alias() -> Result<(), Box<dyn std::error::Error>>
 {
     let backend = ScriptedSessionBackend::new()?;
@@ -234,6 +246,10 @@ async fn durable_unloaded_session_has_a_stable_uuid_alias() -> Result<(), Box<dy
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn thread_resume_loads_an_unloaded_provider_session() -> Result<(), Box<dyn std::error::Error>>
 {
     let backend = ScriptedSessionBackend::new()?;
@@ -275,6 +291,10 @@ async fn thread_resume_loads_an_unloaded_provider_session() -> Result<(), Box<dy
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn thread_resume_returns_replayed_items_grouped_into_historical_turns()
 -> Result<(), Box<dyn std::error::Error>> {
     let backend = ScriptedSessionBackend::new()?;
@@ -362,6 +382,10 @@ async fn thread_resume_returns_replayed_items_grouped_into_historical_turns()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn ephemeral_start_never_reaches_the_provider() -> Result<(), Box<dyn std::error::Error>> {
     let backend = ScriptedSessionBackend::new()?;
     let result = handle_app_server_thread_request(
@@ -386,6 +410,10 @@ async fn ephemeral_start_never_reaches_the_provider() -> Result<(), Box<dyn std:
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn turn_methods_forward_input_and_actor_to_the_port() -> Result<(), Box<dyn std::error::Error>>
 {
     let backend = ScriptedSessionBackend::new()?;
@@ -460,6 +488,10 @@ async fn turn_methods_forward_input_and_actor_to_the_port() -> Result<(), Box<dy
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn listener_serves_a_private_provider_socket() -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -485,6 +517,10 @@ async fn listener_serves_a_private_provider_socket() -> Result<(), Box<dyn std::
 /// Oracle: Codex TUI remote requirements section 2. A running Turn must emit
 /// turn/started, and cancellation must settle with turn/completed interrupted.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn web_socket_streams_turn_start_and_interrupt_from_hub()
 -> Result<(), Box<dyn std::error::Error>> {
     use tokio::time::{Duration, timeout};
@@ -621,6 +657,10 @@ async fn web_socket_streams_turn_start_and_interrupt_from_hub()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn model_list_reads_the_current_supervisor_catalog() -> Result<(), Box<dyn std::error::Error>>
 {
     use tokio::sync::watch;

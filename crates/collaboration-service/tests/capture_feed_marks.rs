@@ -1,18 +1,10 @@
 //! Real board writes and native capture; scripted copy answers isolate mapping from networking.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
@@ -99,6 +91,10 @@ async fn create_task(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledgement_mapping_remains_readable_under_the_project_writer_guard()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -153,6 +149,10 @@ async fn acknowledgement_mapping_remains_readable_under_the_project_writer_guard
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn split_capture_maps_only_acknowledged_commits_and_survives_lost_answers()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -319,6 +319,10 @@ async fn split_capture_maps_only_acknowledged_commits_and_survives_lost_answers(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn published_snapshot_baseline_uses_its_receipt_and_is_unchanged_after_later_writes()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;

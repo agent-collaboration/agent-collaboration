@@ -4,25 +4,18 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    unused_imports,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use collaboration_service::SubscriptionWindowStore;
 use message_board::*;
-use read_cost_counter::{DataStatementCounts, ReadCost, ReadCostObservation};
+use read_cost_counter::sql_cost_classification::DataStatementCounts;
+use read_cost_counter::{ReadCost, ReadCostObservation};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 use std::sync::Arc;

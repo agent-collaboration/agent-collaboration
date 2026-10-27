@@ -1,7 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
 use collaboration_central_conformance::JwksFixtureServer;
@@ -139,6 +135,10 @@ async fn self_hosted_owner_must_match_after_signature_verification() -> TestResu
     .await
 }
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn generated_key_roundtrips_through_pkcs8_and_issues_verifiable_rs256() -> TestResult {
     let bytes = tokio::task::spawn_blocking(SelfHostedIssuer::generate_signing_key).await??;
     let issuer = SelfHostedIssuer::from_pkcs8(&bytes, policy())?;

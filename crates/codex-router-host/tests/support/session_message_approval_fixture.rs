@@ -9,6 +9,12 @@ use collaboration_protocol::{
 use serde_json::json;
 use std::path::Path;
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Fixed test vectors define these indices."
+)]
+#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 pub(crate) async fn prompt_and_approve_from_peer_provider(
     client: &CollaborationClient,
     requester: SessionRef,

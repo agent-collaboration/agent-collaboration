@@ -1,12 +1,12 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 use board_legacy_upgrade::UpgradeError;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn corrupt_stored_attribution_never_becomes_an_inferred_role() -> TestResult {
     // These are the shipped decoder's seven fail-closed relationships, arranged
     // in real ffced1c1 files, as its participant_history_read_tests did.

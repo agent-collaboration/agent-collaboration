@@ -4,6 +4,10 @@ use fleet_sync_protocol::ItemStatusState;
 use transport::WireEvent;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn cold_mail_owner_recovers_the_original_submission_without_a_new_receive_admission()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

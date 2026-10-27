@@ -1,8 +1,4 @@
 //! The actual uploader publishes every copy before recording workflow completion.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 #[expect(
     dead_code,
@@ -236,6 +232,10 @@ async fn real_store_failures_resume_before_and_after_publication_across_server_r
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn uploader_publishes_real_snapshots_and_replays_without_republishing() -> SafeResult {
     let prepared = promote_result(prepare("legacy-complete.sqlite").await)?;
     let first = prepared

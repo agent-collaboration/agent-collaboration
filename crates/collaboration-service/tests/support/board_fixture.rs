@@ -15,25 +15,28 @@ use std::{os::unix::fs::PermissionsExt, sync::Arc};
 #[path = "board_context_backend.rs"]
 mod board_context_backend;
 #[path = "board_poll_services.rs"]
-mod board_poll_services;
+pub(crate) mod board_poll_services;
+use board_poll_services::fixture_poll_services;
 // Only the membership cost proof names the composed-owner type.
-pub use board_poll_services::{FixturePollServices, fixture_poll_services};
+
 #[path = "native_mail_owner.rs"]
 pub mod native_mail_owner;
 use board_context_backend::BoardContextBackend;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 
 #[path = "controlled_clock.rs"]
-mod controlled_clock;
+pub(crate) mod controlled_clock;
 #[path = "registered_project.rs"]
-mod registered_project;
+pub(crate) mod registered_project;
+use registered_project::prepare_registered_creation;
 // Shared fixture exports are consumed by different test binaries.
-pub use registered_project::{prepare_registered_creation, settle_accepted_creation};
+
 #[path = "native_registry.rs"]
-mod native_registry;
+pub(crate) mod native_registry;
+use native_registry::PendingRegistration;
 // Shared fixture exports are consumed by different test binaries.
 // Shared fixture exports are consumed by different test binaries.
-pub use native_registry::{PendingRegistration, new_registry};
+
 pub fn fixture_peer() -> Result<fleet_sync_protocol::PeerId, TestError> {
     native_registry::fixture_peer()
 }
@@ -216,18 +219,23 @@ impl BoardFixture {
         })
     }
     async fn create_default_scope(&self) -> Result<(), TestError> {
-        let mut create = self.header();
-        create["workspaceId"] = json!(self.workspace);
-        create["name"] = json!("test workspace");
-        create["description"] = json!("");
-        accepted(&self.api.call("workspace_create", create).await?);
-        let mut create = self.header();
-        create["workspaceId"] = json!(self.workspace);
-        create["boardId"] = json!(self.board);
-        create["name"] = json!("test board");
-        create["description"] = json!("");
-        create["kind"] = json!({"kind":"area"});
-        accepted(&self.api.call("board_create", create).await?);
+        let mut create = self.header_fields();
+        create.insert("workspaceId".to_owned(), json!(self.workspace));
+        create.insert("name".to_owned(), json!("test workspace"));
+        create.insert("description".to_owned(), json!(""));
+        accepted(
+            &self
+                .api
+                .call("workspace_create", Value::Object(create))
+                .await?,
+        );
+        let mut create = self.header_fields();
+        create.insert("workspaceId".to_owned(), json!(self.workspace));
+        create.insert("boardId".to_owned(), json!(self.board));
+        create.insert("name".to_owned(), json!("test board"));
+        create.insert("description".to_owned(), json!(""));
+        create.insert("kind".to_owned(), json!({"kind":"area"}));
+        accepted(&self.api.call("board_create", Value::Object(create)).await?);
         Ok(())
     }
     pub async fn stop(self) -> Result<(), TestError> {
@@ -426,27 +434,40 @@ impl BoardFixture {
         })
     }
     pub fn header(&self) -> Value {
-        json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":self.actor})
+        Value::Object(self.header_fields())
+    }
+    fn header_fields(&self) -> serde_json::Map<String, Value> {
+        serde_json::Map::from_iter([
+            ("requestId".to_owned(), json!(RequestId::generate())),
+            ("protocolVersion".to_owned(), json!(1)),
+            ("actingFor".to_owned(), Value::Null),
+            ("actor".to_owned(), self.actor.clone()),
+        ])
     }
     pub fn record_origin(&self) -> Result<ActorOrigin, TestError> {
         fixture_record_origin()
     }
     pub fn request(&self, project: &ProjectId, operation: Value) -> Value {
-        let mut request = self.header();
-        request["projectId"] = json!(project);
-        request["operation"] = operation;
-        request
+        let mut request = self.header_fields();
+        request.insert("projectId".to_owned(), json!(project));
+        request.insert("operation".to_owned(), operation);
+        Value::Object(request)
     }
     pub async fn project(&self) -> Result<(ProjectId, WorkstreamId), TestError> {
         let project = ProjectId::generate();
         let workstream = WorkstreamId::generate();
-        let mut create = self.header();
-        create["boardId"] = json!(self.board);
-        create["projectId"] = json!(project);
-        create["title"] = json!(project.as_str());
-        self.prepare_registered_creation(&serde_json::from_value(create.clone())?)
+        let mut create = self.header_fields();
+        create.insert("boardId".to_owned(), json!(self.board));
+        create.insert("projectId".to_owned(), json!(project));
+        create.insert("title".to_owned(), json!(project.as_str()));
+        self.prepare_registered_creation(&serde_json::from_value(Value::Object(create.clone()))?)
             .await?;
-        accepted(&self.api.call("project_create", create).await?);
+        accepted(
+            &self
+                .api
+                .call("project_create", Value::Object(create))
+                .await?,
+        );
         accepted(&self.api.call("role_grant",self.request(&project,json!({"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"lead","holder":self.actor,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}))).await?);
         accepted(&self.api.call("workstream_create",self.request(&project,json!({"kind":"workstreamCreate","workstreamId":workstream,"name":"work","goal":"proof"}))).await?);
         Ok((project, workstream))
@@ -596,5 +617,3 @@ fn fixture_subscription_service(
         },
     ))
 }
-
-pub use controlled_clock::ControlledClock;

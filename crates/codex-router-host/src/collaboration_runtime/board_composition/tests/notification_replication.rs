@@ -9,6 +9,10 @@ use std::num::NonZeroUsize;
 use super::split_transport::SplitTransport;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn staged_handoff_parts_wait_for_the_final_acknowledgement_and_reopen_keeps_the_mark()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

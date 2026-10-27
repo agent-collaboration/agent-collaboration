@@ -133,6 +133,10 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         ))
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_provider_credentials(
         &self,
         provider: Provider,

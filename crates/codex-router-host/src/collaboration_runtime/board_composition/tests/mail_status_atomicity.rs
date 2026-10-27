@@ -36,6 +36,10 @@ async fn native_status_cursor(root: &Path) -> Result<u64, TestError> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn status_prefix_ack_never_precedes_batch_and_cursor_commit_at_sigkill()
 -> Result<(), TestError> {
     let (directory, state) = kill_child(CrashKind::StatusBatch).await?;

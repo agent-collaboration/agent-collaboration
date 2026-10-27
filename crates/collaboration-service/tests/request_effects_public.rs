@@ -1,13 +1,8 @@
 // This scenario uses only the Fleet portion of the shared real fixture.
 #[path = "support/board_fixture.rs"]
 #[expect(
-    unused_imports,
     dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};

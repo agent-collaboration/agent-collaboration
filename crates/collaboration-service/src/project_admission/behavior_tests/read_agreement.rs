@@ -25,7 +25,6 @@ async fn assert_unread_agreement(
 }
 
 #[tokio::test]
-
 async fn rewatch_boundaries_and_acknowledgements_keep_summary_equal_to_inbox()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

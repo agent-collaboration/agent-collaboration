@@ -1,16 +1,8 @@
 //! Holder-side admission consumes a fixture verified origin; central routing remains G3.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
@@ -18,6 +10,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn forwarded_posts_keep_the_declared_actor_and_original_per_observation_origin_on_replay()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -118,6 +114,10 @@ async fn forwarded_posts_keep_the_declared_actor_and_original_per_observation_or
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn forwarded_admission_refuses_operations_outside_the_post_family_without_effects()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

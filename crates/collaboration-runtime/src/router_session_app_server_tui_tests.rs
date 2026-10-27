@@ -7,6 +7,10 @@ use tokio_util::sync::CancellationToken;
 /// a new form. Oracle: pinned Codex 0.157.1 TUI server request display.
 #[tokio::test]
 #[ignore = "requires installed codex-cli 0.157.1 and a pseudo-terminal"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
 -> Result<(), Box<dyn std::error::Error>> {
     use crate::{NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker};
@@ -244,6 +248,10 @@ async fn pinned_codex_tui_reattach_has_no_resolved_approval_form()
 /// v2/item.rs:236-429. A real TUI must render the projected live Item.
 #[tokio::test]
 #[ignore = "requires installed codex-cli 0.157.1 and a pseudo-terminal"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
 -> Result<(), Box<dyn std::error::Error>> {
     use session_event_model::{
@@ -388,6 +396,10 @@ async fn pinned_codex_tui_renders_a_provider_reply_and_completed_turn()
 /// v2 response parser has no protocol version negotiation.
 #[tokio::test]
 #[ignore = "requires installed codex-cli 0.157.1 and a pseudo-terminal"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pinned_codex_tui_boots_and_starts_a_provider_thread()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::process::Stdio;
@@ -472,6 +484,10 @@ async fn pinned_codex_tui_boots_and_starts_a_provider_thread()
 /// the TUI prompt open and displays its error.
 #[tokio::test]
 #[ignore = "requires installed codex-cli 0.157.1 and a pseudo-terminal"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pinned_codex_tui_shows_untrusted_project_and_refuses_persistence()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::process::Stdio;

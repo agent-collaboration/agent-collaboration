@@ -58,6 +58,10 @@ async fn wait_notice_completion(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_grant_record_failure_defers_later_notices_then_reconnect_recovers_the_prefix()
 -> TestResult {
     let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;

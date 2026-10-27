@@ -1,17 +1,9 @@
 //! A measured future excludes concurrent native SQL outside its subscriber.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #![deny(clippy::too_many_lines)]
 // Other cost-proof APIs share this source, but are not exercised here.
 #[path = "support/read_cost_counter.rs"]
 #[expect(
     dead_code,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    unused_imports,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
 mod read_cost_counter;
@@ -22,6 +14,10 @@ use sqlx::{ConnectOptions, Connection, Executor};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn data_budget_ignores_real_pragma_but_detects_an_extra_select() -> TestResult {
     let mut connection = sqlx_turso::TursoConnectOptions::new().connect().await?;
     let first = ReadCostObservation::default();
@@ -55,6 +51,10 @@ async fn data_budget_ignores_real_pragma_but_detects_an_extra_select() -> TestRe
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn scoped_read_cost_excludes_real_concurrent_sql_and_separates_observations() -> TestResult {
     read_cost_counter::install();
     let mut measured = sqlx_turso::TursoConnectOptions::new().connect().await?;

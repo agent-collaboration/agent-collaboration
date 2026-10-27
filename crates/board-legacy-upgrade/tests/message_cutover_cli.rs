@@ -1,8 +1,4 @@
 //! The shipped CLI derives the two files from its existing one-root argument.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 #[path = "upload_support/central_fixture.rs"]
 #[expect(
     dead_code,
@@ -60,6 +56,10 @@ async fn run(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn dry_run_copies_messages_only_into_disposable_output_and_keeps_source_untouched()
 -> TestResult {
     let (directory, board) = support::fixture_copy("legacy-complete.sqlite")?;
@@ -91,6 +91,10 @@ async fn dry_run_copies_messages_only_into_disposable_output_and_keeps_source_un
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_upload_copies_and_verifies_messages_before_applying_the_real_drop() -> TestResult
 {
     let (directory, board) = support::fixture_copy("legacy-complete.sqlite")?;
@@ -156,6 +160,10 @@ async fn actual_cli_upload_copies_and_verifies_messages_before_applying_the_real
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn missing_thread_refuses_dry_and_real_cli_before_publication_or_message_drop() -> TestResult
 {
     let (directory, board) = support::fixture_copy("legacy-complete.sqlite")?;

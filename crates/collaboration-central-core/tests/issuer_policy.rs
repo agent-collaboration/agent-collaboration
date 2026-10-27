@@ -1,10 +1,10 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 use collaboration_central_core::AccessPolicy;
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn a_private_network_issuer_has_an_independent_key_source() -> Result<(), Box<dyn std::error::Error>>
 {
     let policy: AccessPolicy = serde_json::from_value(serde_json::json!({
@@ -24,6 +24,10 @@ fn a_private_network_issuer_has_an_independent_key_source() -> Result<(), Box<dy
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn cloudflare_configuration_keeps_its_exact_issuer_key_source_and_validation()
 -> Result<(), Box<dyn std::error::Error>> {
     let policy = AccessPolicy::cloudflare(
@@ -59,6 +63,10 @@ fn cloudflare_configuration_keeps_its_exact_issuer_key_source_and_validation()
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn malformed_or_credential_bearing_issuer_and_key_source_are_refused()
 -> Result<(), Box<dyn std::error::Error>> {
     for invalid in [

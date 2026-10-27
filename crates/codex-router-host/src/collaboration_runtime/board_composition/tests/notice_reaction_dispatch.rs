@@ -65,6 +65,10 @@ async fn completion(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn one_reaction_owner_defers_y_while_x_waits_on_the_actual_store_and_requests_continue()
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;
@@ -168,6 +172,10 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_the_actual_store_and_reque
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn stale_generation_completion_returns_the_owner_without_acknowledging_new_receipts()
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;

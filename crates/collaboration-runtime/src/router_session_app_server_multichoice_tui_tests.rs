@@ -19,6 +19,10 @@ use tokio_util::sync::CancellationToken;
 /// and appears as a completed read-only notice here.
 #[tokio::test]
 #[ignore = "requires installed codex-cli 0.157.1 and a pseudo-terminal"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pinned_codex_tui_shows_unsupported_multichoice_question()
 -> Result<(), Box<dyn std::error::Error>> {
     let version = Command::new("codex").arg("--version").output().await?;

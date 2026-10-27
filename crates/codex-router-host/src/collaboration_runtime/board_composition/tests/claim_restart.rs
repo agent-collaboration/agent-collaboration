@@ -332,6 +332,10 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn requested_stop_preserves_a_failed_owned_operation() -> TestResult {
     let mut fixture = Box::pin(super::claim_fixture::ClaimFixture::start()).await?;
     let (failed, observed) = tokio::sync::oneshot::channel();

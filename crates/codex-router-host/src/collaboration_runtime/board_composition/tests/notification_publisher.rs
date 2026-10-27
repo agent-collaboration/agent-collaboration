@@ -42,6 +42,10 @@ async fn submit_operation(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn an_acknowledged_remote_handoff_is_published_without_another_board_write() -> TestResult {
     let _ = tracing_subscriber::fmt()
         .with_max_level(tracing::Level::WARN)

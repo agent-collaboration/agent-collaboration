@@ -1,8 +1,5 @@
 //! Fixed vectors and rejected local inputs keep protocol hashing independent of HTTP.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)] // Assertions carry literal protocol expectations.
+// Assertions carry literal protocol expectations.
 #![deny(clippy::too_many_lines)]
 use super::{
     FleetCommandError,
@@ -15,6 +12,10 @@ use std::{error::Error, io::Cursor, os::unix::fs::PermissionsExt};
 type TestResult = Result<(), Box<dyn Error>>;
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn machine_randomness_is_32_bytes_and_hashes_only_the_raw_hex_token() -> TestResult {
     let raw = random_machine_token(&mut Cursor::new([0_u8; 32]))?;
     assert_eq!(
@@ -37,6 +38,10 @@ fn machine_randomness_is_32_bytes_and_hashes_only_the_raw_hex_token() -> TestRes
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn central_admin_url_preserves_origin_and_translates_session_scheme() -> TestResult {
     let root = tempfile::tempdir()?;
     let secret = root.path().join("access");

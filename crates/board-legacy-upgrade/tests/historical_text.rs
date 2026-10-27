@@ -1,12 +1,12 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 mod support;
 use message_board::*;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn historical_control_text_and_derived_subject_keep_the_shipped_visible_escape() -> TestResult
 {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
@@ -45,6 +45,10 @@ async fn historical_control_text_and_derived_subject_keep_the_shipped_visible_es
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn imported_subject_uses_first_line_unicode_characters_and_empty_line_fallback() -> TestResult
 {
     for (text, expected) in [

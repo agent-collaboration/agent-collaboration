@@ -349,6 +349,10 @@ pub(crate) fn run_account_command_with_input_and_openai_client_and_secret_store(
 }
 
 #[cfg(all(test, target_os = "macos"))]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 pub(crate) fn run_account_command_with_input_and_claude_flow_and_secret_store(
     stdout: &mut impl Write,
     reader: &mut impl BufRead,

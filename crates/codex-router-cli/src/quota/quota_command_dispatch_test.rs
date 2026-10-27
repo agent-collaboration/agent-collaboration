@@ -299,6 +299,10 @@ async fn non_interactive_dispatch_never_constructs_an_injected_reset_session() {
     struct RejectingResetSessionFactory;
 
     impl crate::quota_reset::InteractiveResetSessionFactory for RejectingResetSessionFactory {
+        #[expect(
+            clippy::panic_in_result_fn,
+            reason = "Contract asserts; setup may fail."
+        )]
         fn create(
             &self,
             _router_root: &Path,

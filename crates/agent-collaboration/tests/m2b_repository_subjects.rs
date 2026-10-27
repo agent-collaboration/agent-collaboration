@@ -5,8 +5,7 @@ mod board_cli_execution;
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
     dead_code,
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 pub mod board_fixture;
 
@@ -174,7 +173,6 @@ async fn assert_list_parity(
 }
 
 #[tokio::test]
-
 async fn repository_and_default_lists_follow_subject_rename_and_refile() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     attach_repository(&fixture).await?;
@@ -212,7 +210,6 @@ async fn repository_and_default_lists_follow_subject_rename_and_refile() -> Resu
 }
 
 #[tokio::test]
-
 async fn repository_and_default_lists_keep_redacted_subjects_private() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     attach_repository(&fixture).await?;

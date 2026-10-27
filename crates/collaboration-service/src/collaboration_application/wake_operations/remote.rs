@@ -22,6 +22,7 @@ impl WakeOperations {
         self
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_send(&self, request: WakeSendRequest) -> Result<WakeSnapshot, WakeFailure> {
         if request.message.target.endpoint.service_id == self.service_id {
             return self.wake_send_local(request).await;
@@ -112,6 +113,7 @@ impl WakeOperations {
         Ok(snapshot)
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_show(&self, request: WakeShowRequest) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
         let Some(target) = self.remote_target(&request.wakeup_id, &context).await? else {
@@ -149,18 +151,21 @@ impl WakeOperations {
             )),
         }
     }
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_pause(
         &self,
         request: WakeMutationRequest,
     ) -> Result<WakeMutationResult, WakeFailure> {
         self.remote_mutation(request, WakeAction::Pause).await
     }
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_resume(
         &self,
         request: WakeMutationRequest,
     ) -> Result<WakeMutationResult, WakeFailure> {
         self.remote_mutation(request, WakeAction::Resume).await
     }
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn wake_cancel(
         &self,
         request: WakeMutationRequest,
@@ -168,6 +173,7 @@ impl WakeOperations {
         self.remote_mutation(request, WakeAction::Cancel).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn remote_mutation(
         &self,
         request: WakeMutationRequest,
@@ -286,6 +292,7 @@ impl WakeOperations {
             },
         }
     }
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn remote_target(
         &self,
         id: &WakeupId,
@@ -307,6 +314,7 @@ impl WakeOperations {
                 )
             })
     }
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn control(
         &self,
         context: WakeFailureContext,
@@ -338,6 +346,7 @@ impl WakeOperations {
         clippy::too_many_arguments,
         reason = "The frozen request, correlation and caller deadline are independent inputs."
     )]
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn remote_call(
         &self,
         context: WakeFailureContext,

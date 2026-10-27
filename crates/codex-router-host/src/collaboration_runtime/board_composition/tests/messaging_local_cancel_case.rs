@@ -3,6 +3,10 @@ use super::*;
 use collaboration_protocol::PushDeliveryState;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplicated_end()
 -> TestResult {
     let mut fixture = Box::pin(RuleFixture::open(true)).await?;

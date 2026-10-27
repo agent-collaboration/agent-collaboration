@@ -20,7 +20,7 @@ pub struct PostReferences(Vec<ReferenceTarget>);
 #[schemars(transparent)]
 #[expect(
     dead_code,
-    reason = "Shared test fixtures expose helpers used by other test targets."
+    reason = "The derive reads this field's schema; no schema-carrier value is constructed."
 )]
 struct PostReferencesSchema(#[schemars(length(max = 64))] Vec<ReferenceTarget>);
 

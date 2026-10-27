@@ -18,6 +18,7 @@ use serde_json::{Value, json};
 
 impl AutomationOperations {
     /// Pages one delivery's attempts as of a pinned observation time.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_attempts(
         &self,
         request: DeliveryAttemptsRequest,
@@ -37,6 +38,7 @@ impl AutomationOperations {
     }
 
     /// Pages one Run's summary attempts as of a pinned observation time.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_summaries(
         &self,
         request: RunSummariesRequest,
@@ -55,6 +57,7 @@ impl AutomationOperations {
         .await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn attempt_history<TRecord: DeserializeOwned>(
         &self,
         selection: AttemptSelection,
@@ -192,6 +195,7 @@ impl AutomationOperations {
     }
 
     /// Reads retained automation events after `after`, disclosing any retention gap.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn automation_events(
         &self,
         request: AutomationEventsRequest,

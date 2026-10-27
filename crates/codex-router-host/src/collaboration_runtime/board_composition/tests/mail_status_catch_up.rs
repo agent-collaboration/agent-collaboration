@@ -4,6 +4,10 @@ use fleet_sync_protocol::{DeliveryEnvelope, SubmitResult};
 use transport::WireEvent;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn welcome_catch_up_commits_pages_and_resumes_after_a_lost_status_ack()
 -> Result<(), TestError> {
     let _ = tracing_subscriber::fmt()

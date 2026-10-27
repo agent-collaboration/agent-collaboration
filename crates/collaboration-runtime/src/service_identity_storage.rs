@@ -185,14 +185,14 @@ fn read_peer_identity(path: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
 }
 
 #[cfg(test)]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 mod read_only_identity_tests {
     use super::*;
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn read_existing_identity_never_creates_or_replaces_files() -> io::Result<()> {
         let directory = tempfile::tempdir()?;
         assert_eq!(read_service_identity(directory.path())?, None);

@@ -230,6 +230,10 @@ async fn serve(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_through_real_relay_and_canonical_status()
 -> Result<(), TestError> {
     let mut source = MailHarness::open(false).await?;

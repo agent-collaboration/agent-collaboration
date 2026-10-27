@@ -29,6 +29,10 @@ async fn wait_known(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn hints_during_a_real_running_receive_cycle_coalesce_into_one_further_fetch_pass()
 -> Result<(), TestError> {
     let mut harness = MailHarness::open(false).await?;
@@ -122,6 +126,10 @@ async fn hints_during_a_real_running_receive_cycle_coalesce_into_one_further_fet
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn submit_fetch_received_report_and_committed_status_use_one_actual_session()
 -> Result<(), TestError> {
     let mut harness = MailHarness::open(false).await?;
@@ -230,6 +238,10 @@ async fn submit_fetch_received_report_and_committed_status_use_one_actual_sessio
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn largest_accepted_items_are_returned_by_the_relay_under_the_actual_runtime_budget()
 -> Result<(), TestError> {
     // Each item gets a fresh physical mailbox/owner. A malformed native projection
@@ -313,6 +325,10 @@ async fn largest_accepted_items_are_returned_by_the_relay_under_the_actual_runti
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn wrong_relay_is_never_sent_while_a_correct_submission_on_the_same_session_succeeds()
 -> Result<(), TestError> {
     let mut harness = MailHarness::open(false).await?;

@@ -1,16 +1,8 @@
 //! Imported history stays covered; only real live admission supplies window time.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 use collaboration_service::SubscriptionWindowStore;
@@ -30,6 +22,10 @@ impl ImportRowKeys for FixtureImportKeys {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn unknown_imported_post_is_covered_and_only_the_later_live_post_opens_a_window() -> TestResult
 {
     let fixture = board_fixture::BoardFixture::start().await?;

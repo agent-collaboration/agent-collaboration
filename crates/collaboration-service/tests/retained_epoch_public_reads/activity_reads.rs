@@ -130,7 +130,7 @@ async fn retained_trail_search_inbox_and_stored_push_ranges_survive_a_later_writ
             .ok_or("creating fields")?
             .clone(),
     );
-    board_fixture::settle_accepted_creation(
+    board_fixture::registered_project::settle_accepted_creation(
         &target._fleet,
         &serde_json::from_value(creating)?,
         &target.record_origin()?,

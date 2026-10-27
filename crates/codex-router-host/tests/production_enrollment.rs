@@ -33,7 +33,6 @@ const CREDENTIAL_SENTINEL: &str = "Bearer enrollment-credential-must-stay-privat
 const ACCESS_SENTINEL: &str = "enrollment-access-secret-must-stay-private";
 
 #[tokio::test]
-
 async fn production_host_discovers_enrollment_and_creates_a_central_project() -> TestResult {
     let fixture = ProductionEnrollmentFixture::start(EnrollmentLocation::RouterRoot).await?;
     fixture
@@ -81,7 +80,6 @@ async fn production_host_discovers_enrollment_and_creates_a_central_project() ->
 }
 
 #[tokio::test]
-
 async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable() -> TestResult {
     let fixture =
         ProductionEnrollmentFixture::start(EnrollmentLocation::CollaborationDirectory).await?;

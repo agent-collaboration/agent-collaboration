@@ -2,11 +2,6 @@
 
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
-    unused_imports,
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
-#[expect(
     dead_code,
     reason = "Shared fixture helpers serve different subsets of integration targets."
 )]

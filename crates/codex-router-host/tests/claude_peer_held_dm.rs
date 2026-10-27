@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Closed Claude peers hold Auto DMs until their owner publishes a writer.
 
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
@@ -25,6 +21,7 @@ use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, sync::Arc, time::Duration};
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -36,6 +33,7 @@ fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn draft(
     target: &SessionRef,
     mode: MessageDelivery,
@@ -59,6 +57,7 @@ fn draft(
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn generation_guard() -> CodexGeneration {
     serde_json::from_value(json!({
         "serviceEpoch":"00000000-0000-4000-8000-000000000001",
@@ -67,6 +66,7 @@ fn generation_guard() -> CodexGeneration {
     .expect("Codex generation guard")
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn publish_peer(registry: &std::path::Path, socket_path: &std::path::Path) {
     let process_id = std::process::id();
     std::fs::write(
@@ -92,6 +92,7 @@ fn publish_peer(registry: &std::path::Path, socket_path: &std::path::Path) {
         .expect("private peer authentication record");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn start_peer_delivery_service(
     root: &std::path::Path,
 ) -> (

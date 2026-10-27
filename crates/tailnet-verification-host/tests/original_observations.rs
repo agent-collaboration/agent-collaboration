@@ -1,8 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions fail these tests while fixture errors propagate through Result."
-)]
-
 use std::path::Path;
 
 use codex_router_tailnet_verification_host::driver_error::{DriverError, DriverResult};
@@ -105,6 +100,10 @@ fn invoke(case: &OracleCase) -> DriverResult<Value> {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn matches_forty_two_original_observation_executions() -> Result<(), Box<dyn std::error::Error>> {
     let directory = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/original-observations");
     let mut files = std::fs::read_dir(directory)?.collect::<Result<Vec<_>, _>>()?;

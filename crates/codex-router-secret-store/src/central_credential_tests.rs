@@ -1,7 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions fail the test while fixture errors propagate."
-)]
 use crate::central_credentials::{CentralCredential, CredentialFileError};
 use std::{
     error::Error,
@@ -19,6 +15,10 @@ fn owner() -> CentralCredential {
     }
 }
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn a_handoff_is_created_private_consumed_once_and_removed() -> TestResult {
     let directory = tempfile::tempdir()?;
     let file = directory.path().join("credential.json");
@@ -36,6 +36,10 @@ fn a_handoff_is_created_private_consumed_once_and_removed() -> TestResult {
     Ok(())
 }
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn shared_symlinked_hardlinked_oversized_and_malformed_handoffs_fail_closed() -> TestResult {
     let directory = tempfile::tempdir()?;
     let file = directory.path().join("credential.json");
@@ -78,6 +82,10 @@ fn shared_symlinked_hardlinked_oversized_and_malformed_handoffs_fail_closed() ->
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn fifo_handoff_is_refused_without_waiting_for_a_writer() -> TestResult {
     let directory = tempfile::tempdir()?;
     let fifo = directory.path().join("credential.fifo");
@@ -88,6 +96,10 @@ fn fifo_handoff_is_refused_without_waiting_for_a_writer() -> TestResult {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn symlink_to_fifo_is_refused_without_waiting_for_a_writer() -> TestResult {
     let directory = tempfile::tempdir()?;
     let fifo = directory.path().join("credential.fifo");
@@ -117,6 +129,10 @@ impl Drop for HandoffChild {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn require_prompt_refusal(path: &Path) -> TestResult {
     let mut child = HandoffChild(
         Command::new(std::env::current_exe()?)

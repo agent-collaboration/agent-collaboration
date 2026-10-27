@@ -3,6 +3,10 @@ use super::*;
 use futures_util::FutureExt;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn archive_observer_waits_for_a_fresh_sync_while_admission_is_busy() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
     runtime.fleet.synchronize().await?;

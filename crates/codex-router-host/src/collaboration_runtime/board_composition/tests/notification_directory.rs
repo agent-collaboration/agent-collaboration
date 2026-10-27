@@ -5,6 +5,10 @@ use board_sync_protocol::InstallationPeerLookup;
 use message_board::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_live_installation_lookup_freezes_its_peer_outside_the_project_lock_and_then_uses_the_cache()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -87,6 +91,10 @@ async fn a_live_installation_lookup_freezes_its_peer_outside_the_project_lock_an
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn an_unknown_installation_lookup_refuses_the_actual_intent_without_freezing_mail()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

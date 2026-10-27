@@ -1,16 +1,8 @@
 //! Forced real-pool interleavings at the writable-to-superseded registry boundary.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 pub mod board_fixture;
 
@@ -118,6 +110,10 @@ async fn supersede(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable()
 -> Result<(), TestError> {
     timeout(BOUND, async {
@@ -162,6 +158,10 @@ async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retried()
 -> Result<(), TestError> {
     timeout(BOUND, async {
@@ -214,6 +214,10 @@ async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retrie
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn completed_supersession_retries_without_reopening_the_closed_file() -> Result<(), TestError>
 {
     timeout(BOUND, async {

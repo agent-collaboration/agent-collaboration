@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Provider route decisions before any client effect.
 
 #[path = "support/provider_fixture_launch.rs"]

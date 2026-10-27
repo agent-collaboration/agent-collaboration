@@ -79,6 +79,10 @@ pub(super) async fn write_and_replicate(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy() -> TestResult {
     let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
@@ -210,6 +214,10 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> TestResult {
     use collaboration_contracts::ProjectClaim;
     use fleet_sync_session::SessionClientStore;
@@ -415,6 +423,10 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn same_epoch_unavailable_writer_is_not_stopped_as_an_older_snapshot_owner() -> TestResult {
     let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
@@ -464,6 +476,10 @@ async fn same_epoch_unavailable_writer_is_not_stopped_as_an_older_snapshot_owner
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_idle_holder_move_preserves_claimed_prefix_without_an_intervening_write()
 -> TestResult {
     let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;

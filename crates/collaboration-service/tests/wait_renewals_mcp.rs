@@ -4,20 +4,16 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/native_authority.rs"]
 pub mod native_authority;
-use board_fixture::{BoardFixture, ControlledClock, TestError, accepted, fixture_peer};
+use board_fixture::controlled_clock::ControlledClock;
+use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use message_board::*;
 use runtime_primitives::{Clock, SystemClock};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 #[tokio::test]
-
 async fn wait_renewals_replay_each_project_and_keep_partial_refusals_visible()
 -> Result<(), TestError> {
     tokio::time::timeout(Duration::from_secs(30), Box::pin(exercise_wait_renewals())).await?

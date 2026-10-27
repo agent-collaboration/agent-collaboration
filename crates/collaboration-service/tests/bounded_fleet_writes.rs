@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
 #[expect(
@@ -35,7 +31,7 @@ async fn update_cost(
     (
         ReadCost,
         RouterPayloadInputBodies,
-        read_cost_counter::AlarmRunCosts,
+        read_cost_counter::alarm_read_costs::AlarmRunCosts,
     ),
     TestError,
 > {
@@ -43,7 +39,7 @@ async fn update_cost(
     for index in 0..size {
         accepted(&keyed_call(&fixture, "workspace_create", json!({"workspaceId":WorkspaceId::generate(),"name":format!("unrelated {index}"),"description":""})).await?);
     }
-    let alarms = read_cost_counter::observe_alarm_costs();
+    let alarms = read_cost_counter::alarm_read_costs::observe_alarm_costs();
     let before = current_cost();
     let payload_inputs = fixture._fleet_runtime.observe_payload_input_bodies()?;
     accepted(&keyed_call(&fixture, "workspace_update", json!({"workspaceId":fixture.workspace,"name":"updated workspace","description":"scoped projection"})).await?);

@@ -1,8 +1,4 @@
 //! Real admission writes bind intent state and frozen mail under one native guard.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Literal behavioral assertions in Result-returning native fixtures."
-)]
 use super::subscription_fixture::*;
 use crate::{IntentHandoffInput, IntentRecipientEnrollment, IntentReply, ProjectAdmissionError};
 use fleet_sync_protocol::{DeliveryEnvelope, ItemId, PeerId};
@@ -63,6 +59,10 @@ fn input(recipient: &Identity) -> Result<IntentHandoffInput, TestError> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn intent_claim_commits_the_frozen_item_and_equal_reference_and_replays_without_reallocation()
 -> Result<(), TestError> {
     let (fixture, original) = Box::pin(arrange_intent()).await?;
@@ -135,6 +135,10 @@ async fn intent_claim_commits_the_frozen_item_and_equal_reference_and_replays_wi
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_missing_enrollment_defers_without_writes_and_a_resolved_pair_can_retry()
 -> Result<(), TestError> {
     let (fixture, intent) = Box::pin(arrange_intent()).await?;
@@ -185,6 +189,10 @@ async fn a_missing_enrollment_defers_without_writes_and_a_resolved_pair_can_retr
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_claim_refuses_an_enrollment_pair_for_a_different_service_under_the_lock()
 -> Result<(), TestError> {
     let (fixture, intent) = Box::pin(arrange_intent()).await?;
@@ -219,6 +227,10 @@ async fn a_claim_refuses_an_enrollment_pair_for_a_different_service_under_the_lo
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn the_admission_writer_refuses_a_handed_off_reference_that_names_another_frozen_item()
 -> Result<(), TestError> {
     let (fixture, mut intent) = Box::pin(arrange_intent()).await?;
@@ -257,6 +269,10 @@ async fn the_admission_writer_refuses_a_handed_off_reference_that_names_another_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn an_unknown_installation_is_a_terminal_refusal_without_a_frozen_handoff()
 -> Result<(), TestError> {
     let (fixture, intent) = Box::pin(arrange_intent()).await?;
@@ -302,6 +318,10 @@ async fn an_unknown_installation_is_a_terminal_refusal_without_a_frozen_handoff(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_ledger_write_failure_rolls_back_the_frozen_handoff_and_intent_transition_together()
 -> Result<(), TestError> {
     let (fixture, intent) = Box::pin(arrange_intent()).await?;

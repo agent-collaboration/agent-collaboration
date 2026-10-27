@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Host content admission preserves actor authority and ACP block order.
 
 #[path = "support/provider_fixture_launch.rs"]

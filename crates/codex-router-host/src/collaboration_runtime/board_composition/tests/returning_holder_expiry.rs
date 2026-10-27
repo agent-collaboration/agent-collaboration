@@ -6,6 +6,10 @@ use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, TransferId};
 use received_grants::{wait_published_project, write_and_replicate};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_project() -> TestResult
 {
     let fixture = claim_fixture::ClaimFixture::start().await?;

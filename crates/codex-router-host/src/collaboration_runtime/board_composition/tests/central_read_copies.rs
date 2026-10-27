@@ -57,6 +57,10 @@ fn copy_files(root: &Path) -> Result<BTreeSet<PathBuf>, io::Error> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn superseded_local_file_reads_native_central_copy_with_distinct_authority_and_pinned_generations()
 -> TestResult {
     // Arrange actual board creation, writer publication and the existing machine session.

@@ -1,8 +1,4 @@
 //! The real tool reply and its own grant notice join one held native install.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
-)]
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
@@ -26,6 +22,10 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(30);
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is_held() -> TestResult
 {
     let directory = tempfile::tempdir()?;

@@ -14,10 +14,6 @@
 //! (`session_operations`, `journal_operations`); provider observation
 //! (`provider_observation_operations`). Heavier paging logic stays in the crate's domain modules
 //! (`codex_session_inventory`, `provider_session_inventory`, `schedule_preparation`).
-#![expect(
-    clippy::result_large_err,
-    reason = "typed failures are the published payloads, returned once per IO-bound request"
-)]
 mod automation_history_operations;
 mod automation_inspection_operations;
 mod automation_operations;

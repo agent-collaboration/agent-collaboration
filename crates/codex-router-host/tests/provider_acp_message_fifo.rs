@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Queue draining and inspectable provider queue operation behavior.
 
 #[path = "support/provider_fixture_launch.rs"]

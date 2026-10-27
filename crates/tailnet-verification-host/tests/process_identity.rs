@@ -1,10 +1,10 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions fail these tests while fixture errors propagate through Result."
-)]
 use codex_router_tailnet_verification_host::process_identity::parse_identity;
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn process_fields_preserve_birth_and_executable_spacing() -> Result<(), Box<dyn std::error::Error>>
 {
     let identity = parse_identity(

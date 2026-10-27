@@ -24,6 +24,10 @@ fn assert_accepted(reply: &Value) {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_requester_without_project_writes()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

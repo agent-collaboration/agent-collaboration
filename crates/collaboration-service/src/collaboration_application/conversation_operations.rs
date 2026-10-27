@@ -37,6 +37,7 @@ macro_rules! submitted_operations {
     ($($(#[$documentation:meta])* $operation:ident($request:ty) => $backend_method:ident;)*) => {
         $(
             $(#[$documentation])*
+            #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
             pub async fn $operation(
                 &self,
                 mut request: $request,
@@ -92,6 +93,7 @@ impl ConversationOperations {
     }
 
     /// Creates a provider session on the endpoint's active binding.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn conversation_create(
         &self,
         mut request: ConversationCreateRequest,
@@ -133,6 +135,7 @@ impl ConversationOperations {
     }
 
     /// Changes one advertised provider setting.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn settings_set(
         &self,
         request: ProviderSettingsSetRequest,
@@ -144,6 +147,7 @@ impl ConversationOperations {
     }
 
     /// Accepts the provider's current settings without calling the agent.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn settings_accept(
         &self,
         request: ProviderSettingsAcceptRequest,
@@ -171,6 +175,7 @@ impl ConversationOperations {
     }
 
     /// Shows one operation, whether a recorded Codex operation or a provider operation.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_show(
         &self,
         request: ConversationOperationShowRequest,
@@ -186,6 +191,7 @@ impl ConversationOperations {
     }
 
     /// Waits up to `timeoutSeconds` for an operation to settle.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_wait(
         &self,
         request: ConversationOperationWaitRequest,
@@ -201,6 +207,7 @@ impl ConversationOperations {
     }
 
     /// Reconciles an operation whose outcome is unresolved.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_reconcile(
         &self,
         request: ConversationOperationReconcileRequest,
@@ -215,6 +222,7 @@ impl ConversationOperations {
             .map_err(ConversationFailure::Operation)
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     fn read_backend(
         &self,
         operation_id: &OperationId,
@@ -223,6 +231,7 @@ impl ConversationOperations {
             .ok_or_else(|| local_failure(LocalFailure::Unavailable, operation_id.clone(), None))
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn admit_submission(
         &self,
         check: SubmissionCheck<'_>,
@@ -343,6 +352,7 @@ impl ConversationOperations {
     }
 
     /// The recorded Codex ACP operation with this identity, if one exists.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn codex_record(
         &self,
         operation_id: &OperationId,
@@ -364,6 +374,7 @@ impl ConversationOperations {
         }))
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn codex_wait(
         &self,
         request: &ConversationOperationWaitRequest,
@@ -407,6 +418,7 @@ impl ConversationOperations {
         }
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn codex_reconcile(
         &self,
         operation_id: &OperationId,
@@ -623,6 +635,7 @@ fn local_failure(
     })
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn codex_snapshot(
     record: collaboration_runtime::ProviderOperationRecord,
 ) -> Result<ConversationOperationSnapshot, ConversationFailure> {

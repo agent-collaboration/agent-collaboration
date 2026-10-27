@@ -6,10 +6,6 @@ pub mod accepted_snapshot;
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;

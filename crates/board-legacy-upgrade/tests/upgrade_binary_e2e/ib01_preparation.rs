@@ -3,6 +3,10 @@ use message_board::MAX_DESCRIPTION_BYTES;
 use serde_json::{Value, json};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_dry_run_reports_literal_history_and_keeps_inputs_unchanged() -> E2eResult {
     let fixture = CliImportFixture::new("legacy-complete.sqlite")?;
     let descriptions = set_description_variants(&fixture.source)?;
@@ -61,6 +65,10 @@ async fn actual_cli_dry_run_reports_literal_history_and_keeps_inputs_unchanged()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn set_description_variants(path: &std::path::Path) -> E2eResult<Vec<String>> {
     let empty = String::new();
     let control = "  first\r\nsecond\0\tline\n ".to_owned();
@@ -81,6 +89,10 @@ fn set_description_variants(path: &std::path::Path) -> E2eResult<Vec<String>> {
     Ok(vec![empty, control, maximum])
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_dry_run_projects(report: &Value, descriptions: &[String]) -> E2eResult {
     let projects = report
         .get("report")
@@ -110,6 +122,10 @@ fn assert_dry_run_projects(report: &Value, descriptions: &[String]) -> E2eResult
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_project_15_mapping(report: &Value) -> E2eResult {
     let projects = report
         .get("report")

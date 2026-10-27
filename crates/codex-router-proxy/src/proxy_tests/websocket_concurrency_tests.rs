@@ -1,7 +1,6 @@
 use super::*;
 
 #[test]
-
 fn legacy_single_lane_accept_loop_reproducer_blocks_second_client_until_first_finishes() {
     let listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,

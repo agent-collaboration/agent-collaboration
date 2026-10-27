@@ -4,6 +4,10 @@ use super::*;
 use message_board::CancelExpansionSeq;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn child_capture_marks_wait_for_final_ack_and_survive_all_native_owners_reopening()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -87,7 +91,7 @@ async fn child_capture_marks_wait_for_final_ack_and_survive_all_native_owners_re
     drop(store);
     drop(database);
     let directory = target.stop_and_keep_directory().await?;
-    let registry = board_fixture::new_registry(directory.path())?;
+    let registry = board_fixture::native_registry::new_registry(directory.path())?;
     let store = registry
         .existing_project(&project)
         .await?
@@ -154,6 +158,10 @@ async fn child_capture_marks_wait_for_final_ack_and_survive_all_native_owners_re
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn verified_seed_baseline_inherits_child_marks_and_later_expansions_cannot_change_it()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -235,6 +243,10 @@ impl ReplicationTransport<BoardConsumerProtocol> for DelayedOldAcknowledgement {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn discarded_child_ordinal_reuse_does_not_transfer_a_delayed_old_epoch_acknowledgement()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;

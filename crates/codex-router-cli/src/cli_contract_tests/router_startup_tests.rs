@@ -457,6 +457,10 @@ struct LoopbackUpkeepOAuthClient {
 }
 
 impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn refresh_credentials(
         &self,
         _account_id: &AccountId,

@@ -1,8 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! Real registry/socket fixtures at the peer route boundary.
 
 use agent_automation::{
@@ -48,6 +43,7 @@ impl AttemptEvidenceSink for RecordedPeerEvidence {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -59,6 +55,11 @@ fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Fixed test vectors define these indices."
+)]
 fn publish_peer(root: &Path, status: Option<&str>) -> std::path::PathBuf {
     let pid = std::process::id();
     let socket_path = root.join("peer.sock");
@@ -84,6 +85,11 @@ fn publish_peer(root: &Path, status: Option<&str>) -> std::path::PathBuf {
     socket_path
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Fixed test vectors define these indices."
+)]
 fn publish_peer_claim(root: &Path, process_id: u32, name: Option<&str>, cwd: Option<&str>) {
     let mut record = json!({
         "pid": process_id,
@@ -100,6 +106,7 @@ fn publish_peer_claim(root: &Path, process_id: u32, name: Option<&str>, cwd: Opt
         .expect("registry claim fixture");
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn delivery(mode: MessageDelivery) -> PreparedDeliveryRequest {
     let target = target();
     let push_id =

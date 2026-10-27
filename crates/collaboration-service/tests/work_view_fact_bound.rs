@@ -2,13 +2,8 @@
 // This fixture also supplies other board journeys.
 #[path = "support/board_fixture.rs"]
 #[expect(
-    unused_imports,
-    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
-)]
-#[expect(
     dead_code,
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared test fixture helpers serve different callers."
 )]
 mod board_fixture;
 use board_fixture::{BoardFixture, TestError};

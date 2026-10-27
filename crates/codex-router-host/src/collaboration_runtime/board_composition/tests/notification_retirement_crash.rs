@@ -21,6 +21,10 @@ struct RetirementCheckpoint {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before_progress()
 -> Result<(), TestError> {
     // Arrange: the child can report ready only after the real ACK and deletion.

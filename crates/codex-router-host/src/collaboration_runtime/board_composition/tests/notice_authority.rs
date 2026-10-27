@@ -84,6 +84,10 @@ async fn check_hint_against_current_authority(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn granted_hint_with_a_different_epoch_cannot_replace_authoritative_writer() -> TestResult {
     let hinted_epoch = Epoch::new(73)?;
     check_hint_against_current_authority(

@@ -4,12 +4,9 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
-use board_fixture::{BoardFixture, ControlledClock, TestError, accepted, fixture_peer};
+use board_fixture::controlled_clock::ControlledClock;
+use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use fleet_sync_protocol::{
     DatabaseId, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer, RenewResult,
 };

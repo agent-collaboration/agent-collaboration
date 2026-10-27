@@ -1,8 +1,3 @@
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "test assertions report contract failures; Result propagates setup errors"
-)]
-
 use super::{CycleBaseline, PackageGraphs};
 use crate::ModuleGraph;
 
@@ -33,6 +28,10 @@ fn two_module_cycle() -> Result<PackageGraphs, crate::ArchitectureError> {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn unchanged_cycles_pass_independent_of_baseline_order() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(
         r#"{"demo-package":[{
@@ -46,6 +45,10 @@ fn unchanged_cycles_pass_independent_of_baseline_order() -> Result<(), crate::Ar
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn new_cycle_fails_with_its_concrete_edges() -> Result<(), crate::ArchitectureError> {
     let violation = CycleBaseline::default()
         .compare(&two_module_cycle()?)
@@ -59,6 +62,10 @@ fn new_cycle_fails_with_its_concrete_edges() -> Result<(), crate::ArchitectureEr
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn module_joining_an_allowed_cycle_fails() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(TWO_MODULE_BASELINE)?;
     let current = packages(
@@ -80,6 +87,10 @@ fn module_joining_an_allowed_cycle_fails() -> Result<(), crate::ArchitectureErro
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn new_intra_scc_edge_fails_without_membership_growth() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(THREE_MODULE_BASELINE)?;
     let current = packages(
@@ -102,6 +113,10 @@ fn new_intra_scc_edge_fails_without_membership_growth() -> Result<(), crate::Arc
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn new_incoming_edge_fails_without_membership_growth() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(TWO_MODULE_BASELINE)?;
     let current = packages(
@@ -122,6 +137,10 @@ fn new_incoming_edge_fails_without_membership_growth() -> Result<(), crate::Arch
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn new_item_use_of_an_allowed_module_edge_passes() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(TWO_MODULE_BASELINE)?;
     let current = packages(
@@ -136,6 +155,10 @@ fn new_item_use_of_an_allowed_module_edge_passes() -> Result<(), crate::Architec
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn cycles_cannot_merge_two_allowed_components() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(
         r#"{"demo-package":[
@@ -161,6 +184,10 @@ fn cycles_cannot_merge_two_allowed_components() -> Result<(), crate::Architectur
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn shrink_and_disappearance_require_a_baseline_update() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(
         r#"{"demo-package":[{
@@ -183,6 +210,10 @@ fn shrink_and_disappearance_require_a_baseline_update() -> Result<(), crate::Arc
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn removing_an_incoming_edge_requires_a_baseline_update() -> Result<(), crate::ArchitectureError> {
     let baseline = CycleBaseline::from_json(
         r#"{"demo-package":[{

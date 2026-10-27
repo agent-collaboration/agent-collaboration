@@ -31,12 +31,14 @@ impl ClaimFixture {
         let central =
             Arc::new(TestCentral::start(&directory.path().join("central"), &origin()?).await?);
 
-        let mut board = open_board_admission(
+        let board = open_board_admission(
             &directory.path().join("router"),
             identity()?,
             Some(central.session_inputs()?),
         )
         .await?;
+        #[cfg(feature = "runtime-test-support")]
+        let mut board = board;
         let session = board.session.as_ref().ok_or("session")?;
         let projects = session.projects.clone();
         let welcomed = session.welcomed.subscribe();

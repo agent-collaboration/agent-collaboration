@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -107,7 +103,6 @@ fn corrupt_text(
     Ok(())
 }
 #[tokio::test]
-
 async fn native_current_and_kind_reads_reject_padded_names_titles_and_tags() -> Result<(), TestError>
 {
     let (fixture, project, cases) = setup().await?;

@@ -1,11 +1,4 @@
 //! One-time legacy board translation, separate from the running Router.
-#![cfg_attr(
-    test,
-    expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract assertions fail the test while fixture errors propagate."
-    )
-)]
 mod import_digest;
 mod import_error;
 mod import_keys;

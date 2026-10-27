@@ -1,8 +1,4 @@
 //! Force the real install runner and bootstrap renew to meet at the drain boundary.
-#![expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
@@ -47,6 +43,10 @@ fn held_renewal(observation: DispatchFaultObservation) -> Result<RenewRequest, i
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_publication()
 -> TestResult {
     let directory = tempfile::tempdir()?;

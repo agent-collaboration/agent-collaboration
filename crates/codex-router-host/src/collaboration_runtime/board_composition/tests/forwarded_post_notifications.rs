@@ -69,6 +69,10 @@ fn item_id(intent: &NotifyIntent) -> Result<ItemId, Box<dyn std::error::Error + 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_deduplicates_retry()
 -> TestResult {
     let holder = Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?;

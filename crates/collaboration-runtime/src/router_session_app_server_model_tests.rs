@@ -6,6 +6,10 @@ use tokio::net::{UnixListener, UnixStream};
 use tokio_tungstenite::{client_async, tungstenite::Message};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn local_codex_model_uses_provider_default_and_reports_agent_selection()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
@@ -58,6 +62,10 @@ async fn local_codex_model_uses_provider_default_and_reports_agent_selection()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn turn_model_uses_only_provider_advertised_choices() -> Result<(), Box<dyn std::error::Error>>
 {
     let catalog = vec![

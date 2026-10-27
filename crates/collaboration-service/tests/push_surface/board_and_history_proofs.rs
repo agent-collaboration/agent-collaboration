@@ -1,7 +1,3 @@
-#![expect(
-    clippy::indexing_slicing,
-    reason = "Test-only JSON fixture construction; behavior assertions remain strict."
-)]
 //! Real Control proofs for off-board DMs and retained conversation views.
 use super::*;
 use chrono::{DateTime, Duration, Utc};
@@ -27,9 +23,15 @@ struct BoardControlFixture {
 }
 
 impl BoardControlFixture {
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "Fixed test vectors define these indices."
+    )]
     async fn start() -> Self {
         let directory = tempfile::tempdir().expect("isolated Control databases");
-        let registry = board_fixture::new_registry(directory.path()).expect("fixture enrollment");
+        let registry = board_fixture::native_registry::new_registry(directory.path())
+            .expect("fixture enrollment");
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
                 .expect("fixture service"),
@@ -38,7 +40,7 @@ impl BoardControlFixture {
         };
         let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
             directory.path(),
-            Arc::new(board_fixture::PendingRegistration),
+            Arc::new(board_fixture::native_registry::PendingRegistration),
             &origin,
         )
         .await
@@ -150,7 +152,7 @@ impl BoardControlFixture {
         create["boardId"] = json!(board);
         create["projectId"] = json!(project);
         create["title"] = json!("project");
-        board_fixture::prepare_registered_creation(
+        board_fixture::registered_project::prepare_registered_creation(
             &fleet,
             &registry,
             &serde_json::from_value(create.clone()).expect("typed creation input"),
@@ -193,6 +195,7 @@ impl BoardControlFixture {
         }
     }
 
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn close(self) {
         let Self {
             _fleet_runtime,
@@ -213,6 +216,7 @@ impl BoardControlFixture {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn board_content_counts(
     path: &std::path::Path,
     baseline: message_board::FeedCursor,
@@ -279,6 +283,7 @@ async fn control_dm_send_and_read_leave_board_messages_and_activity_empty() {
     fixture.close().await;
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn stored_dm(
     fixture: &BoardControlFixture,
     origin: &SessionRef,
@@ -310,6 +315,7 @@ async fn stored_dm(
     push_id
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn notices(response: Value) -> Vec<PushRecordNotice> {
     serde_json::from_value(
         response

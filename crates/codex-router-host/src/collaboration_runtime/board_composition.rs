@@ -56,11 +56,6 @@ mod server_calls;
 mod snapshot_installation;
 #[cfg(test)]
 #[path = "board_composition/tests.rs"]
-#[expect(
-    unused_imports,
-    dead_code,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 mod tests;
 
 pub(super) use machine_session::RunningMachineSession;

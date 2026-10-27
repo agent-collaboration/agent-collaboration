@@ -90,6 +90,10 @@ async fn wait_diagnostic(
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority()
 -> Result<(), TestError> {
     // A separate exact-case process gives log capture its own global subscriber,

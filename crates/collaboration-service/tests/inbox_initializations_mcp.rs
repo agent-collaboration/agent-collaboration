@@ -4,10 +4,6 @@
     dead_code,
     reason = "This integration target consumes only a subset of the shared fixture's capabilities."
 )]
-#[expect(
-    clippy::indexing_slicing,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
-)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
@@ -27,8 +23,12 @@ async fn aggregate_initializations_expose_each_result_when_a_project_file_is_mov
         "requestId":RequestId::generate(),"protocolVersion":1,"actor":fixture.actor,
         "projectId":moving,"boardId":fixture.board,"title":moving.as_str()
     }))?;
-    board_fixture::settle_accepted_creation(&fixture._fleet, &input, &fixture.record_origin()?)
-        .await?;
+    board_fixture::registered_project::settle_accepted_creation(
+        &fixture._fleet,
+        &input,
+        &fixture.record_origin()?,
+    )
+    .await?;
     let (third, _) = fixture.project().await?;
     let moving_store = fixture._registry.open_project(&moving).await?;
     let mut empty = moving_store.snapshot().await?;

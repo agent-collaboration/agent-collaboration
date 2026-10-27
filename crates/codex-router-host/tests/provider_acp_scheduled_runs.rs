@@ -1,7 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    reason = "A malformed fixed fixture must fail its test."
-)]
 //! A provider run waits for an idle actor and summarizes its own prompt settlement.
 #[path = "support/provider_fixture_launch.rs"]
 mod provider_fixture_launch;
@@ -142,6 +138,7 @@ fn rendered_schedule_push(
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn rendered_schedule_line(
     run_id: &RunId,
     target: &SessionRef,

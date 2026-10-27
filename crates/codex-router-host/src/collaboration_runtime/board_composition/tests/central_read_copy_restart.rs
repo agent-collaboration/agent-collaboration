@@ -192,6 +192,10 @@ async fn an_interrupted_native_page_install_is_refetched_after_owning_reopen() -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_from_central()
 -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;

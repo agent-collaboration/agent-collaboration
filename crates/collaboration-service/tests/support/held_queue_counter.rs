@@ -1,8 +1,4 @@
 //! Observe executed native SQL; no repository path is replaced.
-#![expect(
-    clippy::unwrap_used,
-    reason = "A poisoned or uninstalled test counter must fail the diagnostic."
-)]
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
@@ -13,15 +9,18 @@ use tracing_subscriber::{Layer, layer::Context, prelude::*};
 #[derive(Clone, Default)]
 pub struct SqlCounter(Arc<Mutex<Vec<BTreeMap<String, String>>>>);
 impl SqlCounter {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn install(&self) {
         tracing_subscriber::registry()
             .with(self.clone())
             .try_init()
             .unwrap();
     }
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn offset(&self) -> usize {
         self.0.lock().unwrap().len()
     }
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn since(&self, offset: usize) -> Vec<BTreeMap<String, String>> {
         self.0
             .lock()
@@ -46,6 +45,7 @@ impl Visit for EventFields {
     }
 }
 impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for SqlCounter {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_event(&self, event: &tracing::Event<'_>, _: Context<'_, TSubscriber>) {
         if event.metadata().target() == "sqlx::query" {
             let mut fields = EventFields::default();

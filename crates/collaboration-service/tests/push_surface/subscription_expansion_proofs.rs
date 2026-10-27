@@ -1,7 +1,3 @@
-#![expect(
-    clippy::indexing_slicing,
-    reason = "Test-only JSON fixture construction; behavior assertions remain strict."
-)]
 //! Control router/show expands a stored subscription range without acknowledging it.
 use super::*;
 use chrono::Utc;
@@ -29,9 +25,11 @@ fn header(actor: &Identity) -> Value {
     json!({"requestId":message_board::RequestId::generate(),"protocolVersion":1,"actor":actor,"actingFor":null})
 }
 impl SubscriptionExpansionFixture {
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn start() -> Self {
         let directory = tempfile::tempdir().expect("native databases");
-        let registry = board_fixture::new_registry(directory.path()).expect("fixture enrollment");
+        let registry = board_fixture::native_registry::new_registry(directory.path())
+            .expect("fixture enrollment");
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
                 .expect("fixture service"),
@@ -40,7 +38,7 @@ impl SubscriptionExpansionFixture {
         };
         let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
             directory.path(),
-            Arc::new(board_fixture::PendingRegistration),
+            Arc::new(board_fixture::native_registry::PendingRegistration),
             &origin,
         )
         .await
@@ -111,7 +109,7 @@ impl SubscriptionExpansionFixture {
                 .expect("header")
                 .extend(fields.as_object().expect("fields").clone());
             if tool == "project_create" {
-                board_fixture::prepare_registered_creation(
+                board_fixture::registered_project::prepare_registered_creation(
                     &fleet,
                     &registry,
                     &serde_json::from_value(input.clone()).expect("typed creation input"),
@@ -157,6 +155,7 @@ impl SubscriptionExpansionFixture {
             initialization: message_board::RequestId::generate(),
         }
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn close(self) {
         self.control.close().await;
         self._fleet_runtime
@@ -170,6 +169,7 @@ impl SubscriptionExpansionFixture {
             .await
             .expect("close");
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn post_thread_message(&self, body: &str) -> Post {
         let writer = Identity::Human {
             human_id: "subscription-range-writer"
@@ -208,10 +208,16 @@ impl SubscriptionExpansionFixture {
         }
         .expect("stored post")
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    #[expect(
+        clippy::indexing_slicing,
+        reason = "Fixed test vectors define these indices."
+    )]
     async fn unread_project_activity(&self) -> Vec<InboxActivity> {
         let result=self.control.served.call("inbox_fetch",json!({"protocolVersion":1,"actingFor":null,"scope":{"kind":"project","projectId":self.project_id},"reader":self.board_reader,"readMode":"unread","initializations":[{"projectId":self.project_id,"requestId":self.initialization}],"page":{}})).await.expect("inbox");
         serde_json::from_value(result["result"]["page"]["records"].clone()).expect("activity")
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn insert_subscription_push(
         &self,
         push_id: PushId,
@@ -257,6 +263,7 @@ impl SubscriptionExpansionFixture {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn board_session_identity(target: &SessionRef) -> Identity {
     Identity::Session {
         session: BoardSessionRef {
