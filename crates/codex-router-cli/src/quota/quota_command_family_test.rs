@@ -17,4 +17,4 @@ const NOW: u64 = 1_700_000_000;
 mod quota_command_dispatch_test;
 #[path = "quota_status_formatting_test.rs"]
 mod quota_status_formatting_test;
-use codex_router_quota_service::test_support::*;
+use codex_router_quota_service::quota::test_fixtures::*;

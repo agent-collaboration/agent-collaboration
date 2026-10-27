@@ -16,4 +16,4 @@ mod quota_reset_pace_projection_test;
 mod quota_route_selection_projection_test;
 #[path = "quota_status_metrics_test.rs"]
 mod quota_status_metrics_test;
-use crate::test_support::*;
+use crate::quota::test_fixtures::*;

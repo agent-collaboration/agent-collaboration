@@ -168,3 +168,6 @@ pub mod quota_command_family_test;
 #[cfg(test)]
 #[path = "quota/claude_quota_refresh_ingestion_tests.rs"]
 pub mod claude_quota_refresh_ingestion_tests;
+
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_fixtures;
