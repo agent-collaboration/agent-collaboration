@@ -6,7 +6,8 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 11] = [
+const LAYER_POLICY: [(&str, &[&str]); 15] = [
+    ("node-test-fixture", &[]),
     ("codex-router-quota", &[]),
     ("codex-router-selection", &["codex-router-quota"]),
     (
@@ -26,6 +27,50 @@ const LAYER_POLICY: [(&str, &[&str]); 11] = [
         "codex-router-quota-tui",
         &["codex-router-quota-service", "codex-router-tui"],
     ),
+    ("collaboration-contracts", &[]),
+    ("collaboration-runtime", &["collaboration-contracts"]),
+    (
+        "collaboration-service",
+        &["collaboration-contracts", "collaboration-runtime"],
+    ),
+    (
+        "agent-session-inventory",
+        &[
+            "node-test-fixture",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "agent-session-picker",
+        &[
+            "agent-session-inventory",
+            "codex-router-tui",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "agent-collaboration",
+        &[
+            "agent-session-inventory",
+            "agent-session-picker",
+            "codex-router-tui",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "codex-router-host",
+        &[
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
     (
         "codex-router-cli",
         &[
@@ -35,20 +80,6 @@ const LAYER_POLICY: [(&str, &[&str]); 11] = [
             "codex-router-host",
             "codex-router-proxy",
             "codex-router-selection",
-            "collaboration-runtime",
-            "collaboration-service",
-        ],
-    ),
-    ("collaboration-contracts", &[]),
-    ("collaboration-runtime", &["collaboration-contracts"]),
-    (
-        "collaboration-service",
-        &["collaboration-contracts", "collaboration-runtime"],
-    ),
-    (
-        "codex-router-host",
-        &[
-            "collaboration-contracts",
             "collaboration-runtime",
             "collaboration-service",
         ],

@@ -10,8 +10,7 @@ async fn tailscale_failure_settles_actual_owned_children_before_returning_host_e
         env!("CARGO_MANIFEST_DIR"),
         "/../../verification/fixtures/held-socket-child.ts"
     );
-    let node_executable = codex_router_test_support::node_fixture::node_executable()
-        .expect("fixture Node executable");
+    let node_executable = node_test_fixture::node_executable().expect("fixture Node executable");
     let make_command = || {
         let mut command = tokio::process::Command::new(&node_executable);
         command

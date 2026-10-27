@@ -1,5 +1,5 @@
 use super::*;
-use crate::fake_api_support::{FakeCollaborationApi, FakeReply};
+use agent_session_inventory::test_support::fake_api_support::{FakeCollaborationApi, FakeReply};
 
 #[tokio::test]
 async fn malformed_wait_result_uses_machine_uncertainty_output() -> TestResult {

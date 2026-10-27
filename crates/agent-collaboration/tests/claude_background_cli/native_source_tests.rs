@@ -173,7 +173,7 @@ async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_bef
         let output = root.join("native-jobs.json");
         fs::write(&output,serde_json::to_vec(&json!([{"kind":"background","id":"distinct-background-handle","sessionId":SESSION,"cwd":fixture.working_directory,"state":state,"startedAt":1790162100000_i64}])).unwrap()).unwrap();
         let reader = root.join("native-read");
-        codex_router_test_support::node_fixture::write_node_fixture(
+        node_test_fixture::write_node_fixture(
             &reader,
             "native-cli-catalogue-agent.ts",
             &serde_json::json!({"kind":"file","output":{"kind":"path","path":output}}),

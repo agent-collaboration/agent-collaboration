@@ -179,6 +179,8 @@ name = "agent-collaboration"
 version = "0.1.105"
 dependencies = [
  "agent-automation",
+ "agent-session-inventory",
+ "agent-session-picker",
  "automation-storage",
  "axum",
  "board-central-test-support",
@@ -216,6 +218,7 @@ dependencies = [
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
+ "node-test-fixture",
  "reqwest 0.12.28",
  "rmcp",
  "runtime-primitives",
@@ -236,6 +239,59 @@ dependencies = [
  "unicode-width 0.2.2",
  "url",
  "uuid",
+]
+
+[[package]]
+name = "agent-session-inventory"
+version = "0.1.105"
+dependencies = [
+ "axum",
+ "chrono",
+ "clap",
+ "claude-code-peer-messaging",
+ "codex-native-integration",
+ "codex-router-host",
+ "collaboration-client",
+ "collaboration-mcp",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "collaboration-service",
+ "futures-util",
+ "jsonc-parser",
+ "node-test-fixture",
+ "reqwest 0.12.28",
+ "rmcp",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rustls",
+ "tokio-tungstenite",
+ "tokio-util",
+ "toml 1.1.2+spec-1.1.0",
+ "url",
+]
+
+[[package]]
+name = "agent-session-picker"
+version = "0.1.105"
+dependencies = [
+ "agent-session-inventory",
+ "codex-native-integration",
+ "codex-router-tui",
+ "collaboration-client",
+ "crossterm",
+ "futures-util",
+ "iocraft",
+ "node-test-fixture",
+ "serde_json",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]
@@ -1154,6 +1210,7 @@ version = "0.1.105"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
+ "node-test-fixture",
  "rustix 1.1.4",
  "serde",
  "serde_json",
@@ -1356,6 +1413,7 @@ dependencies = [
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
+ "node-test-fixture",
  "opentelemetry",
  "reqwest 0.12.28",
  "reqwest-websocket",
@@ -1564,6 +1622,7 @@ dependencies = [
  "codex-router-state",
  "collaboration-client",
  "futures-util",
+ "node-test-fixture",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1841,6 +1900,7 @@ dependencies = [
  "jsonschema",
  "message-board",
  "message-board-storage",
+ "node-test-fixture",
  "reqwest 0.12.28",
  "rmcp",
  "runtime-primitives",
@@ -1956,6 +2016,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "nix",
+ "node-test-fixture",
  "petgraph",
  "proptest",
  "runtime-primitives",
@@ -4264,6 +4325,13 @@ dependencies = [
  "cfg-if",
  "cfg_aliases 0.1.1",
  "libc",
+]
+
+[[package]]
+name = "node-test-fixture"
+version = "0.1.105"
+dependencies = [
+ "serde_json",
 ]
 
 [[package]]

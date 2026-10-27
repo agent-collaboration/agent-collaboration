@@ -1,0 +1,64 @@
+[package]
+name = "agent-session-inventory"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+test-support = [
+    "dep:sqlx",
+    "dep:collaboration-runtime",
+    "dep:axum",
+    "dep:node-test-fixture",
+    "dep:collaboration-mcp",
+    "dep:claude-code-peer-messaging",
+    "dep:collaboration-service",
+]
+
+[dependencies]
+chrono.workspace = true
+tokio-util.workspace = true
+futures-util.workspace = true
+tokio-tungstenite.workspace = true
+collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
+codex-native-integration.workspace = true
+clap.workspace = true
+jsonc-parser.workspace = true
+reqwest = { workspace = true, features = ["json"] }
+rmcp = { workspace = true, features = ["client"] }
+url.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+toml = "1.1.2"
+tempfile = "3.27.0"
+thiserror.workspace = true
+tokio = { workspace = true, features = ["io-std", "fs"] }
+
+sqlx = { workspace = true, features = ["sqlite"], optional = true }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", optional = true }
+axum = { workspace = true, features = ["http1", "tokio", "json"], optional = true }
+node-test-fixture = { path = "../node-test-fixture", optional = true }
+collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"], optional = true }
+claude-code-peer-messaging = { path = "../claude-code-peer-messaging", version = "0.1.37", optional = true }
+collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"], optional = true }
+
+[dev-dependencies]
+sqlx = { workspace = true, features = ["sqlite"] }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+axum = { workspace = true, features = ["http1", "tokio", "json"] }
+tokio = { workspace = true, features = ["test-util"] }
+collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
+claude-code-peer-messaging = { path = "../claude-code-peer-messaging", version = "0.1.37" }
+reqwest = { workspace = true, features = ["json"] }
+rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12"] }
+codex-router-host = { workspace = true, features = ["runtime-test-support"] }
+collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
+tokio-util.workspace = true
+futures-util.workspace = true
