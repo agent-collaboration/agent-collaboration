@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#permission",
+  "originalSHA256": "5fc5a424c34a30eb35bc735a10a924b4ce0bb8ad272ce1b97a02729ff382dd61",
+  "target": "host-basic-session-agent.ts",
+  "arguments": ["permission"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"result\": {\"outcome\": {\"outcome\": \"cancelled\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"permission-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"fixture-session\", \"toolCall\": {\"toolCallId\": \"permission-tool\"}, \"options\": [{\"optionId\": \"reject\", \"name\": \"Reject\", \"kind\": \"reject_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

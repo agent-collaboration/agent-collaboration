@@ -1,5 +1,14 @@
 # Cross-machine
 
+## Current entry
+
+The wrapper retired in 0.1.102. Current execution is `node verification/run.ts "$PRIVATE_DECLARATION"`, with the strict owner-private declaration in `verification/declaration.ts` and retained cases in `verification/case-registry.ts`. The declaration selects two machines, exact signed artifacts, an explicit Tokio/workerd/staging target, governing rows and a deadline. Real state and evidence require the declared canonical cache task roots; current synthetic-only and real-copy boundaries are enforced by the selected entry. Missing mappings remain open and cannot receive confirmation credit. A separate real-copy Mac import uses `verification/import-run.ts` and its own declaration.
+
+## Retained obligations and historical evidence
+
+The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
+
+
 This lasting journey drives reachable OB4 routes through two declared debug
 Hosts and retains all ten case results. It is a **partial driver**. Recipient
 routes need authenticated exact-model sessions. The driver uses an existing
@@ -16,19 +25,11 @@ approvals are outside this journey.
 
 ## Run and bind
 
-Run from the repository root with Python 3.13, Pydantic 2.14.1 and the optional
-WebSocket transport dependency for normal retirement replay:
+Use the current TypeScript entry above; the former wrapper’s invocation and declaration are retired.
 
-```sh
-uv run --offline --python 3.13 --with pydantic==2.14.1 \
-  python -m scripts.verification.cross_machine_journey --help
-uv run --offline --python 3.13 --with pydantic==2.14.1 \
-  python -m scripts.verification.cross_machine_journey --list-cases
-uv run --python 3.13 --with pydantic==2.14.1 --with websockets==17.2 \
-  python -m scripts.verification.cross_machine_journey --plan "$PRIVATE_PLAN"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
-The JSON schema is `scripts/verification/cross_machine_plan.py`. Unknown fields
+The current strict JSON schema is `verification/declaration.ts`. Unknown fields
 fail. Keep plans and fresh output directories under an authorized private task
 directory outside repositories. This commission forbids `/tmp`. A plan itself
 authorizes no build, real enrollment, staging access or deployment.
@@ -42,7 +43,7 @@ remain blocked in that run; selecting fewer cases cannot establish full coverage
 | Controller | Absolute `repository`, fresh `output_directory`, `mode` |
 | Two installations | Distinct names, canonical owned `task_directory`, containing `temporary_parent`, selected `port` (0 allows allocation) |
 | Native artifacts | `launcher`, `cli`, each with absolute `path`, `sha256`, full `source_head`; signed private copies and their build receipt |
-| SSH transfer | Literal `ssh_host`, Python 3.13+ `remote_python`, exact local binary `transfer_source`; never infer it from mutable `target/debug` |
+| SSH transfer | Literal SSH host and exact signed Router/CLI artifacts in `verification/declaration.ts`; `verification/machines/remote.ts` owns transfer and launch. Never infer artifacts from mutable `target/debug`. |
 | Local central/import | Exact `central_binary` and optional `importer_binary`; importer enables the synthetic unheld case |
 | Recipient | Real controlling `caller` SessionRef; `recipient_provider` with adapter/native Claude paths, digests, versions, private `configuration_directory`, optional API-key environment **name**, and `model: claude-haiku-5-5` |
 | Session | Matrix requires both already-enrolled endpoints, peer, receiver, relay and machine/access credential environment **names**, never values |
@@ -72,7 +73,7 @@ new authentication wiring. The driver builds nothing.
   edges using supplied already-enrolled inputs. This performs no deployment,
   login or enrollment. `allow_external_central` is an explicit activation guard,
   and adds no operating authority. Local qualification uses
-  `python -m scripts.verification.cross_machine_local --plan "$LOCAL_PLAN"`: it
+  the retired local wrapper: it
   owns a real Tokio central and signed synthetic JWKS, enrolls disposable Hosts,
   and invokes this same matrix mode with explicit HTTP/WS declarations.
 

@@ -1,0 +1,16 @@
+{
+  "original": "Provider route integration#saved-load",
+  "originalSHA256": "6040f627327a1b8637ae0d42f2d19f362d7bf1dbb062918ca88e2c81b88321b9",
+  "target": "provider-loaded-route-agent.ts",
+  "arguments": ["saved", "<RECEIPT>", "<ROOT>/unused.sock"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"fixture-session\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"saved-session-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"fixture-session\"}}\n",
+    "files": {
+      "receipt.json": "{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"fixture-session\"}}\n"
+    }
+  }
+}

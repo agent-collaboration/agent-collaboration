@@ -118,205 +118,71 @@ fn working_directory() -> TestResult<ProviderWorkingDirectory> {
     Ok(ProviderWorkingDirectory::try_from("/tmp".to_owned())?)
 }
 
-fn launch(script: &str) -> ExternalProviderLaunch {
+fn launch(program: &str, arguments: Vec<String>) -> ExternalProviderLaunch {
+    let script = codex_router_test_support::node_fixture::fixture_program(program);
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script.to_owned()],
+        executable: PathBuf::from("node"),
+        arguments: std::iter::once(script.to_string_lossy().into_owned())
+            .chain(arguments)
+            .collect(),
         environment: vec![],
     }
 }
 
-const SETTINGS_CREATE_FIXTURE: &str = r#"
-import json,sys
-mode='__MODE__'
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-def option(id,current,values):
-    return {'id':id,'name':id,'category':id,'type':'select','currentValue':current,
-            'options':[{'value':value,'name':value} for value in values]}
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{'sessionCapabilities':{} if mode=='invalid_no_close' else {'close':{}}},
-    'agentInfo':{'name':'supervisor-settings','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-current={'mode':'auto','model':'a'}
-def options(): return [option('mode',current['mode'],['auto','ask']),option('model',current['model'],['a','b'])]
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'settings-session','configOptions':options()}})
-if mode.startswith('invalid'):
-    if mode=='invalid':
-        request=read()
-        assert request['method']=='session/close',request
-        send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-else:
-    request=read()
-    assert request['method']=='session/set_config_option' and request['params']['configId']=='mode'
-    if mode=='partial_first':
-        send({'jsonrpc':'2.0','id':request['id'],'error':{'code':-32603,'message':'private detail'}})
-    else:
-        current['mode']='ask'
-        send({'jsonrpc':'2.0','id':request['id'],'result':{'configOptions':options()}})
-        request=read()
-        assert request['method']=='session/set_config_option' and request['params']['configId']=='model'
-        if mode=='partial':
-            send({'jsonrpc':'2.0','id':request['id'],'error':{'code':-32603,'message':'private detail'}})
-        else:
-            current['model']='b'
-            send({'jsonrpc':'2.0','id':request['id'],'result':{'configOptions':options()}})
-sys.stdin.read()
-"#;
-
 fn cancel_fixture(dispatch_log: &std::path::Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-log={:?}
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'supervisor-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-open(log,'a').write('new\n')
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-open(log,'a').write('prompt\n')
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-open(log,'a').write('cancel\n')
-print(json.dumps({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'cancelled'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        dispatch_log.display().to_string()
-    );
-    launch(&script)
+    launch(
+        "supervisor-integration-agent.ts",
+        vec![
+            "cancel".to_owned(),
+            dispatch_log.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 fn load_fixture() -> ExternalProviderLaunch {
-    launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'load-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/load'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-    )
+    launch("supervisor-integration-agent.ts", vec!["load".to_owned()])
 }
 
 fn resume_close_fixture() -> ExternalProviderLaunch {
     launch(
-        r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{'sessionCapabilities':{'resume':{},'close':{}}},
-    'agentInfo':{'name':'lifecycle-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/resume',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-request=read()
-assert request['method']=='session/close',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-sys.stdin.read()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["lifecycle".to_owned()],
     )
 }
 
 fn permission_allow_fixture() -> ExternalProviderLaunch {
     launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'fixture-session','toolCall':{'toolCallId':'permission-tool'},'options':[{'optionId':'allow-exact-once','name':'Allow once','kind':'allow_once'},{'optionId':'deny-exact-once','name':'Deny once','kind':'reject_once'}]}})); sys.stdout.flush()
-permission_response=json.loads(sys.stdin.readline())
-assert permission_response['id']==91
-assert permission_response['result']['outcome']['outcome']=='selected'
-assert permission_response['result']['outcome']['optionId']=='allow-exact-once'
-print(json.dumps({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["permission".to_owned()],
     )
 }
 
 fn permission_cancel_fixture() -> ExternalProviderLaunch {
     launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-retirement-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':92,'method':'session/request_permission','params':{'sessionId':'fixture-session','toolCall':{'toolCallId':'permission-tool'},'options':[{'optionId':'allow-exact-once','name':'Allow once','kind':'allow_once'}]}})); sys.stdout.flush()
-permission_response=json.loads(sys.stdin.readline())
-assert permission_response['id']==92
-assert permission_response['result']['outcome']['outcome']=='cancelled'
-print(json.dumps({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["retirement".to_owned()],
     )
 }
 
 fn authentication_then_create_fixture() -> ExternalProviderLaunch {
     launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'auth-fixture','version':'1'}}})); sys.stdout.flush()
-first=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':first['id'],'error':{'code':-32000,'message':'authentication required'}})); sys.stdout.flush()
-second=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':second['id'],'result':{'sessionId':'authenticated-session'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["authentication".to_owned()],
     )
 }
 
 fn authentication_then_prompt_fixture() -> ExternalProviderLaunch {
     launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'prompt-auth-fixture','version':'1'}}})); sys.stdout.flush()
-create=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'authenticated-session'}})); sys.stdout.flush()
-first=json.loads(sys.stdin.readline())
-assert first['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','id':first['id'],'error':{'code':-32000,'message':'authentication required'}})); sys.stdout.flush()
-second=json.loads(sys.stdin.readline())
-assert second['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'authenticated-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'final text retained'}}}})); sys.stdout.flush()
-print(json.dumps({'jsonrpc':'2.0','id':second['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["prompt-authentication".to_owned()],
     )
 }
 
 fn provider_prompt_rejection_fixture() -> ExternalProviderLaunch {
     launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'prompt-rejection-fixture','version':'1'}}})); sys.stdout.flush()
-create=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'rejection-session'}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':prompt['id'],'error':{'code':-32603,'message':'provider conversation is busy'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["rejection".to_owned()],
     )
 }
 
@@ -324,21 +190,14 @@ fn saturated_load_fixture(
     admission_log: &std::path::Path,
     process_id_path: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    launch(&format!(
-        r#"
-import json,os,sys
-open({process_id:?},'w').write(str(os.getpid()))
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'saturated-supervisor-fixture','version':'1'}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
-    request=json.loads(line)
-    assert request['method']=='session/load'
-    with open({admission_log:?},'a') as log:
-        log.write(request['params']['sessionId']+'\n')
-"#,
-        process_id = process_id_path.display().to_string(),
-        admission_log = admission_log.display().to_string(),
-    ))
+    launch(
+        "host-admission-agent.ts",
+        vec![
+            "supervisor-saturated".to_owned(),
+            admission_log.to_string_lossy().into_owned(),
+            process_id_path.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 async fn assert_process_reaped(process_id_path: &std::path::Path) -> TestResult {

@@ -23,8 +23,8 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
   exit 127
 fi
 
-if ! command -v python3 >/dev/null 2>&1; then
-  echo "python3 is required" >&2
+if ! command -v node >/dev/null 2>&1; then
+  echo "node is required" >&2
   exit 127
 fi
 
@@ -117,48 +117,6 @@ for forbidden in \
   fi
 done
 
-python3 - "${json_output}" <<'PY'
-import json
-import sys
-
-with open(sys.argv[1], "r", encoding="utf-8") as handle:
-    payload = json.load(handle)
-
-assert payload["route_band"] == "responses"
-assert payload["selected_pool"] == "usable"
-assert "weighted_candidates" not in payload
-
-by_label = {account["safe_account_label"]: account for account in payload["accounts"]}
-preferred = [account for account in payload["accounts"] if account["preferred_next"]]
-assert len(preferred) == 1
-assert preferred[0]["safe_account_label"] == "askluna"
-assert preferred[0]["next_use"] == "preferred by quota"
-assert preferred[0]["routing_reason"] == "preferred_safest_quota"
-
-assert by_label["askluna"]["preferred_next"] is True
-assert by_label["askluna"]["weekly_quota_guard"] == 20
-assert by_label["askluna"]["active_clients"] == 1
-assert by_label["askluna"]["active_clients_source"] == "sqlx_mirror"
-assert "routing_weight" not in by_label["askluna"]
-
-assert by_label["matches"]["preferred_next"] is False
-assert by_label["matches"]["weekly_quota_guard"] == 10
-assert by_label["matches"]["active_clients"] == 1
-assert by_label["matches"]["active_clients_source"] == "sqlx_mirror"
-assert "routing_weight" not in by_label["matches"]
-
-assert by_label["ssdev"]["preferred_next"] is False
-assert by_label["ssdev"]["weekly_quota_guard"] == 3
-assert by_label["ssdev"]["active_clients"] == 0
-assert by_label["ssdev"]["active_clients_source"] == "sqlx_mirror"
-assert "routing_weight" not in by_label["ssdev"]
-
-for account in payload["accounts"]:
-    assert "short_quota_risk" not in account
-    assert "weekly_quota_risk" not in account
-    assert "short_quota_guard" in account
-    assert "weekly_quota_guard" in account
-    assert "routing_weight" not in account
-PY
+node verification/tooling/quota-smoke-assertions.ts selection "${json_output}"
 
 echo "quota routing selection matrix smoke ok: ${smoke_root}"

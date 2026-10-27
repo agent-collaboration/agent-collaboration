@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#settings-success",
+  "originalSHA256": "88632b5432c7c19a58df1a4256258a9b1e64a1b0dea0fba1e7fca71b96cc33bb",
+  "target": "supervisor-settings-create-agent.ts",
+  "arguments": ["success"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/set_config_option\", \"params\": {\"configId\": \"mode\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/set_config_option\", \"params\": {\"configId\": \"model\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"sessionCapabilities\": {\"close\": {}}}, \"agentInfo\": {\"name\": \"supervisor-settings\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"settings-session\", \"configOptions\": [{\"id\": \"mode\", \"name\": \"mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"auto\", \"options\": [{\"value\": \"auto\", \"name\": \"auto\"}, {\"value\": \"ask\", \"name\": \"ask\"}]}, {\"id\": \"model\", \"name\": \"model\", \"category\": \"model\", \"type\": \"select\", \"currentValue\": \"a\", \"options\": [{\"value\": \"a\", \"name\": \"a\"}, {\"value\": \"b\", \"name\": \"b\"}]}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"configOptions\": [{\"id\": \"mode\", \"name\": \"mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"ask\", \"options\": [{\"value\": \"auto\", \"name\": \"auto\"}, {\"value\": \"ask\", \"name\": \"ask\"}]}, {\"id\": \"model\", \"name\": \"model\", \"category\": \"model\", \"type\": \"select\", \"currentValue\": \"a\", \"options\": [{\"value\": \"a\", \"name\": \"a\"}, {\"value\": \"b\", \"name\": \"b\"}]}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"configOptions\": [{\"id\": \"mode\", \"name\": \"mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"ask\", \"options\": [{\"value\": \"auto\", \"name\": \"auto\"}, {\"value\": \"ask\", \"name\": \"ask\"}]}, {\"id\": \"model\", \"name\": \"model\", \"category\": \"model\", \"type\": \"select\", \"currentValue\": \"b\", \"options\": [{\"value\": \"a\", \"name\": \"a\"}, {\"value\": \"b\", \"name\": \"b\"}]}]}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

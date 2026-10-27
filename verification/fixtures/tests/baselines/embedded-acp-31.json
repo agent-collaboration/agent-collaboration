@@ -1,0 +1,17 @@
+{
+  "original": "crates/acp-client-runtime/tests/create_settings_order.rs#FAILED_SETTINGS_FIXTURE",
+  "originalSHA256": "586956a787f265f2ea5003933d1eb33df19568073587134794f7142c5d2e44de",
+  "target": "provider-failed-settings-agent.ts",
+  "arguments": ["invalid", "<RECEIPT>"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/close\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"sessionCapabilities\": {\"close\": {}}}, \"agentInfo\": {\"name\": \"settings-failure-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\", \"configOptions\": [{\"id\": \"mode\", \"name\": \"mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"auto\", \"options\": [{\"value\": \"auto\", \"name\": \"auto\"}, {\"value\": \"ask\", \"name\": \"ask\"}]}, {\"id\": \"model\", \"name\": \"model\", \"category\": \"model\", \"type\": \"select\", \"currentValue\": \"a\", \"options\": [{\"value\": \"a\", \"name\": \"a\"}, {\"value\": \"b\", \"name\": \"b\"}]}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": "closed",
+    "files": {
+      "receipt.json": "closed"
+    }
+  }
+}

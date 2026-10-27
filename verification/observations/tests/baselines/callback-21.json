@@ -1,0 +1,47 @@
+{
+  "function": "compare_reopen",
+  "name": "test_wrong_root_or_changed_creation_revision_content_fails",
+  "args": [
+    {
+      "database": "/owned/interaction.sqlite",
+      "revision": 4,
+      "records": [
+        {
+          "requestId": "question",
+          "createdAt": "2026-10-16T00:00:00.000000000Z",
+          "record": {
+            "kind": "question",
+            "state": {
+              "kind": "answered",
+              "content": {
+                "choice": "first"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "database": "/owned/interaction.sqlite",
+      "revision": 5,
+      "records": [
+        {
+          "requestId": "question",
+          "createdAt": "2026-10-16T00:00:00.000000000Z",
+          "record": {
+            "kind": "question",
+            "state": {
+              "kind": "answered",
+              "content": {
+                "choice": "first"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "error": "terminal content, creation instant, root or revision changed on owning reopen"
+  }
+}

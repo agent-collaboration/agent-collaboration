@@ -1,0 +1,16 @@
+export const retiredMarkers: readonly string[] = [
+  "G18 conformance-only transaction panic",
+  "/__conformance/control",
+  "/__conformance/core-session",
+  "_cf_test_directory_updates",
+  "_cf_test_flag_",
+  "_cf_test_known",
+  "_cf_test_clock",
+  "_cf_test_held_dispatch",
+  "edge-probe-unknown",
+  "conformanceClose",
+  "LegacyConnectionObject",
+  "LegacyProjectCopyObject",
+  "LegacyLeaseRegistryObject",
+  "LegacyFleetObject",
+];

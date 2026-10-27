@@ -1,0 +1,26 @@
+[
+  {
+    "command": "exec '/source\"s root' --source-request-v1 '{\"quoted\":\"isn'\"'\"'t\"}'",
+    "expected": ["exec", "/source\"s root", "--source-request-v1", "{\"quoted\":\"isn't\"}"]
+  },
+  {
+    "command": "a\\ b \"c\\\\d\\\"e\" '' \"\"",
+    "expected": ["a b", "c\\d\"e", "", ""]
+  },
+  {
+    "command": "abc#literal $literal `literal`",
+    "expected": ["abc#literal", "$literal", "`literal`"]
+  },
+  {
+    "command": "a\tb\nc\rd",
+    "expected": ["a", "b", "c", "d"]
+  },
+  {
+    "command": "'line\nbreak'",
+    "expected": ["line\nbreak"]
+  },
+  {
+    "command": "\"$x\\$y\"",
+    "expected": ["$x\\$y"]
+  }
+]

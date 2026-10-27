@@ -29,22 +29,12 @@ async fn source_executable_ssh_publication_preserves_partial_and_invalid_distinc
         .tempdir()
         .unwrap();
     let ssh = root.path().join("ssh");
-    std::fs::write(&ssh,r#"#!/usr/bin/python3
-import json, os, shlex, subprocess, sys
-assert sys.argv[1:10] == ['-T','-o','BatchMode=yes','-o','StrictHostKeyChecking=yes','-o','ConnectTimeout=5','--','source.example.invalid']
-parts=shlex.split(sys.argv[10])
-assert parts[:3] == ['exec',os.environ['SOURCE_EXECUTABLE'],'--source-request-v1']
-assert len(parts) == 4
-request=json.loads(parts[3])
-assert request['operation']['kind'] in ('endpoints','providerSessions')
-with open(os.environ['SOURCE_SSH_TRANSCRIPT'],'a') as trace: trace.write(json.dumps(request)+'\n')
-# Run the real fixed source; retain raw status/output when this stand-in fails.
-child=subprocess.run(parts[1:],stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=3)
-with open(os.environ['SOURCE_SSH_TRANSCRIPT']+'.results','a') as trace:
-    trace.write(json.dumps({'status':child.returncode,'stdout':child.stdout.decode(errors='replace'),'stderr':child.stderr.decode(errors='replace')})+'\n')
-sys.stdout.buffer.write(child.stdout)
-sys.exit(child.returncode if child.returncode >= 0 else 128-child.returncode)
-"#).unwrap();
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &ssh,
+        "source-ssh-agent.ts",
+        &json!({"kind":"publication"}),
+    )
+    .unwrap();
     std::fs::set_permissions(&ssh, std::fs::Permissions::from_mode(0o700)).unwrap();
     for (mode, code, data) in [
         (

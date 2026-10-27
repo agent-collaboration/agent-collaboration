@@ -259,9 +259,10 @@ impl RegistryCase {
         let bin = root.join("bin");
         std::fs::create_dir(&bin)?;
         let claude = bin.join("claude");
-        std::fs::write(
+        codex_router_test_support::node_fixture::write_node_fixture(
             &claude,
-            "#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint('[]')\n",
+            "native-cli-catalogue-agent.ts",
+            &serde_json::json!({"kind":"text","text":"[]"}),
         )?;
         std::fs::set_permissions(&claude, std::fs::Permissions::from_mode(0o700))?;
         self.router = Some(PersistentRouterHealthFixture::start().await?);

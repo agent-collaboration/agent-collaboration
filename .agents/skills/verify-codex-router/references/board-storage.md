@@ -1,7 +1,20 @@
 # Board records, replication and holder changes
 
-Use `scripts/verification/board_central_journey.py --plan PLAN.json` for the
-model-free local central route. It drives prebuilt `board-debug-runtime` Hosts,
+## Current entry
+
+The wrapper retired in 0.1.102. Current local model-free process journeys are the Rust `board_records_e2e` and `board_central_e2e` targets, backed by `crates/agent-collaboration/tests/board_e2e/`. After the CI local-end-to-end job’s artifact preparation, run:
+
+```sh
+cargo test --locked -p agent-collaboration --all-features --test board_records_e2e --test board_central_e2e -- --test-threads=1
+```
+
+These cover retained record/reopen and BC01–BC06 replication, holders, archive, forwarding, import and lease cases. They grant no hosted or separate-machine credit.
+
+## Retained obligations and historical evidence
+
+The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
+
+The historical model-free local central wrapper drove prebuilt `board-debug-runtime` Hosts,
 `agent-collaboration` over private Unix listeners and TCP MCP, and the real
 `board-upgrade-central`. The launcher accepts a private fixture session file.
 Registry enrollment, leases, Copy, snapshot installation, notices and board
@@ -66,11 +79,7 @@ changes outside that set and the verification apparatus. This grants no edits.
 owns the normal artifacts. Every exported tracked blob is checked before launch;
 this keeps live WIP separate from an observation of frozen product bytes.
 
-```sh
-TMPDIR="$BOARD_CACHE" PYTHONDONTWRITEBYTECODE=1 uv run --offline --no-project \
-  --with pydantic==2.14.1 --python 3.13 python \
-  -m scripts.verification.board_central_journey --plan "$BOARD_PLAN"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 Readiness is the central ready line (owned PID/loopback URL) and each Host's
 `boardDebugRuntimeReady` matched to v3 `service.json`. The driver boots a Host
@@ -296,15 +305,12 @@ remain separate.
 
 ## Apparatus controls
 
-`board_store_readback_test.py` checks closed-file refusal, exact binary/null
+`board_store_readback_test` (retired wrapper) checks closed-file refusal, exact binary/null
 cells, expression-index metadata, nonempty density across epochs, and refusal
 of v4 keys and the retired schema. These are apparatus controls, never product
-evidence. Use an isolated Python environment containing Pydantic v2 and pytest:
+evidence. The current owning Rust suites and TypeScript package supply apparatus checks:
 
-```sh
-python -m pytest scripts/verification/board_store_readback_test.py \
-  --basetemp "$BOARD_RUNTIME_PARENT/apparatus-tests" -q
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 The base-temp path is task-owned disposable output; pytest replaces it on a
 repeat run. Type-check the changed files with basedpyright and run Ruff check

@@ -1,0 +1,36 @@
+{
+  "name": "root-change",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"changed\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "d94cb82b8e1d55d6fb064d09917f367ac6b1b842ae08fe8012f57c84cf596592",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "<root>",
+        "occurrence": 0,
+        "before_sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "after_sha256": "d94cb82b8e1d55d6fb064d09917f367ac6b1b842ae08fe8012f57c84cf596592",
+        "classification": "unexpected"
+      }
+    ],
+    "allowed": false
+  }
+}

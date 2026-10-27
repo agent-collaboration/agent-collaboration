@@ -13,11 +13,11 @@ fn cursor_options() -> Result<launch_options::DebugHostOptions, Box<dyn std::err
             "--port",
             "28787",
             "--cursor-acp-executable",
-            "/usr/bin/python3",
+            "/usr/bin/node",
             "--cursor-acp-arguments",
-            "-u",
+            "--no-warnings",
             "--cursor-acp-arguments",
-            "/tmp/scripted cursor.py",
+            "/tmp/scripted cursor.ts",
             "--cursor-acp-arguments",
             r#"{"steps":["literal with spaces"]}"#,
         ]
@@ -45,10 +45,10 @@ fn cursor_parser_preserves_literal_command_and_repeated_arguments() {
     assert_eq!(
         options.cursor_provider,
         Some(ProviderCommand {
-            executable: "/usr/bin/python3".into(),
+            executable: "/usr/bin/node".into(),
             arguments: vec![
-                "-u".into(),
-                "/tmp/scripted cursor.py".into(),
+                "--no-warnings".into(),
+                "/tmp/scripted cursor.ts".into(),
                 r#"{"steps":["literal with spaces"]}"#.into(),
             ],
         })
@@ -76,7 +76,7 @@ fn cursor_parser_requires_explicit_absolute_root_and_executable() {
             "--cursor-acp-executable",
             "relative/acp",
         ],
-        vec!["--cursor-acp-arguments", "-u"],
+        vec!["--cursor-acp-arguments", "--no-warnings"],
         vec!["--cursor-acp-executable"],
     ] {
         let mut arguments = vec![
@@ -155,12 +155,12 @@ fn cursor_attaches_existing_binding_without_a_claude_selector() {
         })
         .expect("actual launch binding");
     assert_eq!(String::from(binding.endpoint_id.clone()), "cursor-local");
-    assert_eq!(binding.launch.executable, PathBuf::from("/usr/bin/python3"));
+    assert_eq!(binding.launch.executable, PathBuf::from("/usr/bin/node"));
     assert_eq!(
         binding.launch.arguments,
         [
-            "-u",
-            "/tmp/scripted cursor.py",
+            "--no-warnings",
+            "/tmp/scripted cursor.ts",
             r#"{"steps":["literal with spaces"]}"#
         ]
     );
@@ -221,11 +221,11 @@ fn cursor_replacement_preserves_exact_argv_without_shell_rewriting() {
         "--router-root",
         "/tmp/cursor-proof-account",
         "--cursor-acp-executable",
-        "/usr/bin/python3",
+        "/usr/bin/node",
         "--cursor-acp-arguments",
-        "-u",
+        "--no-warnings",
         "--cursor-acp-arguments",
-        "/tmp/scripted cursor.py",
+        "/tmp/scripted cursor.ts",
         "--cursor-acp-arguments",
         r#"{"steps":["literal with spaces"]}"#,
     ]
@@ -272,7 +272,7 @@ fn cursor_private_context_round_trip_rejects_changed_resume_input() {
         .cursor_provider
         .as_mut()
         .expect("Cursor command")
-        .executable = "/another/python3".into();
+        .executable = "/another/node".into();
     assert!(validate_resume_binding(&context, &changed_executable).is_err());
     let mut changed_arguments = options.clone();
     changed_arguments

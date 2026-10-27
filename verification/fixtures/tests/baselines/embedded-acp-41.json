@@ -1,0 +1,15 @@
+{
+  "original": "crates/acp-client-runtime/tests/create_settings_order.rs#CLOSED_SETTINGS_SINK_FIXTURE",
+  "originalSHA256": "85344e419d098b884b46e1d38224c989e73781949c8f309b1e325bc698de7f51",
+  "target": "provider-setting-response-agent.ts",
+  "arguments": ["closed"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"closed-settings-sink\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

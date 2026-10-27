@@ -1,0 +1,29 @@
+{
+  "input": {
+    "name": "E-04 false",
+    "operation": "soak",
+    "arguments": ["E-04", "artifact.json", "receipt.json", "declared", "source.rs"],
+    "originalArguments": ["E-04", "artifact.json", "receipt.json", "declared", "source.rs"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}",
+      "artifact.json": "{}",
+      "source.rs": ""
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json", "three-websocket-soak-transcript.json"]
+  },
+  "expected": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "artifact codex_version None does not match installed Codex codex-fixture 1\nartifact mode is not three-websocket-soak\nclients did not all succeed\nclient count is not 3\ntarget client model is not gpt-5.4-mini\nupstream target_model is not gpt-5.4-mini\nupstream target_model_session_count is not 3\nunexpected_response_create_models is not a list\nfinal-session forwarded counts do not prove three unique sessions with >=3 frames: []\nupstream in_overlap_session_event_counts do not prove three unique non-prewarm sessions with >=3 in-overlap events: []\nforwarded_upstream_messages is below 9\n",
+    "files": {
+      "receipt.json": "{\n  \"artifact_paths\": [\n    \"three-websocket-soak-transcript.json\"\n  ],\n  \"artifact_source\": \"declared\",\n  \"exit_code\": 1,\n  \"freshness_check\": \"explicit_artifact_pointer_and_git_head_match_current_head_or_relevant_source_unchanged\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"artifact codex_version None does not match installed Codex codex-fixture 1; artifact mode is not three-websocket-soak; clients did not all succeed; client count is not 3; target client model is not gpt-5.4-mini; upstream target_model is not gpt-5.4-mini; upstream target_model_session_count is not 3; unexpected_response_create_models is not a list; final-session forwarded counts do not prove three unique sessions with >=3 frames: []; upstream in_overlap_session_event_counts do not prove three unique non-prewarm sessions with >=3 in-overlap events: []; forwarded_upstream_messages is below 9\",\n  \"result\": \"fail\",\n  \"retained\": \"keep\",\n  \"soak_summary\": {\n    \"clients\": null,\n    \"mode\": null,\n    \"router_websocket_registry\": {},\n    \"socket_cleanup\": {},\n    \"upstream\": {}\n  },\n  \"status_after\": \"[ ] pending\",\n  \"touched_targets\": [\n    \"crates/codex-router-test-support/src/installed_codex.rs\",\n    \"tests/smoke/installed_codex_mock.sh\",\n    \"crates/codex-router-proxy/src/websocket.rs\",\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-cli/src/lib.rs\",\n    \"scripts/proof-matrix.sh\"\n  ]\n}\n",
+      "three-websocket-soak-transcript.json": "{}"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-3",
+  "originalSHA256": "e74ccc64e937cba1aeeaba2a4bfc9fa8184f8707721c078ed05b14c6a7b2bedc"
+}

@@ -1,0 +1,29 @@
+{
+  "input": {
+    "name": "S-04 false",
+    "operation": "serial",
+    "arguments": ["S-04", "receipt.json", "artifact.json", "output.txt"],
+    "originalArguments": ["S-04", "receipt.json", "artifact.json", "output.txt"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}",
+      "artifact.json": "{}",
+      "output.txt": "fallback reconnecting request timed out"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json", "S-04-transcript.json"]
+  },
+  "expected": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "serial WebSocket smoke observed forbidden transport degradation text: fallback\nserial WebSocket smoke observed forbidden transport degradation text: reconnecting\nserial WebSocket smoke observed forbidden transport degradation text: request timed out\nserial WebSocket smoke did not record upstream request frames\nserial WebSocket smoke did not record exactly one upstream handshake\n",
+    "files": {
+      "receipt.json": "{\n  \"artifact_paths\": [\n    \"S-04-transcript.json\"\n  ],\n  \"exit_code\": 1,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"serial WebSocket smoke observed forbidden transport degradation text: fallback; serial WebSocket smoke observed forbidden transport degradation text: reconnecting; serial WebSocket smoke observed forbidden transport degradation text: request timed out; serial WebSocket smoke did not record upstream request frames; serial WebSocket smoke did not record exactly one upstream handshake\",\n  \"result\": \"fail\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[ ] pending\",\n  \"touched_targets\": [\n    \"crates/codex-router-test-support/src/installed_codex.rs\",\n    \"tests/smoke/installed_codex_mock.sh\",\n    \"crates/codex-router-cli/src/lib.rs\",\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/websocket.rs\"\n  ]\n}\n",
+      "S-04-transcript.json": "{}"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-4",
+  "originalSHA256": "438ab4f2b8b87511cda52551f10f3d32e57883e29ee04ddcbca86dc6e20b0f9b"
+}

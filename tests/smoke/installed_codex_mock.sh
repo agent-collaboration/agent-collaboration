@@ -14,51 +14,12 @@ process_home=""
 require_copied_root_under_dev_state() {
   local label="$1"
   local candidate="$2"
-  python3 -c '
-import os
-import sys
-
-repo_root, label, candidate = sys.argv[1:4]
-dev_state = os.path.realpath(os.path.join(repo_root, "tmp", "dev-state"))
-if os.path.islink(candidate):
-    print(
-        f"copied-dev-state {label} must not be a symlink; got {candidate}",
-        file=sys.stderr,
-    )
-    raise SystemExit(2)
-resolved = os.path.realpath(candidate)
-try:
-    under_dev_state = os.path.commonpath([resolved, dev_state]) == dev_state
-except ValueError:
-    under_dev_state = False
-if not under_dev_state:
-    print(
-        f"copied-dev-state {label} must be under repo-local tmp/dev-state; got {resolved}",
-        file=sys.stderr,
-    )
-    raise SystemExit(2)
-' "$repo_root" "$label" "$candidate"
+  node "$repo_root/verification/tooling/path-inspection.ts" require-copied-root "$repo_root" "$label" "$candidate"
 }
 
 repo_relative_path() {
   local candidate="$1"
-  python3 -c '
-import os
-import sys
-
-repo_root, candidate = sys.argv[1:3]
-resolved = os.path.realpath(candidate)
-repo = os.path.realpath(repo_root)
-try:
-    relative = os.path.relpath(resolved, repo)
-except ValueError:
-    print(resolved)
-    raise SystemExit(0)
-if relative.startswith(".."):
-    print(resolved)
-else:
-    print(relative)
-' "$repo_root" "$candidate"
+  node "$repo_root/verification/tooling/path-inspection.ts" relative "$repo_root" "$candidate"
 }
 
 while [[ $# -gt 0 ]]; do

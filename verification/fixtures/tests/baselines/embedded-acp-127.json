@@ -1,0 +1,18 @@
+{
+  "original": "Host supervisor integration#saturated",
+  "originalSHA256": "4d453d88210215242d861bf47d7d7f4663fb502ea2ec7661c429a81b0c7d9929",
+  "target": "host-admission-agent.ts",
+  "arguments": ["supervisor-saturated", "<ROOT>/admission.log", "<RECEIPT>"],
+  "pidFiles": ["receipt.json"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {\"sessionId\": \"first\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/load\", \"params\": {\"sessionId\": \"second\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"saturated-supervisor-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": "<OWN_PID>",
+    "files": {
+      "admission.log": "first\nsecond\n",
+      "receipt.json": "<OWN_PID>"
+    }
+  }
+}

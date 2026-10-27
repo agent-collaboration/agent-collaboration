@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "generic passed note",
+    "operation": "pass",
+    "arguments": ["receipt.json", "line one\nquoted ' data Ω"],
+    "originalArguments": ["receipt.json", "line one\nquoted ' data Ω"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"line one\\nquoted ' data \\u03a9\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\"\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-1",
+  "originalSHA256": "8f38fa4c2ee0decbf3370ed8d8ea2c6e1461b7fe68c58abcbe3129fb0f1d596d"
+}

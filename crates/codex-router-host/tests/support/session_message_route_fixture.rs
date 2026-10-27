@@ -20,44 +20,12 @@ use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path};
 
 pub(super) fn provider_fixture(path: &Path) {
-    std::fs::write(
+    codex_router_test_support::node_fixture::write_node_fixture(
         path,
-        r#"#!/usr/bin/python3
-import json,sys
-session_id=sys.argv[1]
-load_marker=sys.argv[2]
-prompt_log=sys.argv[3]
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'delivery-fixture','version':'1'},'_meta':{'steering':{'supported':True}}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- method=request['method']
- if method=='session/new':
-  result={'sessionId':session_id}
- elif method=='session/load':
-  open(load_marker,'a').write('load\n')
-  result={}
- elif method=='_session/steering':
-  result={'outcome':'promptRequired'}
- elif method=='session/prompt':
-  open(prompt_log,'a').write(json.dumps(request)+'\n')
-  if 'request permission' in request['params']['prompt'][0]['text']:
-   print(json.dumps({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':session_id,'toolCall':{'toolCallId':'permission-tool'},'options':[{'optionId':'allow-once','name':'Allow once','kind':'allow_once'},{'optionId':'deny-once','name':'Deny once','kind':'reject_once'}]}})); sys.stdout.flush()
-   decision=json.loads(sys.stdin.readline())
-   assert decision['id']==91
-   assert decision['result']['outcome']['outcome']=='selected'
-   assert decision['result']['outcome']['optionId']=='allow-once'
-   open(prompt_log,'a').write(json.dumps({'fixturePermissionDecision':decision})+'\n')
-  result={'stopReason':'end_turn'}
- else:
-  raise RuntimeError(method)
- print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':result})); sys.stdout.flush()
- open(prompt_log,'a').write(json.dumps({'fixturePromptCompleted':request['id']})+'\n')
-"#,
+        "session-message-route-agent.ts",
+        &serde_json::json!(null),
     )
     .expect("provider fixture");
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))
-        .expect("provider executable");
 }
 
 pub(super) fn message(target: SessionRef) -> MessageSendRequest {

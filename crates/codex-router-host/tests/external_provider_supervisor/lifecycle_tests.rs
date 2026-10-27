@@ -651,12 +651,8 @@ async fn response_loss_is_unknown_and_reconciliation_never_replays() -> TestResu
     let root = tempfile::tempdir()?;
     let endpoint = endpoint("claude-local")?;
     let runtime = ExternalProviderRuntime::initialize(launch(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'loss-fixture','version':'1'}}})); sys.stdout.flush()
-sys.stdin.readline()
-"#,
+        "supervisor-integration-agent.ts",
+        vec!["loss".to_owned()],
     ))
     .await?;
     let backend = supervisor(&root, vec![(binding(endpoint.clone(), "claude")?, runtime)]).await?;

@@ -1,6 +1,9 @@
 #![allow(clippy::expect_used)]
 //! Real-provider races where LoadedOnly must refuse a newly unloaded session.
 
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};
 use codex_router_host::{
@@ -42,20 +45,7 @@ impl LiveSessionOwnershipCheck for LivePeer {
 }
 
 fn no_load_fixture() -> ExternalProviderLaunch {
-    let script = r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-assert request['method']=='initialize'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
- 'agentCapabilities':{},'agentInfo':{'name':'no-load-fixture','version':'1'}}}),flush=True)
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script.to_owned()],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch("provider-loaded-route-agent.ts", vec!["idle".to_owned()])
 }
 
 async fn store_with_session_record(
@@ -87,38 +77,14 @@ async fn store_with_session_record(
 }
 
 fn close_and_load_fixture(close_marker: &Path, load_marker: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,
- 'agentCapabilities':{{'loadSession':True,'sessionCapabilities':{{'close':{{}}}}}},
- 'agentInfo':{{'name':'close-load-fixture','version':'1'}}}}}})
-request=read()
-assert request['method']=='session/new'
-send({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})
-for line in sys.stdin:
- request=json.loads(line)
- if request['method']=='session/close':
-  with open({:?},'a') as marker: marker.write('session/close\\n')
- elif request['method']=='session/load':
-  with open({:?},'a') as marker: marker.write('session/load\\n')
- else:
-  raise AssertionError(request['method'])
- send({{'jsonrpc':'2.0','id':request['id'],'result':{{}}}})
-"#,
-        close_marker.display().to_string(),
-        load_marker.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-loaded-route-agent.ts",
+        vec![
+            "close".to_owned(),
+            close_marker.to_string_lossy().into_owned(),
+            load_marker.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 struct CloseSessionAtDispatch {

@@ -1,0 +1,143 @@
+{
+  "function": "require_callback_capture",
+  "name": "test_ack_without_actual_tool_completion_is_rejected",
+  "args": [
+    {
+      "target": {
+        "endpoint": {
+          "serviceId": "service",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      },
+      "observation": {
+        "target": {
+          "endpoint": {
+            "serviceId": "service",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "generation": {
+          "serviceEpoch": "epoch",
+          "generation": 1
+        },
+        "attached": true,
+        "endReason": "deadlineReached",
+        "continuationGap": true
+      },
+      "events": [
+        {
+          "sequence": 1,
+          "event": {
+            "kind": "turnStarted",
+            "turnId": "turn",
+            "inputId": "input"
+          }
+        },
+        {
+          "sequence": 2,
+          "event": {
+            "kind": "interactionRequested",
+            "interaction": {
+              "kind": "question",
+              "request": {
+                "requestId": "question"
+              }
+            }
+          }
+        },
+        {
+          "sequence": 3,
+          "event": {
+            "kind": "interactionResolved",
+            "requestId": "question"
+          }
+        },
+        {
+          "sequence": 4,
+          "event": {
+            "kind": "itemUpdated",
+            "item": {
+              "itemId": "question-tool",
+              "kind": {
+                "kind": "toolCall",
+                "status": "completed"
+              }
+            }
+          }
+        },
+        {
+          "sequence": 5,
+          "event": {
+            "kind": "interactionRequested",
+            "interaction": {
+              "kind": "approval",
+              "request": {
+                "requestId": "approval",
+                "subject": {
+                  "toolCall": {
+                    "toolCallId": "approval-tool"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "sequence": 6,
+          "event": {
+            "kind": "interactionResolved",
+            "requestId": "approval"
+          }
+        },
+        {
+          "sequence": 7,
+          "event": {
+            "kind": "itemUpdated",
+            "item": {
+              "itemId": "approval-tool",
+              "kind": {
+                "kind": "toolCall",
+                "status": "pending"
+              }
+            }
+          }
+        },
+        {
+          "sequence": 8,
+          "event": {
+            "kind": "turnEnded",
+            "turnId": "turn",
+            "outcome": {
+              "kind": "ended",
+              "stop_reason": "endTurn"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "target": {
+        "endpoint": {
+          "serviceId": "service",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      },
+      "binding": {
+        "binding": {
+          "generation": {
+            "serviceEpoch": "epoch",
+            "generation": 1
+          }
+        }
+      },
+      "inputId": "input"
+    },
+    ["question", "approval"]
+  ],
+  "expected": {
+    "error": "actual tool completion missing or unexpected tool"
+  }
+}

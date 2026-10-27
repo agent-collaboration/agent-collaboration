@@ -26,60 +26,14 @@ use provider_conversation_submission::{
     spawn_provider_prompt, submit_provider_cancel, submit_provider_create,
 };
 
-const PROVIDER: &str = r#"#!/usr/bin/python3
-import json,os,socket,sys,threading
-control=socket.socket(socket.AF_UNIX)
-control.bind(sys.argv[1]); control.listen(1)
-release_cancelled_prompt=threading.Event()
-def control_requests():
-    while True:
-        peer,_=control.accept()
-        command=peer.recv(1)
-        peer.close()
-        if command==b'x': os._exit(0)
-        if command==b'c': release_cancelled_prompt.set()
-threading.Thread(target=control_requests,daemon=True).start()
-def send(value): print(json.dumps(value),flush=True)
-request=json.loads(sys.stdin.readline())
-assert request['method']=='initialize',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'pending-hub-fixture','version':'1'}}})
-next_session=0
-pending={}
-responded=set()
-for line in sys.stdin:
-    request=json.loads(line)
-    method=request.get('method')
-    if method=='session/new':
-        next_session+=1
-        send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-'+str(next_session)}})
-    elif method=='session/prompt':
-        session=request['params']['sessionId']
-        if session=='fixture-1':
-            pending[session]=request['id']
-            send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':session,'toolCall':{'toolCallId':'permission-tool'},'options':[{'optionId':'allow-once','name':'Allow once','kind':'allow_once'}]}})
-            release_cancelled_prompt.wait()
-            send({'jsonrpc':'2.0','id':pending.pop(session),'result':{'stopReason':'cancelled'}})
-            responded.add(session)
-        else:
-            send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-    elif method=='session/cancel':
-        session=request['params']['sessionId']
-        if session not in responded:
-            send({'jsonrpc':'2.0','id':pending.pop(session),'result':{'stopReason':'cancelled'}})
-            responded.add(session)
-    elif request.get('id')==91:
-        assert request['result']['outcome']['outcome']=='cancelled',request
-        if 'fixture-1' not in responded:
-            send({'jsonrpc':'2.0','id':pending.pop('fixture-1'),'result':{'stopReason':'cancelled'}})
-            responded.add('fixture-1')
-    else:
-        raise AssertionError(request)
-"#;
-
 async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
-    let provider = root.join("pending-hub-provider.py");
-    std::fs::write(&provider, PROVIDER)?;
+    let provider = root.join("pending-hub-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &provider,
+        "pending-hub-provider-agent.ts",
+        &serde_json::Value::Null,
+    )?;
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))?;
     Ok(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {

@@ -1,0 +1,35 @@
+{
+  "function": "require_serve_during",
+  "args": [
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        }
+      }
+    },
+    {
+      "TCP": {
+        "443": {
+          "HTTPS": true
+        },
+        "8443": {
+          "HTTPS": true
+        }
+      },
+      "Foreground": {
+        "owned": {
+          "Web": {
+            "node:8443": {
+              "Handlers": {}
+            }
+          }
+        }
+      }
+    },
+    8443
+  ],
+  "expected": {
+    "result": null
+  }
+}

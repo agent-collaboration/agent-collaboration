@@ -1,0 +1,408 @@
+{
+  "mode": "metrics",
+  "secret": "private-canary",
+  "payload": {
+    "data": [
+      {
+        "__name__": "codex_router_account_selections_total",
+        "account.slot": "safe",
+        "agent.proof.marker": "safe",
+        "route_band": "safe",
+        "selection.reason": "safe",
+        "service.name": "safe",
+        "transport": "safe"
+      },
+      {
+        "__name__": "codex_router_account_rejections_total",
+        "account.slot": "safe",
+        "agent.proof.marker": "safe",
+        "route_band": "safe",
+        "selection.reason": "safe",
+        "service.name": "safe",
+        "transport": "safe"
+      },
+      {
+        "__name__": "codex_router_active_clients",
+        "account.slot": "safe",
+        "agent.proof.marker": "safe",
+        "route_band": "safe",
+        "service.name": "safe",
+        "transport": "safe"
+      },
+      {
+        "__name__": "codex_router_quota_refresh_total",
+        "agent.proof.marker": "safe",
+        "refresh.error_class": "safe",
+        "refresh.outcome": "safe",
+        "route_band": "safe",
+        "service.name": "safe"
+      },
+      {
+        "__name__": "codex_router_websocket_events_total",
+        "agent.proof.marker": "safe",
+        "event.kind": "safe",
+        "route_band": "safe",
+        "service.name": "safe"
+      },
+      {
+        "__name__": "codex_router_quota_remaining_bucket",
+        "account.slot": "safe",
+        "agent.proof.marker": "safe",
+        "quota.remaining_bucket": "safe",
+        "quota.window": "safe",
+        "route_band": "safe",
+        "service.name": "safe"
+      },
+      {
+        "__name__": "codex_router_quota_pressure_bucket",
+        "account.slot": "safe",
+        "agent.proof.marker": "safe",
+        "quota.pressure_bucket": "safe",
+        "quota.window": "safe",
+        "route_band": "safe",
+        "service.name": "safe"
+      }
+    ]
+  },
+  "originalSHA256": "8bdf865761e5d1a6da923775b1eb636738bfa0d07ee417854d88ee6b474807f1",
+  "cases": [
+    {
+      "name": "valid original input",
+      "path": [],
+      "action": "keep",
+      "accepted": true
+    },
+    {
+      "name": "delete data",
+      "path": ["data"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0",
+      "path": ["data", "0"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.__name__",
+      "path": ["data", "0", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.account.slot",
+      "path": ["data", "0", "account.slot"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.agent.proof.marker",
+      "path": ["data", "0", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.route_band",
+      "path": ["data", "0", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.selection.reason",
+      "path": ["data", "0", "selection.reason"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.service.name",
+      "path": ["data", "0", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.0.transport",
+      "path": ["data", "0", "transport"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1",
+      "path": ["data", "1"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.__name__",
+      "path": ["data", "1", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.account.slot",
+      "path": ["data", "1", "account.slot"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.agent.proof.marker",
+      "path": ["data", "1", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.route_band",
+      "path": ["data", "1", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.selection.reason",
+      "path": ["data", "1", "selection.reason"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.service.name",
+      "path": ["data", "1", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.1.transport",
+      "path": ["data", "1", "transport"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2",
+      "path": ["data", "2"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2.__name__",
+      "path": ["data", "2", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2.account.slot",
+      "path": ["data", "2", "account.slot"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2.agent.proof.marker",
+      "path": ["data", "2", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2.route_band",
+      "path": ["data", "2", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2.service.name",
+      "path": ["data", "2", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.2.transport",
+      "path": ["data", "2", "transport"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3",
+      "path": ["data", "3"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3.__name__",
+      "path": ["data", "3", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3.agent.proof.marker",
+      "path": ["data", "3", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3.refresh.error_class",
+      "path": ["data", "3", "refresh.error_class"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3.refresh.outcome",
+      "path": ["data", "3", "refresh.outcome"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3.route_band",
+      "path": ["data", "3", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.3.service.name",
+      "path": ["data", "3", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.4",
+      "path": ["data", "4"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.4.__name__",
+      "path": ["data", "4", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.4.agent.proof.marker",
+      "path": ["data", "4", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.4.event.kind",
+      "path": ["data", "4", "event.kind"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.4.route_band",
+      "path": ["data", "4", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.4.service.name",
+      "path": ["data", "4", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5",
+      "path": ["data", "5"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.__name__",
+      "path": ["data", "5", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.account.slot",
+      "path": ["data", "5", "account.slot"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.agent.proof.marker",
+      "path": ["data", "5", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.quota.remaining_bucket",
+      "path": ["data", "5", "quota.remaining_bucket"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.quota.window",
+      "path": ["data", "5", "quota.window"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.route_band",
+      "path": ["data", "5", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.5.service.name",
+      "path": ["data", "5", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6",
+      "path": ["data", "6"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.__name__",
+      "path": ["data", "6", "__name__"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.account.slot",
+      "path": ["data", "6", "account.slot"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.agent.proof.marker",
+      "path": ["data", "6", "agent.proof.marker"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.quota.pressure_bucket",
+      "path": ["data", "6", "quota.pressure_bucket"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.quota.window",
+      "path": ["data", "6", "quota.window"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.route_band",
+      "path": ["data", "6", "route_band"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete data.6.service.name",
+      "path": ["data", "6", "service.name"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "set data.0.token",
+      "path": ["data", "0", "token"],
+      "action": "set",
+      "value": "synthetic",
+      "accepted": false
+    },
+    {
+      "name": "set extra",
+      "path": ["extra"],
+      "action": "set",
+      "value": "private-canary",
+      "accepted": false
+    }
+  ]
+}

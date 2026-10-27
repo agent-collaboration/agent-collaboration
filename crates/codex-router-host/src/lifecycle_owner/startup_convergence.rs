@@ -297,13 +297,16 @@ mod tests {
                     }),
                 )
                 .launch();
-        let fixture_executable = fake_acp_launch.executable.to_string_lossy().into_owned();
+        let fixture_executable = codex_router_test_support::node_fixture::node_executable()
+            .expect("absolute Node fixture executable")
+            .to_string_lossy()
+            .into_owned();
         let fixture_arguments = fake_acp_launch.arguments;
         claude_binding.launch.executable = fake_acp_launch.executable;
         claude_binding.launch.arguments = vec![
-            "-u".to_owned(),
-            "-c".to_owned(),
-            "import os, sys\nwith open(sys.argv[1], 'w', encoding='utf-8') as output:\n    output.write(os.environ['ANTHROPIC_AUTH_TOKEN'])\nexecutable = sys.argv[2]\nos.execvpe(executable, [executable, *sys.argv[3:]], os.environ)\n".to_owned(),
+            codex_router_test_support::node_fixture::fixture_program("token-observed-exec.ts")
+                .to_string_lossy()
+                .into_owned(),
             claude_token_observation_path.to_string_lossy().into_owned(),
             fixture_executable,
         ];

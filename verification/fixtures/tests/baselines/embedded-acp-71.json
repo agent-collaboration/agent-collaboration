@@ -1,0 +1,16 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/robustness_tests.rs#frames",
+  "originalSHA256": "93414db2701ef01458ba288adfa9a37eade9e9c91e025d55c870564bc512d1d0",
+  "target": "host-output-pressure-agent.ts",
+  "arguments": ["frames"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {\"sessionId\": \"large-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"method\": \"session/prompt\", \"params\": {\"sessionId\": \"second-session\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "784a3669cf704e77e601f597af6c66fb0c5428101a5d9936e40ad735ab57b685",
+      "bytes": 4195398
+    },
+    "stderr": "",
+    "receipt": null
+  }
+}

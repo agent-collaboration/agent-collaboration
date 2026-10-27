@@ -263,7 +263,7 @@ mod tests {
         ProviderWorkingDirectory, RouterAccess, SessionId, UuidIdentity,
     };
     use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
-    use std::{path::PathBuf, sync::Arc};
+    use std::sync::Arc;
 
     struct FixtureOwnership(LiveSessionOwnership);
 
@@ -278,33 +278,14 @@ mod tests {
     }
 
     fn fixture_launch(event_path: &std::path::Path, fail_load: bool) -> ExternalProviderLaunch {
-        let script = format!(
-            r#"
-import json,sys
-first=json.loads(sys.stdin.readline())
-assert first['method']=='initialize'
-print(json.dumps({{'jsonrpc':'2.0','id':first['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}}}}}})); sys.stdout.flush()
-line=sys.stdin.readline()
-if line:
- request=json.loads(line)
- assert request['method']=='session/load', request['method']
- assert request['params']['sessionId']=='fixture-session'
- open({:?},'w').write(request['method'])
- if {fail_load}:
-  print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'error':{{'code':-32001,'message':'fixture load refused'}}}})); sys.stdout.flush()
- else:
-  print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-            event_path.display().to_string(),
-            fail_load = if fail_load { "True" } else { "False" }
-        );
-        ExternalProviderLaunch {
-            persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-            executable: PathBuf::from("/usr/bin/python3"),
-            arguments: vec!["-c".to_owned(), script],
-            environment: Vec::new(),
-        }
+        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+            "host-fifo-load-agent.ts",
+            vec![
+                "load".to_owned(),
+                event_path.to_string_lossy().into_owned(),
+                fail_load.to_string(),
+            ],
+        )
     }
 
     fn target() -> SessionRef {

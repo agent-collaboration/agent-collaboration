@@ -1,0 +1,43 @@
+{
+  "name": "crlf",
+  "before": "model = \"fixed\"\r\n",
+  "after": "model = \"fixed\"\r\n[desktop.preferences]\r\nflag = true\r\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "ff9c40a0ea58d22243dda73d9e9406039f680f41b69866a9f6479590aa4b8d9b",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "ff9c40a0ea58d22243dda73d9e9406039f680f41b69866a9f6479590aa4b8d9b",
+        "names_run": false
+      },
+      {
+        "header": "[desktop.preferences]",
+        "table": ["desktop", "preferences"],
+        "occurrence": 0,
+        "sha256": "c38d9887b8d6b89e7973ad74a147451bd4f0dd9a5e1245a5f4416061fe5095d9",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[desktop.preferences]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "c38d9887b8d6b89e7973ad74a147451bd4f0dd9a5e1245a5f4416061fe5095d9",
+        "classification": "externalDesktopSection"
+      }
+    ],
+    "allowed": true
+  }
+}

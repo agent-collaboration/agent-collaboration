@@ -1,11 +1,16 @@
 # Real board journey
 
-`board_real_app_journey.py` drives the built `agent-collaboration` CLI over its
+The former wrapper retired in 0.1.102. Current local process journeys live in `crates/agent-collaboration/tests/board_records_e2e.rs` and `board_central_e2e.rs`, with owned fixtures in `board_e2e/`. Follow the CI local-end-to-end job’s artifact preparation and run those retained Rust test targets. Upgrade/import publication has its own `board-legacy-upgrade` `upgrade_binary_e2e` target. Current two-machine and Worker orchestration is `node verification/run.ts "$PRIVATE_DECLARATION"`; its registered cases and declaration determine actual coverage. See [current tooling](../../verification/README.md).
+
+The requirements and earlier qualification notes below remain governing obligations. Historical wrapper descriptions do not establish current availability or runtime proof; an obligation without a retained route remains unavailable.
+
+
+The retired board journey wrapper drove the built `agent-collaboration` CLI over its
 private Unix MCP listener and the same Host-owned `board-debug-runtime` over TCP
 MCP. It checks observable identities, content, state and failure outcomes. It
 does not build binaries or contact an installed Router.
 
-The driver uses stdlib-only Python 3.12+, an owned private `/tmp` directory per
+The historical driver required an owned private `/tmp` directory per
 case, and a checkout with clean tracked product source or a verified Git export.
 Only this driver's own `scripts/verification` edits or untracked files are
 permitted beside the declared product head; their status and hashes are recorded
@@ -19,15 +24,7 @@ created.
 
 Run after building the launcher and CLI from the declared source:
 
-```sh
-python3 -m scripts.verification.board_real_app_journey --list-cases
-python3 -m scripts.verification.qualify_peer_fixture \
-  --output tmp/verify-m2/peer-producer-qualification.json
-python3 -m scripts.verification.board_real_app_journey \
-  --expected-head <full-source-commit> \
-  --peer-qualification tmp/verify-m2/peer-producer-qualification.json \
-  --output-directory tmp/verify-m2/observations/final
-```
+Use the current Rust process journeys described above; the retired wrapper command is unavailable.
 
 For the round-2 sensitivity run, point `--source-root` at the separately built
 `git archive 61b46682` export and select `--case rejected-scope`,
@@ -103,12 +100,12 @@ G1 uses a named session-entry-author stand-in, qualified against the pinned
 shipped Claude Code 2.1.301 writer and serializer, rather than against only
 Router's reader. A changed producer executable fails qualification. Native
 session creation, its own publication and turns remain unverified until M4.
-`board_journey_peer.py` records the producer pin and field construction.
+`board_journey_peer` (retired wrapper) records the producer pin and field construction.
 The qualification command runs the actual extracted producer object expression,
 status merger and serializer in Node with declared controlled inputs. It compares
 exact bytes and rejects the old missing-field/newline forms. This maintenance
 check needs the installed pinned executable and Node; it starts no native
-session. The runtime driver stays Python stdlib-only and binds that receipt to
+session. The retired runtime driver bound that receipt to
 the exact fixture-module hash and the bytes it publishes.
 
 O-R2-F2's transient scan failure has no real-app injection/observation seam.
@@ -119,7 +116,7 @@ the unchanged maximum-identity release budget likewise belong to their named
 integration gates.
 
 After the Implementer's final-head/build handoff, the commissioned transient
-check is runnable with `python3 -m scripts.verification.verify_transient_scan_sensitivity`,
+check is runnable with the retired wrapper command,
 passing `--source-export`, `--expected-head` and a new `--output-directory`.
 It verifies the exported source, mutates only the exact existing error-class
 arm, requires the named quarantine assertion to fail, restores the source in a
@@ -132,9 +129,9 @@ turn, real central admission/leases/replication, remote-watch propagation or P3
 external delivery. The local Fleet/lease/C5 composition is named as a stand-in;
 the release and cross-machine outcomes remain M4 and later.
 
-`board_list_subject_journey.py` observes the M2b review correction S-M2b-R1-F1
+`board_list_subject_journey` (retired wrapper) observes the M2b review correction S-M2b-R1-F1
 on the real Host. It is runnable with
-`python3 -m scripts.verification.board_list_subject_journey`, passing
+the retired wrapper command, passing
 `--expected-head`, `--manifest` (the frozen CLI-last artifact manifest) and a
 new `--output-directory`. It compares the repository-path, no-selector and plain
 default thread lists with the workspace CLI and MCP rows through a rename, a

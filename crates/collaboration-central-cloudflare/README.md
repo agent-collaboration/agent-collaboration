@@ -4,11 +4,15 @@ Run these commands from the repository root. The Worker is a root Cargo
 workspace member. It uses workers-rs and worker-build 0.8.7; local runtime
 proof uses Miniflare 5.20261012.0-beta and workerd 1.20261012.1.
 
+Use the Node and pnpm versions pinned in `verification/package.json`. Install
+tooling dependencies with `pnpm --dir verification install --frozen-lockfile` before
+running the bundle checks and local conformance commands below.
+
 Build and check a deployment candidate without test features:
 
 ```sh
 worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
-python3 scripts/tooling/check-central-worker-bundle.py production
+node verification/tooling/check-central-worker-bundle.ts production
 ```
 
 The root `worker-release` profile preserves the former standalone Worker's
@@ -39,7 +43,7 @@ For local conformance, build the dev artifact with the current test controls:
 
 ```sh
 worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
-python3 scripts/tooling/check-central-worker-bundle.py faults
+node verification/tooling/check-central-worker-bundle.ts faults
 cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- runtime-controls node /path/to/miniflare/dist/src/index.js /absolute/fresh/persistence 8957
 ```
 

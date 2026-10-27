@@ -1,6 +1,8 @@
 #![allow(clippy::expect_used)]
 //! Queue draining and inspectable provider queue operation behavior.
 
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderRuntime, ExternalProviderSupervisor,
     ProviderAcpDeliveryRoute,

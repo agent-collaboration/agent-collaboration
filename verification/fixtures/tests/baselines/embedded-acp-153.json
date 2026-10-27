@@ -1,0 +1,18 @@
+{
+  "original": "crates/codex-router-host/tests/support/session_message_route_fixture.rs#route",
+  "originalSHA256": "d2a8c1cb5dbd8ab5a35573f63b1d6d1c931ff568df309642261660680cf0683a",
+  "target": "session-message-route-agent.ts",
+  "arguments": ["sample-session", "<ROOT>/load", "<ROOT>/prompts"],
+  "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/load\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"_session/steering\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"session/prompt\",\"params\":{\"prompt\":[{\"type\":\"text\",\"text\":\"request permission\"}]}}\n{\"jsonrpc\":\"2.0\",\"id\":91,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"allow-once\"}}}\n{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"session/prompt\",\"params\":{\"prompt\":[{\"type\":\"text\",\"text\":\"ordinary\"}]}}\n",
+  "configuration": null,
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"delivery-fixture\", \"version\": \"1\"}, \"_meta\": {\"steering\": {\"supported\": true}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"sample-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"outcome\": \"promptRequired\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"sample-session\", \"toolCall\": {\"toolCallId\": \"permission-tool\"}, \"options\": [{\"optionId\": \"allow-once\", \"name\": \"Allow once\", \"kind\": \"allow_once\"}, {\"optionId\": \"deny-once\", \"name\": \"Deny once\", \"kind\": \"reject_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 6, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "load": "load\n",
+      "prompts": "{\"fixturePromptCompleted\": 2}\n{\"fixturePromptCompleted\": 3}\n{\"fixturePromptCompleted\": 4}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"method\": \"session/prompt\", \"params\": {\"prompt\": [{\"type\": \"text\", \"text\": \"request permission\"}]}}\n{\"fixturePermissionDecision\": {\"jsonrpc\": \"2.0\", \"id\": 91, \"result\": {\"outcome\": {\"outcome\": \"selected\", \"optionId\": \"allow-once\"}}}}\n{\"fixturePromptCompleted\": 5}\n{\"jsonrpc\": \"2.0\", \"id\": 6, \"method\": \"session/prompt\", \"params\": {\"prompt\": [{\"type\": \"text\", \"text\": \"ordinary\"}]}}\n{\"fixturePromptCompleted\": 6}\n"
+    }
+  }
+}

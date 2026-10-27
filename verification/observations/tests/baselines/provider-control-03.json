@@ -1,0 +1,274 @@
+{
+  "input": {
+    "name": "inspect",
+    "action": "inspect",
+    "plan": {
+      "cli": "<CLI>",
+      "evidence": "<ROOT>/evidence",
+      "service_directory": "<ROOT>/service",
+      "caller_session_id": "caller",
+      "endpoint_id": "claude-local",
+      "settings": {
+        "mode": "manual-mode",
+        "model": "provider-model",
+        "effort": "low"
+      },
+      "tools": null,
+      "approver": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "approver"
+      }
+    },
+    "manifest": {
+      "serviceId": "00000000-0000-7000-8000-000000000001",
+      "serviceEpoch": "epoch",
+      "serviceVersion": "test",
+      "machineLabel": "synthetic",
+      "routerProxyEndpoint": "http://127.0.0.1:1",
+      "mcp": {
+        "url": "<RPC>"
+      }
+    },
+    "files": {
+      "create-intent": {
+        "operationId": "00000000-0000-7000-8000-000000000002"
+      }
+    },
+    "responses": {
+      "conversation_operation_show": [
+        {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "binding": {
+            "binding": {
+              "generation": {
+                "serviceEpoch": "epoch",
+                "generation": 1
+              }
+            }
+          },
+          "stage": "terminal",
+          "effect": "applied",
+          "reconciliation": "confirmed"
+        }
+      ],
+      "provider_session_inspect": [
+        {
+          "record": {
+            "target": {
+              "endpoint": {
+                "serviceId": "00000000-0000-7000-8000-000000000001",
+                "endpointId": "claude-local"
+              },
+              "sessionId": "requester"
+            },
+            "state": "idle",
+            "capabilities": {
+              "elicitation": true
+            },
+            "settingsCatalog": {
+              "currentMode": "manual-mode",
+              "modes": [
+                {
+                  "value": "manual-mode",
+                  "label": "Manual"
+                }
+              ],
+              "configOptions": [
+                {
+                  "id": "model",
+                  "category": "model",
+                  "currentValue": {
+                    "kind": "select",
+                    "value": "provider-model"
+                  },
+                  "choices": [
+                    {
+                      "value": "provider-model",
+                      "label": "Actual provider model"
+                    }
+                  ]
+                },
+                {
+                  "id": "effort",
+                  "category": "effort",
+                  "currentValue": {
+                    "kind": "select",
+                    "value": "low"
+                  },
+                  "choices": [
+                    {
+                      "value": "low",
+                      "label": "Low"
+                    }
+                  ]
+                },
+                {
+                  "id": "thinking",
+                  "category": null,
+                  "currentValue": {
+                    "kind": "boolean",
+                    "value": true
+                  },
+                  "choices": []
+                }
+              ]
+            },
+            "retainedExtension": {
+              "precision": "2026-10-26T01:02:03.123456789Z"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "expected": {
+    "calls": [
+      {
+        "name": "conversation_operation_show",
+        "arguments": {
+          "operationId": "<OPERATION>"
+        }
+      },
+      {
+        "name": "provider_session_inspect",
+        "arguments": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          }
+        }
+      }
+    ],
+    "files": {
+      "create-intent.json": {
+        "operationId": "<OPERATION>"
+      },
+      "create-operation-readback.json": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-7000-8000-000000000001",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "binding": {
+          "binding": {
+            "generation": {
+              "serviceEpoch": "epoch",
+              "generation": 1
+            }
+          }
+        },
+        "stage": "terminal",
+        "effect": "applied",
+        "reconciliation": "confirmed"
+      },
+      "session-inspect.json": {
+        "record": {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "state": "idle",
+          "capabilities": {
+            "elicitation": true
+          },
+          "settingsCatalog": {
+            "currentMode": "manual-mode",
+            "modes": [
+              {
+                "value": "manual-mode",
+                "label": "Manual"
+              }
+            ],
+            "configOptions": [
+              {
+                "id": "model",
+                "category": "model",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "provider-model"
+                },
+                "choices": [
+                  {
+                    "value": "provider-model",
+                    "label": "Actual provider model"
+                  }
+                ]
+              },
+              {
+                "id": "effort",
+                "category": "effort",
+                "currentValue": {
+                  "kind": "select",
+                  "value": "low"
+                },
+                "choices": [
+                  {
+                    "value": "low",
+                    "label": "Low"
+                  }
+                ]
+              },
+              {
+                "id": "thinking",
+                "category": null,
+                "currentValue": {
+                  "kind": "boolean",
+                  "value": true
+                },
+                "choices": []
+              }
+            ]
+          },
+          "retainedExtension": {
+            "precision": "2026-10-26T01:02:03.123456789Z"
+          }
+        }
+      },
+      "target-binding.json": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "requester"
+      }
+    },
+    "stdout": [
+      {
+        "created": {
+          "endpoint": {
+            "serviceId": "00000000-0000-7000-8000-000000000001",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "routerElicitationRoute": true,
+        "selectedSettings": {
+          "mode": "manual-mode",
+          "model": "provider-model",
+          "effort": "low"
+        },
+        "catalogOnly": false,
+        "authStatus": null,
+        "providerQuestionToolSupport": "requires qualified tool provenance and genuine emission"
+      }
+    ],
+    "failure": null
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "external-project",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[projects.\"/another/repository\"]\ntrust_level = \"trusted\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[projects.\"/another/repository\"]",
+        "table": ["projects", "/another/repository"],
+        "occurrence": 0,
+        "sha256": "7bec8e8a5dc3ee4a7eb5d57a7ec4fa1c70e199dea78ed0512461ec9fd60b83d4",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[projects.\"/another/repository\"]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "7bec8e8a5dc3ee4a7eb5d57a7ec4fa1c70e199dea78ed0512461ec9fd60b83d4",
+        "classification": "externalProjectSection"
+      }
+    ],
+    "allowed": true
+  }
+}

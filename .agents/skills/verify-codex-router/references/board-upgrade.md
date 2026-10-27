@@ -1,5 +1,21 @@
 # Board upgrade
 
+## Current entry
+
+The wrapper retired in 0.1.102. The retained Rust preparation, publication, replay and restart route is `crates/board-legacy-upgrade/tests/upgrade_binary_e2e.rs`. Prepare the real local entry points as CI does, then run:
+
+```sh
+cargo test --locked -p board-legacy-upgrade --test upgrade_binary_e2e -- --test-threads=1
+```
+
+The retained independent inbox oracle is `crates/board-legacy-upgrade/examples/legacy_selection_oracle.rs`; build/run that example with an explicitly supplied sealed copy, copy root and private output. Its owning tests remain in the example and upgrade suite.
+
+A separately commissioned sealed-copy Mac observation uses `node verification/import-run.ts "$PRIVATE_DECLARATION"`; its current contract is `verification/import-declaration.ts`. It supports the declared local Tokio target and real copies on that Mac only.
+
+## Retained obligations and historical evidence
+
+The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
+
 For a separately commissioned G4 external upload, use the
 [external central route](board-upgrade-external.md). It adds the declared
 HTTPS/owner Access and machine-credential inputs and qualifies locally before
@@ -73,38 +89,12 @@ the explicitly listed copies, checks their byte/mtime fingerprints, and never
 writes them. The current fixture route can be prepared by copying the retained
 test fixture into that caller-owned directory.
 
-`PublicationPlan` in `board_upgrade_publication_views.py` defines the complete
+`PublicationPlan` in `board_upgrade_publication_views` (retired wrapper) defines the complete
 JSON input. Set the caller's `DECLARED_SOURCE_HEAD`, `LEGACY_COPY_ROOT`,
 `LEGACY_COPY`, `JOURNEY_PLAN` and fresh `JOURNEY_OUTPUT` first. The output's
 parent must also be private system-temp state outside the checkout.
 
-```sh
-python3 - <<'PY'
-import hashlib, json, os
-from pathlib import Path
-repository = Path.cwd().resolve()
-binary = repository / "target/debug/codex-router-board-upgrade"
-central = repository / "scripts/verification/board_upgrade_native/target/debug/board-upgrade-central"
-plan = {
-    "repository": str(repository),
-    "expected_head": os.environ["DECLARED_SOURCE_HEAD"],
-    "binary": str(binary),
-    "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
-    "central_binary": str(central),
-    "central_sha256": hashlib.sha256(central.read_bytes()).hexdigest(),
-    "copy_root": os.environ["LEGACY_COPY_ROOT"],
-    "sources": [os.environ["LEGACY_COPY"]],
-    "source_evidence": "syntheticFixture",
-    "output_directory": os.environ["JOURNEY_OUTPUT"],
-}
-with Path(os.environ["JOURNEY_PLAN"]).open("x") as output:
-    output.write(json.dumps(plan, indent=2) + "\n")
-PY
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 \
-  python -m scripts.verification.board_upgrade_journey --help
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 \
-  python -m scripts.verification.board_upgrade_journey --publication-plan "$JOURNEY_PLAN"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 For a commissioned real-copy run, set `source_evidence` to `ownerSuppliedCopy`
 and list the actual handed-over paths. That field records the caller's evidence
@@ -152,17 +142,11 @@ required behavioral failure. No physical double-publication mutant is claimed.
 
 ## Source-entry inspection only
 
-Run from the repository root with Python 3.13 and Pydantic 2.14.1. Supply the
+Use the current Rust/TypeScript entry above from the repository root. Supply the
 declared source commit and a new output directory under an existing, private,
 owner-controlled system-temp task directory:
 
-```sh
-python -m scripts.verification.board_upgrade_journey --help
-python -m scripts.verification.board_upgrade_journey --list-cases
-python -m scripts.verification.board_upgrade_journey \
-  --expected-head "$DECLARED_SOURCE_HEAD" \
-  --output-directory "$PRIVATE_EVIDENCE_PARENT/board-upgrade-entry"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 The optional entry gate checks HEAD, clean product source (allowing only the assigned verifier
 paths), and `cargo metadata --offline --locked --no-deps --format-version 1`.
@@ -182,13 +166,9 @@ under normal Codex/Router state. Sealing and confirming no live owner is the
 copy supplier's responsibility; this oracle is not the importer's open-store
 refusal proof.
 
-```sh
-python -m scripts.verification.legacy_selection_oracle \
-  --legacy-copy "$SUPPLIED_LEGACY_COPY" --copy-root "$SUPPLIED_COPY_ROOT" \
-  --output "$PRIVATE_EVIDENCE_PARENT/legacy-selection.json"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
-`legacy_selection_oracle.py` projects the shipped inbox predicate at
+`legacy_selection_oracle` (retired wrapper) projects the shipped inbox predicate at
 `ffced1c1:crates/message-board-storage/src/inbox_records.rs:124` into each topic's
 post selection. Main posts use the workspace main-start and topic bookmark;
 replies use the active thread watch and thread bookmark. Unread omits the
@@ -200,19 +180,16 @@ the state or activity whose absence the observation must check. A topic-only
 watch does not subscribe to any thread's replies; an explicit watch on one
 thread does not include replies from its unwatched siblings.
 Receipts identify source/driver hashes and explicitly say no product import was
-observed. `legacy_selection_oracle_test.py` checks literal mixed-history cases,
+observed. `legacy_selection_oracle_test` (retired wrapper) checks literal mixed-history cases,
 including rejection of an incorrectly shared main/reply cutoff.
 
 Run the oracle's apparatus checks independently (these are not product tests):
 
-```sh
-uv run --offline --no-project --with pydantic==2.14.1 --with pytest --python 3.13 \
-  python -m pytest scripts/verification/legacy_selection_oracle_test.py -q
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 ## Offline native preparation fidelity
 
-`--observe-plan` retains `ObservationPlan` in `board_upgrade_views.py`: declared
+`--observe-plan` retains `ObservationPlan` in `board_upgrade_views` (retired wrapper): declared
 repository/reference repository, expected HEAD, CLI/native-observer paths and
 hashes, and a fresh private output directory. It drives the retained synthetic
 fixtures and the independent native oracle. Its scope is preparation, not
@@ -337,13 +314,7 @@ unchanged checks. Keep mutants outside the product tree.
 
 Before a G3 drive, qualify request construction without launching a Host:
 
-```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 \
-  python -m scripts.verification.board_request_shapes \
-  --decoder scripts/verification/board_upgrade_native/target/debug/board-request-shapes
-uv run --offline --no-project --with pydantic==2.14.1 --with pytest --python 3.13 \
-  python -m pytest scripts/verification/board_request_shapes_test.py -q
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 This decodes actual shared-builder outputs with the current Rust DTOs, then
 requires retired `observedEpoch`/`resubmits` additions to fail. A source sweep also
@@ -374,13 +345,7 @@ all evidence outside that directory. Reopen `journey.json` after teardown.
 
 Apparatus checks (these are not product-test counts):
 
-```sh
-uv run --offline --no-project --with pydantic==2.14.1 --with pytest --python 3.13 \
-  python -m pytest scripts/verification/board_upgrade_publication_views_test.py \
-  scripts/verification/board_upgrade_publication_runtime_test.py \
-  scripts/verification/legacy_selection_oracle_test.py \
-  scripts/verification/board_upgrade_source_test.py -q
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 Return the declared source and actual executable hashes, fixture/supplied-copy
 classification, commands/exits and per-phase assertions, retained evidence and

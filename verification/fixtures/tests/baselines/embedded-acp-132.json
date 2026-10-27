@@ -1,0 +1,18 @@
+{
+  "original": "Composed Host integration#failure",
+  "originalSHA256": "f3b6cf4c6548a9f09cd6c0f2bdb06f7f4d3d60fa7750306b1f7be38e8697d2d3",
+  "target": "host-composition-agent.ts",
+  "arguments": [],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 4,
+    "stdout": "",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  },
+  "configuration": {
+    "mode": "failure"
+  }
+}

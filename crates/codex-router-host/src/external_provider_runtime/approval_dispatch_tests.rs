@@ -67,102 +67,24 @@ impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
 }
 
 fn permission_dispatch_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'two-session-permission-fixture','version':'1'}}})
-first_create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':first_create['id'],'result':{'sessionId':'session-a'}})
-second_create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':second_create['id'],'result':{'sessionId':'session-b'}})
-first_prompt=json.loads(sys.stdin.readline())
-assert first_prompt['method']=='session/prompt'
-assert first_prompt['params']['sessionId']=='session-a'
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'session-a','toolCall':{'toolCallId':'permission-a','title':'Run an approved command','kind':'execute'},'options':[{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}]}})
-second_prompt=json.loads(sys.stdin.readline())
-assert second_prompt['method']=='session/prompt'
-assert second_prompt['params']['sessionId']=='session-b'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-b','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'session-b-replied'}}}})
-send({'jsonrpc':'2.0','id':second_prompt['id'],'result':{'stopReason':'end_turn'}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='selected'
-assert permission['result']['outcome']['optionId']=='allow-a'
-send({'jsonrpc':'2.0','method':'$/cancel_request','params':{'requestId':91}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-a','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'session-a-approved'}}}})
-send({'jsonrpc':'2.0','id':first_prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec!["two".to_owned()],
+    )
 }
 
 fn permission_cancellation_fixture(cancellation_source: &str) -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-cancel_source=sys.argv[1]
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-cancellation-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'session-a'}})
-prompt=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'session-a','toolCall':{'toolCallId':'permission-a','title':'Run an approved command','kind':'execute'},'options':[{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}]}})
-if cancel_source=='peer':
-    send({'jsonrpc':'2.0','method':'$/cancel_request','params':{'requestId':91}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='cancelled'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-a','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'permission-cancelled'}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            fixture.to_owned(),
-            cancellation_source.to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec!["cancel".to_owned(), cancellation_source.to_owned()],
+    )
 }
 
 fn permission_during_steer_fixture() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'_meta':{'steering':{'supported':True}},'agentInfo':{'name':'permission-steer-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'session-a'}})
-prompt=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'session-a','toolCall':{'toolCallId':'permission-a','title':'Run an approved command','kind':'execute'},'options':[{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}]}})
-steer=json.loads(sys.stdin.readline())
-assert steer['method']=='_session/steering'
-send({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'injected'}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='selected'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'session-a','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'session-a-steered-and-approved'}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec!["steer".to_owned()],
+    )
 }
 
 fn permission_during_cancel_fixture() -> ExternalProviderLaunch {
@@ -191,78 +113,25 @@ fn permission_during_cancel_fixture() -> ExternalProviderLaunch {
 }
 
 fn permission_after_cancel_fixture(event_socket: &std::path::Path) -> ExternalProviderLaunch {
-    // ACP v1 prompt-turn.mdx:336-350 requires every permission offered during
-    // a cancelling Turn to receive `cancelled` before its prompt result.
-    let fixture = format!(
-        r#"
-import json,socket,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':initialize['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'late-permission-fixture','version':'1'}}}}}})
-create=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':create['id'],'result':{{'sessionId':'session-a'}}}})
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-    event.connect({event_socket:?})
-    event.sendall(b'prompt')
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-send({{'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{{'sessionId':'session-a','toolCall':{{'toolCallId':'permission-after-cancel','title':'Late tool','kind':'execute'}},'options':[{{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}}]}}}})
-answer=json.loads(sys.stdin.readline())
-assert answer['id']==91
-assert answer['result']['outcome']['outcome']=='cancelled'
-send({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'cancelled'}}}})
-sys.stdin.read()
-"#,
-        event_socket = event_socket.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-u".to_owned(), "-c".to_owned(), fixture],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec![
+            "late".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 fn output_limit_with_pending_permission_fixture(
     event_socket: &std::path::Path,
 ) -> ExternalProviderLaunch {
-    // ACP v1 prompt-turn.mdx:336-350 requires an outstanding permission to
-    // receive `cancelled` when Router cancels the Turn for its output limit.
-    let fixture = format!(
-        r#"
-import json,socket,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':initialize['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'output-limit-permission-fixture','version':'1'}}}}}})
-create=json.loads(sys.stdin.readline())
-send({{'jsonrpc':'2.0','id':create['id'],'result':{{'sessionId':'session-a'}}}})
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-send({{'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{{'sessionId':'session-a','toolCall':{{'toolCallId':'pending-tool','title':'Pending tool','kind':'execute'}},'options':[{{'optionId':'allow-a','name':'Allow once','kind':'allow_once'}}]}}}})
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-    event.connect({event_socket:?})
-    assert event.recv(1)==b'g'
-send({{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'session-a','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'x'*(1024*1024+1)}}}}}}}})
-answer=json.loads(sys.stdin.readline())
-assert answer['id']==91
-assert answer['result']['outcome']['outcome']=='cancelled'
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-send({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'cancelled'}}}})
-sys.stdin.read()
-"#,
-        event_socket = event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-u".to_owned(), "-c".to_owned(), fixture],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-approval-dispatch-agent.ts",
+        vec![
+            "output".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 async fn wait_for_pending_approval<TPromptFuture>(

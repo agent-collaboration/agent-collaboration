@@ -131,21 +131,10 @@ fn provider_output_classifier_reports_only_bounded_uuid_metadata() {
 }
 
 fn owned_host_endpoint_fixture() -> ExternalProviderLaunch {
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'owned-result-fixture','version':'1'}}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-            .to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["owned".to_owned()],
+    )
 }
 
 fn session_ref(
@@ -330,62 +319,17 @@ async fn approval_broker_fixture(
 }
 
 fn fixture_acp_permission_request_agent(provider_name: &str) -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-provider=sys.argv[1]
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':provider+'-permission-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'fixture-'+provider+'-session'}})
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':'fixture-'+provider+'-session','toolCall':{'toolCallId':'echo-command','title':'Run echo cursor-ok','kind':'execute'},'options':[{'optionId':'allow','name':'Allow once','kind':'allow_once'}]}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==91
-assert permission['result']['outcome']['outcome']=='selected'
-assert permission['result']['outcome']['optionId']=='allow'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-'+provider+'-session','update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'cursor-ok'}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            fixture.to_owned(),
-            provider_name.to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["approve".to_owned(), provider_name.to_owned()],
+    )
 }
 
 fn fixture_acp_permission_without_allow_agent() -> ExternalProviderLaunch {
-    let fixture = r#"
-import json,sys
-def send(value):
-    print(json.dumps(value)); sys.stdout.flush()
-initialize=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'permission-refusal-fixture','version':'1'}}})
-create=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'fixture-refusal-session'}})
-prompt=json.loads(sys.stdin.readline())
-send({'jsonrpc':'2.0','id':92,'method':'session/request_permission','params':{'sessionId':'fixture-refusal-session','toolCall':{'toolCallId':'refused-command','title':'Run an unapproved command','kind':'execute'},'options':[{'optionId':'reject','name':'Reject once','kind':'reject_once'}]}})
-permission=json.loads(sys.stdin.readline())
-assert permission['id']==92
-assert permission['result']['outcome']['outcome']=='selected'
-assert permission['result']['outcome']['optionId']=='reject'
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'cancelled'}})
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), fixture.to_owned()],
-        environment: Vec::new(),
-    }
+    acp_scripted_fixture::launch_fixture_agent(
+        "host-live-approval-agent.ts",
+        vec!["reject".to_owned()],
+    )
 }
 
 #[cfg(unix)]

@@ -11,33 +11,14 @@ use collaboration_service::{
 use interaction_storage::InteractionStore;
 
 fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-assert request['method']=='initialize'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'saved-session-fixture','version':'1'}}}}}}),flush=True)
-for line in sys.stdin:
- request=json.loads(line)
- assert request['method'] in ['session/load','session/prompt'], request['method']
- assert request['params']['sessionId']=='fixture-session'
- with open({:?},'a') as output: output.write(json.dumps(request)+'\n')
- result={{}} if request['method']=='session/load' else {{'stopReason':'end_turn'}}
- print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':result}}),flush=True)
- if request['method']=='session/prompt':
-  with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-   event.connect({:?})
-   event.sendall(b'observed')
-"#,
-        capture.display().to_string(),
-        prompt_event.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-loaded-route-agent.ts",
+        vec![
+            "saved".to_owned(),
+            capture.to_string_lossy().into_owned(),
+            prompt_event.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 async fn save_direct_message(

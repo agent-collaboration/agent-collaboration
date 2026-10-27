@@ -1,0 +1,17 @@
+{
+  "original": "Provider route integration#close-load",
+  "originalSHA256": "45d428d9a861a982c8ef12feea68dc711618c7bd22ba84a301a94781a8167bf2",
+  "target": "provider-loaded-route-agent.ts",
+  "arguments": ["close", "<ROOT>/closed", "<ROOT>/loaded"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/close\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"close\": {}}}, \"agentInfo\": {\"name\": \"close-load-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "loaded": "session/load\\n",
+      "closed": "session/close\\n"
+    }
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "original": "crates/acp-client-runtime/tests/create_settings_order.rs#LEGACY_MODE_FIXTURE",
+  "originalSHA256": "e88b08aabc2cff1ff3afe5b6b6ca48ca64379120625b771476f4fb8286ce8b36",
+  "target": "provider-legacy-mode-agent.ts",
+  "arguments": ["<RECEIPT>"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/set_mode\", \"params\": {\"modeId\": \"ask\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"legacy-mode-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\", \"modes\": {\"currentModeId\": \"auto\", \"availableModes\": [{\"id\": \"auto\", \"name\": \"Auto\"}, {\"id\": \"ask\", \"name\": \"Ask\"}]}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": "mode-before-prompt",
+    "files": {
+      "receipt.json": "mode-before-prompt"
+    }
+  }
+}

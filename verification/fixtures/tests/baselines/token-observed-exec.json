@@ -1,0 +1,59 @@
+[
+  {
+    "input": {
+      "token": "SYNTHETIC_TOKEN",
+      "arguments": ["space value", "quote's value", "Ω"],
+      "stdin": "retained stdin\n"
+    },
+    "originalSHA256": "7b743d6127a16c56d1207fa6592785113e25fc72a60a744899a77ee2e6ef64cb",
+    "expected": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "retained stdin\n",
+      "tokenFile": "SYNTHETIC_TOKEN",
+      "receipt": {
+        "pid": "<OWN_PID>",
+        "args": ["space value", "quote's value", "Ω"],
+        "token": "SYNTHETIC_TOKEN"
+      }
+    }
+  },
+  {
+    "input": {
+      "token": "line one\nline two",
+      "arguments": [],
+      "stdin": ""
+    },
+    "originalSHA256": "7b743d6127a16c56d1207fa6592785113e25fc72a60a744899a77ee2e6ef64cb",
+    "expected": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "",
+      "tokenFile": "line one\nline two",
+      "receipt": {
+        "pid": "<OWN_PID>",
+        "args": [],
+        "token": "line one\nline two"
+      }
+    }
+  },
+  {
+    "input": {
+      "token": "",
+      "arguments": ["--literal"],
+      "stdin": "opaque\u0000body"
+    },
+    "originalSHA256": "7b743d6127a16c56d1207fa6592785113e25fc72a60a744899a77ee2e6ef64cb",
+    "expected": {
+      "exit": 0,
+      "stderr": "",
+      "stdout": "opaque\u0000body",
+      "tokenFile": "",
+      "receipt": {
+        "pid": "<OWN_PID>",
+        "args": ["--literal"],
+        "token": ""
+      }
+    }
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "S-02 patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "S-02"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Hardening smoke/tests passed: missing local token does not reach upstream, forbidden carriers reject before selection, stale WebSocket generation closes on rotation, and WebSocket token smuggling is rejected.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-test-support/src/installed_codex.rs\",\n    \"crates/codex-router-proxy/src/lib.rs\",\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/websocket.rs\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-5",
+  "originalSHA256": "7bbb7d93fe436dfb5744c8e69e6c7a0cb97d4a199079217af815f156451f0968"
+}

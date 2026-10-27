@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "I-05a patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "I-05a"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Old-failure equivalent reproducer passed: a single-lane accept loop leaves the second client without application progress until the first handler is released.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/lib.rs\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-7",
+  "originalSHA256": "55f01ae211bd0676e3350b52644306c1bc8a0349fd1e1f530f88f0723096503d"
+}

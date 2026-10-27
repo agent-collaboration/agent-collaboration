@@ -174,8 +174,8 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     .map_err(|error| format!("failed to read proxy DB smoke script: {error}"))?;
     let validator_script = fs::read_to_string(
         workspace_root
-            .join("scripts")
-            .join("validate-proxy-db-runtime-isolation-artifact.py"),
+            .join("verification/tooling")
+            .join("validate-proxy-db-runtime-isolation-artifact.ts"),
     )
     .map_err(|error| format!("failed to read proxy DB artifact validator: {error}"))?;
     let installed_script = fs::read_to_string(
@@ -190,20 +190,16 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     assert!(proxy_script.contains(r#"--router-root "${router_root_resolved}""#));
     assert!(proxy_script.contains(r#"--codex-home "${codex_home_resolved}""#));
     assert!(proxy_script.contains(r#"--process-home "${home_resolved}""#));
-    assert!(proxy_script.contains("validate-proxy-db-runtime-isolation-artifact.py"));
+    assert!(proxy_script.contains("validate-proxy-db-runtime-isolation-artifact.ts"));
     assert!(proxy_script.contains(r#"--scenario s8-overlap-quota"#));
     assert!(!proxy_script.contains(r#"--scenario quota-reconnect"#));
     assert!(proxy_script.contains("installed-codex-s8-overlap-quota-artifact.txt"));
     assert!(!proxy_script.contains("${quota_artifact_path}"));
-    assert!(validator_script.contains(r#"runtime_roots.get("mode") == "copied-dev-state""#));
-    assert!(validator_script.contains(r#"pressure.get("copied_db_pressure_proven") is True"#));
-    assert!(
-        validator_script.contains(r#"pressure.get("sqlite_lock_or_maintenance_pressure") is True"#)
-    );
-    assert!(
-        validator_script.contains(r#"signal_ordering.get("signal_before_persistence") is True"#)
-    );
-    assert!(validator_script.contains(r#"account_selection.get("non_reselection") is True"#));
+    assert!(validator_script.contains(r#"runtimeRoots.mode === "copied-dev-state""#));
+    assert!(validator_script.contains(r#"pressure.copied_db_pressure_proven === true"#));
+    assert!(validator_script.contains(r#"pressure.sqlite_lock_or_maintenance_pressure === true"#));
+    assert!(validator_script.contains(r#"signalOrdering.signal_before_persistence === true"#));
+    assert!(validator_script.contains(r#"accountSelection.non_reselection === true"#));
     assert!(validator_script.contains(r#"router_signal_count"#));
     assert!(validator_script.contains(r#"source_artifacts_same_s8_run_id"#));
     assert!(proxy_script.contains(r#"status=BLOCKED"#));
@@ -223,8 +219,8 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     assert!(installed_script.contains(r#"CODEX_ROUTER_INSTALLED_SMOKE_CODEX_HOME"#));
     assert!(installed_script.contains(r#"CODEX_ROUTER_INSTALLED_SMOKE_PROCESS_HOME"#));
     assert!(installed_script.contains(r#"CODEX_ROUTER_S8_RUN_ID"#));
-    assert!(installed_script.contains("os.path.realpath"));
-    assert!(!installed_script.contains("os.path.abspath(candidate)"));
+    assert!(installed_script.contains("verification/tooling/path-inspection.ts"));
+    assert!(installed_script.contains("require-copied-root"));
 
     Ok(())
 }
@@ -372,10 +368,11 @@ fn timed_out_codex_output_suppresses_captured_stdout_stderr() {
 
 #[test]
 fn run_with_timeout_drains_child_stderr_while_waiting() {
-    let mut command = std::process::Command::new("python3");
+    let mut command = std::process::Command::new("node");
     command
-        .arg("-c")
-        .arg("import sys; sys.stderr.write('x' * 200000); sys.stderr.flush()")
+        .arg(crate::node_fixture::fixture_program(
+            "stderr-pressure-agent.ts",
+        ))
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped());
 

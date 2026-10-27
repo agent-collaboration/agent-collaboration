@@ -1,0 +1,10 @@
+{
+  "serviceId": "fixture-service",
+  "serviceEpoch": "fixture-epoch",
+  "mcp": {
+    "url": "http://127.0.0.1:1/mcp"
+  },
+  "serviceVersion": "0.1.102",
+  "machineLabel": "Fixture & <host>",
+  "routerProxyEndpoint": "http://127.0.0.1:1"
+}

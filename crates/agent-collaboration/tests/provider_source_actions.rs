@@ -18,22 +18,6 @@ mod recorded_api_listener;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-const CURSOR_FIXTURE: &str = r#"#!/usr/bin/python3
-import json,sys
-log=sys.argv[1]
-def send(value): print(json.dumps(value),flush=True)
-request=json.loads(sys.stdin.readline())
-assert request['method']=='initialize',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
- 'agentCapabilities':{'loadSession':True,'sessionCapabilities':{'resume':{}}},
- 'agentInfo':{'name':'source-policy-fixture','version':'1'}}})
-for line in sys.stdin:
- request=json.loads(line)
- assert request['method'] in ['session/new','session/load','session/resume'],request
- with open(log,'a') as output: output.write(json.dumps(request)+'\n')
- send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'created-by-source'} if request['method']=='session/new' else {}})
-"#;
-
 #[tokio::test]
 async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_approver() {
     let result:TestResult=async {
@@ -50,9 +34,9 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
             .tempdir_in("/tmp")?;
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
         let root_path = std::fs::canonicalize(root.path())?;
-        let provider = root_path.join("cursor-fixture.py");
+        let provider = root_path.join("cursor-fixture.ts");
         let provider_log = root_path.join("provider-input.jsonl");
-        std::fs::write(&provider, CURSOR_FIXTURE)?;
+        codex_router_test_support::node_fixture::write_node_fixture(&provider, "source-policy-agent.ts", &json!(null))?;
         std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))?;
         let saved_directory = root_path.join("saved-restricted-project");
         let invoking_directory = root_path.join("different-new-default-project");

@@ -14,18 +14,18 @@ Typed notices are stored pushes delivered through `typed_interaction_notice.rs`;
 
 ## One fresh requester journey
 
-Read `JourneyPlan` in `scripts/verification/provider_session_control.py`: qualified `cli`, fresh `evidence` subdirectory, explicit `service_directory`, actual `caller_session_id`, explicit `endpoint_id`, and `settings` mapping. `approver` is the returned exact real provider SessionRef for the requester. `tools` holds qualified `question_tool`, `execution_tool`, `question_method`, `evidence_path` and SHA256. There are no implicit Claude tool/model defaults. The supported question methods are existing `elicitation/create` and `cursor/ask_question`; protocol names are not guesses at provider tool names. Provenance hashes do not themselves prove tool support; the operator must inspect the actual source/catalog witness. Set `JOURNEY_PLAN` to this private JSON file. Its evidence subdirectory sits beside lifecycle `workspace`.
+Read `JourneyPlan` in `verification/observations/provider-journey-plan.ts`: qualified `cli`, fresh `evidence` subdirectory, explicit `service_directory`, actual `caller_session_id`, explicit `endpoint_id`, and `settings` mapping. `approver` is the returned exact real provider SessionRef for the requester. `tools` holds qualified `question_tool`, `execution_tool`, `question_method`, `evidence_path` and SHA256. There are no implicit Claude tool/model defaults. The supported question methods are existing `elicitation/create` and `cursor/ask_question`; protocol names are not guesses at provider tool names. Provenance hashes do not themselves prove tool support; the operator must inspect the actual source/catalog witness. Set `JOURNEY_PLAN` to this private JSON file. Its evidence subdirectory sits beside lifecycle `workspace`.
 
 First create the Approver, qualify its returned actual catalog/settings and initialize it with the `initialize-approver` action: one harmless no-tools instruction. Confirm exact completion, idle state and no tool/interaction events. Then create the distinct requester using that real returned SessionRef as `approver`. The requester driver re-inspects both actual Sessions before its one model input. Never remap a native production Session ID into this debug service.
 
 ```sh
-uv run --offline --no-project --with pydantic --python 3.13 python -m scripts.verification.interaction_journey create "$JOURNEY_PLAN"
+node verification/observations/interaction-journey.ts create "$JOURNEY_PLAN"
 ```
 
 One create with explicit selected settings and write-restricted access; verify its actual endpoint generation, returned catalog, Router elicitation-route capability, operation and auth status. `settings: {}` is metadata-only and blocks model input until settings are qualified. CLI validates requested advertised choices. The Host supplies its Router-owned Claude route/token without exporting credentials. Stop unsupported settings or Question capability before model input. A create decoding failure authorizes only `inspect` of the retained operation, never another create.
 
 ```sh
-uv run --offline --no-project --with pydantic --python 3.13 python -m scripts.verification.interaction_journey drive "$JOURNEY_PLAN"
+node verification/observations/interaction-journey.ts drive "$JOURNEY_PLAN"
 ```
 
 One prompt requests actual AskUserQuestion first, exactly Blue/Green. The driver answers the real Blue option ID under its declared Session actor. It then validates the actual Execute request's reviewed exact private marker command and selects only an offered allow/once option without a persistent target. Unexpected actions/options/order stop without a grant. No retry, fallback model, permission-as-Question substitution or persistent/session grant.

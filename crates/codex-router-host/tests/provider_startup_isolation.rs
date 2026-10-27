@@ -24,15 +24,11 @@ fn runtime_inputs(directory: &Path) -> CollaborationRuntimeInputs {
 }
 
 fn fixture_provider(directory: &Path) -> std::path::PathBuf {
-    let executable = directory.join("fixture-provider.py");
-    std::fs::write(
+    let executable = directory.join("fixture-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
         &executable,
-        r#"#!/usr/bin/python3
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'startup-fixture','version':'1'}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"startup"}),
     )
     .expect("write fixture provider");
     std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
@@ -125,9 +121,13 @@ async fn failed_initialize_isolated_from_other_provider() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private root");
     let cursor = fixture_provider(root.path());
-    let failing = root.path().join("failing-provider.py");
-    std::fs::write(&failing, "#!/usr/bin/python3\nimport sys\nsys.exit(4)\n")
-        .expect("write failure fixture");
+    let failing = root.path().join("failing-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &failing,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"failure"}),
+    )
+    .expect("write failure fixture");
     std::fs::set_permissions(&failing, std::fs::Permissions::from_mode(0o700))
         .expect("make failure fixture executable");
 

@@ -1,0 +1,14 @@
+{
+  "original": "crates/acp-client-runtime/tests/cursor_todo_events.rs#SINGLE_RUNNING_TODO",
+  "originalSHA256": "68d89b72a8516c6836621f009c0babacd946befbc1a5fcf312944041b6e08e50",
+  "target": "cursor-todos-agent.ts",
+  "arguments": ["single"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": \"todo\", \"result\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"single-todo-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"only-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": \"todo\", \"method\": \"cursor/update_todos\", \"params\": {\"toolCallId\": \"unobserved\", \"todos\": [{\"id\": \"one\", \"content\": \"Fallback task\", \"status\": \"pending\"}], \"merge\": false}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

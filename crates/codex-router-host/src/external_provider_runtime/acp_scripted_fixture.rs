@@ -7,7 +7,27 @@ use super::ExternalProviderLaunch;
 use serde_json::{Value, json};
 use std::path::PathBuf;
 
-const AGENT_SCRIPT: &str = include_str!("acp_scripted_fixture.py");
+const AGENT_SCRIPT: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/scripted-acp-agent.ts"
+);
+
+pub(crate) fn launch_fixture_agent(
+    program: &str,
+    arguments: Vec<String>,
+) -> ExternalProviderLaunch {
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../verification/fixtures")
+        .join(program);
+    ExternalProviderLaunch {
+        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
+        executable: PathBuf::from("node"),
+        arguments: std::iter::once(script.to_string_lossy().into_owned())
+            .chain(arguments)
+            .collect(),
+        environment: vec![],
+    }
+}
 
 #[derive(Default)]
 pub(crate) struct AcpFixtureScript {
@@ -140,13 +160,8 @@ impl AcpFixtureScript {
         let script = serde_json::to_string(&self.steps).expect("fixture script serializes");
         ExternalProviderLaunch {
             persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-            executable: PathBuf::from("/usr/bin/python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                AGENT_SCRIPT.to_owned(),
-                script,
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![AGENT_SCRIPT.to_owned(), script],
             environment: self
                 .diagnostic_path
                 .map(|path| {

@@ -53,21 +53,24 @@ not replace real database migration, process/socket/PTY or runtime acceptance te
 
 ## Checked queries by database engine
 
+Use the Node and pnpm versions pinned in `verification/package.json` and install
+tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.
+
 Stock SQLite query metadata is generated against separate disposable schemas for
 account, automation and provider-operation queries:
 
 ```sh
 scripts/tooling/bootstrap-tools.sh sqlx
-python3 scripts/tooling/prepare-sqlx.py
-python3 scripts/tooling/prepare-sqlx.py --check
+node verification/tooling/prepare-sqlx.ts
+node verification/tooling/prepare-sqlx.ts --check
 ```
 
 Turso query metadata is generated through the native driver from the project,
 fleet and Router-local migration sets, plus the driver's own test schema:
 
 ```sh
-python3 scripts/tooling/prepare-sqlx-turso.py
-python3 scripts/tooling/prepare-sqlx-turso.py --check
+node verification/tooling/prepare-sqlx-turso.ts
+node verification/tooling/prepare-sqlx-turso.ts --check
 ```
 
 The wrappers supply their own database URLs and remove their temporary schema

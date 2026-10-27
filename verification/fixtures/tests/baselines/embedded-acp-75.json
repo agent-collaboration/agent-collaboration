@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/robustness_tests.rs#unknown-session",
+  "originalSHA256": "3beaedd1329d979d3bad3dca550a0019d16da2b2e445330f77d12c1cc28c7dc4",
+  "target": "host-unknown-request-agent.ts",
+  "arguments": ["session"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"error\": {\"code\": -32601, \"message\": \"unknown method\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"error\": {\"code\": -32601, \"message\": \"unknown method\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"unknown-request-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/unknown\", \"params\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/unknown\", \"params\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"[{\\\"jsonrpc\\\": \\\"2.0\\\", \\\"id\\\": 91, \\\"error\\\": {\\\"code\\\": -32601, \\\"message\\\": \\\"unknown method\\\"}}, {\\\"jsonrpc\\\": \\\"2.0\\\", \\\"id\\\": 91, \\\"error\\\": {\\\"code\\\": -32601, \\\"message\\\": \\\"unknown method\\\"}}]\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

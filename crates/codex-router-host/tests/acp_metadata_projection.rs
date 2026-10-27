@@ -15,38 +15,10 @@ use session_event_model::{
 };
 use tokio_util::sync::CancellationToken;
 
-const METADATA_PROVIDER: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'metadata-fixture','version':'1'}}})
-request=read()
-replay=request['method']=='session/load'
-if not replay:
-    assert request['method']=='session/new'
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'metadata-session'}})
-    request=read()
-    assert request['method']=='session/prompt'
-for update in [
-    {'sessionUpdate':'available_commands_update','availableCommands':[
-        {'name':'compact','description':'Compact context','input':{'hint':'instructions'}}],
-     '_meta':{'providerDetail':'retained'}},
-    {'sessionUpdate':'usage_update','used':1234,'size':200000,
-     'cost':{'amount':0.25,'currency':'USD'},'_meta':{'providerDetail':'usage-retained'}},
-    {'sessionUpdate':'current_mode_update','currentModeId':'default'},
-    {'sessionUpdate':'config_option_update','configOptions':[]},
-    {'sessionUpdate':'session_info_update','title':'Metadata example'},
-    {'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':'Ordinary assistant reply'}},
-    {'sessionUpdate':'agent_thought_chunk','content':{'type':'text','text':'Useful reasoning'}},
-]:
-    send({'jsonrpc':'2.0','method':'session/update','params':{
-        'sessionId':'metadata-session','update':update}})
-send({'jsonrpc':'2.0','id':request['id'],'result':{} if replay else {'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const METADATA_PROVIDER: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-metadata-agent.ts"
+);
 
 struct NoInteractions;
 
@@ -110,8 +82,8 @@ async fn check_metadata_projection(replay: bool) {
     let (sender, mut received) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec!["-u".into(), "-c".into(), METADATA_PROVIDER.into()],
+            executable: PathBuf::from("node"),
+            arguments: vec![METADATA_PROVIDER.into()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

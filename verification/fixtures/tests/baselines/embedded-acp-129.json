@@ -1,0 +1,18 @@
+{
+  "original": "Composed Host integration#acp",
+  "originalSHA256": "59a8aaac16234b20dc421d06affae39d242d8cd8206b944eb1cf8a34f7a0f677",
+  "target": "host-composition-agent.ts",
+  "arguments": [],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"acp-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"acp-provider-session\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  },
+  "configuration": {
+    "mode": "acp"
+  }
+}

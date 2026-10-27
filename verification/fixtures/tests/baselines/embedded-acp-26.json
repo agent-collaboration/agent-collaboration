@@ -1,0 +1,14 @@
+{
+  "original": "crates/acp-client-runtime/tests/history_replay_order.rs#REPLAY_LIVE_TOOL_FIXTURE",
+  "originalSHA256": "5ef060bca33021d2e5d26b9c3add8bf8e2eb0b352370eb1ae385cd29c243da31",
+  "target": "provider-history-agent.ts",
+  "arguments": ["live"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"replay-live-tool-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call\", \"toolCallId\": \"replayed-tool\", \"title\": \"Old tool\", \"kind\": \"execute\", \"status\": \"pending\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"current_mode_update\", \"currentModeId\": \"ask\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"modes\": {\"currentModeId\": \"auto\", \"availableModes\": [{\"id\": \"auto\", \"name\": \"Auto\"}, {\"id\": \"ask\", \"name\": \"Ask\"}]}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"tool_call_update\", \"toolCallId\": \"replayed-tool\", \"title\": \"Tool finished\", \"status\": \"completed\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

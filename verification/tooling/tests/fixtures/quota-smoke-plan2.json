@@ -1,0 +1,123 @@
+{
+  "mode": "plan2",
+  "secret": "private-canary",
+  "payload": {
+    "git_head": "synthetic",
+    "codex": {
+      "status": "exit status: 0",
+      "stdout_contains_smoke_text": true,
+      "stdout_contains_usage_limit_reached": false,
+      "stderr_contains_usage_limit_reached": false
+    },
+    "quota_reconnect": {
+      "reconnected_to_different_account": true,
+      "quota_error_hidden_from_codex": true
+    },
+    "profile_uses_codex_router_token": false,
+    "upstream": {
+      "websocket_handshake_count": 2,
+      "non_prewarm_frame_count": 2
+    }
+  },
+  "originalSHA256": "82554d952c99545a2f5e6755f3b01057a1186ea6c7a1f8324515465fe6e54a62",
+  "cases": [
+    {
+      "name": "valid original input",
+      "path": [],
+      "action": "keep",
+      "accepted": true
+    },
+    {
+      "name": "delete git_head",
+      "path": ["git_head"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete codex",
+      "path": ["codex"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete codex.status",
+      "path": ["codex", "status"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete codex.stdout_contains_smoke_text",
+      "path": ["codex", "stdout_contains_smoke_text"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete codex.stdout_contains_usage_limit_reached",
+      "path": ["codex", "stdout_contains_usage_limit_reached"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete codex.stderr_contains_usage_limit_reached",
+      "path": ["codex", "stderr_contains_usage_limit_reached"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete quota_reconnect",
+      "path": ["quota_reconnect"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete quota_reconnect.reconnected_to_different_account",
+      "path": ["quota_reconnect", "reconnected_to_different_account"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete quota_reconnect.quota_error_hidden_from_codex",
+      "path": ["quota_reconnect", "quota_error_hidden_from_codex"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete profile_uses_codex_router_token",
+      "path": ["profile_uses_codex_router_token"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream",
+      "path": ["upstream"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream.websocket_handshake_count",
+      "path": ["upstream", "websocket_handshake_count"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "delete upstream.non_prewarm_frame_count",
+      "path": ["upstream", "non_prewarm_frame_count"],
+      "action": "delete",
+      "accepted": false
+    },
+    {
+      "name": "set extra",
+      "path": ["extra"],
+      "action": "set",
+      "value": "primary-token",
+      "accepted": false
+    },
+    {
+      "name": "set upstream.websocket_handshake_count",
+      "path": ["upstream", "websocket_handshake_count"],
+      "action": "set",
+      "value": 3,
+      "accepted": false
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#rejection",
+  "originalSHA256": "3667dbebdb6057de912517f707775fa981738a8b74aba0b784e25acd08c4ea7c",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["rejection"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"prompt-rejection-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"rejection-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"error\": {\"code\": -32603, \"message\": \"provider conversation is busy\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

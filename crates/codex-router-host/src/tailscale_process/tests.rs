@@ -2,43 +2,14 @@ use super::*;
 use std::{num::NonZeroU16, path::Path};
 
 // The test double is the foreign CLI only. Spawn, pipes, waits, signals and reaping stay real.
-const CHILD_FIXTURE: &str = r#"
-import json, os, signal, socket, sys
-mode = os.environ['TAILNET_TEST_MODE']
-if mode == 'finite_failure':
-    print('PRIVATE_FIXTURE_OUTPUT', file=sys.stderr)
-    sys.exit(23)
-if mode == 'finite_overflow':
-    print('PRIVATE_FIXTURE_OUTPUT' * 65537)
-    sys.exit(0)
-if mode == 'finite_hang':
-    while True:
-        signal.pause()
-if sys.argv[1:] == ['status', '--json']:
-    if mode == 'overflow':
-        print('x' * 65537)
-    elif mode == 'bad_status':
-        print('not-json')
-    else:
-        print(json.dumps({'BackendState':'Running','Self':{'DNSName':'node.example.ts.net.'},'CertDomains':['node.example.ts.net']}))
-    sys.exit(0)
-if mode == 'early_exit':
-    sys.exit(23)
-signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
-print('https://node.example.ts.net:8443/', flush=True)
-if mode == 'controlled_exit':
-    connection = socket.socket(socket.AF_UNIX)
-    connection.connect(os.environ['TAILNET_TEST_CONTROL'])
-    connection.sendall(b'ready')
-    connection.recv(1)
-    sys.exit(23)
-while True:
-    signal.pause()
-"#;
+const CHILD_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/tailscale-command-agent.ts"
+);
 
 fn command_fixture(mode: &str, control: Option<&Path>) -> TailscaleCommand {
-    let mut specification = ChildCommandSpec::new(PathBuf::from("/usr/bin/python3"))
-        .with_arguments(["-u", "-c", CHILD_FIXTURE])
+    let mut specification = ChildCommandSpec::new(PathBuf::from("node"))
+        .with_arguments([CHILD_FIXTURE])
         .with_environment("TAILNET_TEST_MODE", mode);
     if let Some(control) = control {
         specification = specification.with_environment("TAILNET_TEST_CONTROL", control);

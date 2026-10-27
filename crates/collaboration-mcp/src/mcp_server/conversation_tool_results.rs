@@ -99,7 +99,7 @@ pub(super) fn conversation_tool_result<TValue: Serialize>(
             "kind":"invalidRequest","stage":"validation","effect":"none",
             "operationId":null,"endpoint":endpoint,"operation":operation,
             "message":format!("provider conversation {operation} requires a caller-supplied canonical lowercase RFC UUIDv7 operationId"),
-            "fix":"Generate a UUIDv7 with python3 -c 'import uuid; print(uuid.uuid7())' and pass it as operationId"
+            "fix":"Generate a fresh UUIDv7 and pass it as operationId"
         })),
     }
 }

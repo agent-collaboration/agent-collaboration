@@ -1,0 +1,17 @@
+{
+  "function": "curl_http_reply",
+  "args": [
+    {
+      "exit": 28,
+      "stdout": {
+        "base64": "cGFydGlhbAoyMDA="
+      },
+      "stderr": {
+        "base64": "bGl0ZXJhbCBmYWlsdXJl"
+      }
+    }
+  ],
+  "expected": {
+    "refused": true
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "original": "crates/acp-client-runtime/tests/interaction_cancel_wire_order.rs#INTERACTION_FIXTURE",
+  "originalSHA256": "033c6a8ca176db1e7f8e1117e1451f8a9949d3260831aa3346e4458d4f7510a5",
+  "target": "interaction-cancel-order-agent.ts",
+  "arguments": ["form", "<RECEIPT>"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": \"interaction\", \"result\": {\"outcome\": \"cancelled\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"interaction-order-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": \"interaction\", \"method\": \"elicitation/create\", \"params\": {\"mode\": \"form\", \"sessionId\": \"fixture-session\", \"message\": \"Confirm\", \"requestedSchema\": {\"type\": \"object\", \"properties\": {\"answer\": {\"type\": \"string\"}}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"cancelled\"}}\n",
+    "stderr": "",
+    "receipt": "[{\"jsonrpc\": \"2.0\", \"id\": \"interaction\", \"result\": {\"outcome\": \"cancelled\"}}, {\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {}}]",
+    "files": {
+      "receipt.json": "[{\"jsonrpc\": \"2.0\", \"id\": \"interaction\", \"result\": {\"outcome\": \"cancelled\"}}, {\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {}}]"
+    }
+  }
+}
