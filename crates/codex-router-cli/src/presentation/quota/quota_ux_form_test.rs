@@ -391,7 +391,10 @@ async fn all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_la
                 "saved Current1% must not be satisfied by draft Floor1%: {frame}"
             );
             evidence.push(("saved-current", 0usize, frame.clone()));
-            if height == 12 {
+            // C9 footer no longer spends a blank gap. If the complete short
+            // form fits, scrolling is an honest no-op and emits no repaint.
+            if height == 12 && actual_dialog_has_scroll_thumb(&frame, "Weekly floor") {
+                evidence.push(("saved-current-scroll-thumb", 0, frame.clone()));
                 for _ in 0..256 {
                     sender.send(provider_filter_key(KeyCode::Down)).unwrap();
                 }
@@ -408,6 +411,17 @@ async fn all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_la
                 frame = next_options_title_frame(frames.as_mut()).await;
                 assert!(current_visible(&frame), "saved Current restored: {frame}");
                 evidence.push(("saved-current-restored", 0, frame.clone()));
+            } else if height == 12 {
+                let words = options_position_words(&frame, "Weekly floor");
+                assert!(
+                    current_visible(&frame)
+                        && words.contains("Floor")
+                        && words.contains("0% disables protection · maximum 15%")
+                        && words.contains("Save")
+                        && words.contains("Cancel"),
+                    "a non-scrolling form must witness every saved/draft/rule/action fact: {frame}"
+                );
+                evidence.push(("saved-current-form-fits", 0, frame.clone()));
             }
             sender.send(provider_filter_key(KeyCode::Esc)).unwrap();
             next_options_title_frame(frames.as_mut()).await;
@@ -508,6 +522,16 @@ async fn all_grid_normal_capture_positions_keep_exact_balance_saved_floor_and_la
                     .lines()
                     .all(|line| unicode_width::UnicodeWidthStr::width(line) <= width)
         }));
+        if height == 12 {
+            let witnessed = |name| evidence.iter().any(|(label, _, _)| *label == name);
+            assert!(
+                (witnessed("saved-current-scroll-thumb")
+                    && witnessed("saved-current-bottom-negative")
+                    && witnessed("saved-current-restored"))
+                    || witnessed("saved-current-form-fits"),
+                "short form must execute its scroll negative/restoration or explicit complete-fit proof"
+            );
+        }
     }
 }
 

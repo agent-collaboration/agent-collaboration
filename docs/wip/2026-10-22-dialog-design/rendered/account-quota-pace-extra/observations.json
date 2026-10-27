@@ -1,0 +1,97 @@
+{
+  "renderer": "iocraft 0.9.2",
+  "observations": [
+    {
+      "name": "quota",
+      "width": 132,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "compactProviderClients": true,
+        "compactQuotaWindows": true,
+        "weeklyWhite": true,
+        "shortSoftWhite": true,
+        "columnOrder": true,
+        "extraAlongsidePace": true,
+        "threeLineIdentity": true
+      },
+      "sha256": "c9ca72bc32602c15b2bcf36664d4395a6c30f9b1366bd880f5c5f4d812879fa7"
+    },
+    {
+      "name": "session",
+      "width": 132,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true
+      },
+      "sha256": "a587f5b484cb9ef37a9119feff895ad7adf94835c048661b26d558afb176ab0c"
+    },
+    {
+      "name": "quota",
+      "width": 100,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "compactProviderClients": true,
+        "compactQuotaWindows": true,
+        "weeklyWhite": true,
+        "shortSoftWhite": true,
+        "columnOrder": true,
+        "extraAlongsidePace": true,
+        "threeLineIdentity": true
+      },
+      "sha256": "9b2260ce56317ea261b8ee2c8aca4acc5a498ea5902c67ca7e4995d7a3c267da"
+    },
+    {
+      "name": "session",
+      "width": 100,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true
+      },
+      "sha256": "c5829f06c2f9b4678e561ae2ee2a6b95e1418f299ce46ac7b53487211120949b"
+    },
+    {
+      "name": "quota",
+      "width": 48,
+      "height": 32,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "compactProviderClients": true,
+        "compactQuotaWindows": true,
+        "weeklyWhite": true,
+        "shortSoftWhite": true
+      },
+      "sha256": "a516dea66ec31b0a89bc9082892c672465c65e474c2a36af8ebfc94f0bdd09e8"
+    },
+    {
+      "name": "session",
+      "width": 48,
+      "height": 32,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true
+      },
+      "sha256": "fe11533e3b209a26501912d76b2fb73a1ff017067da716202d9c1cff1114e472"
+    }
+  ],
+  "method": "Independent real renderer composition: Account / Quota / Weekly pace / Extra. Actual row coordinates/content, colors and deliberately clipped footer controls.",
+  "limits": "Renderer feasibility, not exact HTML DOM parity, terminal display or input, backend, or installed Router proof."
+}

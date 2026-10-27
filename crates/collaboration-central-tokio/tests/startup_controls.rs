@@ -29,6 +29,7 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
             call: DispatchCallSelector::MailboxSubmit,
         },
         RuntimeControl::AwaitDroppedObjectReply,
+        RuntimeControl::DropHeldDispatchReply,
         RuntimeControl::AwaitDroppedAnswer {
             frame: fleet_sync_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
         },

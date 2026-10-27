@@ -2,38 +2,47 @@
 
 Observe the actual iocraft UI/input/layout through the existing non-publishable
 `codex-router-quota-reset-test-harness` fixture entry. Expected outcomes come from
-`docs/specs/2026-10-17-tui-component-system/specification.md` R1–R14 and
-`verification-design.md` U1–U14, not from an earlier screenshot or the HTML proposal.
+`docs/specs/2026-10-23-quota-dialog-visuals/specification.md` C1–C10 (and its
+`verification-design.md` V1–V10) first; `docs/specs/2026-10-17-tui-component-system/`
+R1–R14/U1–U14 still govern wherever 2026-10-23 does not supersede presentation.
+Never take an expectation from an earlier screenshot, the HTML study or today's output.
+See [2026-10-23 visual refinement](#2026-10-23-visual-refinement-c1c10) for what
+that version retired and what replaced it.
 
 **Scope:** compiled fixture observation is separate from public entry, live provider effects and delivery acceptance. Use the driver/scene contract below; select applicable exact-source evidence rather than rerunning for a date. Historical results live in `tmp/tui-verification/maintenance-history.md` and their unchanged original receipts. Narrow-width plus short-height desktop proxies satisfy the adopted phone scope; actual iPhone hardware is waived. Same-child resize and pending/error observations remain distinct from static grids. Do not drive a moving build or compete with the Implementer’s build allocation.
 
 ## Launch, readiness and evidence
 
-Reusable Python entrypoints live in `scripts/verification/`: `tui_verification.py` declares source/readbacks, `tui_capture.py` drives compact/live routes, `tui_component_capture.py` drives Normal42, `tui_capture_lifecycle.py` owns bounded discovery/stop waiting, and `tui_public_sessions.py` owns the separately authorized public route. Their matching permanent regressions remain in `scripts/tests/`; real tapes, fixed child, lifecycle, Swift checker and opt-in libtests remain in `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test*`. These are reusable apparatus/test homes, not throwaways.
+Reusable TypeScript entrypoints live in `scripts/verification/tui/` and run directly with the plan’s declared Node 26.12.1 and locked package dependencies. `evidence-readback.ts` records source and same-child PTY readbacks; `capture-run.ts` drives compact/live routes; `component-capture-run.ts` drives Normal and hard-case Quota; `driver-lifecycle.ts` owns bounded discovery/stop waiting; `public-sessions-run.ts` owns the separately authorized public route. The Rust driver launches the permanent `fixture-child.ts` and `ttyd-adapter.ts` through the same bound Node. Vitest regressions sit beside the entrypoints as `*.test.ts`. Real tapes, lifecycle, Swift checker, native PTY tests and opt-in libtests remain in `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test*`. These are reusable apparatus/test homes.
 
-Caller-supplied qualified prebuilt artifacts, complete plan/config and an approved execution surface are prerequisites by contract. `--source` is a source declaration, not a complete plan/build/install producer. The existing permanent `run_capture.sh` / `run_provider_filter_capture.sh` compile checker inputs and use nominated local tool roots; inspect their exact environment requirements before use. They install no tools. One-off `run-c7-*`, `package-c7-*` and `publish-c7-*` allocation/packaging/gallery wrappers belong under `tmp`, not in this recipe or permanent script homes. HTML remains Lead-owned; these Python modules emit evidence manifests, not a general HTML generator. Missing producer/tool setup or browser permission is a reported prerequisite gap, not authority to invent a fallback.
+Caller-supplied qualified prebuilt artifacts, complete plan/config and an approved execution surface are prerequisites by contract. `--source` is a source declaration, not a complete plan/build/install producer. The existing permanent `run_capture.sh` / `run_provider_filter_capture.sh` compile checker inputs and use nominated local tool roots; inspect their exact environment requirements before use. They install no tools. One-off `run-c7-*`, `package-c7-*` and `publish-c7-*` allocation/packaging/gallery wrappers belong under `tmp`, not in this recipe or permanent script homes. HTML remains Lead-owned; these TypeScript entrypoints emit evidence manifests, not a general HTML generator. Missing producer/tool setup or browser permission is a reported prerequisite gap, not authority to invent a fallback.
 
-Run from repository root with Python 3.13 and Pydantic v2. The producer declares
+Run from repository root with the plan's declared Node 26.12.1 (`TUI_NODE` below
+is its `node.path`; the CLI refuses any other Node) and the package's locked
+dependencies already present in `scripts/verification/tui/node_modules`. The producer declares
 the source HEAD plus file hashes (including untracked product files), exact
 compiled test-driver and harness executable paths/hashes, fixtures/configuration,
 and build equivalence. Hashes bind artifacts; the producer's build declaration
 is not independent proof of compilation provenance. The compiled receipt also
 binds its embedded tape/driver/image-verifier sources to current files.
 
-Read `CapturePlan` in `scripts/verification/tui_verification.py` for the JSON
+Read `capturePlanSchema` in `scripts/verification/tui/evidence-schema.ts` for the JSON
 shape. The `capture_driver` is the prebuilt libtest executable for
 `quota_storyboard_capture_test`, not Cargo and not the product executable.
 `harness_binary` is the exact harness embedded in that driver at build time.
+`node` binds the absolute Node realpath and SHA-256. The driver receives
+`QUOTA_STORYBOARD_NODE` and `QUOTA_STORYBOARD_NODE_SHA256`; native receipts
+record `node_sha256`.
 Supply nominated private VHS/ttyd/image-verifier executables and their hashes,
 the existing private temporary directory, dynamic library path and a fresh
 nonexistent output directory whose parent exists. These tools must already be
 qualified; this recipe installs and builds nothing.
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_verification --source .
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_verification --gaps
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_capture "$TUI_PLAN" --check
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_capture "$TUI_PLAN"
+"$TUI_NODE" scripts/verification/tui/evidence-readback.ts --source .
+"$TUI_NODE" scripts/verification/tui/evidence-readback.ts --gaps
+"$TUI_NODE" scripts/verification/tui/capture-run.ts "$TUI_PLAN" --check
+"$TUI_NODE" scripts/verification/tui/capture-run.ts "$TUI_PLAN"
 ```
 
 `--check` checks bindings, exact test discovery and the real blank-image negative
@@ -56,39 +65,48 @@ mutation, wrong viewport, cleanup failure or source/build drift prevent a pass.
 
 The existing Rust harness also exposes the ignored selector
 `compiled_compact_current_quota_storyboard_exports_real_tui`. It drives only
-CompactQuota through the same tape, renderer and lifecycle at the three sizes
-plus the existing 48×12 extension. Its consumer requires all nine exact ordered
-Quota checkpoints; omitted, replaced or extra scenes reject before capture.
-Select it in the same Python wrapper with `--quota-only`, for both `--check`
+CompactQuota through the same tape, renderer and lifecycle at all six declared
+grids. Its consumer requires 15 exact ordered Quota checkpoints at 120×36 and
+14 elsewhere; omitted, replaced or extra scenes reject before capture.
+Select it through `capture-run.ts` with `--quota-only`, for both `--check`
 and execution. The mode is mutually exclusive with live CUA, qualifies the Quota
-blank-image oracle, requires exactly six Quota receipt sets and all nine PNG
-scenes per set, and records its actual selector/surface in the manifest. The
+blank-image oracle, requires exactly six Quota receipt sets and each grid’s exact PNG
+scene list, and records its actual selector/surface in the manifest. The
 default still selects both surfaces. Missing, replaced or extra receipts/scenes,
 wrong source/build/tools or failed effect/negative-image/cleanup checks reject.
 Apparatus tests and exact ignored-test discovery qualify that validation, not
 the screenshots. Failed static runs are retained independently; they do not
 qualify a changed target. Each observation binds its fresh producer and source.
-Blank/wrong-scene controls remain, with a fourth Quota negative requiring the
+Blank/wrong-scene controls remain, including the Quota negative requiring the
 Hidden-focus oracle to reject the initial Shown-focus image. Missing, substituted
 or reordered auxiliary evidence cannot close the two-step choice proof.
 
 The Sessions-only selector
 `compiled_compact_current_sessions_storyboard_exports_real_tui` preserves the
-19 non-Details scenes and replaces Gamma Details with measured ordered poses.
-Use `--sessions-only` for `--check` and execution, narrow first at six grids:
-32×24 Down0/4/6 (title, strict7/fullID, path);40×24 Down0/3/5;
-48×12 Down1/5/7/8 (title, fullID, Endpoint/State, path);
-48×24 Down0/3 (title, strict7/fullID);76×30 Down2;120×36 Down0.
-The last two grids use their single strict7/fullID pose. Each image requires
-fixed captured Gamma identity within actual dialog/action bounds. Across each
-grid, full captured title/path/ID and Endpoint/State remain required. Full title
-in fixed context counts where visible; a truncated value or foreign background
-never does. This implements Root0b's explicit short-height multi-pose admission.
-The strict collector requires128 originals/14 Details images and33 wrong images:
-18 previous controls,14 foreign-Codex Details controls, one short full-ID oracle
-against the same-session title-only image. Sessions cap5700s (5610work+90cleanup).
-Quota keeps54 originals/24 wrong images. BOTH requires182 originals/57 negative
-reads, cap8820s. These are maximum existing operation budgets, not measured time.
+19 non-Details scenes and replaces Gamma Details with measured ordered poses
+(`compact_session_details_poses` in `provider_filter_details.rs`, mirrored by
+`sessionDetailsPoses` (`scene-contracts.ts`); Root CUA on candidate004,
+`tmp/tui-visuals/2026-10-23/lead-session-poses-004.md`). Offsets count Down
+inputs from Home: 120×36 fields/path/title at 0; 76×30 fields 0, path 2, title
+5; 48×24 fields 0, path 1, title 4; 48×12 identity 0, Endpoint/State 3, path 9,
+title 12; 40×24 and 32×24 fields 0, path 4, title 8. Use `--sessions-only` for
+`--check` and execution, narrow first. Details is structured
+(`render_structured_details`): `Session ID:`, `Endpoint:`, `State:`, `Client:`,
+`Machine:`, `Working directory:`, then the `Original title` section holding the
+full title, then `Conversation`; below 76 columns the fixed context clips the
+title but keeps its tag. `sessionsDetailsPairs` binds the context row (the tag
+may be its own right-aligned box), each field on its own label row with stacked
+continuation down to the next label or section heading, and the title only
+between the `Original title` and `Conversation` headings, inside the dialog
+bounded by its heading row and its single `Close …` action row (the `… Esc
+Close` hint never bounds it). A truncated value or foreign background never
+counts. The strict collector requires 133 originals/19 Details images and 38
+wrong images (18 scene controls, one foreign-Codex Details control per Details
+image, one short full-ID oracle). Quota requires 85 originals/36 wrong images
+(15 scenes at 120×36, 14 elsewhere; six wrong images per grid). BOTH
+requires 218 originals/74 negative reads. Derive caps from
+`staticCaptureBudgetSeconds` (`capture-selection.ts`); these are maximum operation budgets, not
+measured time.
 Required source/build/effect/viewport/provider/state and independent cleanup
 gates remain. Failed runs preserve their original bytes/caps. Current source
 qualification is not current original-image proof or live provider acceptance.
@@ -118,7 +136,7 @@ requires the selected choice. Other palettes/pixel formats are not qualified by
 this result. Original image-by-image visual review remains required beyond OCR
 and focus sampling. Matcher and protocol controls are apparatus qualification, separate from actual fresh captures.
 
-Derive each fresh packet’s work budget from the current driver and declared grids; never extend a running packet. Normal42+12 uses `240 + 30 × (42 + 12) + 40 = 1900` work seconds per grid, plus the declared preflight and independent cleanup reserves. Compact routes have different scene counts and source-derived budgets. Each image child remains bounded to30seconds. On timeout the Python wrapper writes only fixed `capture-stop`; Rust owns exact PTY/browser/image settlement. Timeout remains failure even if the driver exits0. Keep `driver-exit.json`, raw streams, stop error and actual settlement; an unsettled driver is not authorization for broad Python signals. Exact libtest discovery is bounded to10seconds.
+Derive each fresh packet’s work budget from the current driver and declared grids; never extend a running packet. Normal43+13 uses `240 + 30 × (43 + 13) + 40 = 1960` work seconds per grid, plus the declared preflight and independent cleanup reserves. Compact routes have different scene counts and source-derived budgets. Each image child remains bounded to30seconds. On timeout the TypeScript driver writes only the fixed `capture-stop`; Rust owns exact PTY/browser/image settlement. Timeout remains failure even if the driver exits0. Keep `driver-exit.json`, raw streams, stop error and actual settlement; an unsettled driver is not authorization for broad process signals. Exact libtest discovery is bounded to10seconds.
 
 The wrapper preserves `declared-target.json`, exact command, stdout/stderr and
 exit, underlying tape/receipts/PNG/oracle observations, and
@@ -131,7 +149,7 @@ original files to the Lead for the proof HTML. The Lead owns HTML and acceptance
 
 ## Journey index and remaining route gaps
 
-The lasting routes share the existing capture ownership, not one common selector: compact `tui_capture.py`, Normal Quota `tui_component_capture.py`, and public Sessions `tui_public_sessions.py`. `tui_verification.py --gaps` reports structural gaps, not current accepted run status. No absent fixture seam, renderer or screenshot may be replaced or fabricated by this recipe.
+The lasting routes share the existing capture ownership, not one common selector: compact `capture-run.ts`, Normal Quota `component-capture-run.ts`, and public Sessions `public-sessions-run.ts`. `evidence-readback.ts --gaps` reports structural gaps, not current accepted run status. No absent fixture seam, renderer or screenshot may be replaced or fabricated by this recipe.
 
 Keep the existing cheap gates beside the image journeys, with their narrower
 boundaries explicit. In `quota_reset_pty_test/provider_filter_pty_test.rs`,
@@ -149,13 +167,13 @@ continuity. Use the same live CUA lease/readbacks below for that observation.
 
 | Journey / adopted outcome | Existing drive / required observation | Coverage gap before a declared-target run |
 | --- | --- | --- |
-| Sessions browse/filters/Help/Details, U2/U3/U5/U9/U10 | Updated draft tape: browse → native Details/Fork and inline destination → New/machine/no-match → source picker → Ctrl+F inline client/no-match → Help → return/apply Claude → edit/cancel → provider Details → each other filter choice → cancel session. | 20 checkpoints and corresponding image scenes are wired. No current UI observation; final controls may require upkeep. |
-| Quota browse/filters/Help/Details, U2/U3/U5/U11 | Updated draft compact tape: browse → Ctrl+F/Enter provider choice → no-match → cancel choice/reopen/select OpenAI → Help → return/select Claude → disabled choice/Hidden → Apply → cancel changed provider draft → F4 Details → close/quit. Nine checkpoints retain the eight semantic scenes plus explicit Hidden focus, and require full account names. Original three groups, glyph meanings and actions require actual image inspection. | Compact Filters evidence and Normal42 evidence cover distinct journeys. Reuse only exact-source-bound originals; variants and same-child resize need their own observations. |
+| Sessions browse/filters/Help/Details, U2/U3/U5/U9/U10 | Compact tape: browse → native Details/Fork and inline destination → New/machine/no-match → source picker → Ctrl+F inline client/no-match → Help → return/apply Claude → edit/cancel → provider Details at its measured poses → each other filter choice → cancel session. | 19 non-Details scenes plus the measured Details poses are wired; each declared target needs its own current originals. |
+| Quota browse/filters/Help/Details, U2/U3/U5/U11 | Compact tape `compact_quota_checkpoints` (`provider_filter_tape.rs`): all → F5 pool-details → pool-details-complete (120×36 only) → pool-details-middle → pool-details-bottom → Esc pool-closed → filters-block-pool → provider-no-match → chooser → help → disabled-choice → hidden-choice → claude → cancelled → F4 details; 15 scenes at 120×36, 14 elsewhere. The four groups (Account / Quota left · reset in / Weekly pace / Extra), glyph meanings and actions require actual image inspection. | Compact Filters, Normal43 and the hard-case journey cover distinct journeys. Reuse only exact-source-bound originals; variants and same-child resize need their own observations. |
 | Sessions New/machine/directory/fork/source states, U2/U7/U8/U10 | Open New header action; inspect actual supported client, machine, directory and supplied args; search/cancel machine within one frame; Start once reaches existing substituted preparation; inspect pending/rejected/unknown and fork return. | Draft tape wires native New/machine/no-match/return and Fork/destination. Pending/rejected/unknown and safe Start effect fixtures still awaited. Product tests must assert captured identities/no duplicate launch. Do not perform a live launch. |
 | Sessions Details action reachability, U10 and owner navigation correction | Drive compiled public entry: Enter opens Details without launch. Use Left/Right and Tab/Shift+Tab to reach each eligible Resume/Fork/Copy/Close action, observe focus, then Enter and its exact captured-target outcome. Preserve Up/Down body scrolling and modified shortcuts. | Required functional journey, not a label-presence assertion. Current target is unreleased; existing tape visits Details/Fork but does not establish every key/action/effect. Public action/effect binding and original before/after observations remain required. |
 | Independent inventory availability, U16/U16-INV-F1 | Through actual local/API, configured HTTP MCP and fixed SSH read boundaries, retain valid Stored rows plus explicit native-live partial notice; successful-empty live is complete. Preserve captured identity and strict invalid/stale guards; keep server private sentinels out of output. | See client-actions.md inventory cases. Real classifier/loader/continuation/publication/component integration and final partial/empty/rejected public-entry images are unobserved; a preclassified fake result or screenshot alone cannot close them. |
 | Choice/search/filter preservation, U1/U3/U7/U9 | Exercise typed/pasted mixed-case/secondary labels, no-match/unavailable, stable selection under reorder, pointer choice, one Escape then parent Escape, Help return, all supported typed filters, full-ID paste, stale loader guard. | Draft tape includes all six Sessions fields, client no-match and unavailable Checkout. Nothing yet observed. Product component tests and CUA must establish detailed paste/identity/negative/coordinate behavior. |
-| Quota options/editors/reset/paging, U2/U3/U11/U12 | Through existing options: Resets/Credits, credit policy Allow/Disallow/cancel, refresh, weekly floor, reset inventory/review/confirmation/result and paging. Inspect exact decimals/units and return state. | Normal42 uses `tui_component_capture.py` and the fixed normal CLI fixture; compact Filters remains separate. Pending/error variants use the declared live lease. Fixture/effect seams stay with Implementer; never run real account mutation. |
+| Quota options/editors/reset/paging, U2/U3/U11/U12 | Through existing options: Resets/Credits, credit policy Allow/Disallow/cancel, refresh, weekly floor, reset inventory/review/confirmation/result and paging. Inspect exact decimals/units and return state. | Normal43 uses `component-capture-run.ts` and the fixed normal CLI fixture; compact Filters remains separate. Pending/error variants use the declared live lease. Fixture/effect seams stay with Implementer; never run real account mutation. |
 | Three sizes plus constrained 48×12 and resize, U4/U6 | Each changed dialog at 120×36/76×30/48×24, then 48×12 and actual resize with draft/focus/identity retained; header/actions usable; scroll to final body marker; compare selected/unselected columns and CJK. | Static and same-child resize evidence are separate. Require current declared-target originals/readbacks; no static pose alone proves resize continuity. |
 | Source/build/current quality and proof gallery, U13/U14 | Original PNGs/manifest plus offered test checks, required product/quality gates and Lead document inspection. | Use current exact-bound retained observations. CI/review/checklist/HTML are separately Lead-owned; images alone cannot close them. |
 
@@ -250,7 +268,7 @@ After the producer releases the target, use a new plan/output directory for each
 surface and run:
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_capture "$TUI_PLAN" --cua-surface sessions
+"$TUI_NODE" scripts/verification/tui/capture-run.ts "$TUI_PLAN" --cua-surface sessions
 ```
 
 For the separately declared all-menu Quota component fixture, set the plan's
@@ -349,8 +367,8 @@ pixels through its supported `set`, inspect the resulting terminal and use this
 read-only check to bind each actual grid to the live child:
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_verification --cua-plan "$TUI_PLAN" --surface sessions --columns 120 --rows 36 --record "$TUI_OUTPUT/cua-before.json"
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tui_verification --cua-plan "$TUI_PLAN" --surface sessions --columns 48 --rows 12 --baseline "$TUI_OUTPUT/cua-before.json" --record "$TUI_OUTPUT/cua-after.json"
+"$TUI_NODE" scripts/verification/tui/evidence-readback.ts --cua-plan "$TUI_PLAN" --surface sessions --columns 120 --rows 36 --record "$TUI_OUTPUT/cua-before.json"
+"$TUI_NODE" scripts/verification/tui/evidence-readback.ts --cua-plan "$TUI_PLAN" --surface sessions --columns 48 --rows 12 --baseline "$TUI_OUTPUT/cua-before.json" --record "$TUI_OUTPUT/cua-after.json"
 ```
 
 `TUI_OUTPUT` is exactly the plan's output. Pixel dimensions are calibrated from
@@ -379,7 +397,7 @@ process/viewport readbacks and steps to the Lead rather than adding a controller
 The capture test in
 `crates/codex-router-quota-reset-test-harness/tests/quota_storyboard_capture_test.rs`
 calls `provider_filter_capture.rs`; its tape inputs are in
-`provider_filter_tape.rs`. `fixed_quota_child.py` starts the fixture-bound compiled
+`provider_filter_tape.rs`. `scripts/verification/tui/fixture-child.ts` starts the fixture-bound compiled
 binary. Its feature-only `src/main.rs` dispatches Sessions through
 `run_sessions_picker_test_harness`, and Quota through
 `run_quota_reset_test_harness` → the existing Quota command/component.
@@ -398,10 +416,10 @@ output directory and a newly confirmed target. Confirm evidence survives cleanup
 Apparatus checks (not product observations):
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m unittest scripts.tests.test_tui_verification scripts.tests.test_tui_capture -v
-uv run --offline --no-project --with pydantic==2.14.1 --with basedpyright==1.40.2 --python 3.13 basedpyright --pythonversion 3.13 --pythonplatform All scripts/verification/tui_verification.py scripts/verification/tui_capture.py scripts/tests/test_tui_verification.py scripts/tests/test_tui_capture.py
-uv run --offline --no-project --with ruff==0.17.0 ruff check scripts/verification/tui_verification.py scripts/verification/tui_capture.py scripts/tests/test_tui_verification.py scripts/tests/test_tui_capture.py
-uv run --offline --no-project --with ruff==0.17.0 ruff format --check scripts/verification/tui_verification.py scripts/verification/tui_capture.py scripts/tests/test_tui_verification.py scripts/tests/test_tui_capture.py
+pnpm --dir scripts/verification/tui typecheck
+pnpm --dir scripts/verification/tui lint
+pnpm --dir scripts/verification/tui format:check
+pnpm --dir scripts/verification/tui test
 ```
 
 
@@ -424,9 +442,9 @@ or separated whitespace. They require an exact recognized heading line; an
 incidental `Weekly floor` warning cannot substitute. All other field/value,
 header-region, forbidden-marker, effect and cleanup checks remain. Keep controls for joined/separated, wrong/missing headings and background-warning rejection; apparatus qualification is not a UI pass.
 
-`python -m scripts.verification.tui_component_capture PLAN.json` selects only `compiled_normal_quota_component_dialogs_export_real_tui` and `presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture` under fixed `normal`. `ComponentPlan` adds the exact nominated CLI library-test executable and unique supported grids to `CapturePlan`; no normal product executable substitutes. `COMPONENT_STATES` in `scripts/verification/tui_component_capture.py` and `NORMAL_CHECKPOINTS` in `quota_component_tape.rs` own the same42 ordered scenes. They cover browse/lower-credit/5h/pace/return, Details/Help, floor draft/cancel/save/reopen, initial task content, reset inventory/paging, Credits62,500 then refreshed63,000/freshness/0s observation/policy boundary, policy search/no-match/choice/cancel/save, reset No/Yes/contextual full-name Help/unchanged return, result/consumption/guidance/return. A final tail alone never proves an unseen intermediate semantic field.
+`"$TUI_NODE" scripts/verification/tui/component-capture-run.ts PLAN.json` selects only `compiled_normal_quota_component_dialogs_export_real_tui` and `presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture` under fixed `normal`. `ComponentPlan` adds the exact nominated CLI library-test executable and unique supported grids to `CapturePlan`; no normal product executable substitutes. `componentStates` in `scripts/verification/tui/scene-contracts.ts` and `NORMAL_CHECKPOINTS` in `quota_component_tape.rs` own the same43 ordered scenes. They cover browse/lower-credit/5h/pace/return, Details/Help, floor draft/cancel/save/reopen, initial task content, reset inventory/paging, Credits62,500 then refreshed63,000/freshness/0s observation/policy boundary, policy search/no-match/choice/cancel/save, reset No/Yes/contextual full-name Help/unchanged return, result/consumption/guidance/return. A final tail alone never proves an unseen intermediate semantic field. The reset-result-consumption checkpoint requires the complete provider result and consumed-credit sentence together; the mounted six-grid proof measures two Down events at48x12 and zero at the other five grids before that pose. The former42-scene tour missed this short intermediate fact, so it cannot satisfy that coverage claim.
 
-The strict Normal consumer requires all42 ordered scene originals and exact PNG census/hashes, declared grids, source/tool/driver/tape/adapter identity, actual normal child completion and all12 wrong-image controls. `collect_component_images` owns the exact positive order and rejection pairs. Missing, substituted, repeated, reordered or extra evidence fails. Saved floor requires associated `Current 1%`, not unsaved draft `Floor 1%`; refreshed63,000 must reject initial62,500. A short result may expose its full body in one image, so top need not fail bottom. Zero external requests/persisted writes, durable scenario receipt, successful wrapper/child and independently settled owned resources remain required. Fixture refresh does not prove provider freshness.
+The strict Normal consumer requires all43 ordered scene originals and exact PNG census/hashes, declared grids, source/tool/driver/tape/adapter identity, actual normal child completion and all13 wrong-image controls. `collectComponentImages` (`component-collection.ts`) owns the exact positive order and rejection pairs. Missing, substituted, repeated, reordered or extra evidence fails. Saved floor requires associated `Current 1%`, not unsaved draft `Floor 1%`; refreshed63,000 must reject initial62,500. A short result may expose its full body in one image, so top need not fail bottom. Zero external requests/persisted writes, durable scenario receipt, successful wrapper/child and independently settled owned resources remain required. Fixture refresh does not prove provider freshness.
 
 VHS exports final PNGs after tape execution/teardown, so pending images cannot be
 validated before release within that static route. Use the EXISTING component CUA
@@ -435,17 +453,17 @@ action packet is required. Preserve exact `settle\n` release only after the actu
 pending original is retained/validated, then same-PTY result and normal cleanup.
 Do not release from text-only readiness, bypass phase guards, substitute internal
 frames, or cancel an unreleased pending scenario and call its adapter successful.
-The ten existing scenario names remain the only nominated fixture variants.
+The eleven existing scenario names remain the only nominated fixture variants.
 
-Compile all six current Swift checker inputs through the existing capture/control shell owners: `verify_screen_image.swift`, `verify_screen_checkpoint.swift`, `verify_screen_controls.swift`, `verify_screen_identity.swift`, `verify_screen_identity_controls.swift`, and `verify_screen_pace.swift`. Bind all build inputs and the resulting checker; there is no reduced-input fallback. Runtime receipt fields retain their existing source/binary schema; a control-only source does not invent a runtime field.
+Compile all current `verify_screen_*.swift` inputs through the existing capture/control shell owners. Bind every source and the resulting checker; there is no reduced-input fallback. Runtime receipt fields retain their existing source/binary schema; a control-only source does not invent a runtime field.
 
 Public Sessions source upkeep uses the adjacent `public_sessions_capture.rs` and
-`tui_public_sessions.py` over the SAME existing CUA/PTY/artifact-sink route. Fixed
+`public-sessions-run.ts` over the SAME existing CUA/PTY/artifact-sink route. Fixed
 argv is only the bound public executable; approved cwd, inherited normal HOME and
 CODEX_HOME (including absence), explicit debug root and expected Host service/epoch
 are required. The existing owned-runtime qualification checks actual process/
 binary/health/manifest before effects. The fixed child rechecks hash/directory/
-manifest before its retained Popen; public wrapper UID/birth/command identity is
+manifest before its retained Node child; public wrapper UID/birth/command identity is
 qualified before signalling. Rust never signals the public child by a nonexistent
 fixture capability. Its strict lifecycle is distinct from fixture zero-effect
 receipts and refers to helper-owned actual effect evidence; UI exit never proves
@@ -517,12 +535,12 @@ tests plus personal and cold-reader inspection of both fresh originals. The
 semantic check alone makes no selected-color claim. Current compiled originals must establish the adopted concise label and result hierarchy; earlier wording does not decide the expectation.
 
 Compact Quota source expectations likewise follow the actual field labels:
-the retained `Account provider` plus nested `Search: zznomatchzz`,
+the retained `Account provider` plus nested `Search: zznomatchzz▏` (C7 end caret),
 with `No matching choices` and unavailable `Select`,
 then `Disabled accounts` on the initial choice and same-process Shown/Hidden
 focus. Generic `Search:` or collapsed `Apply` cannot qualify that expanded field.
-The exact nine-scene order and existing negatives/effect/cleanup duties remain;
-this semantic upkeep awaits compilation and observation on the next bound target.
+The exact scene order is `compact_quota_checkpoints` in `provider_filter_tape.rs`
+(15 scenes at 120×36, 14 elsewhere) with its negatives/effect/cleanup duties.
 Interactive Details uses labelled Status/Reason facts beside its fixed identity;
 readiness and image checks no longer require the removed duplicate Selected
 account heading. Static/sidecar output is outside that interactive expectation.
@@ -545,7 +563,7 @@ until its tape finishes; a later expected wait failure does **not** preserve an
 earlier Screenshot. Retain the failed no-image attempt and never replay it.
 The corrected diagnostic writes only `first-frame-diagnostic-receipt.json`, kind
 `compiled-quota-first-frame-diagnostic`, complete=false; the Normal collector
-rejects it, and Normal keeps all42 scenes/12 negatives. A separate source-
+rejects it, and Normal keeps all43 scenes/13 negatives. A separate source-
 bound target and finite execution/custody handoff remain required.
 
 Normal tape readiness follows the selected full name through actual wrapping.
@@ -586,7 +604,7 @@ current-source driver release and explicit custody handoff, within50s preflight,
 120s work and90s cleanup (260s whole). It must fail at that exact natural VHS
 wait, retain validated/hashed original text-cursor pairs, and independently settle
 owned processes. Its diagnostic receipt is complete=false and effects unobserved;
-it cannot satisfy Normal42/12-negative, effects, exact failure-time or UX gates.
+it cannot satisfy Normal43/13-negative, effects, exact failure-time or UX gates.
 The retention source preparation and controls remain unqualified until their
 recorded compile/runtime outcomes exist; old failed frames cannot be recovered.
 
@@ -598,9 +616,9 @@ wrong/missing/reordered/suffixed name words. Preserve causal controls rejecting 
 
 Help-bottom requires the full meaning “Exit Quota unless a reset is being applied.” Vague or unconditional copy rejects; controls must cover that distinction.
 
-The42-scene contract retains contextual Help entry, full ordered captured identity/tag, unchanged Yes selection on return, initial62,500 and distinct post-refresh63,000/Freshness/Observation/policy-boundary observations. No old screenshot or failed aggregate is promoted by a later checker audit. Derive counts from current `COMPONENT_STATES`/`NORMAL_CHECKPOINTS`, not historical31/38-scene packets.
+The43-scene contract retains contextual Help entry, full ordered captured identity/tag, unchanged Yes selection on return, initial62,500 and distinct post-refresh63,000/Freshness/Observation/policy-boundary observations. No old screenshot or failed aggregate is promoted by a later checker audit. Derive counts from current `COMPONENT_STATES`/`NORMAL_CHECKPOINTS`, not historical31/38-scene packets.
 
-Normal work budget is1900seconds per declared grid (240VHS +30×(42+12) image guards +40 cleanup allowance);50preflight and90independent cleanup yield2040seconds for one disjoint job. A combined packet derives its own matching reserve shape. Never borrow or extend an old packet’s cap. Native Help body association excludes background names and malformed/ambiguous bounds; Help return preserves the nondefault Yes choice.
+Normal work budget is1960seconds per declared grid (240VHS +30×(43+13) image guards +40 cleanup allowance);50preflight and90independent cleanup yield2100seconds for one disjoint job. A combined packet derives its own matching reserve shape. Never borrow or extend an old packet’s cap. Native Help body association excludes background names and malformed/ambiguous bounds; Help return preserves the nondefault Yes choice.
 
 
 The current coherent Normal fixture declares its initial and refreshed observation
@@ -638,22 +656,29 @@ checkpoint still requires its field label, exact query and No matching choices;
 its separate FocusReveal path exposes them at the short grid. Reuse a prior capture only when its actual image/source/fixture dependencies still apply; a checker supplement is separate evidence.
 
 
+Compact Quota Filters Help first acknowledges its title, then scrolls to the
+complete field-control entry below Current quota: Down3 at48×24, Down8 at48×12,
+Down6 at40×24 and Down5 at32×24;120×36 and76×30 need none. The permanent mounted
+`compact_filter_help_controls_are_reachable_and_preserve_draft` witness measures
+those poses and checks exact draft/focus return. The screenshot still requires
+the contextual controls, and closing Help must preserve the uncommitted filters.
+
 ### Component completion after terminal scrollback
 
 The component wrapper prints final validated `QUOTA_STORYBOARD_CHILD_EXIT` on a fresh cursor line without trailing newline. Component Normal/first-frame tapes use anchored `Wait+Line /^QUOTA_STORYBOARD_CHILD_EXIT=0$/`. This is synchronization only: real child/wrapper exit0, exact durable fixture receipt, zero external requests/persisted writes, original images and independent owned cleanup remain mandatory. Early/forged markers cannot replace these. Other surfaces retain their own existing framing.
 
 The fixed48×12 first-frame diagnostic exports one original with `complete:false`, never a Normal receipt. Permanent real-PTY controls concurrently drain forty lines and check final-line framing plus missing receipt, nonzero-child and forged-marker rejection. Keep diagnostic and full Normal outcomes separate.
 
-### Normal42 lower-content and native-reader contract
+### Normal43 lower-content and native-reader contract
 
-The versioned Normal contract is42-positive/12-negative. Preserve every declared semantic property and all four lower-content originals. Reuse `browse-credit-window` for62.5k credit and `browse-pace-heading` for BOTH5h/99% and Weekly pace; these are separate images on the same Alpha account. At48×12 capture credit atPageDown1, short-window/heading atPageDown2, then complete burn-unavailable at boundedPageDown256 followed byPageUp3. Return withPageUp256 before switching accounts. The other five grids expose these facts atPage0. Literal Home/End remain unsupported by pinnedVHS; the permanent mounted observer must prove exact poses and same initial-frame/identity return. A foreign selectedBeta must fail BOTH lower-credit and short-window/heading even if unselectedAlpha facts remain visible. Unreadable/ambiguous visible selectors fail closed. Offscreen names/gutters carry same-process journey continuity limits; no CJK alias or flat-marker-only attribution is permitted. Prior receipts retain their original contract.
+The versioned Normal contract is43-positive/13-negative. Preserve every declared semantic property and all four lower-content originals. Reuse `browse-credit-window` for62.5k credit and `browse-pace-heading` for BOTH5h/99% and Weekly pace; these are separate images on the same Alpha account. At48×12, the credit and burn-unavailable poses send256 PageDowns, acknowledge the complete bottom group (`Extra`, `Credits unknown`, `2 resets`), then reverse5 PageUps for credit or6 for burn-unavailable. Only the heading pose pages forward2 from the top. Every lower pose returns with PageUp256. Credit uses PageDown1 at48×24 and32×24; every other pose stays at Page0. The permanent mounted witness `normal_short_browse_groups_retain_alpha_and_return_exactly` in `crates/codex-router-cli/src/presentation/quota/quota_normal_browse_pose_test.rs` proves the complete short-grid groups and exact returns against an independent tall reference. Literal Home/End remain unsupported by pinnedVHS; the permanent mounted observer must prove exact poses and same initial-frame/identity return. A foreign selectedBeta must fail BOTH lower-credit and short-window/heading even if unselectedAlpha facts remain visible. Unreadable/ambiguous visible selectors fail closed. Offscreen names/gutters carry same-process journey continuity limits; no CJK alias or flat-marker-only attribution is permitted. Prior receipts retain their original contract.
 
 Initial Resets/Credits screenshots must occur before any manual scroll and expose a meaningful actual task fact. Root accepts Checking/Live eligibility or actual voucher data; voucher-first is a synthetic fixture witness, not a new layout requirement. Initial Credits policy/fact is distinct from later exact balance. Main's current product removes only redundant interactive tabs/divider and restores browse Pages, with static rendering, navigation, all facts and pending assurance preserved. Caption/balance/freshness/observation/policy positions must be bound to that new compiled fixture; old2c09 offsets do not apply. At48×12 Help End requires one Up to capture the full exit guard; other grids need none.
 
-Each Normal grid budgets50preflight +1900work +90independent cleanup =2040seconds. The12 negatives include foreignBeta against both lower-credit and short-window/heading plus the pace wrong-result image. Current source/control qualification, exact Python/Rust census consumers, pinned six-grid VHS parsing and fresh product/tool bindings precede execution; source preparation is not capture success.
+Each Normal grid budgets50preflight +1960work +90independent cleanup =2100seconds. The13 negatives include foreignBeta against both lower-credit and short-window/heading plus the pace wrong-result image. Current source/control qualification, exact TypeScript/Rust census consumers, pinned six-grid VHS parsing and fresh product/tool bindings precede execution; source preparation is not capture success.
 
 
-The current42-scene native reader uses one accurate request with language correction disabled and no custom words. Only the three new lower-fact checkpoints and contextual Help use `[en-US, ja-JP]` with automatic script detection. Weekly-floor draft uses `[ja-JP, en-US]` without automatic detection to read its literal native numeric percent box. Other checkpoints retain English. Floor1% must be the unique active yellow value associated with Floor inside the title/tag/action body; guidance1%, arrows, background/duplicate values and wrong states reject.
+The current43-scene native reader uses one accurate request with language correction disabled and no custom words. Only the three new lower-fact checkpoints and contextual Help use `[en-US, ja-JP]` with automatic script detection. Weekly-floor draft uses `[ja-JP, en-US]` without automatic detection to read its literal native numeric percent box. Other checkpoints retain English. Floor1% must be the unique active yellow value associated with Floor inside the title/tag/action body; guidance1%, arrows, background/duplicate values and wrong states reject.
 
 Selected account extraction derives the fixed two-cell physical selector column from the unique Account header and requires one actual yellow glyph row, yellow name words and the exact ordered full CJK/Latin identity. Adjacent native glyph boxes may overlap by less than half the smaller height; distinct row centers must descend by at least half the larger height, with at most one row-height edge gap. Same-row words retain ordered centers separated by at least half the larger word width. For overlapping same-row boxes, the original decoded intersection must contain zero selected-yellow ink through the existing pixel predicate; no fixed pixel-overlap allowance applies. Ink overlap, merged or duplicated words reject. The first selected native word alone may cover the source-defined two-cell selector slot when actual yellow text/glyph prove it; other words retain the Account-column boundary. Missing, merged, duplicated, reordered, foreign and malformed data reject. Native word ingestion ignores only nil/empty/whitespace-only enumeration payloads before semantic regions; it preserves every nonblank substring and rejects malformed nonblank boxes. Raw recognizedLines and native evidence remain unchanged.
 
@@ -661,6 +686,75 @@ Selected account extraction derives the fixed two-cell physical selector column 
 Root's source-grounded field interpretation separates the captured full Account NAME and exact entire tag VALUE from the one-character presentation decorations on each side (`quota_dialog_context.rs::full_label`). The same measured Account field, exact name/value length, every identifier character and field endpoint remain mandatory. Only literal ASCII/full-width bracket slots are admitted automatically; the entire tag value remains case-exact, while labels and the name retain their existing normalization; no global character replacement, identifier alias, substring/prefix/suffix search, raw-OCR rewriting or mode/candidate change applies. Missing/extra/internal/ambiguous/other-field or same-name/different-tag data must reject. Automation does not establish literal bracket APPEARANCE: every affected original must be personally inspected for actual complete bracketed tag and readability, and its gallery/personal evidence must state that limitation. The failed literal-OCR40 audit and its raw native candidates remain failed/unchanged; a corrected semantic field audit is separate evidence, never a rewrite of a prior run.
 
 
-### Compact32 pace wording cutover
+### 2026-10-23 visual refinement (C1–C10)
 
-Root94 adopts the product's whole `Unknown` label only for the declared32×24 pace-value checkpoint. Its tape requires ordered Weekly→pace→Unknown; the native reader binds the exact350×484 original capture raster, unique aligned Account/Status/Quota headings, full selected Alpha identity with the existing pixel gutter, and consecutive whole Weekly/pace/Unknown tokens in Alpha's Quota column above the next Claude account. Wrong column, Status/Credits unknown, foreign Beta, missing/ambiguous identity, duplicate or split value, malformed boxes, distant rows and a wrong raster reject. This fixed raster is an input constraint for this capture, not a general phone detector. Other viewport rasters keep the existing full burn-unavailable path. Both capture shell owners compile all six Swift sources, including adjacent private `verify_screen_pace.swift`; its controls join the established matching-controls entry point. A matching source-bound checker and driver must qualify before a new32 run. Higher-width evidence can be reused only under separately demonstrated unchanged dependencies/frame equivalence, never relabeled as new-binary screenshots. No provider or general acceptance follows.
+The Quota browse is now four groups — Account / Quota left · reset in / Weekly
+pace / Extra — wide only from 85 columns (120×36); the other five grids fold and
+repeat each heading per account. Census moved to F5 Pool details; Quota browse
+and Session Details footers name their actual bindings. Each superseded check was
+retired with a replacement; old-layout originals are wrong-image evidence only:
+
+| Retired (old layout) | Replacement (owner) |
+| --- | --- |
+| Selected name bound by unique Account + `Status` header | Account heading plus its header-row neighbour, or full width when folded; a name's own `Account` word is rejected by column-gap guards (`verify_screen_identity.swift`) |
+| 32×24 `Unknown` pace on a 350×484 Account/Status/Quota raster | `selectedWeeklyPaceMatches` at every grid: wide Weekly pace column inside the selected block (ends at the two-blank-row separator), folded own Weekly pace heading above Extra, short-grid continuity only when no account start is visible (`verify_screen_pace.swift`); tape waits `burn unavailable` everywhere |
+| Census counts in the browse header (`requiredQuotaHeaderCounts`) | `requiredPoolCensus` bound inside the Pool details dialog body (a second recognition of its title-to-Close rows; a split count binds only to its label's adjacent box); every browse scene rejects `Label N` census in the header rows above the group headings, row by row (`verify_screen_visual.swift`) |
+| Shortcut-text ban on Quota browse and Session Details | Required actual hints (`F4 Details`, `F3 Filters`, `F5 Pool`, `F1 Help`, `Ctrl+R Options`; Details `focus`/`activate`) plus a ban on the HTML sample letters and `Account actions`; Details also rejects any Enter-as-fixed-Resume label. Other dialogs and Sessions browse keep the ban |
+| `Search: zznomatchzz` | Tape terminal-text waits require exactly `zznomatchzz▏`; the image field pair allows at most one caret-like OCR glyph (`verify_screen_sessions.swift`) |
+| `62.5k` credit, `99%…5h…Weekly pace` order | `62.5k credits`; pace heading in either wide (header above) or folded order |
+
+Compact Quota adds `pool-details` (F5, top), `pool-details-complete` (all ten
+pairs incl. zeros; 120×36 only, where the whole body fits),
+`pool-details-middle` and `pool-details-bottom`, `pool-closed` (Esc) and
+`filters-block-pool` (F5 while Account filters owns input). Wrong images add
+Pool details vs unchanged browse and closed vs still-open Pool details.
+
+The top, middle and bottom Pool poses each require a census subset that fits
+the smallest body (48×12 shows four rows; mounted frames in
+`tmp/tui-visuals/2026-10-23/implementer/pool-six-grid-body-proof.log`): top
+Accounts/Usable/Reserve, middle Blocked/Pool unknown/Excluded (hard adds
+Fresh), bottom the rest. Their union is all ten rows at every grid; the hard
+bottom and the 120×36 complete pose also require `Credentials locked` as a row
+inside the modal. The middle pose is offset 0 on tall grids and three (compact)
+or four (hard) Downs at 48×12, derived from the mounted body; the native
+waits and oracles must validate these derived offsets on a declared run.
+
+The separate hard-case journey (`compiled_hard_case_quota_component_exports_real_tui`;
+`component-capture-run.ts` plan `"scenario": "visual-hard-cases"`) drives the
+component fixture `visual-hard-cases`: Alpha's known windows, Beta's stale
+`75% · week · —`, `No data · 5h · —` (no meter glyph on that row), `125.5 credits`
+with `Credits stale`, the visible `Credentials locked` error, the complete hard
+census in Pool details, Esc return to Beta and Beta's Account details with its
+captured `[beta-tag]`. 120×36 uses nine scenes (`HARD_CASE_CHECKPOINTS`);
+76×30 and the 24-row grids eight (`HARD_CASE_PARTIAL_CHECKPOINTS`, no complete
+census pose). At 48×12 the top pose fits only the name's first row,
+so the full name never fits one frame: fourteen named poses
+(`HARD_CASE_SHORT_CHECKPOINTS`) prove identity as the same-child composite of
+the selected name prefix (top pose), its selected continuation one page down
+(`selectedNameContinuationMatches`: top body row below the toolbar, painted
+selected, directly over its own client line, no Account heading or other
+account; Vision may split it into word boxes on that row) and the captured
+Details tag. Every Alpha-selected browse pose reads its CJK prefix with a
+zh-Hans-first word pass used only for the selected name; a misread modal identity
+tag is re-observed by an en-US pass over its own row; with every heading scrolled away the header-less
+selector gutter is anchored on the row-start staleness label. Alpha week is at PageDown 2 and 5h at 3;
+Beta week at 2, stale/no-data at 3, credits at 6 (candidate003 live CUA). A
+distinct `pool-closed-top` keeps the shared tall `pool-closed` full-name check.
+Window lines bind by terminal row, Quota-left column and account block
+(`missingWindowLines`).
+
+Capture tools: build VHS 0.12.1 with native F1/F4/F5 from
+`quota_storyboard_capture_test/vhs_f4/README.md` into a private root beside the
+official ttyd 1.7.7_14 / libwebsockets 5.0.0_2 bottles. All Swift checker sources
+(`verify_screen_*.swift`, including `verify_screen_pace.swift` and the 2026-10-23
+`verify_screen_visual.swift`, `verify_screen_visual_controls.swift` and
+`verify_screen_native_field_controls.swift` and `verify_screen_reading_repairs.swift`) compile into one checker whose
+`--matching-controls` must report zero failures before a run.
+
+Not established by these images: exact RGB tones and fills (mounted/ANSI tests
+plus personal inspection of lossless PNGs), NO_COLOR (fresh compiled PTY test),
+clipboard bytes (mounted substituted writer), Pool census rows between the first
+and last at 48×12 (taller grids and mounted tests), Vision readings of `·`, `—`
+and footer F-keys, the hard 48×12 name continuations, the measured Sessions
+Details poses and the derived 48×12 Pool middle offsets until a declared run
+qualifies them.

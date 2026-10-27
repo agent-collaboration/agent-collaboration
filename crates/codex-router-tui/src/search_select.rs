@@ -185,11 +185,11 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
         let handler=handler.clone();
         element! {
             crate::DialogButton(handler:move |_|if available && enabled { handler(key.clone()); }) {
-                View(width:100pct,flex_shrink:0.0_f32) {
+                View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
                     SelectableRow(selected) {
-                        Text(content:label,color:if !available { Color::DarkGrey } else if selected { Color::Yellow } else { Color::White })
+                        Text(content:label,color:if !available { Color::Grey } else if selected { Color::Yellow } else { Color::White })
                         #(secondary.map(|content|element!(Text(content,color:Color::Grey))))
-                        #(reason.map(|content|element!(Text(content,color:Color::DarkGrey))))
+                        #(reason.map(|content|element!(Text(content,color:Color::Grey))))
                     }
                 }
             }
@@ -198,10 +198,10 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
     element! {
         View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             crate::FocusReveal(has_focus:reveal_empty) {
-                View(padding_left:2) { Text(content:format!("Search: {query}"),color:Color::Grey,wrap:TextWrap::Wrap) }
+                View(padding_left:2) { Text(content:format!("Search: {query}▏"),color:crate::UiTextRole::Label.color(),wrap:TextWrap::Wrap) }
                 #(rows.is_empty().then(||element!(View(padding_left:2) {Text(content:"No matching choices",color:Color::Grey,wrap:TextWrap::Wrap)})))
             }
-            #(rows)
+            View(padding_left:4,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) { #(rows) }
         }
     }
     .into_any()

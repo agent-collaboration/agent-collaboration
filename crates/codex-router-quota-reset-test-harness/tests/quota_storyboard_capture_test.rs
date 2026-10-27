@@ -111,6 +111,20 @@ async fn compiled_normal_quota_component_dialogs_export_real_tui() -> TestResult
 }
 
 #[tokio::test(flavor = "current_thread")]
+#[ignore = "requires a released exact component libtest, source-bound tools and fresh output"]
+async fn compiled_hard_case_quota_component_exports_real_tui() -> TestResult<()> {
+    // 48x12 uses its own measured one-fact poses (quota_component_tape.rs).
+    let grids = declared_component_viewports(
+        &std::env::var("QUOTA_STORYBOARD_COMPONENT_VIEWPORTS")
+            .unwrap_or_else(|_| "120x36,76x30,48x24,48x12,40x24,32x24".to_owned()),
+    )?;
+    for (columns, rows) in grids {
+        capture_support::run_hard_case_component_capture(columns, rows).await?;
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "current_thread")]
 #[ignore = "requires the admitted48x12 first-frame exit-sync diagnostic target and fresh owned output"]
 async fn compiled_quota_phone_first_frame_diagnostic_exports_original() -> TestResult<()> {
     capture_support::run_first_frame_component_diagnostic().await

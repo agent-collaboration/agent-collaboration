@@ -102,6 +102,7 @@ impl TestCentral {
         address: collaboration_central_core::ObjectAddress,
         command: collaboration_central_conformance::RuntimeControl,
     ) -> FixtureResult<collaboration_central_conformance::RuntimeFaultObservation> {
+        let request = collaboration_central_conformance::RuntimeControlRequest { address, command };
         Ok(reqwest::Client::builder()
             .no_proxy()
             .timeout(BOUND)
@@ -111,9 +112,10 @@ impl TestCentral {
                 self.server.base_url()
             ))
             .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
-            .json(&collaboration_central_conformance::RuntimeControlRequest { address, command })
+            .json(&request)
             .send()
-            .await?
+            .await
+            .inspect_err(|error| eprintln!("runtime control {request:?}: {error}"))?
             .error_for_status()?
             .json()
             .await?)

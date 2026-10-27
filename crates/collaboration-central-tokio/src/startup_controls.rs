@@ -27,6 +27,7 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::ResumeDispatchAndHoldNext { .. }
                 | RuntimeControl::ResumeDispatchAndHoldNextSelected { .. }
                 | RuntimeControl::AwaitDroppedObjectReply
+                | RuntimeControl::DropHeldDispatchReply
                 | RuntimeControl::Observe => {
                     return Err(StoreError::backend(
                         "native conformance startup controls must only arm faults",

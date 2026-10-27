@@ -163,12 +163,6 @@ pub(super) fn use_picker_input(hooks: &mut Hooks<'_, '_>, context: PickerInputCo
         if should_cancel.get() || selected_outcome.read().is_some() {
             return;
         }
-        if model_value.source_action.pending.is_some() {
-            if code == KeyCode::Esc {
-                model_value.cancel_source_action();
-            }
-            return;
-        }
         let help_key = matches!(code, KeyCode::F(1) | KeyCode::Char('\u{1f}'))
             || matches!(code, KeyCode::Char('/' | '_' | '7'))
                 && modifiers.contains(KeyModifiers::CONTROL);
@@ -179,6 +173,12 @@ pub(super) fn use_picker_input(hooks: &mut Hooks<'_, '_>, context: PickerInputCo
         if model_value.show_help {
             if code == KeyCode::Esc {
                 model_value.show_help = false;
+            }
+            return;
+        }
+        if model_value.source_action.pending.is_some() {
+            if code == KeyCode::Esc {
+                model_value.cancel_source_action();
             }
             return;
         }

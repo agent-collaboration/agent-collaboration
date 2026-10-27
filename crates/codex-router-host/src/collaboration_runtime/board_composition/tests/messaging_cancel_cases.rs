@@ -3,6 +3,7 @@ use super::*;
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer,
 };
+use collaboration_central_conformance::DispatchCallSelector;
 use fleet_sync_protocol::{
     DeliveryEnvelope, Epoch, OperationAnswer, OperationRequest, SubmitResult,
 };
@@ -23,6 +24,29 @@ async fn lost_custody_receipt_then_takeover_replays_the_batch_and_cancel_without
 -> TestResult {
     Box::pin(prove_remote_cancel(CancelPrefix::LostReceipt)).await
 }
+
+#[path = "messaging_cancel_fault_cases.rs"]
+mod fault_selection;
+
+async fn hold_lost_receipt_submit(
+    fixture: &RuleFixture,
+    mailbox: ObjectAddress,
+    origin: fleet_sync_protocol::PeerId,
+    item: ItemId,
+) -> TestResult {
+    fixture
+        .holder
+        .central
+        .runtime_control(
+            ObjectAddress::Registry,
+            RuntimeControl::HoldNextSelectedDispatch {
+                destination: mailbox,
+                call: DispatchCallSelector::MailboxSubmitFor { origin, item },
+            },
+        )
+        .await?;
+    Ok(())
+}
 #[derive(Clone, Copy)]
 enum CancelPrefix {
     Discarded,
@@ -38,7 +62,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         let (group, cancel) = arrange_remote_end(&fixture, &seed, case).await?;
         let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
         if matches!(case, CancelPrefix::LostReceipt) {
-            fixture.holder.central.runtime_control(ObjectAddress::Registry, RuntimeControl::HoldNextDispatch { destination: mailbox.clone() }).await?;
+            hold_lost_receipt_submit(&fixture, mailbox.clone(), fixture.successor.projects.peer, seed.item.id()).await?;
         }
         fixture.holder.disconnect_holder().await?;
         let moved = fixture.holder.central.take_over_project(DatabaseId::try_from(fixture.project.as_str().to_owned())?,
@@ -267,66 +291,63 @@ async fn lose_actual_submit_answer(
     item: ItemId,
 ) -> TestResult {
     timeout(BOUND, async {
-        loop {
-            let held = fixture
-                .holder
-                .central
-                .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
-                .await?;
-            let board_central_test_support::DispatchFaultObservation::Held { request, .. } =
-                held.dispatch
-            else {
-                return Err("registry dispatch was not held".into());
-            };
-            let request: serde_json::Value = serde_json::from_slice(&request)?;
-            if request.get("kind") == Some(&json!("central.mailbox-submit"))
-                && request.pointer("/request/origin")
-                    == Some(&json!(fixture.successor.projects.peer))
-            {
-                assert_eq!(
-                    request.pointer("/request/item/value/id"),
-                    Some(&json!(item))
-                );
-                fixture
-                    .holder
-                    .central
-                    .runtime_control(
-                        ObjectAddress::Registry,
-                        RuntimeControl::DropNextObjectReply {
-                            destination: mailbox,
-                        },
-                    )
-                    .await?;
-                fixture
-                    .holder
-                    .central
-                    .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
-                    .await?;
-                let lost = fixture
-                    .holder
-                    .central
-                    .runtime_control(
-                        ObjectAddress::Registry,
-                        RuntimeControl::AwaitDroppedObjectReply,
-                    )
-                    .await?;
-                assert!(matches!(
-                    lost.object_reply,
-                    collaboration_central_conformance::ObjectReplyFaultObservation::Dropped { .. }
-                ));
-                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
-            }
-            fixture
-                .holder
-                .central
-                .runtime_control(
-                    ObjectAddress::Registry,
-                    RuntimeControl::ResumeDispatchAndHoldNext {
-                        destination: mailbox.clone(),
-                    },
-                )
-                .await?;
-        }
+        let held = fixture
+            .holder
+            .central
+            .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
+            .await?;
+        let board_central_test_support::DispatchFaultObservation::Held {
+            destination,
+            request: held_request,
+        } = held.dispatch
+        else {
+            return Err("registry dispatch was not held".into());
+        };
+        assert_eq!(destination, mailbox);
+        let request: serde_json::Value = serde_json::from_slice(&held_request)?;
+        assert_eq!(request.get("kind"), Some(&json!("central.mailbox-submit")));
+        assert_eq!(
+            request.pointer("/request/origin"),
+            Some(&json!(fixture.successor.projects.peer))
+        );
+        assert_eq!(
+            request.pointer("/request/item/value/id"),
+            Some(&json!(item))
+        );
+        fixture
+            .holder
+            .central
+            .runtime_control(
+                ObjectAddress::Registry,
+                RuntimeControl::DropHeldDispatchReply,
+            )
+            .await?;
+        fixture
+            .holder
+            .central
+            .runtime_control(ObjectAddress::Registry, RuntimeControl::ResumeDispatch)
+            .await?;
+        let lost = fixture
+            .holder
+            .central
+            .runtime_control(
+                ObjectAddress::Registry,
+                RuntimeControl::AwaitDroppedObjectReply,
+            )
+            .await?;
+        let collaboration_central_conformance::ObjectReplyFaultObservation::Dropped {
+            destination,
+            request: dropped_request,
+        } = lost.object_reply
+        else {
+            return Err("successor submit reply was not dropped".into());
+        };
+        assert_eq!(destination, mailbox);
+        assert_eq!(
+            dropped_request, held_request,
+            "lost reply must belong to the exact held successor submit"
+        );
+        Ok(())
     })
     .await?
 }

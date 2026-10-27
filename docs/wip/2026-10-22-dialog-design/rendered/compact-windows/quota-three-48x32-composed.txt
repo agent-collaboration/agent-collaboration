@@ -1,0 +1,32 @@
+╭──────────────────────────────────────────────╮
+│ Quota                               [?] Help │
+│                                              │
+│ [/] Filters  All providers · Disabled shown  │
+│                                              │
+│   personal                                   │
+│   ◎ OpenAI                                   │
+│   ✓ Available                                │
+│   2 clients                                  │
+│                                              │
+│   QUOTA LEFT · RESET IN                      │
+│   ██████ 92% · week · 6d 16h                 │
+│   █████░ 83% · 5h · 2h 10m                   │
+│                                              │
+│   WEEKLY PACE                                │
+│   Healthy pace                               │
+│   0.89× reset pace                           │
+│                                              │
+│   62.5k credits                              │
+│   2 resets                                   │
+│                                              │
+│                                              │
+│ ❯ ssdev                                      │
+│   ◎ OpenAI                                   │
+│   ★ Preferred                                │
+│   2 clients                                  │
+│                                              │
+│   QUOTA LEFT · RESET IN                      │
+│   ██████ 92% · week · 6d 16h                 │
+│   █████░ 83% · 5h · 2h 10m                   │
+│ [enter] Details  [a] Account actions         │
+╰──────────────────────────────────────────────╯

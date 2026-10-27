@@ -1,0 +1,179 @@
+{
+  "renderer": "iocraft 0.9.2",
+  "observations": [
+    {
+      "name": "quota-three",
+      "width": 132,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true,
+        "weekAnd5hCompact": true,
+        "resetMeaningInHeader": true,
+        "noRepeatedResetLabel": true,
+        "weeklyWhiteRGB": true,
+        "shortSoftWhiteRGB": true,
+        "selectedBackground": true,
+        "headerBackground": true,
+        "alternatingBackground": true
+      },
+      "sha256": "10b15c3043ad96fb0f4d6240855969ddfe19e0d65eb1eb34c3aa5deadcd89604"
+    },
+    {
+      "name": "quota-four",
+      "width": 132,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true,
+        "weekAnd5hCompact": true,
+        "resetMeaningInHeader": true,
+        "noRepeatedResetLabel": true,
+        "weeklyWhiteRGB": true,
+        "shortSoftWhiteRGB": true,
+        "selectedBackground": true,
+        "headerBackground": true,
+        "alternatingBackground": true
+      },
+      "sha256": "679ef1cc0d66c8b6a4d2d73bb99deaff5b4a446d6be006a068f6ae223e56584e"
+    },
+    {
+      "name": "session",
+      "width": 132,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true
+      },
+      "sha256": "a587f5b484cb9ef37a9119feff895ad7adf94835c048661b26d558afb176ab0c"
+    },
+    {
+      "name": "quota-three",
+      "width": 100,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true,
+        "weekAnd5hCompact": true,
+        "resetMeaningInHeader": true,
+        "noRepeatedResetLabel": true,
+        "weeklyWhiteRGB": true,
+        "shortSoftWhiteRGB": true,
+        "selectedBackground": true,
+        "headerBackground": true,
+        "alternatingBackground": true
+      },
+      "sha256": "1615e992a9f50f4c8cc780b4ea65eb5aee0f805e9dea08c2c2c20b37e1c62372"
+    },
+    {
+      "name": "quota-four",
+      "width": 100,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true,
+        "weekAnd5hCompact": true,
+        "resetMeaningInHeader": true,
+        "noRepeatedResetLabel": true,
+        "weeklyWhiteRGB": true,
+        "shortSoftWhiteRGB": true,
+        "selectedBackground": true,
+        "headerBackground": true,
+        "alternatingBackground": true
+      },
+      "sha256": "9a0ad707d6e1f35f31c10df3cb44518899f66258b53ac7001c0b7c649f5a37bf"
+    },
+    {
+      "name": "session",
+      "width": 100,
+      "height": 34,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true
+      },
+      "sha256": "c5829f06c2f9b4678e561ae2ee2a6b95e1418f299ce46ac7b53487211120949b"
+    },
+    {
+      "name": "quota-three",
+      "width": 48,
+      "height": 32,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true,
+        "weekAnd5hCompact": true,
+        "resetMeaningInHeader": true,
+        "noRepeatedResetLabel": true,
+        "weeklyWhiteRGB": true,
+        "shortSoftWhiteRGB": true,
+        "selectedBackground": true,
+        "headerBackground": true
+      },
+      "sha256": "62fb0813c4cef895fcc80fed7e3d390727cf3cc5591d2abac8b38227673b3f85"
+    },
+    {
+      "name": "quota-four",
+      "width": 48,
+      "height": 32,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true,
+        "weekAnd5hCompact": true,
+        "resetMeaningInHeader": true,
+        "noRepeatedResetLabel": true,
+        "weeklyWhiteRGB": true,
+        "shortSoftWhiteRGB": true,
+        "selectedBackground": true,
+        "headerBackground": true
+      },
+      "sha256": "5e008e3a92bfcbee8a29457543e9db10ded0ad1a5b3e139cce160e784f7c4ba2"
+    },
+    {
+      "name": "session",
+      "width": 48,
+      "height": 32,
+      "pass": true,
+      "results": {
+        "rowCount": true,
+        "footerVisible": true,
+        "wrongFooterRejected": true,
+        "titleRGB": true,
+        "surfaceRGB": true
+      },
+      "sha256": "fe11533e3b209a26501912d76b2fb73a1ff017067da716202d9c1cff1114e472"
+    }
+  ],
+  "method": "Isolated sample composition via public render + write/write_ansi; NO_COLOR unset for this process. Three/four-column variants and fixed footer controls.",
+  "limits": "Independent renderer composition, not exact HTML DOM, interactive TUI, perceived terminal color or installed Router proof. Unknown-data case is covered by source wiring, not this fixture."
+}

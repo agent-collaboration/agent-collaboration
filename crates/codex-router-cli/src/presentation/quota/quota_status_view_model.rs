@@ -40,6 +40,8 @@ pub(crate) struct QuotaStatusAccountViewModel {
     pub(crate) credit_usage: CreditUsageStatus,
     pub(crate) reason: String,
     pub(crate) weekly_window: String,
+    pub(crate) display_weekly: QuotaDisplayWindow,
+    pub(crate) display_short: QuotaDisplayWindow,
     pub(crate) short_window: String,
     pub(crate) burn_meter: String,
     pub(crate) sample_metadata: SampleMetadata,
@@ -142,4 +144,16 @@ pub(crate) struct QuotaSelectedAccountViewModel {
     pub(crate) guards: String,
     pub(crate) reset: String,
     pub(crate) note: String,
+}
+
+/// Included quota facts, kept separate from the preserved static display strings.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) enum QuotaDisplayWindow {
+    #[default]
+    Unknown,
+    Known {
+        remaining_percent: u32,
+        reset_in_seconds: Option<u64>,
+        stale: bool,
+    },
 }

@@ -24,6 +24,7 @@ use std::{
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum FixtureScenario {
     Normal,
+    VisualHardCases,
     InspectionPending,
     CommitPending,
     UnknownResult,
@@ -38,6 +39,7 @@ impl FixtureScenario {
     fn from_environment() -> std::io::Result<Self> {
         match std::env::var("QUOTA_COMPONENT_FIXTURE").as_deref() {
             Ok("normal") => Ok(Self::Normal),
+            Ok("visual-hard-cases") => Ok(Self::VisualHardCases),
             Ok("inspection-pending") => Ok(Self::InspectionPending),
             Ok("commit-pending") => Ok(Self::CommitPending),
             Ok("unknown-result") => Ok(Self::UnknownResult),
@@ -73,6 +75,64 @@ pub(super) fn fixture_model() -> QuotaStatusViewModel {
     model.rows[1].account = "Claude Research Account Beta Full Name".to_owned();
     model.rows[1].provider = codex_router_core::provider::Provider::Claude;
     model.rows[1].details.account = model.rows[1].account.clone();
+    model
+}
+
+pub(super) fn fixture_scenario_model(scenario: FixtureScenario) -> QuotaStatusViewModel {
+    let mut model = fixture_model();
+    if scenario != FixtureScenario::VisualHardCases {
+        return model;
+    }
+    use super::super::quota_status_view_model::QuotaDisplayWindow;
+    model.rows[0].display_weekly = QuotaDisplayWindow::Known {
+        remaining_percent: 92,
+        reset_in_seconds: Some(576000),
+        stale: false,
+    };
+    model.rows[0].display_short = QuotaDisplayWindow::Known {
+        remaining_percent: 83,
+        reset_in_seconds: Some(7800),
+        stale: false,
+    };
+    model.rows[1].display_weekly = QuotaDisplayWindow::Known {
+        remaining_percent: 75,
+        reset_in_seconds: None,
+        stale: true,
+    };
+    model.rows[1].display_short = QuotaDisplayWindow::Unknown;
+    // Keep the hard-case Details snapshot consistent with its browse evidence.
+    model.rows[0].details.weekly_window = "week ██████████ 92% left, reset 6d 16h".to_owned();
+    model.rows[0].details.short_window = "5h █████████░ 83% left, reset 2h 10m".to_owned();
+    model.rows[1].details.weekly_window = "week ████████░░ 75% left, reset unknown".to_owned();
+    model.rows[1].details.short_window = "5h ░░░░░░░░░░ no data".to_owned();
+    model.rows[1].credit_usage.provider_observation = CreditProviderObservation::new(
+        CreditAvailability::Available {
+            balance: Some(CreditBalance::new("125.50").unwrap()),
+        },
+        CreditSpendControl::Clear,
+        None,
+    );
+    model.rows[1].credit_usage.freshness = crate::quota::CreditUsageFreshness::Stale;
+    model.rows[1].credit_usage_summary = credit_usage_compact_summary(&model.rows[1].credit_usage);
+    model.header.pool = super::super::quota_status_symbols::QuotaPoolCensus {
+        usable: 1,
+        reserve: 0,
+        blocked: 1,
+        unknown: 0,
+        excluded: 0,
+    };
+    model.header.freshness = super::super::quota_status_symbols::QuotaFreshnessCensus {
+        fresh: 0,
+        stale: 1,
+        unknown: 1,
+    };
+    model.header.credential_notice = Some("Credentials locked".to_owned());
+    for row in &mut model.rows {
+        row.status = super::super::quota_status_symbols::QuotaRowStatus::CredentialUnavailable {
+            notice: "Credentials locked".to_owned(),
+        };
+        row.details.status = "Credentials locked".to_owned();
+    }
     model
 }
 
@@ -118,7 +178,7 @@ pub(super) fn fixture_snapshot(
     )
 }
 
-fn fixture_ports(
+pub(super) fn fixture_ports(
     model: Arc<Mutex<QuotaStatusViewModel>>,
     scenario: FixtureScenario,
     release: tokio::sync::watch::Receiver<bool>,
@@ -301,7 +361,7 @@ async fn compiled_quota_component_storyboard_fixture() -> std::io::Result<()> {
     if !std::io::stdin().is_terminal() || !std::io::stdout().is_terminal() {
         return Err(std::io::Error::other("fixture requires its owned real PTY"));
     }
-    let model = Arc::new(Mutex::new(fixture_model()));
+    let model = Arc::new(Mutex::new(fixture_scenario_model(scenario)));
     let release_path = fixture_release_path(scenario)?;
     let receipt_path =
         fixture_receipt_path(std::env::var_os("QUOTA_COMPONENT_FIXTURE_RECEIPT_FILE"))?;
@@ -587,3 +647,32 @@ fn fixture_receipt_requires_fresh_output_and_never_overwrites_a_previous_result(
 
 #[path = "quota_storyboard_observation_test.rs"]
 mod quota_storyboard_observation_test;
+
+#[test]
+fn visual_hard_case_fixture_has_attributable_unknown_stale_and_credential_facts() {
+    use super::super::quota_status_view_model::QuotaDisplayWindow;
+    let model = fixture_scenario_model(FixtureScenario::VisualHardCases);
+    assert_eq!(
+        model.rows[0].display_weekly,
+        QuotaDisplayWindow::Known {
+            remaining_percent: 92,
+            reset_in_seconds: Some(576000),
+            stale: false
+        }
+    );
+    assert_eq!(model.rows[1].display_short, QuotaDisplayWindow::Unknown);
+    assert_eq!(
+        model.rows[1].display_weekly,
+        QuotaDisplayWindow::Known {
+            remaining_percent: 75,
+            reset_in_seconds: None,
+            stale: true
+        }
+    );
+    assert_eq!(model.rows[1].credit_usage_summary, "125.5 stale");
+    assert_eq!(model.header.pool.reserve, 0);
+    assert_eq!(
+        model.header.credential_notice.as_deref(),
+        Some("Credentials locked")
+    );
+}

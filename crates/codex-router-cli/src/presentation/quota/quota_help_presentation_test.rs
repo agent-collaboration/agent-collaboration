@@ -91,8 +91,8 @@ async fn quota_help_top_line_hides_inline_shortcut_labels() {
     assert!(title.contains("Help"), "{text}");
     for shortcut in ["Ctrl+F", "F4", "ctrl-r", "↑/↓ focus", "esc/q"] {
         assert!(
-            !text.contains(shortcut),
-            "visible shortcut {shortcut}: {text}"
+            !title.contains(shortcut),
+            "C9 shortcuts belong to fixed footer, not title {shortcut}: {text}"
         );
     }
 }
@@ -149,8 +149,8 @@ async fn quota_help_phone_header_keeps_title_and_help_when_pool_status_is_long()
     );
     let header = frame.lines().take(5).collect::<Vec<_>>().join("\n");
     assert!(
-        header.contains("Accounts 2") && header.contains("Usable 2") && header.contains("Stale 2"),
-        "small header keeps core counts/nonzero problems; full client count remains in contextual Help: {frame}"
+        header.contains("Pool details") && !header.contains("Stale 2"),
+        "C6 header keeps the census disclosure; full counts remain in Pool details/Help: {frame}"
     );
 }
 
@@ -185,11 +185,8 @@ async fn quota_help_inactive_filter_value_is_white_while_apply_focus_is_yellow()
         .find(|(_, line)| line.contains("OpenAI ▾"))
         .expect("selected provider");
     let offset = line.find("OpenAI").expect("provider label");
-    let column = line
-        .get(..offset)
-        .expect("UTF-8 label boundary")
-        .chars()
-        .count();
+    let column =
+        unicode_width::UnicodeWidthStr::width(line.get(..offset).expect("UTF-8 label boundary"));
     let style = canvas
         .cell(column, row)
         .expect("provider cell")
@@ -207,11 +204,8 @@ async fn quota_help_inactive_filter_value_is_white_while_apply_focus_is_yellow()
         .find(|(_, line)| line.contains("Apply") && line.contains("Cancel"))
         .expect("actions");
     let offset = line.find("Apply").expect("Apply label");
-    let column = line
-        .get(..offset)
-        .expect("UTF-8 action boundary")
-        .chars()
-        .count();
+    let column =
+        unicode_width::UnicodeWidthStr::width(line.get(..offset).expect("UTF-8 action boundary"));
     let style = canvas
         .cell(column, row)
         .expect("action cell")

@@ -193,35 +193,32 @@ async fn narrow_credit_help_scrolls_to_full_identity_and_current_counts_then_res
 
 #[tokio::test]
 async fn phone_header_preserves_named_nonzero_pool_and_data_problems() {
+    // C6 keeps operational failures visible but moves routine census to Pool details.
     for width in [32usize, 40, 48] {
+        let mut model = current_help_census_model();
+        model.header.credential_notice = Some("Credentials locked".to_owned());
+        model.selection_projection_degraded = true;
         let frame = render_quota_capture_model_at(
-            current_help_census_model(),
+            model,
             width,
             24,
             vec![provider_filter_key(KeyCode::Esc)],
         )
         .await;
-        let header = frame
-            .lines()
-            .skip(1)
-            .take_while(|line| !line.contains('┌'))
-            .map(|line| line.replace(['│', '┃'], " "))
+        let words = frame
+            .replace(['│', '┃'], " ")
+            .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        let words = header.split_whitespace().collect::<Vec<_>>().join(" ");
-        for expected in [
-            "Accounts 14",
-            "Usable 2",
-            "Reserve 3",
-            "Blocked 4",
-            "Pool unknown 5",
-            "Stale 7",
-            "Data unknown 8",
+        for fact in [
+            "Pool details",
+            "Credentials locked",
+            "Selection projection degraded",
         ] {
-            assert!(
-                words.contains(expected),
-                "current nonzero problem {expected} omitted at{width}: {header}"
-            );
+            assert!(words.contains(fact), "{frame}");
+        }
+        for routine in ["Accounts 14", "Usable 2", "Stale 7", "Data unknown 8"] {
+            assert!(!words.contains(routine), "{frame}");
         }
     }
 }

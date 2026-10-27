@@ -1,6 +1,8 @@
 //! Quota status terminal presentation.
 
+mod quota_account_groups;
 mod quota_account_options;
+mod quota_body_rendering;
 mod quota_browse_rendering;
 mod quota_detail_panel;
 mod quota_dialog_actions;
@@ -8,6 +10,7 @@ mod quota_dialog_context;
 mod quota_dialog_rendering;
 mod quota_floor_editor;
 mod quota_help_rendering;
+mod quota_pool_details;
 mod quota_provider_filter_rendering;
 mod quota_provider_filters;
 mod quota_reset_component_input;
@@ -40,7 +43,6 @@ pub(crate) use quota_floor_editor::WeeklyQuotaFloorSaver;
 pub(crate) use quota_status_entrypoint::run_quota_status_view;
 pub(crate) use quota_status_entrypoint::write_quota_status_view;
 pub(crate) use quota_status_view_model::QuotaSelectedAccountViewModel;
-pub(crate) use quota_status_view_model::QuotaStatusAccountViewModel;
 pub(crate) use quota_status_view_model::QuotaStatusViewModel;
 pub(crate) use quota_status_view_model::QuotaStatusViewModelLoader;
 pub(crate) use quota_status_view_model::ResetPaceMeterSegments;
@@ -48,6 +50,7 @@ pub(crate) use quota_status_view_model::ResetPaceState;
 pub(crate) use quota_status_view_model::ResetPaceViewModel;
 pub(crate) use quota_status_view_model::SampleConfidence;
 pub(crate) use quota_status_view_model::SampleMetadata;
+pub(crate) use quota_status_view_model::{QuotaDisplayWindow, QuotaStatusAccountViewModel};
 
 pub(crate) use quota_status_symbols::{
     QuotaAccountStatus, QuotaFreshnessCensus, QuotaHeaderFacts, QuotaPoolCensus, QuotaRowStatus,

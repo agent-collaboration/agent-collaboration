@@ -6,8 +6,8 @@ use super::quota_dialog_actions::{
 };
 use super::quota_help_rendering::{
     QuotaFooterPresentation, QuotaHeaderProps, QuotaHelpMode, QuotaScreenChromeProps,
-    quota_help_action, quota_help_key, quota_legacy_footer, render_quota_header, render_quota_help,
-    render_quota_route, render_quota_screen,
+    quota_help_action, quota_help_key, quota_legacy_footer, render_quota_browse_footer,
+    render_quota_header, render_quota_help, render_quota_route, render_quota_screen,
 };
 use codex_router_tui::DialogHost;
 use iocraft::prelude::*;
@@ -25,9 +25,11 @@ use super::quota_account_options::{
     account_options_content_height, credit_policy_choices, handle_account_options_key_event,
     open_account_options_for_account, run_account_options_commands,
 };
-use super::quota_browse_rendering::{QuotaAccountListProps, fit_line, render_account_list};
-use super::quota_detail_panel::{QuotaDetailPanelProps, render_detail_panel};
-use super::quota_dialog_rendering::{QuotaDialogViewProps, render_quota_dialog};
+use super::quota_browse_rendering::{QuotaAccountListProps, fit_line};
+use super::quota_detail_panel::QuotaDetailPanelProps;
+use super::quota_dialog_rendering::{
+    QuotaDetailsDialog, QuotaDialogViewProps, render_quota_dialog,
+};
 use super::quota_floor_editor::{
     WeeklyFloorEditorCommandPort, WeeklyFloorEditorState, WeeklyQuotaFloorSaver,
     run_weekly_floor_editor_commands, weekly_floor_editor_content_height,
@@ -72,6 +74,9 @@ pub(super) struct QuotaStatusComponentProps {
     pub(super) height: usize,
     #[cfg(test)]
     pub(super) viewport_trace: Option<super::quota_viewport_trace::QuotaViewportTrace>,
+    #[cfg(test)]
+    /// Synthetic resize tests nominate a reader; compiled PTY fixtures keep the default.
+    pub(super) terminal_width_reader: Option<fn() -> Option<usize>>,
     pub(super) reload_view_model: Option<QuotaStatusViewModelLoader>,
     pub(super) reload_interval: Duration,
     pub(super) spinner_interval: Duration,
@@ -90,12 +95,18 @@ pub(super) fn QuotaStatusComponent(
     let mut system = hooks.use_context_mut::<SystemContext>();
     let (terminal_width, terminal_height) = hooks.use_terminal_size();
     let live_terminal_width = props.width == 0;
+    #[cfg(test)]
+    let terminal_width_reader = props
+        .terminal_width_reader
+        .unwrap_or(current_terminal_width);
+    #[cfg(not(test))]
+    let terminal_width_reader = current_terminal_width;
     let live_terminal_height = props.height == 0 && live_terminal_width;
     let view_model = hooks.use_state(|| props.view_model.clone());
     let filters = hooks.use_state(QuotaFilterState::default);
     let filter_choice = hooks.use_state(codex_router_tui::SearchSelectState::default);
     let mut help_open = hooks.use_state(|| false);
-    let mut details_dialog = hooks.use_state(|| None::<codex_router_core::ids::AccountId>);
+    let mut details_dialog = hooks.use_state(|| None::<QuotaDetailsDialog>);
     let interaction_mode = props.interaction_mode;
     let weekly_floor_editing_enabled = props.weekly_floor_saver.is_some();
     let initial_focused_account_id = props
@@ -107,7 +118,7 @@ pub(super) fn QuotaStatusComponent(
         .map(|row| row.account_id.clone());
     let observed_width = hooks.use_state(|| {
         if live_terminal_width {
-            current_terminal_width()
+            terminal_width_reader()
                 .or_else(|| Some(usize::from(terminal_width)))
                 .unwrap_or(props.view_model.width)
                 .max(MIN_QUOTA_WIDTH)
@@ -318,10 +329,19 @@ pub(super) fn QuotaStatusComponent(
                     }
                     return;
                 }
+                if code == KeyCode::F(5) && interaction_mode == QuotaInteractionMode::Interactive {
+                    details_dialog.set(Some(QuotaDetailsDialog::Pool));
+                    return;
+                }
                 if (code == KeyCode::F(4) || code == KeyCode::Enter && modifiers.is_empty())
                     && interaction_mode == QuotaInteractionMode::Interactive
                 {
-                    details_dialog.set(focused_account_id.read().clone());
+                    details_dialog.set(
+                        focused_account_id
+                            .read()
+                            .clone()
+                            .map(QuotaDetailsDialog::Account),
+                    );
                     return;
                 }
                 if interaction_mode == QuotaInteractionMode::Interactive
@@ -515,7 +535,12 @@ pub(super) fn QuotaStatusComponent(
             props.spinner_interval
         },
     );
-    use_live_terminal_width(&mut hooks, live_terminal_width, observed_width);
+    use_live_terminal_width(
+        &mut hooks,
+        live_terminal_width,
+        observed_width,
+        terminal_width_reader,
+    );
     if *should_exit.read() {
         system.exit();
     }
@@ -702,92 +727,49 @@ pub(super) fn QuotaStatusComponent(
     let empty_notice = (interaction_mode == QuotaInteractionMode::Interactive
         && visible_rows.is_empty())
     .then_some("No accounts match these filters");
-    let stacked_list = if current_account_options.is_some() && visible_account_budget == 0 {
-        element! { View(height: 0) {} }.into_any()
-    } else {
-        render_account_list(QuotaAccountListProps {
-            compact_phone,
-            interactive: interaction_mode == QuotaInteractionMode::Interactive,
-            rows: &visible_rows,
-            width: content_width,
-            height: list_height,
-            focused_row_index: focused_row_index_value,
-            visible_rows: visible_account_budget,
-            focused_account_id,
-            interaction_enabled: account_pointer_interaction_enabled,
-            empty_notice,
-        })
-    };
-    let body = if sidecar {
-        let list_width = (content_width.saturating_sub(2) * 3 / 5)
-            .max(58)
-            .min(content_width.saturating_sub(44));
-        let details_width = content_width.saturating_sub(list_width + 2).max(34);
-        element! {
-            View(width: 100pct,flex_shrink:1.0_f32,min_height:0, height: if interaction_mode==QuotaInteractionMode::Static {Size::Auto}else {Size::Length(u32::try_from(body_height).unwrap_or(u32::MAX))}) {
-                #(render_account_list(QuotaAccountListProps {
-            compact_phone,
-            interactive:interaction_mode==QuotaInteractionMode::Interactive,
-                    rows: &visible_rows,
-                    width: list_width,
-                    height: list_height,
-                    focused_row_index: focused_row_index_value,
-                    visible_rows: visible_account_budget,
-                    focused_account_id,
-                    interaction_enabled: account_pointer_interaction_enabled,
-                    empty_notice,
-                }))
-                View(width: 2) { Text(content: "") }
-                #(if interaction_mode==QuotaInteractionMode::Interactive&&filter_modal_owns_input {element!(View(width:u32::try_from(details_width).unwrap_or(u32::MAX),height:u32::try_from(details_height).unwrap_or(u32::MAX))).into_any()}else{render_detail_panel(QuotaDetailPanelProps {
-                    interactive: interaction_mode == QuotaInteractionMode::Interactive,
-                    focused_details,
-                    account_options: current_account_options.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    reset_snapshot: current_reset_snapshot.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    reset_target: current_reset_target.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    weekly_floor_editor: current_weekly_floor_editor.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    weekly_floor_editor_state: weekly_floor_editor,
-                    width: details_width,
-                    height: details_height,
-                    inventory_page_start: inventory_page_start.get(),
-                    spinner_tick: spinner_tick.get(),
-                })})
-            }
-        }
-        .into_any()
-    } else if show_stacked_details {
-        element! {
-            View(width: u32::try_from(content_width).unwrap_or(u32::MAX), flex_direction: FlexDirection::Column) {
-                #(stacked_list)
-                #(render_detail_panel(QuotaDetailPanelProps {
-                    interactive: interaction_mode == QuotaInteractionMode::Interactive,
-                    focused_details,
-                    account_options: current_account_options.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    reset_snapshot: current_reset_snapshot.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    reset_target: current_reset_target.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    weekly_floor_editor: current_weekly_floor_editor.as_ref().filter(|_|interaction_mode==QuotaInteractionMode::Static),
-                    weekly_floor_editor_state: weekly_floor_editor,
-                    width: content_width,
-                    height: stacked_details_height,
-                    inventory_page_start: inventory_page_start.get(),
-                    spinner_tick: spinner_tick.get(),
-                }))
-            }
-        }
-        .into_any()
-    } else {
-        render_account_list(QuotaAccountListProps {
-            compact_phone,
-            interactive: interaction_mode == QuotaInteractionMode::Interactive,
-            rows: &visible_rows,
-            width: content_width,
-            height: list_height,
-            focused_row_index: focused_row_index_value,
-            visible_rows: visible_account_budget,
-            focused_account_id,
-            interaction_enabled: account_pointer_interaction_enabled,
-            empty_notice,
-        })
-    };
+    let body = super::quota_body_rendering::render_quota_body(
+        super::quota_body_rendering::QuotaBodyViewProps {
+            sidecar,
+            show_stacked_details,
+            filter_modal_owns_input,
+            body_height,
+            stacked_details_height,
+            hide_list: current_account_options.is_some() && visible_account_budget == 0,
+            list: QuotaAccountListProps {
+                compact_phone,
+                interactive: interaction_mode == QuotaInteractionMode::Interactive,
+                rows: &visible_rows,
+                width: content_width,
+                height: list_height,
+                focused_row_index: focused_row_index_value,
+                visible_rows: visible_account_budget,
+                focused_account_id,
+                interaction_enabled: account_pointer_interaction_enabled,
+                empty_notice,
+            },
+            panel: QuotaDetailPanelProps {
+                interactive: interaction_mode == QuotaInteractionMode::Interactive,
+                focused_details,
+                account_options: current_account_options
+                    .as_ref()
+                    .filter(|_| interaction_mode == QuotaInteractionMode::Static),
+                reset_snapshot: current_reset_snapshot
+                    .as_ref()
+                    .filter(|_| interaction_mode == QuotaInteractionMode::Static),
+                reset_target: current_reset_target
+                    .as_ref()
+                    .filter(|_| interaction_mode == QuotaInteractionMode::Static),
+                weekly_floor_editor: current_weekly_floor_editor
+                    .as_ref()
+                    .filter(|_| interaction_mode == QuotaInteractionMode::Static),
+                weekly_floor_editor_state: weekly_floor_editor,
+                width: content_width,
+                height: details_height,
+                inventory_page_start: inventory_page_start.get(),
+                spinner_tick: spinner_tick.get(),
+            },
+        },
+    );
     let footer_line = quota_legacy_footer(QuotaFooterPresentation {
         weekly_floor_editor: current_weekly_floor_editor.as_ref(),
         account_options: current_account_options.as_ref(),
@@ -850,7 +832,34 @@ pub(super) fn QuotaStatusComponent(
     };
     let confirmation_choices = quota_confirmation_choices(action_context.clone());
     let actions = quota_dialog_actions(action_context);
-    let sidecar_actions = Vec::new();
+    let sidecar_actions = if interactive
+        && !filter_modal_owns_input
+        && details_dialog.read().is_none()
+        && filter_state.draft.is_none()
+        && !help_open.get()
+    {
+        render_quota_browse_footer(
+            account_pointer_interaction_enabled
+                && !help_open.get()
+                && focused_account_id.read().is_some(),
+            weekly_floor_editing_enabled,
+            move |_| {
+                if account_pointer_interaction_enabled
+                    && !help_open.get()
+                    && filters.read().draft.is_none()
+                {
+                    details_dialog.set(
+                        focused_account_id
+                            .read()
+                            .clone()
+                            .map(QuotaDetailsDialog::Account),
+                    );
+                }
+            },
+        )
+    } else {
+        Vec::new()
+    };
     let dialog_actions = actions;
     let background = render_quota_screen(QuotaScreenChromeProps {
         width,
@@ -873,7 +882,7 @@ pub(super) fn QuotaStatusComponent(
                         && !help_open.get()
                         && filters.read().draft.is_none()
                     {
-                        details_dialog.set(focused_account_id.read().clone());
+                        details_dialog.set(Some(QuotaDetailsDialog::Pool));
                     }
                 },
             ),
@@ -898,6 +907,8 @@ pub(super) fn QuotaStatusComponent(
         QuotaHelpMode::Options
     } else if filter_state.draft.is_some() {
         QuotaHelpMode::Filters
+    } else if matches!(*details_dialog.read(), Some(QuotaDetailsDialog::Pool)) {
+        QuotaHelpMode::PoolDetails
     } else if details_dialog.read().is_some() {
         QuotaHelpMode::Details
     } else {
@@ -907,7 +918,10 @@ pub(super) fn QuotaStatusComponent(
         current_account_options.as_ref(),
         current_reset_target.as_ref(),
         current_weekly_floor_editor.as_ref(),
-        details_dialog.read().as_ref(),
+        details_dialog
+            .read()
+            .as_ref()
+            .and_then(QuotaDetailsDialog::account_id),
         &view_model.rows,
     );
     let mut dialog = render_quota_dialog(QuotaDialogViewProps {

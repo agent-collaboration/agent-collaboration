@@ -65,6 +65,12 @@ pub(super) fn render_help(
             confirmation.session_id_label().as_deref(),
         ));
     }
+    if model.source_action.pending.is_some() {
+        sections.push(ShortcutSection {
+            title: "Checking source".to_owned(),
+            entries: entries(&[("Esc, then Esc", "Close Help, then cancel source check")]),
+        });
+    }
     if model.provider_filter_draft.is_some() {
         sections.push(ShortcutSection {
             title: "Session filters".to_owned(),
@@ -211,12 +217,14 @@ pub(super) fn render_choice_surface(
     } else {
         return None;
     };
-    let dialog = if let Some(pending) = &model.source_action.pending {
-        Some(super::source_action_view::checking_dialog(
-            pending, state, height,
-        ))
+    let dialog = if model.show_help {
+        Some(render_help(model, state, height))
     } else {
-        model.show_help.then(|| render_help(model, state, height))
+        model
+            .source_action
+            .pending
+            .as_ref()
+            .map(|pending| super::source_action_view::checking_dialog(pending, state, height))
     };
     Some(element! {
         View(width: iocraft_cell_count(model.width), height: iocraft_cell_count(height)) {

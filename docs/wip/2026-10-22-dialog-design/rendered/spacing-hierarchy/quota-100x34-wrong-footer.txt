@@ -1,0 +1,34 @@
+╭──────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Quota                                                                                   [?] Help │
+│                                                                                                  │
+│ [/] Filters  All providers · Disabled shown                                                      │
+│   ACCOUNT                 QUOTA LEFT · RESET IN          WEEKLY PACE           EXTRA             │
+│ ──────────────────────────────────────────────────────────────────────────────────────────────── │
+│   personal                ██████ 92% · week · 6d 16h     Healthy pace          62.5k credits     │
+│   ◎ OpenAI · 2 clients    █████░ 83% · 5h · 2h 10m       0.89× reset pace      2 resets          │
+│   ✓ Available                                                                                    │
+│                                                                                                  │
+│                                                                                                  │
+│ ❯ ssdev                   ██████ 92% · week · 6d 16h     Healthy pace          62.5k credits     │
+│   ◎ OpenAI · 2 clients    █████░ 83% · 5h · 2h 10m       0.89× reset pace      2 resets          │
+│   ★ Preferred                                                                                    │
+│                                                                                                  │
+│                                                                                                  │
+│   ss-retail-relay-claude  ██████ 92% · week · 6d 16h     Healthy pace          62.5k credits     │
+│   ◎ OpenAI · 2 clients    █████░ 83% · 5h · 2h 10m       0.89× reset pace      2 resets          │
+│   ✓ Available                                                                                    │
+│                                                                                                  │
+│                                                                                                  │
+│   ss-retail-relay-claude  ██████ 92% · week · 6d 16h     Healthy pace          62.5k credits     │
+│   ◎ OpenAI · 2 clients    █████░ 83% · 5h · 2h 10m       0.89× reset pace      2 resets          │
+│   ✓ Available                                                                                    │
+│                                                                                                  │
+│                                                                                                  │
+│   ss-retail-relay-claude  ██████ 92% · week · 6d 16h     Healthy pace          62.5k credits     │
+│   ◎ OpenAI · 2 clients    █████░ 83% · 5h · 2h 10m       0.89× reset pace      2 resets          │
+│   ✓ Available                                                                                    │
+│                                                                                                  │
+│                                                                                                  │
+│   ss-retail-relay-claude  ██████ 92% · week · 6d 16h     Healthy pace          62.5k credits     │
+│   ◎ OpenAI · 2 clients    █████░ 83% · 5h · 2h 10m       0.89× reset pace      2 resets          │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────╯

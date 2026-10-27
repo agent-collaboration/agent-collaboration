@@ -10,6 +10,20 @@ use codex_router_core::ids::AccountId;
 use codex_router_tui::{DialogAction, DialogFrame, DialogMargins, DialogPresentation};
 use iocraft::prelude::*;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum QuotaDetailsDialog {
+    Account(AccountId),
+    Pool,
+}
+impl QuotaDetailsDialog {
+    pub(super) fn account_id(&self) -> Option<&AccountId> {
+        match self {
+            Self::Account(id) => Some(id),
+            Self::Pool => None,
+        }
+    }
+}
+
 pub(super) struct QuotaDialogViewProps<'a> {
     pub width: u16,
     pub height: u16,
@@ -17,7 +31,7 @@ pub(super) struct QuotaDialogViewProps<'a> {
     pub confirmation_choices: Option<AnyElement<'static>>,
     pub filter_state: QuotaFilterState,
     pub filter_controller: QuotaFilterController,
-    pub details_dialog: State<Option<AccountId>>,
+    pub details_dialog: State<Option<QuotaDetailsDialog>>,
     pub view_model: &'a QuotaStatusViewModel,
     pub filter_modal_owns_input: bool,
     pub help_action: Option<AnyElement<'static>>,
@@ -50,7 +64,37 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
         account_options_state,
         mut panel,
     } = props;
-    let presentation = DialogPresentation::default();
+    if matches!(
+        details_dialog.read().as_ref(),
+        Some(QuotaDetailsDialog::Pool)
+    ) && !filter_modal_owns_input
+    {
+        return Some(super::quota_pool_details::render_pool_details(
+            width,
+            height,
+            &view_model.header,
+            view_model.selection_projection_degraded,
+            details_dialog,
+        ));
+    }
+    let presentation = if let Some(editor) = panel.weekly_floor_editor.filter(|_| height >= 18) {
+        DialogPresentation::Sized {
+            width: codex_router_tui::DialogAxisSize::Content { maximum: Some(68) },
+            // Status adds one row and one separator to the editing form.
+            height: codex_router_tui::DialogAxisSize::cells(
+                if matches!(
+                    editor.phase,
+                    super::quota_floor_editor::WeeklyFloorEditorPhase::Editing
+                ) {
+                    14
+                } else {
+                    16
+                },
+            ),
+        }
+    } else {
+        DialogPresentation::default()
+    };
     let margins = DialogMargins {
         top: 1,
         right: 2,
@@ -74,7 +118,11 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
     if details_dialog.read().is_none() && !filter_modal_owns_input {
         return None;
     }
-    if let Some(identity) = details_dialog.read().as_ref() {
+    if let Some(identity) = details_dialog
+        .read()
+        .as_ref()
+        .and_then(QuotaDetailsDialog::account_id)
+    {
         panel.focused_details = view_model
             .rows
             .iter()
@@ -145,6 +193,7 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
                 editor,
                 panel.width,
                 panel.weekly_floor_editor_state,
+                u16::from(height >= 18),
             ),
         )
     } else if let (Some(snapshot), Some(target)) = (panel.reset_snapshot, panel.reset_target) {
@@ -192,6 +241,7 @@ pub(super) fn render_quota_dialog(props: QuotaDialogViewProps<'_>) -> Option<Any
     };
     Some(element! {
         DialogFrame(width,height,keyboard_owner:codex_router_tui::DialogKeyboardOwner::Caller,title,presentation,margins,help_action,
+            padding:panel.weekly_floor_editor.filter(|_| height >= 18).map(|_| 1u16),
             context:identity.map(|identity|vec![identity.render(usize::from(frame_width.saturating_sub(4)))]).unwrap_or_default(),
             scroll_keys:if panel.account_options.and_then(|options|options.editor.as_ref()).is_some_and(|editor|editor.choice.is_open()) {codex_router_tui::DialogScrollKeys::Disabled}else if filter_modal_owns_input {codex_router_tui::DialogScrollKeys::Arrows}else {codex_router_tui::DialogScrollKeys::Navigation},
             actions:if filter_modal_owns_input {

@@ -326,7 +326,11 @@ async fn assert_no_match_action_at(surface: ChoiceSurface, width: usize, height:
             .text_style()
             .unwrap()
             .color,
-        Some(Color::DarkGrey),
+        Some(Color::Rgb {
+            r: 166,
+            g: 175,
+            b: 189
+        }),
         "unavailable action must be visibly disabled: {frame}"
     );
     let modal = dialog_text(&frame, dialog_bounds(&frame, surface.title()));
@@ -401,8 +405,8 @@ async fn owner_c8_expanded_fork_choices_stay_in_the_shared_value_column() {
                             Some(unicode_width::UnicodeWidthStr::width(
                                 option.get(..option.find("This machine").unwrap()).unwrap()
                             )),
-                            closed_column,
-                            "expanded values retain shared column at {width}: {dialog}"
+                            closed_column.map(|column| column + 4),
+                            "C7 expanded choices nest below the field at {width}: {dialog}"
                         );
                         assert_eq!(
                             dialog.matches("Destination").count(),

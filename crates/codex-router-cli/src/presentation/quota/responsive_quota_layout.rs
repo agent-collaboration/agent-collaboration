@@ -328,6 +328,7 @@ pub(super) fn use_live_terminal_width(
     hooks: &mut Hooks,
     enabled: bool,
     mut observed_width: State<usize>,
+    read_terminal_width: fn() -> Option<usize>,
 ) {
     hooks.use_future(async move {
         if !enabled {
@@ -338,7 +339,7 @@ pub(super) fn use_live_terminal_width(
         loop {
             interval.tick().await;
             let mut width = observed_width.get();
-            if apply_live_terminal_width_sample(&mut width, current_terminal_width()) {
+            if apply_live_terminal_width_sample(&mut width, read_terminal_width()) {
                 observed_width.set(width);
             }
         }

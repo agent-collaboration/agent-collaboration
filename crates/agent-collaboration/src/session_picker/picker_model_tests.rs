@@ -376,18 +376,29 @@ fn unavailable_runtime_is_explained_even_when_every_row_was_already_unknown() {
 
 #[test]
 fn sessions_picker_help_is_compact_by_default_and_expands_on_demand() {
-    let mut model = SessionsPickerModel::new(picker_request(), 120);
+    let mut request = picker_request();
+    request.root = crate::presentation::session_picker::picker_request::SessionsPickerRoot::Any;
+    request.source = crate::sessions::SessionsSource::All;
+    let mut model = SessionsPickerModel::new(request, 120);
+    let identity = model.visible_record_at(1).unwrap().identity.clone();
+    assert!(model.focus_visible_identity_in_window(&identity, Some(1)));
+    assert_eq!(model.focused_window_start(2), 1);
 
     let compact = model.render_snapshot();
     assert!(compact.contains("ctrl-/ Help"));
     assert!(!compact.contains("ctrl-r refresh"));
 
     model.handle_key(SessionsPickerKey::ToggleHelp);
+    assert_eq!(model.focused_window_start(2), 1);
+    assert_eq!(model.focused_identity(), Some(&identity));
     let expanded = model.render_snapshot();
     assert!(expanded.contains("Search: id:<id> | b:<branch> | repo:<name>"));
     assert!(expanded.contains("ctrl-t view"));
     assert!(expanded.contains("ctrl-r refresh"));
     assert!(expanded.contains("F1 close help"));
+    model.handle_key(SessionsPickerKey::ToggleHelp);
+    assert_eq!(model.focused_window_start(2), 1);
+    assert_eq!(model.focused_identity(), Some(&identity));
 }
 
 #[test]

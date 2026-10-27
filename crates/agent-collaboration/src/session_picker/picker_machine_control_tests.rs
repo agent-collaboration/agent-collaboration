@@ -422,7 +422,19 @@ async fn named_new_uses_configured_remote_cwd_and_cannot_create_before_route_qua
                 } else if phase == 2
                     && text.contains("Machine:")
                     && text.contains("/remote/only/project")
-                    && text.contains("no session created")
+                    && {
+                        let body = dialog_text(&text, dialog_bounds(&text, "New session"));
+                        let lines = body
+                            .lines()
+                            .map(|line| line.trim().trim_end_matches(['│', '┃']).trim())
+                            .collect::<Vec<_>>()
+                            .join(" ");
+                        lines
+                            .split_whitespace()
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                            .contains("no session created")
+                    }
                 {
                     for event in [
                         key(KeyCode::Down),

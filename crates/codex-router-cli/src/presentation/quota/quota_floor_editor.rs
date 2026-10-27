@@ -265,7 +265,7 @@ pub(super) fn render_weekly_floor_editor(
     height: usize,
     state: State<Option<WeeklyFloorEditorState>>,
 ) -> AnyElement<'static> {
-    let content = render_weekly_floor_editor_content(editor, width.saturating_sub(4), state);
+    let content = render_weekly_floor_editor_content(editor, width.saturating_sub(4), state, 0);
     element! {View(width:u32::try_from(width).unwrap_or(u32::MAX),height:u32::try_from(height).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {
         UiHeading(content:"Weekly floor".to_owned(),level:UiHeadingLevel::Section)
         codex_router_tui::FormField(label:"Account".to_owned(),label_width:10u16) {Text(content:editor.account_label.clone(),color:Color::White)}
@@ -277,6 +277,7 @@ pub(super) fn render_weekly_floor_editor_content(
     editor: &WeeklyFloorEditorState,
     width: usize,
     mut state: State<Option<WeeklyFloorEditorState>>,
+    section_gap: u16,
 ) -> AnyElement<'static> {
     let status = match editor.phase {
         WeeklyFloorEditorPhase::Editing => None,
@@ -294,8 +295,9 @@ pub(super) fn render_weekly_floor_editor_content(
     };
     let decrease_target = editor.account_id.clone();
     let increase_target = editor.account_id.clone();
+    let context_margin = if status.is_some() { 0 } else { section_gap };
     element! {
-        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:section_gap,margin_top:context_margin) {
             #(status.map(|(message,color)|element!(Text(content:message,color))))
             codex_router_tui::FormField(label:"Current".to_owned(),label_width:10u16) {Text(content:current,color:Color::White)}
             codex_router_tui::FormField(label:"Floor".to_owned(),label_width:10u16,has_focus:true) {

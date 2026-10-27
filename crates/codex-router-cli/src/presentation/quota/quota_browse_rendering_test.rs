@@ -217,12 +217,15 @@ async fn quota_pool_headers_survive_preference_focus_and_scroll_changes() {
                 .find(|line| line.contains("Quota status"))
                 .unwrap_or_else(|| panic!("quota title should render:\n{frame}"));
             assert!(title_line.contains("Clients 12"), "{frame}");
-            assert!(title_line.contains(freshness_summary), "{frame}");
+            assert!(
+                !title_line.contains(freshness_summary),
+                "C6 routine census disclosed: {frame}"
+            );
             let route_line = frame
                 .lines()
-                .find(|line| line.contains("Pool-wide: responses") && line.contains("degraded"))
-                .unwrap_or_else(|| panic!("pool route summary should render:\n{frame}"));
-            assert!(route_line.contains(route_summary), "{frame}");
+                .find(|line| line.contains("Selection projection degraded"))
+                .unwrap();
+            assert!(!frame.contains("Pool-wide:"), "C6 quiet header: {frame}");
             observed_headers.push((route_line.trim().to_owned(), title_line.trim().to_owned()));
         }
 
@@ -312,7 +315,7 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
                     let (row, line) = text
                         .lines()
                         .enumerate()
-                        .find(|(_, line)| line.contains("beta") && line.contains("available"))
+                        .find(|(_, line)| line.contains("beta"))
                         .expect("visible account row");
                     let column = unicode_width::UnicodeWidthStr::width(
                         line.get(..line.find("beta").unwrap())
@@ -453,8 +456,8 @@ async fn quota_status_reloads_view_model_on_timer() {
         "quota status should render the reloaded route line: {frames:?}"
     );
     assert!(
-        frames.iter().any(|frame| frame.contains("Stale 1")),
-        "quota status title should render reloaded report-wide stale count: {frames:?}"
+        frames.iter().any(|frame| frame.contains("beta")),
+        "C6 routine stale census is disclosed; reloaded selected identity remains visible: {frames:?}"
     );
 }
 
@@ -558,6 +561,16 @@ async fn quota_status_renderer_uses_reset_pace_fields_without_parsing_strings() 
             credit_usage_summary: "unknown".to_owned(),
             credit_usage: crate::quota::CreditUsageStatus::default(),
             reason: "safest quota".to_owned(),
+            display_weekly: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                remaining_percent: 83,
+                reset_in_seconds: Some(604800),
+                stale: false,
+            },
+            display_short: super::quota_status_view_model::QuotaDisplayWindow::Known {
+                remaining_percent: 99,
+                reset_in_seconds: Some(18000),
+                stale: false,
+            },
             weekly_window: "█████ 83%".to_owned(),
             short_window: "█████ 99%".to_owned(),
             burn_meter: "legacy-meter-sentinel".to_owned(),
