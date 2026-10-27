@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Production Host startup discovers enrollment; only native/model traffic is a fixture.
 #![deny(clippy::too_many_lines)]
 use board_central_test_support::TestCentral;

@@ -28,18 +28,18 @@ fn weekly_floor_stepper_clamps_to_zero_and_fifteen() {
 #[test]
 fn floor_editor_preserves_component_owned_ctrl_c_and_ctrl_d_exit_keys() {
     assert!(forced_quota_exit_key(
-        &KeyCode::Char('c'),
+        KeyCode::Char('c'),
         KeyModifiers::CONTROL
     ));
     assert!(forced_quota_exit_key(
-        &KeyCode::Char('d'),
+        KeyCode::Char('d'),
         KeyModifiers::CONTROL
     ));
     assert!(!forced_quota_exit_key(
-        &KeyCode::Char('e'),
+        KeyCode::Char('e'),
         KeyModifiers::CONTROL
     ));
-    assert!(!forced_quota_exit_key(&KeyCode::Esc, KeyModifiers::NONE));
+    assert!(!forced_quota_exit_key(KeyCode::Esc, KeyModifiers::NONE));
 }
 
 #[test]
@@ -342,8 +342,8 @@ async fn real_iocraft_arrow_button_handles_mouse_click() {
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),
-                        column as u16,
-                        row as u16,
+                        u16::try_from(column).unwrap_or(u16::MAX),
+                        u16::try_from(row).unwrap_or(u16::MAX),
                     )))
                     .unwrap();
                 clicked = true;

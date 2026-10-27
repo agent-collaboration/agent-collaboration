@@ -1,16 +1,7 @@
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 mod native_registry;
 use collaboration_service as mail_service;
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
 #[expect(
     dead_code,
@@ -19,15 +10,15 @@ use collaboration_service as mail_service;
 mod native_mail_owner;
 use collaboration_client::CollaborationClient;
 use collaboration_client::board::*;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
-use collaboration_contracts::MachineIdentity;
-use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_contracts::SessionMessageDelivery;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
-use collaboration_contracts::TargetPresenceProbe;
 use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
 use serde_json::Value;
 use serde_json::json;

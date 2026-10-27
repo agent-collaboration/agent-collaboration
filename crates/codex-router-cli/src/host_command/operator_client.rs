@@ -46,7 +46,7 @@ pub enum OperatorClientError {
 }
 
 /// Runs one bounded operator request/response exchange over the private socket.
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) async fn send_operator_request(
     socket: &Path,
     request: OperatorRequest,

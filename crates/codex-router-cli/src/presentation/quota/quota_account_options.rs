@@ -416,19 +416,19 @@ pub(super) fn account_options_key_action(
             return AccountOptionsKeyAction::Close;
         }
         if reset_phase != crate::quota_reset::reset_session_supervisor::WorkflowPhase::Browse
-            && super::quota_reset_component_input::forced_quota_exit_key(&code, modifiers)
+            && super::quota_reset_component_input::forced_quota_exit_key(code, modifiers)
         {
             return AccountOptionsKeyAction::ResetWorkflow;
         }
         if reset_phase == crate::quota_reset::reset_session_supervisor::WorkflowPhase::Browse
             && (code == KeyCode::Char('q')
-                || super::quota_reset_component_input::forced_quota_exit_key(&code, modifiers))
+                || super::quota_reset_component_input::forced_quota_exit_key(code, modifiers))
         {
             return AccountOptionsKeyAction::ExitPending;
         }
         return AccountOptionsKeyAction::Ignore;
     }
-    if super::quota_reset_component_input::forced_quota_exit_key(&code, modifiers) {
+    if super::quota_reset_component_input::forced_quota_exit_key(code, modifiers) {
         return if reset_phase == crate::quota_reset::reset_session_supervisor::WorkflowPhase::Browse
         {
             AccountOptionsKeyAction::ExitPending

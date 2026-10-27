@@ -1,4 +1,3 @@
-#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{EndpointAvailability, ObservationTimestamp};

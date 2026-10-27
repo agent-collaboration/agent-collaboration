@@ -1,11 +1,3 @@
-#![cfg_attr(
-    test,
-    expect(
-        clippy::allow_attributes,
-        clippy::allow_attributes_without_reason,
-        reason = "lint pass follows the crate split"
-    )
-)]
 mod import_access;
 mod import_command;
 use clap::Parser;

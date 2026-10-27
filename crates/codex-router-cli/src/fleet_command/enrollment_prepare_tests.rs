@@ -1,5 +1,8 @@
 //! Fixed vectors and rejected local inputs keep protocol hashing independent of HTTP.
-#![allow(clippy::panic_in_result_fn)] // Assertions carry literal protocol expectations.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)] // Assertions carry literal protocol expectations.
 #![deny(clippy::too_many_lines)]
 use super::{
     FleetCommandError,

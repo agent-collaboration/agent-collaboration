@@ -2,11 +2,7 @@
 //! `overloaded` failure to retry later: a board command in the board's typed refusal, and an
 //! untyped command as the retryable overload, never as a connection failure or protocol
 //! violation.
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 #[expect(
     dead_code,

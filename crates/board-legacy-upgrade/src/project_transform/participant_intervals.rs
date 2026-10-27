@@ -1,5 +1,9 @@
 //! Unknown roles remain drafts until closure; they never become open Participants.
-use super::*;
+use super::{
+    ActivityKind, FeedCursor, Identity, ImplementerHolder, LegacyActivity, OrchestratorHolder,
+    Participant, ParticipantClosedReason, ParticipantNote, ParticipantProps, ParticipantRole,
+    ProjectBuilder, RecordedParticipantRole, Thread, ThreadId, UpgradeError, invalid,
+};
 
 #[derive(Clone)]
 pub(super) enum PendingParticipant {

@@ -1,7 +1,3 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Resolve dependency kinds so SDK ownership holds across indirect crate paths.
 #![expect(
     clippy::panic_in_result_fn,

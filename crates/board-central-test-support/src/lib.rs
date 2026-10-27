@@ -1,12 +1,3 @@
-#![cfg_attr(
-    test,
-    expect(
-        clippy::allow_attributes,
-        clippy::allow_attributes_without_reason,
-        clippy::unused_async,
-        reason = "lint pass follows the crate split"
-    )
-)]
 //! A real Access-verified central and machine session for board-side tests.
 //! This crate is consumed only by dev-dependencies; it owns no board policy.
 use board_fleet_sync::BoardSessionInputs;

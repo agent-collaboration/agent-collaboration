@@ -1,5 +1,9 @@
 //! Admit only exact known SQLx prefixes, then read the retired file without mutation.
-use crate::{MessageActivityMap, message_copy::MessageUpgradeError, message_rows::*};
+use crate::{
+    MessageActivityMap,
+    message_copy::MessageUpgradeError,
+    message_rows::{MessageRows, invalid},
+};
 use rusqlite::{Connection, OpenFlags};
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha384};

@@ -1,9 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Decision 1050: the old canonical expiry key carries a retired board scope.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 mod message_support;
 mod support;
 use board_legacy_upgrade::{MessageUpgrade, MessageUpgradeError};

@@ -404,7 +404,7 @@ pub(super) fn terminal_svg(title: &str, text: &str) -> String {
             let (x, rect_width) = if selected_background {
                 (
                     34,
-                    ((width.saturating_sub(4) as f64) * 8.4).round() as usize,
+                    width.saturating_sub(4).saturating_mul(42).saturating_add(2) / 5,
                 )
             } else {
                 (8, pixel_width.saturating_sub(16))

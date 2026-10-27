@@ -1,4 +1,14 @@
 use super::*;
+#[cfg(test)]
+use crate::quota::quota_reset_pace_projection::{
+    reset_pace_meter_text, reset_pace_view_model_from_multiple_basis_points,
+};
+#[cfg(test)]
+use crate::quota::quota_route_selection_projection::display_quota_run_rate_estimate;
+#[cfg(test)]
+use crate::quota::quota_status_formatting::{format_run_rate_estimate, plain_reset_pace_summary};
+#[cfg(test)]
+use crate::quota::quota_status_json::JsonRunRateEstimate;
 
 #[test]
 fn quota_status_formats_subpercent_burn_with_runout() {

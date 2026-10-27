@@ -17,16 +17,6 @@ use collaboration_protocol::{
 };
 use collaboration_service::ApplicationFixture;
 
-
-
-
-
-
-
-
-
-
-
 use fleet_sync_protocol::DeliveryStatus;
 use runtime_primitives::SystemClock;
 use serde_json::json;

@@ -29,7 +29,7 @@ impl CredentialRefreshClient for RecordingUpkeepRefreshClient {
         );
         self.observed_calls
             .send(call)
-            .expect("provider call should be observed");
+            .unwrap_or_else(|_| panic!("provider call should be observed"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             format!("replacement-access-{call}"),
             Some("rotated-refresh-canary".to_owned()),
@@ -160,7 +160,7 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
         );
         self.observed_account_ids
             .send(account_id.clone())
-            .expect("Claude refresh call should be observed");
+            .unwrap_or_else(|_| panic!("Claude refresh call should be observed"));
         CredentialBundle::new_claude(
             SecretString::new(format!("claude-access-{}", account_id.as_str())),
             SecretString::new(format!("claude-rotated-{}", account_id.as_str())),
@@ -295,12 +295,12 @@ impl CredentialRefreshClient for HeldUpkeepRefreshClient {
     {
         self.entered_sender
             .send(())
-            .expect("provider entry should report");
+            .unwrap_or_else(|_| panic!("provider entry should report"));
         self.release_receiver
             .lock()
-            .expect("release lock")
+            .unwrap_or_else(|_| panic!("release lock"))
             .recv_timeout(Duration::from_secs(2))
-            .expect("provider should be released");
+            .unwrap_or_else(|_| panic!("provider should be released"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             "replacement-access-canary",
             Some("replacement-refresh-canary".to_owned()),
@@ -389,12 +389,12 @@ impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
     {
         self.entered_sender
             .send(account_id.clone())
-            .expect("provider entry should report account");
+            .unwrap_or_else(|_| panic!("provider entry should report account"));
         self.release_receiver
             .lock()
-            .expect("release lock")
+            .unwrap_or_else(|_| panic!("release lock"))
             .recv_timeout(Duration::from_secs(3))
-            .expect("claimed provider use should be released");
+            .unwrap_or_else(|_| panic!("claimed provider use should be released"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             "replacement-access-canary",
             Some("replacement-refresh-canary".to_owned()),

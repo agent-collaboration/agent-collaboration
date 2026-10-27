@@ -1,7 +1,3 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Real ACP decoding/projection retains metadata without making it Codex prose.
 #![expect(
     clippy::expect_used,

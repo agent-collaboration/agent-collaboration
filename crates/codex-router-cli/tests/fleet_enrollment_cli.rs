@@ -1,9 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Exercise the installed command vocabulary through the actual CLI executable.
-#![allow(clippy::panic_in_result_fn)] // Assertions prove the public result; fixture I/O remains fallible.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)] // Assertions prove the public result; fixture I/O remains fallible.
 #![deny(clippy::too_many_lines)]
 use std::{
     error::Error,

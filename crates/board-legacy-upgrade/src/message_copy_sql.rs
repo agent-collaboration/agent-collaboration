@@ -1,5 +1,8 @@
 //! Checked SQL borrows A's one writer; conflicts never overwrite destination data.
-use crate::{message_copy::MessageCopyHost, message_rows::*};
+use crate::{
+    message_copy::MessageCopyHost,
+    message_rows::{IntentCursorRow, IntentRow, LegacyPushRow, MessageRows, SubscriptionRow},
+};
 use durable_steps::{StoreError, storage::TransactionScope, turso_store::TursoScope};
 
 pub(crate) async fn insert(

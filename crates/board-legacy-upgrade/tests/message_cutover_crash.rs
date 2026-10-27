@@ -1,9 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! A process can disappear after copy commit without authorizing the source drop.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 mod message_support;
 mod support;
 use board_legacy_upgrade::MessageUpgrade;

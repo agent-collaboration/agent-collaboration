@@ -1,9 +1,7 @@
 #![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
+    clippy::panic,
+    reason = "Fixed test inputs must fail the test when invalid; fixture errors propagate."
 )]
-#![allow(clippy::panic)]
 
 #[cfg(not(feature = "keychain-test-support"))]
 compile_error!("proxy overload process tests require keychain-test-support");

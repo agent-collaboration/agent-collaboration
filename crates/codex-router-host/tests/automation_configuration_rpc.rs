@@ -1,4 +1,3 @@
-#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! Host configuration is changed through the real SDK, then verified after Host restart.
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_client::CollaborationClient;

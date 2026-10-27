@@ -127,7 +127,10 @@ mod quota_refresh_service;
 pub(crate) use quota_background_refresh_worker::*;
 pub use quota_command_dispatch::*;
 pub(crate) use quota_refresh_command::*;
-use quota_refresh_history::*;
+use quota_refresh_history::{
+    append_failure_quota_history_observations, append_success_quota_history_observation,
+    failure_quota_history_observations, purge_old_quota_history, success_quota_history_observation,
+};
 pub(crate) use quota_refresh_provider::*;
 pub(crate) use quota_refresh_service::*;
 
@@ -142,16 +145,49 @@ mod quota_status_metrics;
 mod quota_status_projection;
 mod quota_status_view_model;
 
-use quota_command_options::*;
-use quota_reset_pace_projection::*;
-use quota_route_selection_projection::*;
-use quota_status_command::*;
-use quota_status_formatting::*;
-use quota_status_json::*;
-use quota_status_loader::*;
-use quota_status_metrics::*;
-use quota_status_projection::*;
-use quota_status_view_model::*;
+use quota_command_options::{QuotaRefreshOptions, QuotaStatusOptions};
+use quota_reset_pace_projection::{
+    quota_connection_rate_summary, quota_display_pace_snapshot, quota_pace_snapshot,
+    quota_pace_summary, quota_safe_pace_meter, quota_total_rate_summary,
+    reset_pace_view_model_from_snapshot, sample_metadata_from_display_window,
+    sample_metadata_from_display_windows, sample_metadata_from_observed_windows,
+    short_reset_pace_view_model_from_snapshot,
+};
+use quota_route_selection_projection::{
+    attach_history_estimates_to_display_windows, burn_down_input_from_display_windows,
+    display_windows_from_selector_input,
+};
+use quota_status_command::{
+    effective_human_quota_format, render_interactive_quota_status, render_quota_status,
+};
+use quota_status_formatting::{
+    QuotaTableStyle, active_clients_label, format_active_clients, format_burn_cell,
+    format_burn_rate_basis_points_per_hour, format_duration, format_next_use,
+    format_next_use_from_routing_reason, format_pace_cell, format_refresh_status,
+    format_relative_time, format_reset_credits, format_routing_cell, format_routing_reason,
+    format_window_cell, quota_account_list_window_summary, quota_account_status,
+    quota_window_label, quota_window_status_from_selector_status, quota_window_visual_summary,
+    reason_summary, reset_credits_account_list_label, routing_reason_is_preferred,
+    run_rate_confidence_label, write_quota_json, write_quota_plain, write_quota_table_with_style,
+};
+use quota_status_json::{
+    JsonQuotaStatusReport, oauth_maintenance_state, routing_reason_json, selected_pool_json,
+    window_display_note, window_display_note_with_reset, window_pressure_and_surplus,
+};
+use quota_status_loader::{
+    QuotaCredentialResources, load_quota_status_report_async,
+    load_quota_status_report_with_availability_async,
+};
+use quota_status_metrics::{
+    emit_quota_status_metrics, record_claude_usage_auth_rejected_after_renewal,
+    record_quota_refresh_metric, telemetry_hash,
+};
+use quota_status_projection::quota_status_view_model;
+use quota_status_view_model::{
+    ActiveClientMirrorLoad, ActiveClientMirrorStatus, CredentialStoreAvailability,
+    DisplayQuotaWindow, QuotaPaceSnapshot, QuotaStatusAccountInput, QuotaStatusReport,
+    QuotaStatusRow, SelectionProjectionSource,
+};
 
 pub(crate) use quota_status_command::interactive_credit_usage_refresher;
 

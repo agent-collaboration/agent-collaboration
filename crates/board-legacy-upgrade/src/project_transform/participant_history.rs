@@ -1,5 +1,8 @@
 //! Reconcile only the latest retained interval with the legacy current-row metadata.
-use super::*;
+use super::{
+    Participant, ParticipantProps, PendingParticipant, ProjectBuilder, RecordedParticipantRole,
+    UpgradeError, invalid,
+};
 
 impl ProjectBuilder<'_> {
     pub(super) fn finish_participants(&mut self) -> Result<(), UpgradeError> {

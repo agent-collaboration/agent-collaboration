@@ -170,6 +170,10 @@ fn central_signing_and_handoff_secrets_use_encryption_and_refuse_unmarked_plaint
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 fn fleet_key_validation_and_generic_dispatch_fail_closed_for_every_backend() -> TestResult {
     use crate::fleet_secret_key::{FleetSecretKey, FleetSecretKind};
     let root = tempfile::tempdir()?;

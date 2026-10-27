@@ -20,7 +20,10 @@ const REPLACEMENT_RECOVERY_ACTION: &str =
 const APP_SERVER_RECOVERY_ACTION: &str =
     "inspect host status with the same --router-root and --port before retrying app-server restart";
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 pub(super) async fn complete_update_result(
     coordination_paths: &HostCoordinationPaths,
     frames: Vec<OperatorFrame>,
@@ -173,7 +176,10 @@ impl HostRestartResult {
     }
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 pub(super) async fn complete_restart_result(
     coordination_paths: &HostCoordinationPaths,
     frames: Vec<OperatorFrame>,
@@ -203,7 +209,6 @@ where
     .await
 }
 
-#[allow(dead_code)]
 async fn complete_restart_result_with_deadline(
     coordination_paths: &HostCoordinationPaths,
     frames: Vec<OperatorFrame>,

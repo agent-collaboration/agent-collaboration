@@ -410,7 +410,7 @@ async fn quota_provider_filters_mouse_open_select_toggle_and_apply_match_keyboar
                     .expect("literal match begins at a UTF-8 boundary")
                     .chars()
                     .count();
-                sender.send(click(column as u16, row as u16)).unwrap();
+                sender.send(click(u16::try_from(column).unwrap_or(u16::MAX), u16::try_from(row).unwrap_or(u16::MAX))).unwrap();
                 phase += 1;
             } else if phase == 6
                 && !frame.contains("Account provider")

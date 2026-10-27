@@ -35,9 +35,11 @@ pub(super) fn compact_credit_balance(balance: &CreditBalance) -> String {
         return "0".to_owned();
     }
     let mut exponent = if integer != "0" {
-        integer.len() as i64 - 1
+        i64::try_from(integer.len()).unwrap_or(i64::MAX) - 1
     } else {
-        -((fraction.len() - fraction.trim_start_matches('0').len()) as i64) - 1
+        -(i64::try_from(fraction.len() - fraction.trim_start_matches('0').len())
+            .unwrap_or(i64::MAX))
+            - 1
     };
     // Four meaningful digits, rounded in base ten. No binary floating point.
     let mut digits = significant.bytes().take(4).collect::<Vec<_>>();
@@ -67,19 +69,22 @@ pub(super) fn compact_credit_balance(balance: &CreditBalance) -> String {
     let mut output = String::new();
     if decimal_position <= 0 {
         output.push_str("0.");
-        output.extend(std::iter::repeat_n('0', (-decimal_position) as usize));
+        output.extend(std::iter::repeat_n(
+            '0',
+            usize::try_from(decimal_position.unsigned_abs()).unwrap_or(usize::MAX),
+        ));
         output.extend(digits.iter().map(|digit| char::from(*digit)));
     } else {
         for (index, digit) in digits.iter().enumerate() {
-            if index == decimal_position as usize {
+            if index == usize::try_from(decimal_position).unwrap_or(usize::MAX) {
                 output.push('.');
             }
             output.push(char::from(*digit));
         }
-        if decimal_position as usize > digits.len() {
+        if usize::try_from(decimal_position).unwrap_or(usize::MAX) > digits.len() {
             output.extend(std::iter::repeat_n(
                 '0',
-                decimal_position as usize - digits.len(),
+                usize::try_from(decimal_position).unwrap_or(usize::MAX) - digits.len(),
             ));
         }
     }

@@ -1,7 +1,10 @@
 use codex_router_tui::UseDialogInteraction;
 use iocraft::prelude::*;
 
-use super::quota_status_view_model::*;
+use super::quota_status_view_model::{
+    QuotaSelectedAccountViewModel, QuotaStatusAccountViewModel, ResetPaceState, ResetPaceViewModel,
+    SampleConfidence, SampleMetadata,
+};
 use super::responsive_quota_layout::visible_account_window_start;
 
 const DETAIL_LABEL_WIDTH: usize = 10;
@@ -40,7 +43,7 @@ pub(super) fn render_account_list(props: QuotaAccountListProps<'_>) -> AnyElemen
     if rows.is_empty()
         && let Some(notice) = empty_notice
     {
-        return element!(View(width: width as u32, height: height as u32) { Text(content: notice.to_owned(), color: Color::Grey) }).into_any();
+        return element!(View(width: u32::try_from(width).unwrap_or(u32::MAX), height: u32::try_from(height).unwrap_or(u32::MAX)) { Text(content: notice.to_owned(), color: Color::Grey) }).into_any();
     }
     let window_start = visible_account_window_start(focused_row_index, rows.len(), visible_rows);
     let compact_overflow_markers = super::responsive_quota_layout::quota_account_list_height(
@@ -90,7 +93,7 @@ pub(super) fn render_account_list(props: QuotaAccountListProps<'_>) -> AnyElemen
 
     element! {
         View(
-            width: width as u32,
+            width: u32::try_from(width).unwrap_or(u32::MAX),
             flex_direction: FlexDirection::Column,
             border_style: BorderStyle::Single,
             border_color: Color::DarkGrey,
@@ -133,14 +136,14 @@ fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyEleme
             click_handler:move |_|if let Some(mut state)=state {state.set(Some(account_id.clone()));})}.into_any()
     });
     element! {
-        View(width:props.width as u32,max_height:props.height as u32,min_height:0,flex_shrink:1.0_f32,
-            border_style:if props.compact_phone {BorderStyle::None}else {BorderStyle::Single},border_color:Color::DarkGrey,padding_left:row_padding as u32,padding_right:row_padding as u32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
-            View(padding_left:row_padding as u32,padding_right:(row_padding+1) as u32,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(props.width).unwrap_or(u32::MAX),max_height:u32::try_from(props.height).unwrap_or(u32::MAX),min_height:0,flex_shrink:1.0_f32,
+            border_style:if props.compact_phone {BorderStyle::None}else {BorderStyle::Single},border_color:Color::DarkGrey,padding_left:u32::try_from(row_padding).unwrap_or(u32::MAX),padding_right:u32::try_from(row_padding).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
+            View(padding_left:u32::try_from(row_padding).unwrap_or(u32::MAX),padding_right:u32::try_from(row_padding+1).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {
                 codex_router_tui::SelectableRow {
                     View(column_gap:1) {
-                        View(width:account_width as u32) {Text(content:"Account",color:Color::White)}
-                        View(width:status_width as u32) {Text(content:"Status",color:Color::White)}
-                        View(width:quota_width as u32) {Text(content:"Quota",color:Color::White)}
+                        View(width:u32::try_from(account_width).unwrap_or(u32::MAX)) {Text(content:"Account",color:Color::White)}
+                        View(width:u32::try_from(status_width).unwrap_or(u32::MAX)) {Text(content:"Status",color:Color::White)}
+                        View(width:u32::try_from(quota_width).unwrap_or(u32::MAX)) {Text(content:"Quota",color:Color::White)}
                     }
                 }
             }
@@ -239,20 +242,20 @@ pub(super) fn render_account_row(
         codex_router_core::provider::Provider::Claude => "◆ Claude",
     };
     element! {
-        View(width:width as u32,padding_left:row_padding as u32,padding_right:row_padding as u32,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),padding_left:u32::try_from(row_padding).unwrap_or(u32::MAX),padding_right:u32::try_from(row_padding).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {
             codex_router_tui::SelectableRow(selected:focused) {
                 View(column_gap:1,flex_shrink:0.0_f32) {
-                    View(width:account_width as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                    View(width:u32::try_from(account_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                         Text(content:row.account.clone(),color:if focused {Color::Yellow}else {Color::White},weight:Weight::Bold)
                         Text(content:provider,color:Color::Grey)
                     }
-                    View(width:status_width as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                    View(width:u32::try_from(status_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                         Text(content:if mode==super::quota_provider_filters::QuotaInteractionMode::Static {row.status.label().to_owned()}else {row.status.compact(status_width)},color:Color::White)
                         Text(content:row.active_clients.clone(),color:Color::Grey)
                         Text(content:row.reset_credits.clone(),color:Color::Grey)
                         Text(content:format!("Credits {}",row.credit_usage_summary),color:Color::Grey)
                     }
-                    View(width:quota_width as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                    View(width:u32::try_from(quota_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                         Text(content:row.reason.clone(),color:Color::Grey)
                         codex_router_tui::FormField(label:"Weekly".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:row.weekly_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
                         codex_router_tui::FormField(label:"5h".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:row.short_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
@@ -281,8 +284,8 @@ pub(super) fn render_selected_panel(
 
     element! {
         View(
-            width: width as u32,
-            height: height as u32,
+            width: u32::try_from(width).unwrap_or(u32::MAX),
+            height: u32::try_from(height).unwrap_or(u32::MAX),
             flex_direction: FlexDirection::Column,
             border_style: BorderStyle::Single,
             border_color: Color::DarkGrey,
@@ -312,7 +315,7 @@ pub(super) fn render_selected_details(
     let line = |label: &str, value: &str, color: Color| {
         if interactive {
             element! {
-                codex_router_tui::FormField(label:label.to_owned(),label_width:DETAIL_LABEL_WIDTH as u16,stacked:detail_width<32) {
+                codex_router_tui::FormField(label:label.to_owned(),label_width:u16::try_from(DETAIL_LABEL_WIDTH).unwrap_or(u16::MAX),stacked:detail_width<32) {
                     Text(content:value.to_owned(),color,wrap:TextWrap::Wrap)
                 }
             }
@@ -334,7 +337,7 @@ pub(super) fn render_selected_details(
     };
     element! {
         View(
-            width: detail_width as u32,
+            width: u32::try_from(detail_width).unwrap_or(u32::MAX),
             max_width: 100pct,
             flex_direction: FlexDirection::Column,
             row_gap: 0,
@@ -378,7 +381,7 @@ pub(super) fn reset_pace_detail_line(
     let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH).max(12);
     let reset_pace_text = fit_line(&reset_pace_summary(reset_pace), value_width);
     element! {
-        View(width: width as u32) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX)) {
             Text(content: fit_line(label, DETAIL_LABEL_WIDTH), color: Color::Grey, wrap: TextWrap::NoWrap)
             MixedText(
                 contents: vec![
@@ -399,7 +402,7 @@ pub(super) fn detail_line(
 ) -> AnyElement<'static> {
     let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH).max(12);
     element! {
-        View(width: width as u32) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX)) {
             Text(content: fit_line(label, DETAIL_LABEL_WIDTH), color: Color::Grey, wrap: TextWrap::NoWrap)
             Text(content: fit_line(value, value_width), color, wrap: TextWrap::NoWrap)
         }

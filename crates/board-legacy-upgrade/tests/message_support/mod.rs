@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 use rusqlite::{Connection, params};
 use serde_json::json;
 use sqlx::Connection as _;

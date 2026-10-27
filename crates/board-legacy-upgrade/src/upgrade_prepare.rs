@@ -1,18 +1,20 @@
 //! Owns disposable native stores until their readback and snapshot work is closed.
 use crate::{
-    UpgradeError,
+    CollisionLocation, DerivedImportKeys, MessageActivityMap, NameCollision, ProjectImportReport,
+    UpgradeError, UpgradeReport,
     import_error::invalid,
     legacy_reader::read_legacy,
     legacy_rows::{LegacyProject, LegacyStore},
     project_transform::transform,
-    *,
 };
 use board_fleet_sync::BoardProjectSchema;
 use fleet_admission::{FleetImportBundle, FleetImportRecord, ImportProvenance};
 use fleet_sync_lease::{LeaseHolder, LeasePolicy};
 use fleet_sync_protocol::{DatabaseId, PeerId};
 use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
-use message_board::*;
+use message_board::{HumanId, RecordId, RecordTime, RepositoryRef, ResourceName};
+#[cfg(test)]
+use message_board::{MachineLabel, Record, RecordKind, RecordedActor, ServiceId};
 use message_board_storage::{ProjectStore, apply_project_import};
 use std::{
     collections::BTreeMap,

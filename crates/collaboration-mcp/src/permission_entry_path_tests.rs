@@ -8,8 +8,8 @@ use collaboration_protocol::{
     ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, PushLineInput,
     RouterAccess, RouterLink, RouterOriginRef, SessionRef, render_push_line,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::EndpointDirectory;
+use collaboration_service::ApplicationFixture;
 
 use collaboration_runtime::ManifestPublication;
 use collaboration_runtime::NativeControlBackend;

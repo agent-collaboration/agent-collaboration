@@ -1,11 +1,13 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Measure the actual single-request Fleet boundary without weakening its limit.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 #[path = "upload_support/central_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 mod central_fixture;
 
 use collaboration_central_conformance::JwksFixtureServer;

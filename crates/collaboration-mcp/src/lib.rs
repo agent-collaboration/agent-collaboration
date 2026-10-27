@@ -1,21 +1,3 @@
-#![cfg_attr(
-    not(test),
-    expect(clippy::wildcard_imports, reason = "lint pass follows the crate split")
-)]
-#![cfg_attr(
-    any(test, feature = "test-support"),
-    expect(clippy::unused_async, reason = "lint pass follows the crate split")
-)]
-#![cfg_attr(
-    test,
-    expect(
-        clippy::allow_attributes,
-        clippy::allow_attributes_without_reason,
-        clippy::large_futures,
-        clippy::unwrap_in_result,
-        reason = "lint pass follows the crate split"
-    )
-)]
 //! The collaboration API: one stateless MCP server over the typed collaboration application,
 //! served on every listener the Host holds.
 

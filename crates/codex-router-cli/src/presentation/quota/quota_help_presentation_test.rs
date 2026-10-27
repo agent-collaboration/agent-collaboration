@@ -354,8 +354,8 @@ async fn quota_help_real_mouse_header_blocks_background_and_close_preserves_focu
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),
-                        column as u16,
-                        row as u16,
+                        u16::try_from(column).unwrap_or(u16::MAX),
+                        u16::try_from(row).unwrap_or(u16::MAX),
                     )))
                     .expect("mouse header input");
                 stage = 1;
@@ -440,11 +440,11 @@ async fn quota_help_plain_floor_save_action_uses_existing_command_port() {
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),
-                        line.get(..offset)
+                        u16::try_from(line.get(..offset)
                             .expect("action label starts at a UTF-8 boundary")
                             .chars()
-                            .count() as u16,
-                        row as u16,
+                            .count()).expect("fixture label column fits u16"),
+                        u16::try_from(row).unwrap_or(u16::MAX),
                     )))
                     .expect("click Save");
                 stage = 2;
@@ -509,11 +509,11 @@ async fn quota_help_wide_sidecar_floor_arrow_is_blocked_until_help_closes() {
                 assert!(line.contains("0%"), "initial floor draft: {frame}");
                 let offset = line.find('▶').expect("increment arrow");
                 original_increment = Some((
-                    line.get(..offset)
+                    u16::try_from(line.get(..offset)
                         .expect("action label starts at a UTF-8 boundary")
                         .chars()
-                        .count() as u16,
-                    row as u16,
+                        .count()).expect("fixture label column fits u16"),
+                    u16::try_from(row).unwrap_or(u16::MAX),
                 ));
                 sender
                     .send(provider_filter_key(KeyCode::F(1)))

@@ -1,6 +1,5 @@
 //! B+ process observations compose the real Router entry points with local central.
 #![deny(clippy::too_many_lines)]
-
 #[expect(
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"

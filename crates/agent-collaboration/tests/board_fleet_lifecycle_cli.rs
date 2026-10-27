@@ -1,11 +1,7 @@
 //! Fleet lifecycle commands mutate the real stand-in through SDK/MCP admission.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
     dead_code,

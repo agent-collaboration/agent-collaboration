@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! A pending message upgrade stops actual Host composition before any listener is published.
 use automation_storage::StorageError;
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};

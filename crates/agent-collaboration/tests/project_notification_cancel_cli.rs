@@ -1,13 +1,5 @@
 //! The root project CLI reaches requested cancellation over real frozen rows and SDK custody.
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 #[expect(
     unused_imports,
@@ -16,13 +8,10 @@
 )]
 #[expect(
     dead_code,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared fixture helpers serve different subsets of integration targets."
 )]
 mod board_fixture;
-#[expect(
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/board_read_setup.rs"]
 #[expect(
     dead_code,
@@ -31,14 +20,11 @@ mod board_fixture;
 mod board_read_setup;
 #[path = "support/closed_mail_session.rs"]
 mod closed_mail_session;
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
+
 #[path = "support/local_mail_surfaces.rs"]
 #[expect(
     dead_code,
-    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+    reason = "Shared fixture helpers serve different subsets of integration targets."
 )]
 mod local_mail_surfaces;
 use board_fixture::native_mail_owner;

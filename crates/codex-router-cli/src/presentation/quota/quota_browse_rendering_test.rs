@@ -321,8 +321,8 @@ async fn quota_status_left_click_focuses_account_details_without_opening_an_acti
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column).unwrap_or(u16::MAX),
+                            u16::try_from(row).unwrap_or(u16::MAX),
                         )))
                         .unwrap();
                     phase = 1;

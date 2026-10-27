@@ -1,12 +1,10 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! The shipped CLI derives the two files from its existing one-root argument.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 #[path = "upload_support/central_fixture.rs"]
-#[allow(
+#[expect(
     dead_code,
     reason = "The sibling importer targets also use the owner client helper."
 )]

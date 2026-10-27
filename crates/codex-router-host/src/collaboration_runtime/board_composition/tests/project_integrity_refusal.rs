@@ -12,7 +12,7 @@ async fn piece_integrity_refusal_joins_its_sender_without_resend_while_another_p
         .with_test_writer()
         .try_init();
     let fixture = claim_fixture::ClaimFixture::start().await?;
-    let proof = observe_refusal(&fixture).await;
+    let proof = Box::pin(observe_refusal(&fixture)).await;
     let stopped = fixture.shutdown().await;
     stopped?;
     proof

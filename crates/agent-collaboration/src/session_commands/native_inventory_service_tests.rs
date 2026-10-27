@@ -3,9 +3,9 @@ use super::*;
 use crate::sessions::picker_runtime_inventory::native_inventory_binding::{
     NativeEndpointSelector, NativeInventoryContext, bind_native_inventory,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use std::{io::ErrorKind, os::unix::net::UnixListener, path::PathBuf};
 
 struct StoredServiceFixture {

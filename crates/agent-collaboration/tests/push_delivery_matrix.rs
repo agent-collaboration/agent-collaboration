@@ -15,11 +15,6 @@ mod native_push_receipt;
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 mod native_registry;
 #[path = "delivery_matrix/owned_resource_cleanup.rs"]

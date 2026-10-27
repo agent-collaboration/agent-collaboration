@@ -19,15 +19,15 @@ use rule_fixture::*;
 
 #[tokio::test]
 async fn takeover_after_replicated_handoff_publishes_one_original_item() -> TestResult {
-    prove_takeover(PrefixCase::Both).await
+    Box::pin(prove_takeover(PrefixCase::Both)).await
 }
 #[tokio::test]
 async fn takeover_without_replicated_cause_or_handoff_drops_the_lost_tail() -> TestResult {
-    prove_takeover(PrefixCase::Neither).await
+    Box::pin(prove_takeover(PrefixCase::Neither)).await
 }
 #[tokio::test]
 async fn takeover_with_only_replicated_cause_freezes_one_successor_item() -> TestResult {
-    prove_takeover(PrefixCase::CauseOnly).await
+    Box::pin(prove_takeover(PrefixCase::CauseOnly)).await
 }
 
 #[derive(Clone, Copy)]
@@ -38,7 +38,7 @@ enum PrefixCase {
 }
 
 async fn prove_takeover(case: PrefixCase) -> TestResult {
-    let mut fixture = RuleFixture::open(!matches!(case, PrefixCase::Both)).await?;
+    let mut fixture = Box::pin(RuleFixture::open(!matches!(case, PrefixCase::Both))).await?;
     let proof = async {
         let progress_hold = match fixture.holder.notifications.as_ref() {
             Some(owner) => Some(owner.hold_progress_writer().await?),

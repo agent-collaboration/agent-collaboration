@@ -3,11 +3,6 @@
 //! (refused by an application with no native route, as it refuses them today).
 //! Each runs the compiled CLI against the served API and checks its JSON against the
 //! published `FiniteCommandRecord` contract.
-#![expect(
-    clippy::expect_used,
-    clippy::panic,
-    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
-)]
 
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;

@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 #![cfg(unix)]
 #![expect(
     clippy::expect_used,

@@ -1,24 +1,11 @@
-#![cfg_attr(
-    not(test),
-    expect(clippy::wildcard_imports, reason = "lint pass follows the crate split")
-)]
+//! Command-line entry points for codex-router.
 #![cfg_attr(
     test,
-    expect(clippy::unwrap_in_result, reason = "lint pass follows the crate split")
+    expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions fail the test while fixture errors propagate."
+    )
 )]
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::cast_possible_truncation,
-    clippy::cast_possible_wrap,
-    clippy::cast_sign_loss,
-    clippy::large_futures,
-    clippy::match_wildcard_for_single_variants,
-    clippy::trivially_copy_pass_by_ref,
-    reason = "lint pass follows the crate split"
-)]
-//! Command-line entry points for codex-router.
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 use std::ffi::OsString;
 use std::io::IsTerminal;
@@ -142,13 +129,13 @@ pub async fn run_async() -> i32 {
     let _run_span_guard = run_span.enter();
     let mut stdout = std::io::stdout();
     let mut stderr = std::io::stderr();
-    if let Err(error) = run_with_io_async_with_telemetry(
+    if let Err(error) = Box::pin(run_with_io_async_with_telemetry(
         args,
         &context,
         &mut stdout,
         &mut stderr,
         Some(telemetry_shutdown),
-    )
+    ))
     .await
     {
         let _ = writeln!(stderr, "{error}");
@@ -216,7 +203,10 @@ where
     W: std::io::Write + Send,
     E: std::io::Write,
 {
-    run_with_io_async_with_telemetry(args, context, stdout, stderr, None).await
+    Box::pin(run_with_io_async_with_telemetry(
+        args, context, stdout, stderr, None,
+    ))
+    .await
 }
 
 async fn run_with_io_async_with_telemetry<W, E>(
@@ -251,7 +241,13 @@ where
             stderr.flush().map_err(CliError::Stderr)
         }
         CliCommand::Host(command) => {
-            host_command::run_host_command(stdout, command, context, telemetry_shutdown).await?;
+            Box::pin(host_command::run_host_command(
+                stdout,
+                command,
+                context,
+                telemetry_shutdown,
+            ))
+            .await?;
             stderr.flush().map_err(CliError::Stderr)
         }
         _ => run_with_io(args, context, stdout, stderr),

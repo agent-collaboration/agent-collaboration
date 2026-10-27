@@ -17,7 +17,7 @@ pub(super) fn quota_title_row(
         width.saturating_sub("Quota status".chars().count()),
     );
     element! {
-        View(width: width as u32, flex_direction: FlexDirection::Row) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX), flex_direction: FlexDirection::Row) {
             Text(content: "Quota status", color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)
             View(flex_grow: 1.0_f32) {}
             Text(content: status, color: Color::Cyan, weight: Weight::Bold, wrap: TextWrap::NoWrap)

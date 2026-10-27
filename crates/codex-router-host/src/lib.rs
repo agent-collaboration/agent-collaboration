@@ -1,21 +1,3 @@
-#![cfg_attr(
-    not(test),
-    expect(clippy::wildcard_imports, reason = "lint pass follows the crate split")
-)]
-#![cfg_attr(
-    test,
-    expect(
-        clippy::match_wildcard_for_single_variants,
-        clippy::unwrap_in_result,
-        reason = "lint pass follows the crate split"
-    )
-)]
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Foreground lifecycle control for one shared Codex app-server.
 
 mod acp_interaction_port;

@@ -1,4 +1,3 @@
-#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! Host starts event maintenance after acquiring its own listeners, without a native runtime.
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_protocol::{InstructionText, OperationId};

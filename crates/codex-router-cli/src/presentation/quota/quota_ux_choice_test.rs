@@ -255,8 +255,8 @@ async fn no_match_select_is_disabled_and_pointer_and_enter_preserve_query_throug
                         sender
                             .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                                 MouseEventKind::Down(MouseButton::Left),
-                                (column + 1) as u16,
-                                row as u16,
+                                u16::try_from(column + 1).expect("fixture column fits u16"),
+                                u16::try_from(row).unwrap_or(u16::MAX),
                             )))
                             .unwrap();
                         sender.send(provider_filter_key(KeyCode::Enter)).unwrap();

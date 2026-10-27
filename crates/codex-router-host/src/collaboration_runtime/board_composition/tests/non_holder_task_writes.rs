@@ -37,7 +37,7 @@ async fn assert_cached_task_refusal(complete_read_copy: bool) -> TestResult {
     let holder = claim_fixture::ClaimFixture::start().await?;
     let project = claimed_project(&holder).await?;
     let request = eligible_task_request(&holder, &project).await?;
-    let mut sender = SenderFixture::start(&holder).await?;
+    let mut sender = Box::pin(SenderFixture::start(&holder)).await?;
     let proof = async {
         let context = sender.admission.runtime_test_context();
         // Welcome refresh is asynchronous. Observe the actual retained directory
@@ -177,10 +177,10 @@ async fn assert_cached_task_refusal(complete_read_copy: bool) -> TestResult {
 
 #[tokio::test]
 async fn non_holder_task_write_uses_fleet_membership_without_a_local_copy() -> TestResult {
-    assert_cached_task_refusal(false).await
+    Box::pin(assert_cached_task_refusal(false)).await
 }
 
 #[tokio::test]
 async fn non_holder_task_write_keeps_the_completed_read_copy_epoch() -> TestResult {
-    assert_cached_task_refusal(true).await
+    Box::pin(assert_cached_task_refusal(true)).await
 }

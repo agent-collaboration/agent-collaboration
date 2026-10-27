@@ -14,16 +14,11 @@ use collaboration_protocol::{
 };
 use collaboration_service::ApplicationFixture;
 
-
-
 use collaboration_service::BoardAvailability;
-
-
 
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
-
 
 use serde_json::{Value, json};
 use std::{

@@ -1,7 +1,16 @@
 //! SQLite is used only to read the retired format; all destination writes use Turso.
-use crate::{UpgradeError, import_error::invalid, legacy_rows::*};
+use crate::{
+    UpgradeError,
+    import_error::invalid,
+    legacy_rows::{
+        LegacyIdentity, LegacyPost, LegacyProject, LegacyStore, LegacyThread, LegacyThreadState,
+    },
+};
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    Identity, PostId, ProjectId, ReferenceTarget, SessionEndpointRef, SessionRef, ThreadId,
+    ThreadState,
+};
 use rusqlite::{Connection, OpenFlags};
 use serde::de::DeserializeOwned;
 use std::{

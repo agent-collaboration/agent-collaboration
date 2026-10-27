@@ -1,11 +1,7 @@
 //! Aggregate histories, unread continuation and independent acknowledgements through the executable.
 #[path = "../../collaboration-service/tests/support/native_authority.rs"]
 mod native_authority;
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
 mod native_registry;
 use collaboration_contracts::MachineIdentity;

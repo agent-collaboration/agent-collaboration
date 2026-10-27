@@ -23,17 +23,14 @@ impl ClaimFixture {
 
     #[cfg(feature = "runtime-test-support")]
     pub async fn start_with_notifications() -> TestResultFixture {
-        Self::start_configured(true).await
+        Box::pin(Self::start_configured(true)).await
     }
 
     async fn start_configured(with_notifications: bool) -> TestResultFixture {
         let directory = tempfile::tempdir()?;
         let central =
             Arc::new(TestCentral::start(&directory.path().join("central"), &origin()?).await?);
-        #[expect(
-            unused_mut,
-            reason = "Notification tests attach existing mail owners before activation."
-        )]
+
         let mut board = open_board_admission(
             &directory.path().join("router"),
             identity()?,

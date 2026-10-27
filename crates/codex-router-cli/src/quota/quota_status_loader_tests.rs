@@ -1,3 +1,10 @@
+#[cfg(test)]
+use crate::quota::quota_status_command::quota_status_view_model_loader;
+#[cfg(test)]
+use crate::quota::{
+    AccountId, AccountStatus, QuotaEvidenceFreshness, QuotaRefreshErrorClass, QuotaWindowStatus,
+    V1_SHORT_WINDOW_SECONDS,
+};
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::atomic::AtomicUsize;
@@ -272,7 +279,7 @@ impl KeychainAccess for CountingKeychainAccess {
         Ok(self
             .items
             .lock()
-            .expect("Keychain items lock")
+            .unwrap_or_else(|_| panic!("Keychain items lock"))
             .get(&(service.to_owned(), account.to_owned()))
             .cloned())
     }
@@ -286,7 +293,10 @@ impl KeychainAccess for CountingKeychainAccess {
         if service != ROUTER_KEYCHAIN_SERVICE {
             return Err(KeychainAccessError::ServiceRejected);
         }
-        let mut items = self.items.lock().expect("Keychain items lock");
+        let mut items = self
+            .items
+            .lock()
+            .unwrap_or_else(|_| panic!("Keychain items lock"));
         if items.contains_key(&(service.to_owned(), account.to_owned())) {
             return Err(KeychainAccessError::Unavailable);
         }

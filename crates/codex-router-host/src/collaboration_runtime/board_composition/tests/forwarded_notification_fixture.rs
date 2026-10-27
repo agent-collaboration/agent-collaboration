@@ -1,12 +1,12 @@
 //! Existing native publisher and custody owners attached to a real enrolled holder.
 use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
 use super::*;
+use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
 use collaboration_service::CollaborationApplication;
 use collaboration_service::MailPushDeliveryProps;
 use collaboration_service::NotificationPublisher;
-use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;

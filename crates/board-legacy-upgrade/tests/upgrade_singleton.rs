@@ -1,9 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Offline upgrade and the running Host share the shipped singleton artifact.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 mod support;
 
 use codex_router_host::{HostCoordinationPaths, HostInstance, router_collaboration_directory};

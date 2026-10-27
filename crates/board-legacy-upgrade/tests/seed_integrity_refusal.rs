@@ -1,10 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    clippy::match_wildcard_for_single_variants,
-    reason = "lint pass follows the crate split"
-)]
 //! The real publisher preserves an injected typed server refusal over HTTP.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 mod support;
 use board_legacy_upgrade::{UpgradePublisher, UpgradeUploadError};
 use collaboration_central_core::{
@@ -71,7 +69,7 @@ async fn seed_integrity_refusal_is_a_typed_incomplete_project_not_a_success() ->
                         phases.push("complete");
                         (serde_json::to_vec(&offered)?, true)
                     }
-                    request => {
+                    request @ AdminProjectImportRequest::Status { .. } => {
                         return Err(std::io::Error::other(format!(
                             "unexpected import request: {request:?}"
                         ))

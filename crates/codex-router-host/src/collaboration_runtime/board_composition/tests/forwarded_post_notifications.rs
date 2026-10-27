@@ -35,7 +35,7 @@ fn actor_service(intent: &NotifyIntent) -> Option<ServiceId> {
             Some(Identity::Session { session }) => Some(session.endpoint.service_id),
             _ => None,
         },
-        _ => None,
+        IntentRecipient::NoHolder { .. } => None,
     }
 }
 
@@ -71,12 +71,12 @@ fn item_id(intent: &NotifyIntent) -> Result<ItemId, Box<dyn std::error::Error + 
 #[tokio::test]
 async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_deduplicates_retry()
 -> TestResult {
-    let holder = claim_fixture::ClaimFixture::start_with_notifications().await?;
+    let holder = Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?;
     let project = claimed_project(&holder).await?;
-    let sender = SenderFixture::start(&holder).await?;
+    let sender = Box::pin(SenderFixture::start(&holder)).await?;
     let session = ObjectAddress::Connection(origin()?.installation);
     let copy = ObjectAddress::Copy(DatabaseId::try_from(project.as_str().to_owned())?);
-    let proof = async {
+    let proof = Box::pin(async {
         let notifications = holder.notifications.as_ref().ok_or("native holder notifications")?;
         let request = post_request(&project)?;
         grant_posting_role(&holder, &request).await?;
@@ -210,7 +210,7 @@ async fn non_holder_sender_publishes_local_notifications_before_copy_ack_and_ded
         assert_eq!(final_push.record.push_id, early_push.record.push_id);
         assert_eq!(final_push.record.header_facts, early_push.record.header_facts);
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }.await;
+    }).await;
     // Release the real dispatcher even when the missing-prompt baseline fails.
     let _ = holder
         .central

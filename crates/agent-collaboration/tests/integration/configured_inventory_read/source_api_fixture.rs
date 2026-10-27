@@ -3,9 +3,9 @@ use super::router_connection_registry::RouterConnectionRegistry;
 use crate::presentation::session_picker::{PickerSourceContext, SourceInventoryRequest};
 use crate::sessions::*;
 use collaboration_client::protocol::{EndpointRef, RouterExecutableRelation};
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use std::{
     io::ErrorKind,
     os::unix::{fs::PermissionsExt, net::UnixListener},

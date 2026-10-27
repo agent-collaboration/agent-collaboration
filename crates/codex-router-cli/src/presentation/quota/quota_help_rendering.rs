@@ -272,7 +272,7 @@ pub(super) struct QuotaScreenChromeProps {
 
 pub(super) fn render_quota_screen(props: QuotaScreenChromeProps) -> AnyElement<'static> {
     element! {
-        View(width: props.width as u32, height: props.height.map_or(Size::Auto,|height|Size::Length(height as u32)), border_style: BorderStyle::Round, border_color: Color::Cyan, overflow: Overflow::Hidden, padding_left: props.horizontal_padding as u32, padding_right: props.horizontal_padding as u32, flex_direction: FlexDirection::Column) {
+        View(width: u32::try_from(props.width).unwrap_or(u32::MAX), height: props.height.map_or(Size::Auto,|height|Size::Length(u32::try_from(height).unwrap_or(u32::MAX))), border_style: BorderStyle::Round, border_color: Color::Cyan, overflow: Overflow::Hidden, padding_left: u32::try_from(props.horizontal_padding).unwrap_or(u32::MAX), padding_right: u32::try_from(props.horizontal_padding).unwrap_or(u32::MAX), flex_direction: FlexDirection::Column) {
             #(props.header)
             #(props.route)
             #(props.controls)

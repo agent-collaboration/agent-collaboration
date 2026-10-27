@@ -242,7 +242,10 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
         );
         for width in [32usize, 40, 48, 32] {
             sender
-                .send(TerminalEvent::Resize(width as u16, 24))
+                .send(TerminalEvent::Resize(
+                    u16::try_from(width).unwrap_or(u16::MAX),
+                    24,
+                ))
                 .unwrap();
             let canvas = crate::presentation::quota::quota_frame_observation::next_current_frame(
                 frames.as_mut(),

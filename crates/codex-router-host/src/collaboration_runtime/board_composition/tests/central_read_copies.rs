@@ -1,7 +1,7 @@
 //! Real session and snapshot installation; directory policy remains a fixture input.
 use super::*;
-use collaboration_service::ApplicationFixture;
 use collaboration_contracts::ProjectReplicationPosition;
+use collaboration_service::ApplicationFixture;
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
 use fleet_sync_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use runtime_primitives::{Clock, SystemClock};

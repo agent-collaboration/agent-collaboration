@@ -7,17 +7,17 @@ use collaboration_service as mail_service;
     reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 mod local_mail_surfaces;
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
-)]
+
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
 #[expect(
     dead_code,
     reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
 mod native_mail_owner;
+#[expect(
+    dead_code,
+    reason = "Shared native SQL fixture helpers serve different integration targets."
+)]
 #[path = "support/local_mail_native_sql.rs"]
 // Companion targets use the application-row fault helpers.
 mod native_sql;

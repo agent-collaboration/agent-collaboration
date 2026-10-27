@@ -114,7 +114,7 @@ fn handle_credit_choice(
     code: KeyCode,
     modifiers: KeyModifiers,
 ) -> bool {
-    if super::super::quota_reset_component_input::forced_quota_exit_key(&code, modifiers) {
+    if super::super::quota_reset_component_input::forced_quota_exit_key(code, modifiers) {
         return false;
     }
     let Some(mut options) = state.read().clone() else {

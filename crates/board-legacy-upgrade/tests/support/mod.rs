@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 use board_legacy_upgrade::{PreparedUpgrade, prepare_sources};
 use fleet_admission::ImportProvenance;
 use message_board::*;

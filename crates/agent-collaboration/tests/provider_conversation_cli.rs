@@ -1,9 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic,
-    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
-)]
 //! Compiled-CLI conversations against the real collaboration API, whose in-Host composition
 //! drives a scripted provider backend; fixture assertions fail fast at that boundary.
 

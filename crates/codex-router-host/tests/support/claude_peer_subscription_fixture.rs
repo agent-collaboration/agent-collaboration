@@ -31,15 +31,12 @@ use collaboration_service::CollaborationApplication;
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
 
-use collaboration_service::SubscriptionWindowStore;
 use collaboration_service::BoardAvailability;
-
-
+use collaboration_service::SubscriptionWindowStore;
 
 use collaboration_service::SubscriptionClock;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-
 
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use message_board::{SessionId as BoardSessionId, SessionRef as BoardSessionRef, *};

@@ -123,7 +123,7 @@ fn mint(arguments: MintArguments) -> Result<String, CentralCommandError> {
         ),
         CredentialKind::Enrollment => {
             let client_id =
-                AccessClientId::new(String::from(collaboration_service::new_service_uuid()?))?;
+                AccessClientId::new(String::from(collaboration_runtime::new_service_uuid()?))?;
             let expiry = now + ChronoDuration::days(i64::from(arguments.machine_valid_for_days));
             let assertion = issuer.mint(
                 &AccessCaller::Machine {

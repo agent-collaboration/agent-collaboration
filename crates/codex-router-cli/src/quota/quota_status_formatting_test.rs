@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(test)]
+use crate::quota::quota_status_formatting::write_quota_table;
 
 #[test]
 fn quota_status_width_contract_preserves_layout() {

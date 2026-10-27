@@ -1,8 +1,10 @@
 //! Quota content composed into the shared dialog; effects stay with the owners.
 use super::quota_browse_rendering::render_selected_details;
-use super::quota_detail_panel::*;
-use super::quota_provider_filter_rendering::*;
-use super::quota_provider_filters::*;
+use super::quota_detail_panel::QuotaDetailPanelProps;
+use super::quota_provider_filter_rendering::{
+    render_quota_filter_actions, render_quota_filter_chooser,
+};
+use super::quota_provider_filters::{QuotaFilterController, QuotaFilterState};
 use super::quota_status_view_model::QuotaStatusViewModel;
 use codex_router_core::ids::AccountId;
 use codex_router_tui::{DialogAction, DialogFrame, DialogMargins, DialogPresentation};

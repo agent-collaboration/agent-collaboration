@@ -302,7 +302,10 @@ fn serve_command_defaults_to_home_router_paths_and_provider_upstream() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn serve_command_dispatches_websocket_upgrade_through_runtime() {
     let test_root = TestRoot::new("serve-command-websocket");
     must_ok(fs::create_dir(test_root.path()));
@@ -463,7 +466,7 @@ impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
         let response = reqwest::blocking::Client::builder()
             .timeout(Duration::from_secs(2))
             .build()
-            .expect("fixture OAuth client")
+            .unwrap_or_else(|_| panic!("fixture OAuth client"))
             .post(&self.token_endpoint)
             .header("content-type", "application/json")
             .body(
@@ -471,23 +474,26 @@ impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
                     "grant_type": "refresh_token",
                     "refresh_token": refresh_token.expose_secret(),
                 }))
-                .expect("fixture OAuth request"),
+                .unwrap_or_else(|_| panic!("fixture OAuth request")),
             )
             .send()
-            .expect("fixture OAuth response");
+            .unwrap_or_else(|_| panic!("fixture OAuth response"));
         assert!(response.status().is_success());
-        let payload: serde_json::Value =
-            serde_json::from_str(&response.text().expect("fixture OAuth body"))
-                .expect("fixture OAuth payload");
+        let payload: serde_json::Value = serde_json::from_str(
+            &response
+                .text()
+                .unwrap_or_else(|_| panic!("fixture OAuth body")),
+        )
+        .unwrap_or_else(|_| panic!("fixture OAuth payload"));
         Ok(AccountCredentialBundle::imported_codex_auth(
             payload["access_token"]
                 .as_str()
-                .expect("access token")
+                .unwrap_or_else(|| panic!("access token"))
                 .to_owned(),
             Some(
                 payload["refresh_token"]
                     .as_str()
-                    .expect("refresh token")
+                    .unwrap_or_else(|| panic!("refresh token"))
                     .to_owned(),
             ),
         )

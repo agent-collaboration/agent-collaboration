@@ -1,9 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Four real tables cross owners; only A's migrator may finish the move.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 mod message_support;
 use board_legacy_upgrade::{MessageCopyCounts, MessageUpgrade, MessageUpgradeReport};
 use interaction_storage::InteractionStore;

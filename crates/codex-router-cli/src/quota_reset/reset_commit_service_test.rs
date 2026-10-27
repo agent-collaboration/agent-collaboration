@@ -80,7 +80,10 @@ impl ResetServiceProvider for FakeProvider {
     type PreparedConsume = FakePreparedConsume;
 
     async fn fetch_usage(&self, _auth: LiveResetAccountAuth) -> LiveUsagePortResult {
-        self.ledger.lock().expect("ledger lock").push("usage-get");
+        self.ledger
+            .lock()
+            .unwrap_or_else(|_| panic!("ledger lock"))
+            .push("usage-get");
         self.usage
             .lock()
             .expect("usage lock")
@@ -95,7 +98,7 @@ impl ResetServiceProvider for FakeProvider {
     ) -> CreditInventoryPortResult {
         self.ledger
             .lock()
-            .expect("ledger lock")
+            .unwrap_or_else(|_| panic!("ledger lock"))
             .push("inventory-get");
         self.inventory
             .lock()
@@ -110,15 +113,25 @@ impl ResetServiceProvider for FakeProvider {
         _selected_credit: &SelectedResetCreditSnapshot,
         _redeem_request_id: &RedeemRequestId,
     ) -> Result<Self::PreparedConsume, RenderSafeFailure> {
-        self.ledger.lock().expect("ledger lock").push("prepare");
-        match *self.preparation_failure.lock().expect("preparation lock") {
+        self.ledger
+            .lock()
+            .unwrap_or_else(|_| panic!("ledger lock"))
+            .push("prepare");
+        match *self
+            .preparation_failure
+            .lock()
+            .unwrap_or_else(|_| panic!("preparation lock"))
+        {
             Some(failure) => Err(failure),
             None => Ok(FakePreparedConsume),
         }
     }
 
     async fn invoke_prepared(&self, _prepared: Self::PreparedConsume) -> ConsumePortResult {
-        self.ledger.lock().expect("ledger lock").push("post");
+        self.ledger
+            .lock()
+            .unwrap_or_else(|_| panic!("ledger lock"))
+            .push("post");
         self.consume
             .lock()
             .expect("consume lock")
@@ -147,7 +160,11 @@ async fn inspection_runs_both_independent_gets_even_when_usage_is_ineligible() {
     assert_eq!(usage, LiveUsagePortResult::Known(LiveWeeklyUsage::new(4)));
     assert!(matches!(inventory, CreditInventoryPortResult::Validated(_)));
     assert_eq!(
-        *service.provider.ledger.lock().expect("ledger lock"),
+        *service
+            .provider
+            .ledger
+            .lock()
+            .unwrap_or_else(|_| panic!("ledger lock")),
         ["usage-get", "inventory-get"]
     );
 }
@@ -187,7 +204,7 @@ async fn authority_and_selected_credit_changes_refuse_with_zero_posts() {
                 .provider
                 .ledger
                 .lock()
-                .expect("ledger lock")
+                .unwrap_or_else(|_| panic!("ledger lock"))
                 .contains(&"post")
         );
     }
@@ -240,7 +257,7 @@ async fn every_authority_expiry_and_weekly_precommit_refusal_has_zero_posts() {
                 .provider
                 .ledger
                 .lock()
-                .expect("ledger lock")
+                .unwrap_or_else(|_| panic!("ledger lock"))
                 .contains(&"post")
         );
     }
@@ -298,7 +315,7 @@ async fn later_credit_only_change_allows_exactly_one_by_value_consume() {
             .provider
             .ledger
             .lock()
-            .expect("ledger lock")
+            .unwrap_or_else(|_| panic!("ledger lock"))
             .iter()
             .filter(|entry| **entry == "post")
             .count(),
@@ -317,7 +334,7 @@ async fn local_preparation_failure_is_zero_post_and_ambiguous_invocation_is_unkn
         .provider
         .preparation_failure
         .lock()
-        .expect("preparation lock") = Some(RenderSafeFailure::InvalidResponse);
+        .unwrap_or_else(|_| panic!("preparation lock")) = Some(RenderSafeFailure::InvalidResponse);
     let confirmation = inspected_confirmation(&preparation_failure_service).await;
     assert_eq!(
         preparation_failure_service
@@ -332,7 +349,7 @@ async fn local_preparation_failure_is_zero_post_and_ambiguous_invocation_is_unkn
             .provider
             .ledger
             .lock()
-            .expect("ledger lock")
+            .unwrap_or_else(|_| panic!("ledger lock"))
             .contains(&"post")
     );
 
@@ -363,7 +380,7 @@ async fn local_preparation_failure_is_zero_post_and_ambiguous_invocation_is_unkn
             .provider
             .ledger
             .lock()
-            .expect("ledger lock")
+            .unwrap_or_else(|_| panic!("ledger lock"))
             .iter()
             .filter(|entry| **entry == "post")
             .count(),

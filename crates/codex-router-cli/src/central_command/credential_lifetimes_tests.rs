@@ -1,4 +1,7 @@
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 use super::{
     arguments::{CredentialKind, MintArguments, ServeArguments},
     configuration, mint,

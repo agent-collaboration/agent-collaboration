@@ -3,7 +3,10 @@ use super::*;
 use sqlx::Connection;
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn saved_floor_refresh_reconnects_established_websocket_before_later_response_create() {
     let test_root = TestRoot::new("joined-floor-websocket");
     must_ok(fs::create_dir(test_root.path()));

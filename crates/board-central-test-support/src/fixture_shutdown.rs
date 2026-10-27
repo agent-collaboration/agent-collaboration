@@ -28,9 +28,15 @@ mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU8, Ordering};
 
-    async fn failure(called: &AtomicU8, mask: u8, label: &str) -> FixtureResult {
-        called.fetch_or(mask, Ordering::SeqCst);
-        Err(label.to_owned().into())
+    fn failure<'a>(
+        called: &'a AtomicU8,
+        mask: u8,
+        label: &'a str,
+    ) -> impl Future<Output = FixtureResult> + 'a {
+        std::future::poll_fn(move |_| {
+            called.fetch_or(mask, Ordering::SeqCst);
+            std::task::Poll::Ready(Err(label.to_owned().into()))
+        })
     }
 
     #[tokio::test]
@@ -63,7 +69,10 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::panic_in_result_fn)] // Literal assertions observe the owned listener after a real setup failure.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions fail the test while fixture errors propagate."
+    )] // Literal assertions observe the owned listener after a real setup failure.
     async fn failed_central_start_joins_the_real_jwks_listener() -> FixtureResult {
         let root = tempfile::tempdir()?;
         let blocked = root.path().join("central-is-a-file");

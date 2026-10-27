@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 #[cfg(not(feature = "keychain-test-support"))]
 compile_error!(
     "Responses recovery acceptance requires keychain-test-support and isolated file credentials"
@@ -383,7 +378,10 @@ async fn compiled_serve_recovers_responses_401_using_complete_body_and_current_f
 }
 
 #[tokio::test]
-#[allow(clippy::result_large_err)] // tungstenite requires this unboxed callback error.
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)] // tungstenite requires this unboxed callback error.
 async fn compiled_serve_recovers_websocket_handshake_401_without_repeating_first_frame()
 -> TestResult<()> {
     tokio::time::timeout(Duration::from_secs(20), async {

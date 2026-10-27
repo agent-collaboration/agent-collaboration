@@ -1,4 +1,3 @@
-#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 use std::net::SocketAddr;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;

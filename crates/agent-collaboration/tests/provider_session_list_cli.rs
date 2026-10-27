@@ -5,9 +5,9 @@ use collaboration_client::protocol::{
     EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionRef,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 

@@ -1,10 +1,8 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! The CLI is the sole enrollment producer; central and production Host consume its output.
-#![allow(clippy::panic_in_result_fn)] // Protocol assertions; every owned process is stopped before propagating errors.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)] // Protocol assertions; every owned process is stopped before propagating errors.
 #![deny(clippy::too_many_lines)]
 use board_central_test_support::EnrollmentTestCentral;
 use chrono::{Duration as ChronoDuration, Utc};

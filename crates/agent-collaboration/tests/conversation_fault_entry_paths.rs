@@ -1,8 +1,3 @@
-#![expect(
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
-)]
 //! CLI subprocess proof for conversation failures before any ACP dispatch.
 
 use serde_json::Value;

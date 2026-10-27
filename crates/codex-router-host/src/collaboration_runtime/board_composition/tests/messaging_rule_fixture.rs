@@ -30,7 +30,7 @@ impl RuleFixture {
         holder_notifications: bool,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let holder = if holder_notifications {
-            claim_fixture::ClaimFixture::start_with_notifications().await?
+            Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?
         } else {
             claim_fixture::ClaimFixture::start().await?
         };
@@ -50,7 +50,7 @@ impl RuleFixture {
                 .try_into()?,
             machine: "rule successor".to_owned().try_into()?,
         };
-        let successor = RuleMachine::open(&holder, &successor_origin).await?;
+        let successor = Box::pin(RuleMachine::open(&holder, &successor_origin)).await?;
         let client = ConformanceClient::new(holder.central.base_url())?;
         let recipient = enroll_admitted_peer(
             &client,

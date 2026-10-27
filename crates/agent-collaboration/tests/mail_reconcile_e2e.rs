@@ -1,7 +1,6 @@
 //! CS-1/CS-3 through owned Host processes, authenticated peers and the real Tokio central.
 
 #![deny(clippy::too_many_lines)]
-
 #[expect(
     dead_code,
     reason = "shared fixture module serves separate integration targets with different helper subsets"

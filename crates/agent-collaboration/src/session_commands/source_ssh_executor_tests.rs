@@ -2,11 +2,11 @@
 //! Backend protocol payloads are fixed literals; no Codex or model is launched.
 use super::*;
 use collaboration_client::protocol::{CodexGeneration, ServiceManifest};
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ManifestPublication;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::NativeRelayListener;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf, task::Poll};
 use tokio::net::{UnixListener, UnixStream};

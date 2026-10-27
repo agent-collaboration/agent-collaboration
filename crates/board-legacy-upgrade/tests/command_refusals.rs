@@ -1,10 +1,8 @@
 #![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
 )]
-#![allow(clippy::panic_in_result_fn)]
-#[allow(
+#[expect(
     dead_code,
     reason = "The shared CLI owner is also used by the IB and BC05 integration targets."
 )]

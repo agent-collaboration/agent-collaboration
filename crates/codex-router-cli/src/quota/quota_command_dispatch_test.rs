@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::quota::quota_status_command::await_reset_session_task;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;

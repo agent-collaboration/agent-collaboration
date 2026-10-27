@@ -44,7 +44,10 @@ mod account_help;
 mod account_login_identity;
 #[path = "account_options.rs"]
 mod account_options;
-use account_help::*;
+use account_help::{
+    ACCOUNT_DISABLE_HELP_TEXT, ACCOUNT_ENABLE_HELP_TEXT, ACCOUNT_HELP_TEXT, ACCOUNT_LIST_HELP_TEXT,
+    ACCOUNT_LOGIN_HELP_TEXT, ACCOUNT_SET_WEEKLY_FLOOR_HELP_TEXT,
+};
 #[cfg(test)]
 use account_login_identity::account_id_from_label;
 use account_login_identity::{

@@ -181,7 +181,10 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions fail the test while fixture errors propagate."
+    )]
     fn initial_start_creates_valid_fleet_identities_and_reopens_the_same_signing_key()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;

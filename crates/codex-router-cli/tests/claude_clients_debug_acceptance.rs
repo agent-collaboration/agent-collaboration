@@ -1,4 +1,3 @@
-#![expect(clippy::unused_async, reason = "lint pass follows the crate split")]
 #[path = "support/claude_clients_debug_acceptance.rs"]
 mod claude_clients_debug_acceptance;
 #[path = "support/claude_fake_anthropic.rs"]
@@ -46,7 +45,7 @@ async fn run_acceptance(root: &IsolatedAcceptanceRoot) -> Result<(), Box<dyn std
     let upstream = FakeAnthropicServer::start(UPSTREAM_ADDRESS.parse()?, SYNTHETIC_ACCOUNT_ACCESS)?;
     root.seed_synthetic_claude_account().await?;
 
-    let mut host = HostProcess::start(root).await?;
+    let mut host = HostProcess::start(root)?;
     let manifest = host.wait_until_ready(root).await?;
     let service_id = manifest
         .get("serviceId")
