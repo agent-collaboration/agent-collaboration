@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-client-protocol",
  "futures-util",
@@ -111,7 +111,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -564,7 +564,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -579,6 +579,29 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
+]
+
+[[package]]
+name = "aws-lc-rs"
+version = "1.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faac5829c2b74c28f830747e7818ccfb684261b5f48a1118b1e2a13d36dfab13"
+dependencies = [
+ "aws-lc-sys",
+ "zeroize",
+]
+
+[[package]]
+name = "aws-lc-sys"
+version = "0.46.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1622d8446a2d4b2ce0c7eefc73dd43a99779028d5ee5c2dd8073a658ba8a2bc"
+dependencies = [
+ "cc",
+ "cmake",
+ "dunce",
+ "fs_extra",
+ "pkg-config",
 ]
 
 [[package]]
@@ -759,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "board-central-test-support"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -789,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "board-fleet-sync"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "board-sync-protocol",
@@ -820,7 +843,7 @@ dependencies = [
 
 [[package]]
 name = "board-legacy-upgrade"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "automation-storage",
  "board-fleet-sync",
@@ -828,6 +851,7 @@ dependencies = [
  "chrono",
  "clap",
  "codex-router-host",
+ "codex-router-secret-store",
  "codex-router-test-support",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
@@ -865,7 +889,7 @@ dependencies = [
 
 [[package]]
 name = "board-sync-protocol"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -1120,7 +1144,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -1134,6 +1158,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cmake"
+version = "0.1.58"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c0f78a02292a74a88ac736019ab962ece0bc380e3f977bf72e376c5d78ff0678"
+dependencies = [
+ "cc",
+]
+
+[[package]]
 name = "cmov"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1141,7 +1174,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1163,7 +1196,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1183,7 +1216,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-auth"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1203,7 +1236,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-cli"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-collaboration",
  "base64 0.22.1",
@@ -1221,11 +1254,15 @@ dependencies = [
  "codex-router-test-support",
  "codex-router-tui",
  "collaboration-central-core",
+ "collaboration-central-tokio",
  "collaboration-client",
  "collaboration-protocol",
  "collaboration-service",
  "comfy-table",
  "crossterm",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fs2",
  "futures-util",
  "indicatif",
  "iocraft",
@@ -1252,11 +1289,12 @@ dependencies = [
  "tracing-subscriber",
  "tungstenite 0.28.0",
  "unicode-width 0.2.2",
+ "uuid",
 ]
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1268,7 +1306,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "acp-client-runtime",
  "agent-automation",
@@ -1331,7 +1369,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-proxy"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "async-compression",
  "bytes",
@@ -1366,7 +1404,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "codex-router-core",
  "thiserror 2.0.18",
@@ -1374,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-reset-test-harness"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1389,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1398,6 +1436,7 @@ dependencies = [
  "fs2",
  "getrandom 0.4.3",
  "keyring-core",
+ "rustix 1.1.4",
  "security-framework",
  "serde",
  "serde_json",
@@ -1411,7 +1450,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1426,7 +1465,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1439,7 +1478,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tailnet-verification-host"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "chrono",
@@ -1458,7 +1497,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-test-support"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "codex-native-integration",
  "codex-router-cli",
@@ -1480,7 +1519,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tui"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "futures-util",
  "iocraft",
@@ -1489,14 +1528,14 @@ dependencies = [
 
 [[package]]
 name = "codex-router-ux-prototype"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "iocraft",
 ]
 
 [[package]]
 name = "collaboration-central-admin-protocol"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "board-sync-protocol",
  "chrono",
@@ -1509,7 +1548,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-cloudflare"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1543,7 +1582,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1569,7 +1608,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1594,13 +1633,15 @@ dependencies = [
  "sha2 0.10.9",
  "sqlx-core",
  "thiserror 2.0.18",
+ "url",
  "uuid",
 ]
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
+ "aws-lc-rs",
  "axum",
  "base64 0.22.1",
  "board-fleet-sync",
@@ -1640,7 +1681,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -1676,7 +1717,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "chrono",
  "message-board",
@@ -1689,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-collaboration",
  "automation-storage",
@@ -1731,7 +1772,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -1751,7 +1792,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2323,6 +2364,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
 
 [[package]]
+name = "dunce"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
+
+[[package]]
 name = "durable-steps"
 version = "0.3.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?tag=v0.3.0#a91ae380c9650ae751d4a4b98cf177f28cf545ba"
@@ -2514,7 +2561,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "chrono",
  "fleet-sync-protocol",
@@ -2775,6 +2822,12 @@ dependencies = [
  "libc",
  "winapi",
 ]
+
+[[package]]
+name = "fs_extra"
+version = "1.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42703706b716c37f96a77aea830392ad231f44c9e9a67872fa5548707e11b11c"
 
 [[package]]
 name = "funty"
@@ -3529,7 +3582,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-storage"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -3821,7 +3874,7 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3964,7 +4017,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "chrono",
  "petgraph",
@@ -3980,7 +4033,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
@@ -5455,7 +5508,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "base64 0.22.1",
  "message-board",

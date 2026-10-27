@@ -22,6 +22,7 @@ use codex_router_secret_store::file_backend::FileSecretStore;
 use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
 
 pub mod account;
+mod central_command;
 mod credential_runtime;
 mod credential_upkeep_worker;
 pub mod doctor;
@@ -37,6 +38,7 @@ mod telemetry;
 pub mod token;
 
 use account::AccountCommand;
+use central_command::CentralCommand;
 use fleet_command::FleetCommand;
 use host_command::HostCommand;
 use live::LiveCommand;
@@ -102,7 +104,7 @@ pub async fn run_async() -> i32 {
     let uses_async_dispatch = matches!(&parsed_command, Ok(CliCommand::Quota(_)))
         || matches!(
             &parsed_command,
-            Ok(CliCommand::Host(_) | CliCommand::Fleet(_))
+            Ok(CliCommand::Host(_) | CliCommand::Fleet(_) | CliCommand::Central(_))
         );
     if !uses_async_dispatch {
         return std::thread::spawn(move || run_sync_process_args(args))
@@ -210,6 +212,10 @@ where
     E: std::io::Write,
 {
     match CliCommand::parse(args.clone())? {
+        CliCommand::Central(command) => {
+            central_command::run_central_command(command, stdout).await?;
+            stderr.flush().map_err(CliError::Stderr)
+        }
         CliCommand::Quota(command) => {
             quota::run_quota_command(
                 stdout,
@@ -613,6 +619,9 @@ where
         CliCommand::Fleet(_) => {
             return Err(fleet_command::FleetCommandError::AsyncDispatchRequired.into());
         }
+        CliCommand::Central(_) => {
+            return Err(central_command::CentralCommandError::AsyncDispatchRequired.into());
+        }
         CliCommand::Version => {
             writeln!(stdout, "codex-router {}", env!("CARGO_PKG_VERSION"))
                 .map_err(CliError::Stdout)?;
@@ -821,6 +830,8 @@ commands:
   host router restart            Restart the router when host-owned
   fleet enroll                  Enroll this installation; active at the next Router start
   fleet status                  Inspect enrollment metadata without restarting
+  central serve                 Run a self-hosted Tokio central
+  central mint                  Mint a private owner or machine enrollment credential
   doctor                        Diagnose local router setup
   profile print                 Print the Codex profile snippet
 

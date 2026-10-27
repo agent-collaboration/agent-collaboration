@@ -6,6 +6,31 @@ use codex_router_core::redaction::SecretString;
 use std::{error::Error, os::unix::fs::PermissionsExt, path::Path};
 type TestResult<T = ()> = Result<T, Box<dyn Error>>;
 
+#[test]
+fn cloudflare_enrollment_roundtrips_the_existing_exact_document_bytes() -> TestResult {
+    let previous = r#"{"endpoint":"wss://central.example.invalid/v1/session","access":{"clientId":"fixture.access","clientSecretKey":"fleet_access_client_secret.550e8400-e29b-41d4-a716-446655440000.550e8400-e29b-41d4-a716-446655440001"},"credentialKey":"fleet_machine_credential.550e8400-e29b-41d4-a716-446655440000.550e8400-e29b-41d4-a716-446655440001","peer":"019f0000-0000-7000-8000-000000001f15","receiver":"019f0000-0000-7000-8000-000000000010","relay":"019f0000-0000-7000-8000-000000005240","expiresAt":null}"#;
+    let document: FleetEnrollmentDocument = serde_json::from_str(previous)?;
+    document.secret_keys()?;
+    assert_eq!(serde_json::to_string(&document)?, previous);
+    Ok(())
+}
+
+#[test]
+fn self_hosted_reference_is_explicit_and_older_access_readers_refuse_it() -> TestResult {
+    let value = serde_json::json!({"kind":"selfHosted","assertionKey":"fleet_machine_assertion.550e8400-e29b-41d4-a716-446655440000.550e8400-e29b-41d4-a716-446655440001"});
+    let access: FleetAccess = serde_json::from_value(value.clone())?;
+    assert!(matches!(access, FleetAccess::SelfHosted(_)));
+    assert_eq!(serde_json::to_value(access)?, value);
+    assert!(serde_json::from_value::<FleetAccessReference>(value).is_err());
+    assert!(
+        serde_json::from_value::<FleetAccess>(
+            serde_json::json!({"kind":"selfHosted","clientId":"client", "clientSecretKey":"key"})
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
 fn document(root: &Path) -> TestResult<FleetEnrollmentDocument> {
     let installation = "550e8400-e29b-41d4-a716-446655440000";
     let generation = "550e8400-e29b-41d4-a716-446655440001";
@@ -32,7 +57,8 @@ fn document(root: &Path) -> TestResult<FleetEnrollmentDocument> {
         access: FleetAccessReference {
             client_id: "fixture.access".to_owned(),
             client_secret_key: access.as_str().to_owned(),
-        },
+        }
+        .into(),
         credential_key: credential.as_str().to_owned(),
         peer: "019f0000-0000-7000-8000-000000001f15".parse()?,
         receiver: "019f0000-0000-7000-8000-000000000010".parse()?,
@@ -96,8 +122,11 @@ fn secret_reference_pair_rejects_cross_purpose_installation_and_generation() -> 
     let root = tempfile::tempdir()?;
     let original = document(root.path())?;
     let mut swapped = original.clone();
+    let FleetAccess::Cloudflare(reference) = &mut swapped.access else {
+        return Err("expected Cloudflare fixture".into());
+    };
     std::mem::swap(
-        &mut swapped.access.client_secret_key,
+        &mut reference.client_secret_key,
         &mut swapped.credential_key,
     );
     assert!(swapped.secret_keys().is_err());
