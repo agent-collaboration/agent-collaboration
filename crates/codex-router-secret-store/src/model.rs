@@ -29,6 +29,8 @@ impl SecretKey {
 /// Secret-store operation error.
 #[derive(Debug, Error)]
 pub enum SecretStoreError {
+    #[error("invalid central credential key")]
+    InvalidCentralSecretKey,
     #[error("invalid Fleet secret key: expected purpose, canonical installation and generation")]
     InvalidFleetSecretKey,
     #[error("Fleet secrets require encrypted storage or an explicitly declared debug root")]

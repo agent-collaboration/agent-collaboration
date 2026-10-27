@@ -1,5 +1,6 @@
 //! Owner enrollment and local metadata inspection never restart or reload a Router.
 mod arguments;
+mod enrollment_credentials;
 mod enrollment_http;
 mod enrollment_prepare;
 #[cfg(test)]
@@ -19,6 +20,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum FleetCommandError {
+    #[error(transparent)]
+    CredentialFile(#[from] codex_router_secret_store::central_credentials::CredentialFileError),
     #[error("{0}")]
     Arguments(String),
     #[error("{0}")]

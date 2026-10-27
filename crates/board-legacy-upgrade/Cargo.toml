@@ -23,6 +23,7 @@ fleet-admission = { version = "0.1.100", path = "../fleet-admission" }
 collaboration-service = { version = "0.1.100", path = "../collaboration-service" }
 collaboration-client = { version = "0.1.100", path = "../collaboration-client" }
 codex-router-host = { version = "0.1.100", path = "../codex-router-host" }
+codex-router-secret-store = { version = "0.1.102", path = "../codex-router-secret-store" }
 automation-storage = { version = "0.1.100", path = "../automation-storage" }
 interaction-storage = { version = "0.1.100", path = "../interaction-storage" }
 collaboration-protocol = { version = "0.1.100", path = "../collaboration-protocol" }

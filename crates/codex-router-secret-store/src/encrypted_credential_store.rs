@@ -283,7 +283,7 @@ impl SecretStore for EncryptedCredentialStore {
     fn write_secret(&self, key: &SecretKey, secret: &SecretString) -> Result<(), SecretStoreError> {
         match classify_secret_key(key)? {
             SecretStorageClass::GeneralSecret => self.file_store.write_secret(key, secret),
-            SecretStorageClass::AccountCredential | SecretStorageClass::FleetCredential => {
+            SecretStorageClass::AccountCredential | SecretStorageClass::ProtectedCredential => {
                 self.write_staged(key, secret)
             }
         }
@@ -292,7 +292,7 @@ impl SecretStore for EncryptedCredentialStore {
     fn read_secret(&self, key: &SecretKey) -> Result<SecretString, SecretStoreError> {
         match classify_secret_key(key)? {
             SecretStorageClass::GeneralSecret => return self.file_store.read_secret(key),
-            SecretStorageClass::AccountCredential | SecretStorageClass::FleetCredential => {}
+            SecretStorageClass::AccountCredential | SecretStorageClass::ProtectedCredential => {}
         }
         let data_key = self.ready_data_key()?;
         let envelope = self.file_store.read_credential_envelope(key)?;

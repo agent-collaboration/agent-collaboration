@@ -65,9 +65,11 @@ fn central_admin_url_preserves_origin_and_translates_session_scheme() -> TestRes
             EnrollArguments {
                 endpoint: endpoint.to_owned(),
                 label: "fixture".to_owned(),
-                access_client_id: "fixture.access".to_owned(),
-                access_client_secret_file: secret.clone(),
-                expires_at: (Utc::now() + Duration::hours(1)).to_rfc3339(),
+                access_client_id: Some("fixture.access".to_owned()),
+                access_client_secret_file: Some(secret.clone()),
+                expires_at: Some((Utc::now() + Duration::hours(1)).to_rfc3339()),
+                self_hosted_root: None,
+                enrollment_credential_file: None,
                 owner_token_env: "SELECTED_OWNER_TOKEN".to_owned(),
                 router_root: Some(root.path().join("router")),
                 #[cfg(debug_assertions)]
