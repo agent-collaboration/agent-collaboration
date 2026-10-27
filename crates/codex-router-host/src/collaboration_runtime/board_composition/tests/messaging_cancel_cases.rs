@@ -330,7 +330,17 @@ async fn lose_actual_submit_answer(
             .holder
             .central
             .runtime_control(ObjectAddress::Registry, RuntimeControl::AwaitHeldDispatch)
-            .await?;
+            .await;
+        let held = match held {
+            Ok(held) => held,
+            Err(error) => {
+                return Err(format!(
+                    "selected successor submit did not reach hold: {error}; {}",
+                    successor_publication_evidence(fixture).await?
+                )
+                .into());
+            }
+        };
         let board_central_test_support::DispatchFaultObservation::Held {
             destination,
             request: held_request,
@@ -385,6 +395,50 @@ async fn lose_actual_submit_answer(
         Ok(())
     })
     .await?
+}
+
+async fn successor_publication_evidence(
+    fixture: &RuleFixture,
+) -> Result<String, Box<dyn std::error::Error + Send + Sync>> {
+    let fault = fixture
+        .holder
+        .central
+        .runtime_control(ObjectAddress::Registry, RuntimeControl::Observe)
+        .await?;
+    let marks = fixture
+        .successor
+        .projects
+        .acknowledged_mail_changes(&fixture.project)
+        .await?;
+    let store = fixture
+        .successor
+        .registry
+        .existing_project(&fixture.project)
+        .await?
+        .ok_or("successor store")?;
+    let state = store.writer_state().await?;
+    let mut read = store.snapshot().await?;
+    let frontier = read.mail_settled_through().await?;
+    let handoffs = read
+        .mail_handoff_page(message_board::HandoffSeq::ZERO, 10)
+        .await?
+        .into_iter()
+        .map(|handoff| {
+            Ok(json!({"sequence":handoff.sequence,"item":serde_json::to_value(handoff.item)?}))
+        })
+        .collect::<Result<Vec<_>, serde_json::Error>>()?;
+    read.finish().await?;
+    let rows = fixture
+        .successor
+        .notifications
+        .rows()
+        .await?
+        .into_iter()
+        .map(|row| (row.category, row.identity, row.content))
+        .collect::<Vec<_>>();
+    Ok(format!(
+        "fault={fault:?}; writer={state:?}; marks={marks:?}; frontier={frontier:?}; handoffs={handoffs:?}; native={rows:?}"
+    ))
 }
 
 async fn decide_and_replay(
