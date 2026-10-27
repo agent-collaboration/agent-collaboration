@@ -1,4 +1,7 @@
 //! Session inventory and native-control failures shared by readers and application operations.
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
 use serde_json::{Map, Value, json};
 
 pub(crate) const NATIVE_FAILURE_MESSAGE: &str = "Native control operation failed";
@@ -166,5 +169,68 @@ impl serde::Serialize for ProviderInventoryFailure {
             }
         };
         payload.serialize(serializer)
+    }
+}
+
+impl CollaborationRejection for NativeSessionFailure {
+    fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
+        match self {
+            Self::InvalidRequest(_) => Some(CollaborationRejectionReason::InvalidShape),
+            // A result too large for its response budget is not the API's concurrency limit.
+            Self::Refused { kind, .. } => match kind {
+                NativeSessionFailureKind::WrongService
+                | NativeSessionFailureKind::EndpointNotFound
+                | NativeSessionFailureKind::UnsupportedCapability
+                | NativeSessionFailureKind::Unavailable
+                | NativeSessionFailureKind::StaleGeneration
+                | NativeSessionFailureKind::OutcomeUnknown
+                | NativeSessionFailureKind::ResponseTooLarge => None,
+            },
+            Self::NativeRejected { .. } | Self::NameMismatch { .. } => None,
+        }
+    }
+
+    fn published_rejection(&self) -> PublishedRejection {
+        match self {
+            Self::InvalidRequest(message) => {
+                PublishedRejection::bare(PublishedRejection::INVALID_PARAMS, *message)
+            }
+            Self::Refused { .. } | Self::NativeRejected { .. } | Self::NameMismatch { .. } => {
+                PublishedRejection::typed(
+                    PublishedRejection::OPERATION_FAILED,
+                    self.to_string(),
+                    self,
+                )
+            }
+        }
+    }
+}
+
+impl CollaborationRejection for ProviderInventoryFailure {
+    fn rejection_reason(&self) -> Option<CollaborationRejectionReason> {
+        match self {
+            Self::InvalidRequest(_) => Some(CollaborationRejectionReason::InvalidShape),
+            // A page too large for its response budget is not the API's concurrency limit.
+            Self::Unavailable(kind) => match kind {
+                ProviderInventoryFailureKind::WrongService
+                | ProviderInventoryFailureKind::EndpointNotFound
+                | ProviderInventoryFailureKind::UnsupportedCapability
+                | ProviderInventoryFailureKind::Unavailable
+                | ProviderInventoryFailureKind::ResponseTooLarge => None,
+            },
+        }
+    }
+
+    fn published_rejection(&self) -> PublishedRejection {
+        match self {
+            Self::InvalidRequest(message) => {
+                PublishedRejection::bare(PublishedRejection::INVALID_PARAMS, *message)
+            }
+            Self::Unavailable(_) => PublishedRejection::typed(
+                PublishedRejection::OPERATION_FAILED,
+                self.to_string(),
+                self,
+            ),
+        }
     }
 }

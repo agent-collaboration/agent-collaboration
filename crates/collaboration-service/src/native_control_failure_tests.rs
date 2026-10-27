@@ -10,7 +10,7 @@ use {
 
 /// A native failure as callers receive it, in the envelope these tests read.
 #[cfg(test)]
-fn published(failure: &impl crate::collaboration_application::CollaborationRejection) -> Value {
+fn published(failure: &impl crate::collaboration_rejection::CollaborationRejection) -> Value {
     json!({"error": failure.published_rejection()})
 }
 

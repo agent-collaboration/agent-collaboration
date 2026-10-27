@@ -33,7 +33,7 @@ mod tests {
     use crate::SubscriptionDeliveryService;
     use crate::SubscriptionDeliveryServiceProps;
     use crate::SystemSubscriptionClock;
-    use crate::collaboration_application::CollaborationRejection;
+    use crate::collaboration_rejection::CollaborationRejection;
 
     use collaboration_contracts::MachineIdentity;
     use collaboration_contracts::SessionMessageDelivery;

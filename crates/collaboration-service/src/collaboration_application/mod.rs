@@ -22,7 +22,6 @@ mod automation_history_operations;
 mod automation_inspection_operations;
 mod automation_operations;
 mod board_operations;
-mod collaboration_rejection;
 mod conversation_operations;
 mod interaction_operations;
 mod journal_operations;
@@ -43,9 +42,6 @@ pub(crate) mod wake_operations;
 
 pub use automation_operations::AutomationOperations;
 pub use board_operations::{BoardOperations, ThreadWaitBudgetError, thread_wait_root_notice_limit};
-pub use collaboration_rejection::{
-    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
-};
 pub use conversation_operations::{ConversationFailure, ConversationOperations};
 pub use interaction_operations::{InteractionFailure, InteractionOperations, QuestionRejection};
 pub use journal_operations::{
@@ -66,10 +62,6 @@ pub(crate) use session_operations::{
     classify_native_call_failure, rename_method_unsupported, valid_session_rename_name,
 };
 pub use wake_operations::{WakeOperations, WakeWaitFailure};
-
-#[cfg(test)]
-#[path = "collaboration_rejection_tests.rs"]
-mod collaboration_rejection_tests;
 
 #[cfg(test)]
 #[path = "thread_wait_budget_tests.rs"]
@@ -166,4 +158,37 @@ impl CollaborationApplication {
     pub fn interactions(&self) -> &InteractionOperations {
         &self.interactions
     }
+}
+
+// Rejection tests compose existing failure builders without exposing application internals.
+#[cfg(test)]
+pub(crate) use automation_operations::run_failure_context;
+#[cfg(test)]
+pub(crate) use schedule_operations::{ScheduleFailureContext, schedule_failure};
+#[cfg(test)]
+pub(crate) use session_native_control::INVALID_NATIVE_PARAMETERS;
+
+#[cfg(test)]
+pub(crate) fn instruction_rejection_fixture(
+    kind: collaboration_protocol::InstructionFailureKind,
+) -> collaboration_protocol::InstructionFailure {
+    use automation_operations::{
+        InstructionContext, InstructionFailureReason, instruction_failure,
+    };
+    use collaboration_protocol::{InstructionStage, LocalMutationState};
+
+    instruction_failure(
+        InstructionContext {
+            operation_id: None,
+            instruction_id: None,
+            mutation: true,
+            current_revision_id: None,
+        },
+        InstructionFailureReason {
+            kind,
+            stage: InstructionStage::Storage,
+            message: "failure",
+            mutation: LocalMutationState::None,
+        },
+    )
 }

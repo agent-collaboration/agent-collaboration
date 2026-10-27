@@ -1,6 +1,7 @@
 //! Typed board families route all project writes through project admission.
-use super::{
-    CollaborationRejection, CollaborationRejectionReason, PublishedRejection, ResultByteBudget,
+use super::ResultByteBudget;
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };
 use collaboration_protocol::{
     SubscriptionWaitBatch, ThreadSubscriptionPresence, ThreadSubscriptionState,

@@ -1,5 +1,7 @@
 //! Approvals and questions: decisions a person or agent owes a waiting session.
-use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams, ApprovalListResponse,
     QuestionAnswerParams, QuestionAnswerResult, QuestionListParams, QuestionListResult,

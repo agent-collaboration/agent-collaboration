@@ -11,7 +11,7 @@ use collaboration_protocol::{
     EndpointInventory, UuidIdentity,
 };
 use collaboration_service::CollaborationApplication;
-use collaboration_service::collaboration_application::CollaborationRejection;
+use collaboration_service::collaboration_rejection::CollaborationRejection;
 
 pub(crate) struct ApplicationCollaboration {
     application: CollaborationApplication,

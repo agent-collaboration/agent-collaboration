@@ -1,6 +1,8 @@
 //! The lifecycle journal and the address book: long-polled lifecycle reads and paged address
 //! snapshots for the endpoints this Router publishes.
-use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
 use collaboration_protocol::{AddressListParams, JournalReadParams, JournalStatus};
 use lifecycle_observation::{AddressPage, JournalBounds, JournalError, JournalPage};
 use serde_json::json;

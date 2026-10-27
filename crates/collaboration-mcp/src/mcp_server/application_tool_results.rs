@@ -10,9 +10,7 @@ use super::{
     operation_failure_from_client_error, structured_tool_error, validation_failure,
 };
 use collaboration_protocol::AdapterOperationFailure;
-use collaboration_service::collaboration_application::{
-    CollaborationRejection, PublishedRejection,
-};
+use collaboration_service::collaboration_rejection::{CollaborationRejection, PublishedRejection};
 
 /// The rejection as an operation failure, with the effect the tool declares unless the
 /// rejection itself shows nothing took effect.

@@ -89,7 +89,7 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
     {
         Ok(result) => json!({ "result": result }),
         Err(failure) => json!({
-            "error": crate::collaboration_application::CollaborationRejection::published_rejection(&failure)
+            "error": crate::collaboration_rejection::CollaborationRejection::published_rejection(&failure)
         }),
     };
     if old_link_result

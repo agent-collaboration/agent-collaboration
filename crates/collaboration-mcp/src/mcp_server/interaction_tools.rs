@@ -129,7 +129,7 @@ impl CollaborationMcpServer {
 /// An approval or answer refused by the broker: the decision's outcome is unknown to the
 /// caller, at the named stage, with no target or turn known.
 fn staged_failure_result(
-    rejection: &impl collaboration_service::collaboration_application::CollaborationRejection,
+    rejection: &impl collaboration_service::collaboration_rejection::CollaborationRejection,
     stage: &str,
 ) -> CallToolResult {
     let mut failure = rejection_failure(rejection, OperationEffect::Unknown);

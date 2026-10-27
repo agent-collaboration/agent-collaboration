@@ -1,8 +1,8 @@
 //! Schedules: local administration and portable packages, plus the explicit preparation that
 //! allocates a native destination. Only preparation reaches a native route.
-use super::{
-    AutomationOperations, CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
-    ResultByteBudget,
+use super::{AutomationOperations, ResultByteBudget};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };
 use automation_storage::{
     AutomationStore, ScheduleCreate, ScheduleEdit, ScheduleInspection, ScheduleMutation,

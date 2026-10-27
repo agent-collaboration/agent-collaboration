@@ -12,7 +12,7 @@ use collaboration_protocol::{
 };
 use collaboration_service::ApplicationFixture;
 use collaboration_service::CollaborationApplication;
-use collaboration_service::collaboration_application::CollaborationRejection;
+use collaboration_service::collaboration_rejection::CollaborationRejection;
 
 use serde::Serialize;
 use serde_json::{Value, json};

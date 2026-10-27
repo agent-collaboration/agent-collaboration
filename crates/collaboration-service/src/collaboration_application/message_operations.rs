@@ -1,5 +1,7 @@
 //! Direct messages: store-first sends and replies, push inspection, inbox and history.
-use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
 use crate::push_record_delivery::{PushDeliveryFailure, store_first_and_deliver};
 use crate::push_record_resolver::{
     ActivityReadError, ReferenceError, caller_is_local, can_read, expand_activity_ranges, link_for,

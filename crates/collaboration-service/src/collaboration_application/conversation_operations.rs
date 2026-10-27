@@ -1,6 +1,8 @@
 //! Provider conversations: Host-owned operations on external provider sessions, plus the
 //! inspection and recovery of recorded Codex ACP operations.
-use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
 use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationBindingIdentity,

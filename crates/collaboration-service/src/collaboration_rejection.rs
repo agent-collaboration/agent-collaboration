@@ -83,3 +83,7 @@ impl PublishedRejection {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "collaboration_rejection_tests.rs"]
+mod collaboration_rejection_tests;

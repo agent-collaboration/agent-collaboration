@@ -1,7 +1,8 @@
 //! U66 / MS-10: bounded wakes expire; age-only history pruning preserves their evidence.
 use super::{WakeDeliverySender, build_wake_push_draft};
 use crate::ApplicationFixture;
-use crate::collaboration_application::{CollaborationApplication, CollaborationRejection};
+use crate::collaboration_application::CollaborationApplication;
+use crate::collaboration_rejection::CollaborationRejection;
 use agent_automation::{
     CessationEvidence, ExpiryRule, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
     SubmissionEffect, TimingRule, WakeState,

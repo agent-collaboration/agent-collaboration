@@ -4,7 +4,9 @@
 //!
 //! Each sub-area fails with its existing typed payload (`ConfigurationFailure`, `RunFailure`,
 //! `InstructionFailure`, `ScheduleFailure`, `AutomationInspectionFailure`).
-use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
+use crate::collaboration_rejection::{
+    CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
+};
 use automation_storage::{
     AutomationStore, InstructionUpdate, StorageError, SummaryRecoveryAction, SummaryRecoveryRequest,
 };

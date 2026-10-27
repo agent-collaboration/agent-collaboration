@@ -1,22 +1,24 @@
 //! Each family's typed failure maps to a spec 1 §5 rejection reason only where it is that same
 //! reason, and its wire payload keeps today's `kind`. The oracle is the spec 1 §5 table and the
 //! published `-32050` payload kinds, never the mapping code itself.
-use super::automation_operations::{
-    InstructionContext, InstructionFailureReason, instruction_failure, run_failure_context,
+use super::{CollaborationRejection, CollaborationRejectionReason as Reason};
+use crate::collaboration_application::wake_operations::{WakeFailureContext, wake_failure};
+use crate::collaboration_application::{
+    ConversationFailure, INVALID_NATIVE_PARAMETERS, InteractionFailure, JournalFailure,
+    JournalUnavailableKind, MessageFailure, MessageFailureKind, MessageFailureStage,
+    NativeSessionFailure, NativeSessionFailureKind, NativeSessionStage, ObservationFailure,
+    ProviderInventoryFailure, ProviderInventoryFailureKind, QuestionRejection,
+    ScheduleFailureContext, ScheduleOperationFailure, WakeWaitFailure,
+    instruction_rejection_fixture, run_failure_context, schedule_failure,
 };
-use super::schedule_operations::{ScheduleFailureContext, schedule_failure};
-use super::session_native_control::INVALID_NATIVE_PARAMETERS;
-use super::wake_operations::{WakeFailureContext, wake_failure};
-use super::*;
-use CollaborationRejectionReason as Reason;
 use automation_storage::StorageError;
 use collaboration_protocol::{
     AutomationInspectionFailureKind, ConfigurationFailure, ConfigurationFailureKind,
     ConfigurationFileState, ConfigurationNextAction, ConversationOperationFailure,
     ConversationOperationFailureKind, ConversationOperationFailureStage, InstructionFailureKind,
-    InstructionStage, LocalMutationState, NonEmptyText, ProviderInspectFailure,
-    ProviderInspectFailureKind, ProviderOperationEffect, ProviderSettingsFailure,
-    ProviderSettingsFailureKind, RunFailureKind, ScheduleFailure, WakeFailureReason,
+    LocalMutationState, NonEmptyText, ProviderInspectFailure, ProviderInspectFailureKind,
+    ProviderOperationEffect, ProviderSettingsFailure, ProviderSettingsFailureKind, RunFailureKind,
+    ScheduleFailure, WakeFailureReason,
 };
 use message_board::{
     BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardNextAction,
@@ -252,20 +254,7 @@ fn instruction_failures_map_by_kind() {
     ];
     for (kind, wire, reason) in table {
         // Act.
-        let failure = instruction_failure(
-            InstructionContext {
-                operation_id: None,
-                instruction_id: None,
-                mutation: true,
-                current_revision_id: None,
-            },
-            InstructionFailureReason {
-                kind,
-                stage: InstructionStage::Storage,
-                message: "failure",
-                mutation: LocalMutationState::None,
-            },
-        );
+        let failure = instruction_rejection_fixture(kind);
 
         // Assert.
         assert_eq!(failure.rejection_reason(), reason, "{wire}");

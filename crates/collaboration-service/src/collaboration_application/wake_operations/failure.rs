@@ -3,7 +3,7 @@ use super::{
     LocalMutationEvidence, LocalMutationState, OperationId, StorageError, WaitUnavailable,
     WakeFailure, WakeFailureReason, WakeFailureStage, WakeNextAction, WakeNotFound, WakeupId, json,
 };
-use crate::collaboration_application::{
+use crate::collaboration_rejection::{
     CollaborationRejection, CollaborationRejectionReason, PublishedRejection,
 };
 /// The identities a wake failure reports back, taken from the request that failed.
