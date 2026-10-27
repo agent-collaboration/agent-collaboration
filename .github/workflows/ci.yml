@@ -198,6 +198,8 @@ jobs:
           sudo docker image prune --all --force > /dev/null
           df -h /
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version-file: verification/package.json
@@ -226,6 +228,18 @@ jobs:
       # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
         run: cargo fetch --locked
+      - name: Select quota-reset stage
+        id: quota_scope
+        if: github.event_name == 'pull_request'
+        env:
+          QUOTA_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
+          # Use the tested merge tree so paths match metadata after base-branch moves.
+          QUOTA_DIFF_HEAD: ${{ github.sha }}
+        run: node verification/tooling/select-quota-stage.ts
+      - name: Report skipped quota-reset stage
+        if: github.event_name == 'pull_request' && steps.quota_scope.outputs.changed == 'false'
+        run: |
+          printf 'quota-reset stage skipped: no quota changes\n' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Restore pinned Rust tools
         id: rust_tools
         uses: actions/cache/restore@v4
@@ -250,9 +264,11 @@ jobs:
           cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))' --no-run
           df -h /
       - name: Build quota-reset test binaries
+        if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness --no-run
       - name: Test quota-reset terminal integration
         id: quota_reset_terminal_integration
+        if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
         background: true
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
       - name: Test Rust workspace
