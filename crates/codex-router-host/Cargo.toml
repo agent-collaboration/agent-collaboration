@@ -68,6 +68,7 @@ toml = "1.1.2"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+codex-router-host = { path = ".", features = ["runtime-test-support"] }
 reqwest-websocket = "=0.5.1"
 board-legacy-upgrade = { version = "0.1.100", path = "../board-legacy-upgrade" }
 collaboration-central-conformance = { version = "0.1.100", path = "../collaboration-central-conformance" }

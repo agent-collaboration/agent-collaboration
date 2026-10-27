@@ -17,6 +17,16 @@ use collaboration_protocol::PushDeliveryState;
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem};
 use serde_json::{Value, json};
 
+#[path = "takeover_copy_progress.rs"]
+mod copy_progress;
+use copy_progress::copy_project;
+#[path = "takeover_frontier_cut.rs"]
+mod frontier_cut;
+use frontier_cut::{EndCutConsequence, RemoteEndCut};
+pub use frontier_cut::{FrontierCut, RemoteEndPrefix};
+#[path = "takeover_cancel_successor.rs"]
+mod cancel_successor;
+
 struct HeldFollow {
     follow: FollowMembership,
     item: DeliveryItem<BoardDeliveryTypes>,
@@ -27,6 +37,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     fixture.create().await?;
     let follow =
         FollowMembership::arrange(fixture, recipients::session(second.host()?).await?).await?;
+    copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
@@ -38,10 +49,9 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     let range = follow
         .post(fixture, "held follow cancellation range")
         .await?;
-    let item = submitted_item(
-        &controls::held_call(fixture, ObjectAddress::Registry, "central.mailbox-submit").await?,
-    )?;
+    let item = submitted_item(&copy_progress::held_submit(fixture).await?)?;
     follow.assert_frozen(&item, &range)?;
+    copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::resume(fixture, ObjectAddress::Registry).await?;
     sender_status(fixture.host()?, &item.id().as_uuid().to_string(), "held").await?;
@@ -68,6 +78,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     let captured = readbacks::handoff_capture(&stopped, &fixture.project, item.id()).await?;
     drop(stopped);
     fixture.reopen_host().await?;
+    copy_project(fixture).await?;
     controls::confirm_copy_ack(fixture, captured).await?;
     Ok(HeldFollow {
         follow,
@@ -79,7 +90,7 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
 pub async fn remote(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
-    prefix: EndPrefix,
+    prefix: RemoteEndPrefix,
 ) -> FixtureResult {
     recipients::scenario(fixture, second, async move |fixture, second, peers| {
         Box::pin(controls::scenario(
@@ -96,9 +107,113 @@ async fn prove_remote(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
     peers: &mut Recipients,
-    prefix: EndPrefix,
+    remote_prefix: RemoteEndPrefix,
 ) -> FixtureResult {
+    let prefix = remote_prefix.end_prefix();
     let seed = held_remote(fixture, second).await?;
+    let cut = arrange_remote_end(fixture, second, &seed, remote_prefix).await?;
+    let stopped = fixture
+        .host
+        .take()
+        .ok_or("predecessor Host absent")?
+        .crash_for_readback()
+        .await?;
+    let before = readbacks::handoffs(&stopped, &fixture.project, 1).await?;
+    let [
+        message_board_storage::MailHandoffItem::CancelGroup(_),
+        message_board_storage::MailHandoffItem::Delivery(original),
+        message_board_storage::MailHandoffItem::CancelGroup(_),
+    ] = before.as_slice()
+    else {
+        return Err("remote-end fixture must retain policy1, original2 and end3".into());
+    };
+    assert_eq!(original.id(), seed.item.id());
+    assert_end_groups(&before, &seed.follow, true)?;
+    let expansions = readbacks::cancel_expansions(&stopped, &fixture.project, 1).await?;
+    if !matches!(prefix, EndPrefix::Discarded) {
+        let [expansion] = expansions.as_slice() else {
+            return Err("retained end has no unique frozen child cancel".into());
+        };
+        assert_eq!(expansion.get("target"), Some(&json!(seed.item.id())));
+        if let EndCutConsequence::LostReceipt(lost) = &cut.consequence {
+            assert_eq!(expansion.get("envelope"), Some(lost));
+        }
+    }
+    controls::assert_end_cut(
+        fixture,
+        &stopped,
+        seed.item.id(),
+        cut.end,
+        prefix,
+        &expansions,
+        cut.pre_end_ack,
+    )
+    .await?;
+    if let EndCutConsequence::Retained { cut, frontier } = cut.consequence {
+        let copied = controls::copy_ack(fixture).await?;
+        assert_eq!(copied.epoch, frontier.position.epoch);
+        match cut {
+            FrontierCut::Unsettled => assert!(
+                copied.sequence < frontier.position.sequence,
+                "unsettled cut copied the frontier"
+            ),
+            FrontierCut::Settled => assert!(
+                copied.sequence >= frontier.position.sequence,
+                "settled cut omitted the frontier"
+            ),
+        }
+        match cut {
+            FrontierCut::Unsettled => assert!(
+                frontier.settled_through.get() >= 2,
+                "held frontier did not cover the original"
+            ),
+            FrontierCut::Settled => assert_eq!(
+                frontier.settled_through.get(),
+                3,
+                "settled cut omitted the end group"
+            ),
+        }
+        eprintln!(
+            "CI6 frontier prefix: {cut:?}, captured={:?}, copyAck={copied:?}",
+            frontier.position
+        );
+    }
+    drop(stopped);
+    recipient_before_transfer(second, &seed, prefix).await?;
+    transfer_to_second(fixture, second, TransferKind::Takeover)
+        .await
+        .map_err(|error| format!("CI6 successor writer activation: {error}"))?;
+    if matches!(prefix, EndPrefix::Discarded | EndPrefix::Retained) {
+        // The held frontier belongs to the dead predecessor; release its
+        // conformance dispatch only after the successor seed is installed.
+        let observed = super::central_pair::central(fixture)?
+            .runtime_control(controls::connection(fixture)?, RuntimeControl::Observe)
+            .await?;
+        if matches!(
+            observed.dispatch,
+            board_central_test_support::DispatchFaultObservation::Held { .. }
+        ) {
+            controls::resume(fixture, controls::connection(fixture)?).await?;
+        }
+    }
+    cancel_successor::assert_remote_successor(
+        fixture,
+        second,
+        peers,
+        remote_prefix,
+        &seed,
+        expansions,
+    )
+    .await
+}
+
+async fn arrange_remote_end(
+    fixture: &mut BoardFixture,
+    second: &SecondHost,
+    seed: &HeldFollow,
+    remote_prefix: RemoteEndPrefix,
+) -> FixtureResult<RemoteEndCut> {
+    let prefix = remote_prefix.end_prefix();
     let mailbox = ObjectAddress::Mailbox(second.service_id()?.try_into()?);
     match prefix {
         EndPrefix::Discarded => {
@@ -119,14 +234,22 @@ async fn prove_remote(
             )
             .await?
         }
-        EndPrefix::Retained => {}
+        EndPrefix::Retained => {
+            controls::hold_selected(
+                fixture,
+                controls::connection(fixture)?,
+                controls::copy(fixture)?,
+                DispatchCallSelector::CopyWrite,
+            )
+            .await?;
+        }
     }
     let pre_end_ack = controls::copy_ack(fixture).await?;
     let end = seed.follow.unsubscribe(fixture).await?;
-    let mut held_copy_write = None;
-    let lost = match prefix {
+    let consequence = match prefix {
         EndPrefix::Discarded => {
-            held_copy_write = Some(controls::held(fixture, controls::connection(fixture)?).await?);
+            let held = controls::held(fixture, controls::connection(fixture)?).await?;
+            assert_eq!(held.get("kind"), Some(&json!("central.copy-session-write")));
             native_state(
                 second.host()?,
                 &seed.follow.target,
@@ -134,158 +257,32 @@ async fn prove_remote(
                 PushDeliveryState::Held,
             )
             .await?;
-            None
+            EndCutConsequence::Discarded
         }
         EndPrefix::Retained => {
+            let RemoteEndPrefix::Retained(cut) = remote_prefix else {
+                return Err("retained end has no frontier cut".into());
+            };
+            let frontier = frontier_cut::establish(fixture, cut).await?;
             sender_status(
                 fixture.host()?,
                 &seed.item.id().as_uuid().to_string(),
                 "cancelled",
             )
-            .await?;
+            .await
+            .map_err(|error| format!("CI6 retained-end original cancellation: {error}"))?;
             settled_view(fixture.host()?, &fixture.project).await?;
-            None
+            EndCutConsequence::Retained { cut, frontier }
         }
-        EndPrefix::LostReceipt => {
-            Some(lose_cancel_answer(fixture, mailbox, seed.item.id().as_uuid().to_string()).await?)
-        }
+        EndPrefix::LostReceipt => EndCutConsequence::LostReceipt(
+            lose_cancel_answer(fixture, mailbox, seed.item.id().as_uuid().to_string()).await?,
+        ),
     };
-    let stopped = fixture
-        .host
-        .take()
-        .ok_or("predecessor Host absent")?
-        .crash_for_readback()
-        .await?;
-    let before = readbacks::handoffs(&stopped, &fixture.project, 1).await?;
-    assert_end_groups(&before, &seed.follow, true)?;
-    let expansions = readbacks::cancel_expansions(&stopped, &fixture.project, 1).await?;
-    if !matches!(prefix, EndPrefix::Discarded) {
-        let [expansion] = expansions.as_slice() else {
-            return Err("retained end has no unique frozen child cancel".into());
-        };
-        assert_eq!(expansion.get("target"), Some(&json!(seed.item.id())));
-        if let Some(lost) = lost {
-            assert_eq!(expansion.get("envelope"), Some(&lost));
-        }
-    }
-    controls::assert_end_cut(
-        fixture,
-        &stopped,
-        seed.item.id(),
-        end,
-        prefix,
-        &expansions,
+    Ok(RemoteEndCut {
         pre_end_ack,
-    )
-    .await?;
-    if let Some(request) = held_copy_write {
-        assert_eq!(
-            request.get("kind"),
-            Some(&json!("central.copy-session-write"))
-        );
-    }
-    drop(stopped);
-    recipient_before_transfer(second, &seed, prefix).await?;
-    transfer_to_second(fixture, second, TransferKind::Takeover).await?;
-    if matches!(prefix, EndPrefix::Discarded) {
-        controls::resume(fixture, controls::connection(fixture)?).await?;
-    }
-    assert_remote_successor(fixture, second, peers, prefix, &seed, expansions).await
-}
-
-async fn assert_remote_successor(
-    fixture: &BoardFixture,
-    second: &mut SecondHost,
-    peers: &mut Recipients,
-    prefix: EndPrefix,
-    seed: &HeldFollow,
-    expansions: Vec<Value>,
-) -> FixtureResult {
-    peers
-        .start_second(second, u64::from(matches!(prefix, EndPrefix::Discarded)))
-        .await?;
-    let expected_state = match prefix {
-        EndPrefix::Discarded => {
-            peers
-                .second()?
-                .expect_marker(&seed.item.id().as_uuid().to_string())
-                .await?;
-            PushDeliveryState::Delivered
-        }
-        EndPrefix::Retained | EndPrefix::LostReceipt => PushDeliveryState::Rejected,
-    };
-    native_state(
-        second.host()?,
-        &seed.follow.target,
-        &seed.item.id().as_uuid().to_string(),
-        expected_state,
-    )
-    .await?;
-    if !matches!(prefix, EndPrefix::Discarded) {
-        let [frozen] = expansions.as_slice() else {
-            return Err("retained end has no unique frozen cancel association".into());
-        };
-        let cancel = serde_json::from_value(
-            frozen
-                .get("cancel")
-                .ok_or("frozen child cancel is absent")?
-                .clone(),
-        )?;
-        let host = second.host_mut()?;
-        // Rejected already held before takeover; only this committed row proves replay.
-        tokio::time::timeout(BOUND, async {
-            while !host.local_cancel_delivery_recorded(cancel).await? {}
-            FixtureResult::Ok(())
-        })
-        .await??;
-    }
-    let stopped = second.stop_for_readback().await?;
-    let inherited = readbacks::handoffs(&stopped, &fixture.project, 2).await?;
-    if matches!(prefix, EndPrefix::Discarded) {
-        readbacks::assert_ongoing_membership(
-            &stopped,
-            &fixture.project,
-            2,
-            &seed.follow.membership,
-        )
-        .await?;
-    }
-    assert_end_groups(
-        &inherited,
-        &seed.follow,
-        !matches!(prefix, EndPrefix::Discarded),
-    )?;
-    let actual = only_item(readbacks::deliveries(inherited))?;
-    assert_eq!(
-        serde_json::to_value(&actual)?,
-        serde_json::to_value(&seed.item)?
-    );
-    seed.follow.assert_frozen(&actual, &seed.range)?;
-    let after = readbacks::cancel_expansions(&stopped, &fixture.project, 2).await?;
-    match prefix {
-        EndPrefix::Discarded => assert!(after.is_empty()),
-        EndPrefix::Retained | EndPrefix::LostReceipt => assert_eq!(after, expansions),
-    }
-    assert_local_replay(
-        &readbacks::local_cancel_deliveries(&stopped).await?,
-        prefix,
-        &expansions,
-    )?;
-    readbacks::assert_no_wake(&stopped).await?;
-    drop(stopped);
-    second.reopen_host().await?;
-    native_state(
-        second.host()?,
-        &seed.follow.target,
-        &seed.item.id().as_uuid().to_string(),
-        expected_state,
-    )
-    .await?;
-    assert_eq!(
-        peers.second()?.count_after_barrier().await?,
-        u64::from(matches!(prefix, EndPrefix::Discarded))
-    );
-    Ok(())
+        end,
+        consequence,
+    })
 }
 
 async fn lose_cancel_answer(
@@ -351,26 +348,6 @@ async fn recipient_before_transfer(
     );
     drop(stopped);
     second.reopen_host().await?;
-    Ok(())
-}
-
-fn assert_local_replay(local: &[Value], prefix: EndPrefix, expansions: &[Value]) -> FixtureResult {
-    if matches!(prefix, EndPrefix::Discarded) {
-        assert!(local.is_empty(), "discarded end invented a Local cancel");
-        return Ok(());
-    }
-    let [replayed] = local else {
-        return Err("successor did not admit exactly one Local cancel replay".into());
-    };
-    let [frozen] = expansions else {
-        return Err("retained end has no unique frozen cancel association".into());
-    };
-    assert_eq!(replayed.get("cancel"), frozen.get("cancel"));
-    assert_eq!(replayed.get("target"), frozen.get("target"));
-    assert_eq!(
-        replayed.get("attribution"),
-        Some(&json!({"kind":"boardDerived"}))
-    );
     Ok(())
 }
 

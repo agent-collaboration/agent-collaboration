@@ -94,6 +94,7 @@ enum ServedEndpoint {
 /// One listener serving the API until stopped.
 pub(crate) struct ServedApi {
     endpoint: ServedEndpoint,
+    http_client: reqwest::Client,
     shutdown: CancellationToken,
     tool_calls: ToolCallRegistry,
     task: JoinHandle<io::Result<()>>,
@@ -151,6 +152,7 @@ impl ServedApi {
         ));
         Self {
             endpoint: ServedEndpoint::LoopbackTcp(address),
+            http_client: reqwest::Client::new(),
             shutdown: config.shutdown.clone(),
             tool_calls,
             task,
@@ -169,6 +171,7 @@ impl ServedApi {
         ));
         Self {
             endpoint: ServedEndpoint::UnixSocket(socket.to_owned()),
+            http_client: reqwest::Client::new(),
             shutdown: config.shutdown.clone(),
             tool_calls,
             task,
@@ -243,7 +246,8 @@ impl ServedApi {
     /// Posts one JSON-RPC message over TCP without a client handshake; stateless calls need
     /// none. Answers the JSON-RPC response, whether sent as JSON or as one SSE event.
     pub(crate) async fn post(&self, message: &Value) -> (reqwest::StatusCode, Value) {
-        let response = reqwest::Client::new()
+        let response = self
+            .http_client
             .post(self.url())
             .header(CONTENT_TYPE, "application/json")
             .header(ACCEPT, "application/json, text/event-stream")
