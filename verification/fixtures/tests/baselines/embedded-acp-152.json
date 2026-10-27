@@ -1,0 +1,16 @@
+{
+  "original": "crates/codex-router-host/tests/support/provider_acp_message_fifo_support.rs#load",
+  "originalSHA256": "10c8c6f25bb01341dac371ecf1f45c890ad33a2f10775ded3bf657bf3b62e0b8",
+  "target": "provider-message-fifo-agent.ts",
+  "arguments": ["load", "<ROOT>/load"],
+  "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/load\",\"params\":{\"sessionId\":\"fixture-session\"}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/load\",\"params\":{\"sessionId\":\"fixture-session\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"load-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"error\": {\"code\": -32001, \"message\": \"refused load\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"error\": {\"code\": -32001, \"message\": \"refused load\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "load": "session/load\nsession/load\n"
+    }
+  }
+}

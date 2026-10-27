@@ -1,0 +1,18 @@
+{
+  "original": "Composed Host integration#tui",
+  "originalSHA256": "bdffc49d9742648744ac59f5983d06ba0820ba722846122267cfcbb8d871bb2b",
+  "target": "host-composition-agent.ts",
+  "arguments": [],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"prompt\": [{\"type\": \"text\", \"text\": \"hello from TUI\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/prompt\", \"params\": {\"prompt\": [{\"type\": \"text\", \"text\": \"queued by another agent\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"method\": \"session/prompt\", \"params\": {\"prompt\": [{\"type\": \"text\", \"text\": \"prompt by another agent\"}]}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"tui-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"tui-provider-session\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"tui-provider-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"fixture reply\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 5, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  },
+  "configuration": {
+    "mode": "tui"
+  }
+}

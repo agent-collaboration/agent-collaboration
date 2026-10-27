@@ -1,0 +1,69 @@
+{
+  "name": "test_dropping_metadata_is_not_a_fix",
+  "observation": {
+    "target": {
+      "endpoint": {
+        "serviceId": "service",
+        "endpointId": "cursor-local"
+      },
+      "sessionId": "thread"
+    },
+    "events": [
+      {
+        "sequence": 2,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "assistant",
+            "kind": {
+              "kind": "agentMessage"
+            },
+            "text": "ACP_OK"
+          },
+          "turnId": null
+        }
+      }
+    ],
+    "epoch": 0,
+    "endReason": "deadlineReached"
+  },
+  "views": [
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "terminal": "ACP_OK",
+  "resumedTerminal": "ACP_OK",
+  "expectedReply": "ACP_OK",
+  "requireUsage": false,
+  "expected": {
+    "error": "required provider metadata was not retained"
+  }
+}

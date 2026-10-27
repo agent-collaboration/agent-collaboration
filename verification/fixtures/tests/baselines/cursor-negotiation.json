@@ -1,0 +1,10 @@
+{
+  "scenario": "negotiation",
+  "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n",
+  "expected": {
+    "status": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"mcpCapabilities\": {\"http\": true}}, \"agentInfo\": {\"name\": \"cursor-settings-wire-peer\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": "[{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}]"
+  }
+}

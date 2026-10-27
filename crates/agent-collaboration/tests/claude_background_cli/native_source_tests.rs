@@ -173,7 +173,12 @@ async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_bef
         let output = root.join("native-jobs.json");
         fs::write(&output,serde_json::to_vec(&json!([{"kind":"background","id":"distinct-background-handle","sessionId":SESSION,"cwd":fixture.working_directory,"state":state,"startedAt":1790162100000_i64}])).unwrap()).unwrap();
         let reader = root.join("native-read");
-        fs::write(&reader,format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",serde_json::to_string(&output).unwrap())).unwrap();
+        codex_router_test_support::node_fixture::write_node_fixture(
+            &reader,
+            "native-cli-catalogue-agent.ts",
+            &serde_json::json!({"kind":"file","output":{"kind":"path","path":output}}),
+        )
+        .unwrap();
         fs::set_permissions(&reader, fs::Permissions::from_mode(0o700)).unwrap();
         let description=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
         let identity = ApplicationFixture::new(

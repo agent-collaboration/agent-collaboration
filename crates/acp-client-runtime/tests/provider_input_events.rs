@@ -10,108 +10,25 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, InputId, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const INJECTED_STEER_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'input-fixture','version':'1'},
-    '_meta':{'steering':{'supported':True}}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-steer=read()
-assert steer['method']=='_session/steering'
-send({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'injected'}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const INJECTED_STEER_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-steering-agent.ts"
+);
 
-const STARTED_STEER_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'started-steer-fixture','version':'1'},
-    '_meta':{'steering':{'supported':True}}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-steer=read()
-assert steer['method']=='_session/steering'
-send({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'startedNewTurn'}})
-sys.stdin.read()
-"#;
+const STARTED_STEER_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-steering-agent.ts"
+);
 
-const STREAMED_ITEMS_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'item-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-for kind,text in [('agent_message_chunk','Hello'),('agent_message_chunk',' world'),
-                  ('agent_thought_chunk','Thinking')]:
-    send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-        'update':{'sessionUpdate':kind,'content':{'type':'text','text':text}}}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'tool_call','toolCallId':'tool-one',
-              'title':'Run check','kind':'execute','status':'pending'}}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'tool_call_update','toolCallId':'tool-one',
-              'title':'Check passed','status':'completed'}}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'plan','entries':[{'content':'Build client',
-              'priority':'medium','status':'pending'}]}}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'future_kind','content':{'type':'text','text':'Future detail'}}}})
-for update in [
-    {'sessionUpdate':'current_mode_update','currentModeId':'ask'},
-    {'sessionUpdate':'config_option_update','configOptions':[]},
-    {'sessionUpdate':'session_info_update','title':'Working session'},
-    {'sessionUpdate':'usage_update','used':5,'size':100},
-    {'sessionUpdate':'available_commands_update','availableCommands':[]},
-]:
-    send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session','update':update}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const STREAMED_ITEMS_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-streamed-items-agent.ts"
+);
 
-const PROMPT_REQUIRED_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'prompt-required-fixture','version':'1'},
-    '_meta':{'steering':{'supported':True}}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-steer=read()
-assert steer['method']=='_session/steering'
-assert steer['params']['_meta']['steering']['idleBehavior']=='promptRequired'
-send({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'promptRequired'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const PROMPT_REQUIRED_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-steering-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -179,12 +96,8 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                INJECTED_STEER_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![INJECTED_STEER_FIXTURE.to_owned(), "injected".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -270,12 +183,8 @@ async fn started_new_turn_uses_the_steer_input_id() {
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                STARTED_STEER_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![STARTED_STEER_FIXTURE.to_owned(), "started".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -352,12 +261,8 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                PROMPT_REQUIRED_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![PROMPT_REQUIRED_FIXTURE.to_owned(), "required".to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -424,12 +329,8 @@ async fn text_and_thought_chunks_publish_ordered_items() {
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                STREAMED_ITEMS_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![STREAMED_ITEMS_FIXTURE.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

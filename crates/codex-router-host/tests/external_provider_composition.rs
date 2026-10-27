@@ -26,27 +26,11 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
-    let provider = root.path().join("provider.py");
-    std::fs::write(
+    let provider = root.path().join("provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
         &provider,
-        r#"#!/usr/bin/python3
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'composition-fixture','version':'1'},'_meta':{'steering':{'supported':True}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'provider-session'}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-steer=json.loads(sys.stdin.readline())
-assert steer['method']=='_session/steering'
-print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'promptRequired'}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"composition"}),
     )
     .expect("provider fixture");
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))
@@ -205,18 +189,15 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
-    let provider = root.path().join("exit-provider.py");
+    let provider = root.path().join("exit-provider.ts");
     let barrier_path = root.path().join("exit-barrier.sock");
     let barrier = tokio::net::UnixListener::bind(&barrier_path).expect("provider exit barrier");
-    std::fs::write(&provider, r#"#!/usr/bin/python3
-import json,os,socket,struct,sys
-request=json.loads(sys.stdin.readline())
-barrier=socket.socket(socket.AF_UNIX)
-barrier.connect(sys.argv[1])
-barrier.sendall(struct.pack('!I',os.getpid()))
-barrier.recv(1)
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'exit-fixture','version':'1'}}})); sys.stdout.flush()
-"#).expect("provider fixture");
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &provider,
+        "host-composition-agent.ts",
+        &serde_json::json!({"mode":"exit"}),
+    )
+    .expect("provider fixture");
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))
         .expect("provider executable");
     let start = CollaborationRuntime::start_with_external_providers(

@@ -13,8 +13,11 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         let root = tempfile::tempdir()?;
         let provider_endpoint = endpoint("cursor-local")?;
         let creator = actor(provider_endpoint.clone(), "creator")?;
-        let script = SETTINGS_CREATE_FIXTURE.replace("__MODE__", mode);
-        let runtime = ExternalProviderRuntime::initialize(launch(&script)).await?;
+        let runtime = ExternalProviderRuntime::initialize(launch(
+            "supervisor-settings-create-agent.ts",
+            vec![mode.to_owned()],
+        ))
+        .await?;
         let backend = supervisor(
             &root,
             vec![(binding(provider_endpoint.clone(), "cursor")?, runtime)],

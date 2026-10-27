@@ -1,0 +1,15 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_lifecycle.rs#UNADVERTISED_FIXTURE",
+  "originalSHA256": "554724e6945613295c56dab8acef80c2fcc5f378c2a006cad4fc875e6d794e34",
+  "target": "provider-unadvertised-agent.ts",
+  "arguments": ["<RECEIPT>"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"no-lifecycle-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

@@ -1,0 +1,146 @@
+[
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/owned/new/tail"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/owned/new/tail\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/alias"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/dangling/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/missing/child\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/escape/../peer"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/outside/peer\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/loop-a"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/loop-a\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/loop-b/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/loop-b/child\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/chain-0/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/owned/child\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/..hidden/file"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/..hidden/file\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/outside"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/outside\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["tmp/dev-state/owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["../outside"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/outside\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": [""],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "canonical",
+    "arguments": ["<ROOT>/repo/tmp/dev-state/a/../owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  }
+]

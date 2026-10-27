@@ -1,0 +1,34 @@
+{
+  "input": {
+    "name": "accounts false",
+    "operation": "accounts",
+    "arguments": ["receipt.json", "serial.json", "concurrent.json"],
+    "originalArguments": ["receipt.json", "serial.json", "concurrent.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}",
+      "serial.json": "{}",
+      "concurrent.json": "{}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": [
+      "receipt.json",
+      "AR-E2E-ACCOUNTS-serial-transcript.json",
+      "AR-E2E-ACCOUNTS-concurrent-transcript.json"
+    ]
+  },
+  "expected": {
+    "exit": 1,
+    "stdout": "",
+    "stderr": "serial WebSocket artifact did not prove expected account selection\nserial WebSocket artifact did not include selected account safe tag\nconcurrent artifact did not run three clients\nconcurrent artifact did not report all clients successful\nconcurrent artifact did not prove selected upstream account evidence\nconcurrent artifact did not include selected account safe tag\nconcurrent artifact did not record upstream client sessions\nconcurrent artifact did not prove overlapping WebSocket sessions\n",
+    "files": {
+      "receipt.json": "{\n  \"artifact_paths\": [\n    \"AR-E2E-ACCOUNTS-serial-transcript.json\",\n    \"AR-E2E-ACCOUNTS-concurrent-transcript.json\"\n  ],\n  \"exit_code\": 1,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"serial WebSocket artifact did not prove expected account selection; serial WebSocket artifact did not include selected account safe tag; concurrent artifact did not run three clients; concurrent artifact did not report all clients successful; concurrent artifact did not prove selected upstream account evidence; concurrent artifact did not include selected account safe tag; concurrent artifact did not record upstream client sessions; concurrent artifact did not prove overlapping WebSocket sessions\",\n  \"result\": \"fail\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[ ] pending\"\n}\n",
+      "AR-E2E-ACCOUNTS-serial-transcript.json": "{}",
+      "AR-E2E-ACCOUNTS-concurrent-transcript.json": "{}"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-2",
+  "originalSHA256": "9bd81c84b6403799852bfeebc2eb9259d48d1a31265e112b5779325fb9b08e59"
+}

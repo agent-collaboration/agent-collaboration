@@ -3,6 +3,9 @@
     reason = "A malformed fixed fixture must fail its test."
 )]
 //! A running Claude prompt identifies the operation receiving a steered message.
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
@@ -105,40 +108,13 @@ fn binding(target: &SessionRef) -> ProviderBindingIdentity {
 }
 
 fn steering_fixture(event_socket: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'claude-fixture','version':'1'}},'_meta':{{'steering':{{'supported':True}}}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'active')
- for index in range(3):
-  steer=json.loads(sys.stdin.readline())
-  assert steer['method']=='_session/steering'
-  if index < 2:
-   assert '"follow-up"' in steer['params']['prompt'][0]['text']
-   assert 'router://' in steer['params']['prompt'][0]['text']
-  else:
-   assert steer['params']['prompt']==[{{'type':'text','text':'follow-up'}}]
-  print(json.dumps({{'jsonrpc':'2.0','id':steer['id'],'result':{{'outcome':'injected'}}}})); sys.stdout.flush()
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-steering-route-agent.ts",
+        vec![
+            "active".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 async fn prepared_route(
@@ -229,107 +205,28 @@ enum IdleSteeringScenario {
 }
 
 fn idle_steering_fixture(scenario: IdleSteeringScenario) -> ExternalProviderLaunch {
-    let tail = match scenario {
-        IdleSteeringScenario::SteerOnly
-        | IdleSteeringScenario::StartsNewTurn
-        | IdleSteeringScenario::Fails => "sys.stdin.read()",
-        IdleSteeringScenario::AutoStartsPrompt => {
-            r#"
-prompt=json.loads(sys.stdin.readline())
-assert prompt['method']=='session/prompt'
-print(json.dumps({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-        }
-        IdleSteeringScenario::DropDuringSteer => "sys.exit(0)",
+    let mode = match scenario {
+        IdleSteeringScenario::SteerOnly => "idle",
+        IdleSteeringScenario::AutoStartsPrompt => "auto",
+        IdleSteeringScenario::StartsNewTurn => "started",
+        IdleSteeringScenario::Fails => "failed",
+        IdleSteeringScenario::DropDuringSteer => "drop",
     };
-    let steer_reply = match scenario {
-        IdleSteeringScenario::DropDuringSteer => "",
-        IdleSteeringScenario::SteerOnly | IdleSteeringScenario::AutoStartsPrompt => {
-            "print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'promptRequired'}})); sys.stdout.flush()"
-        }
-        IdleSteeringScenario::StartsNewTurn => {
-            "print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'startedNewTurn'}})); sys.stdout.flush()"
-        }
-        IdleSteeringScenario::Fails => {
-            "print(json.dumps({'jsonrpc':'2.0','id':steer['id'],'result':{'outcome':'failed','reason':'private provider detail'}})); sys.stdout.flush()"
-        }
-    };
-    let script = format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'claude-fixture','version':'1'}},'_meta':{{'steering':{{'supported':True}}}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-steer=json.loads(sys.stdin.readline())
-assert steer['method']=='_session/steering'
-{steer_reply}
-{tail}
-"#
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch("provider-steering-route-agent.ts", vec![mode.to_owned()])
 }
 
 fn no_steering_fixture() -> ExternalProviderLaunch {
-    let script = r#"
-import json,sys
-initialize=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'no-steer-fixture','version':'1'}}})); sys.stdout.flush()
-create=json.loads(sys.stdin.readline())
-assert create['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':create['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-sys.stdin.read()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script.to_owned()],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch("provider-steering-route-agent.ts", vec!["none".to_owned()])
 }
 
 fn no_steering_prompt_fixture(event_socket: &Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-initialize=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':initialize['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'no-steer-prompt','version':'1'}}}}}})); sys.stdout.flush()
-create=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':create['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-first=json.loads(sys.stdin.readline())
-assert first['method']=='session/prompt'
-assert '"follow-up"' in first['params']['prompt'][0]['text']
-assert 'router://' in first['params']['prompt'][0]['text']
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({event_socket:?})
- event.sendall(b'first')
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':first['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-second=json.loads(sys.stdin.readline())
-assert second['method']=='session/prompt'
-assert '"follow-up"' in second['params']['prompt'][0]['text']
-assert 'router://' in second['params']['prompt'][0]['text']
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({event_socket:?})
- event.sendall(b'second')
-print(json.dumps({{'jsonrpc':'2.0','id':second['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket = event_socket.display().to_string(),
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-steering-route-agent.ts",
+        vec![
+            "serial".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 #[tokio::test]

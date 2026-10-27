@@ -1,0 +1,40 @@
+{
+  "function": "question_response_for",
+  "name": "test_optional_adapter_other_field_does_not_block_offered_answer",
+  "args": [
+    {
+      "fields": [
+        {
+          "kind": "singleChoice",
+          "fieldId": "question_0",
+          "required": false,
+          "options": [
+            {
+              "optionId": "blue-id",
+              "label": "Blue"
+            },
+            {
+              "optionId": "green-id",
+              "label": "Green"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "fieldId": "question_0_custom",
+          "required": false
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "result": {
+      "action": "answered",
+      "content": {
+        "question_0": {
+          "selectedOptionIds": ["blue-id"]
+        }
+      }
+    }
+  }
+}

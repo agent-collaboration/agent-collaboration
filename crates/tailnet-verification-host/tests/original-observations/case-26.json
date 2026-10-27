@@ -1,0 +1,33 @@
+{
+  "function": "observe_native_readiness",
+  "args": [
+    {
+      "endpoints": [
+        {
+          "endpoint": {
+            "serviceId": "destination",
+            "endpointId": "codex-local"
+          },
+          "availability": {
+            "state": "available"
+          },
+          "channels": [
+            {
+              "kind": "nativeCodex",
+              "generation": {
+                "serviceEpoch": "epoch",
+                "generation": 1
+              }
+            }
+          ]
+        }
+      ],
+      "serviceEpoch": "epoch"
+    },
+    "destination",
+    "different-epoch"
+  ],
+  "expected": {
+    "refused": true
+  }
+}

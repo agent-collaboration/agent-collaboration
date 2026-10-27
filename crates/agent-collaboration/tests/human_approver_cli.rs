@@ -14,32 +14,6 @@ use std::{os::unix::fs::PermissionsExt as _, path::Path, time::Duration};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-const PROVIDER: &str = r#"#!/usr/bin/python3
-import json,sys
-def send(value): print(json.dumps(value),flush=True)
-request=json.loads(sys.stdin.readline())
-assert request['method']=='initialize',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'human-approver-fixture','version':'1'}}})
-pending_prompt=None
-next_session=0
-for line in sys.stdin:
- request=json.loads(line)
- method=request.get('method')
- if method=='session/new':
-  next_session+=1
-  send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'human-approval-session-'+str(next_session)}})
- elif method=='session/prompt':
-  pending_prompt=request['id']
-  send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{'sessionId':request['params']['sessionId'],'toolCall':{'toolCallId':'permission-tool'},'options':[{'optionId':'allow-once','name':'Allow once','kind':'allow_once'}]}})
- elif request.get('id')==91:
-  assert request['result']['outcome']=={'outcome':'selected','optionId':'allow-once'},request
-  assert pending_prompt is not None
-  send({'jsonrpc':'2.0','id':pending_prompt,'result':{'stopReason':'end_turn'}})
-  pending_prompt=None
- else:
-  raise AssertionError(request)
-"#;
-
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
@@ -48,8 +22,12 @@ for line in sys.stdin:
 async fn cli_human_approver_from_create_can_decide_provider_permission() -> TestResult {
     let root = tempfile::tempdir()?;
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
-    let provider_path = root.path().join("human-approver-provider.py");
-    std::fs::write(&provider_path, PROVIDER)?;
+    let provider_path = root.path().join("human-approver-provider.ts");
+    codex_router_test_support::node_fixture::write_node_fixture(
+        &provider_path,
+        "human-approver-agent.ts",
+        &json!(null),
+    )?;
     std::fs::set_permissions(&provider_path, std::fs::Permissions::from_mode(0o700))?;
     let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {

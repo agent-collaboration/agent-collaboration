@@ -1,4 +1,6 @@
 //! Real SQLite, peer registry, bounded job child and served MCP/client.
+#[path = "../../../codex-router-test-support/src/node_fixture.rs"]
+mod node_fixture;
 use super::served_api::ServedApi;
 use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
 use collaboration_protocol::{
@@ -44,12 +46,10 @@ impl CatalogueFixture {
         let output = root.path().join("job-output.json");
         std::fs::write(&output, "[]")?;
         let executable = root.path().join("claude");
-        std::fs::write(
+        node_fixture::write_node_fixture(
             &executable,
-            format!(
-                "#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",
-                serde_json::to_string(&output)?
-            ),
+            "native-cli-catalogue-agent.ts",
+            &json!({"kind":"file","output":{"kind":"path","path":output}}),
         )?;
         std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
         let description: EndpointDescription = serde_json::from_value(

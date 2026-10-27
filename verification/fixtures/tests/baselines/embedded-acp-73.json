@@ -1,0 +1,16 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/robustness_tests.rs#limit",
+  "originalSHA256": "9ffaf51d3d1059b0c6cb82851529081882aa5a50528c133dc8bf51a5bdc9fd0c",
+  "target": "host-output-pressure-agent.ts",
+  "arguments": ["limit"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "8be0a2ff5e31581bdef8c921d3099267b572a8c2331f02ac77dc36d4fa758eb4",
+      "bytes": 67109270
+    },
+    "stderr": "",
+    "receipt": null
+  }
+}

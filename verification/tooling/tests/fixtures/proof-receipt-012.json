@@ -1,0 +1,34 @@
+{
+  "input": {
+    "name": "accounts true",
+    "operation": "accounts",
+    "arguments": ["receipt.json", "serial.json", "concurrent.json"],
+    "originalArguments": ["receipt.json", "serial.json", "concurrent.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}",
+      "serial.json": "{\"websocket\":{\"selected_expected_account\":true},\"selected_account\":{\"safe_tag\":\"account-safe\"}}",
+      "concurrent.json": "{\"clients\":{\"count\":3,\"all_success\":true},\"selected_account\":{\"safe_tag\":\"account-safe\",\"expected_upstream_account_selected\":true},\"upstream\":{\"upstream_client_sessions\":[1,2,3],\"active_high_water\":3}}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": [
+      "receipt.json",
+      "AR-E2E-ACCOUNTS-serial-transcript.json",
+      "AR-E2E-ACCOUNTS-concurrent-transcript.json"
+    ]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"artifact_paths\": [\n    \"AR-E2E-ACCOUNTS-serial-transcript.json\",\n    \"AR-E2E-ACCOUNTS-concurrent-transcript.json\"\n  ],\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Serial and three-client concurrent installed-Codex WebSocket transcripts prove selected-account routing and transport continuity.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\"\n}\n",
+      "AR-E2E-ACCOUNTS-serial-transcript.json": "{\"websocket\":{\"selected_expected_account\":true},\"selected_account\":{\"safe_tag\":\"account-safe\"}}",
+      "AR-E2E-ACCOUNTS-concurrent-transcript.json": "{\"clients\":{\"count\":3,\"all_success\":true},\"selected_account\":{\"safe_tag\":\"account-safe\",\"expected_upstream_account_selected\":true},\"upstream\":{\"upstream_client_sessions\":[1,2,3],\"active_high_water\":3}}"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-2",
+  "originalSHA256": "9bd81c84b6403799852bfeebc2eb9259d48d1a31265e112b5779325fb9b08e59"
+}

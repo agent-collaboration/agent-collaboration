@@ -1,0 +1,16 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#aggregate",
+  "originalSHA256": "ed33edae154c0f18d0d9e21be3acce4e25e8878bf908dd344ad16cc582e2336e",
+  "target": "host-basic-session-agent.ts",
+  "arguments": ["aggregate"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"session/cancel\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "6f3d1221721ad328a0c499edda73aa22421c3101a0e11ef38bcf1565cd15897e",
+      "bytes": 1229454
+    },
+    "stderr": "",
+    "receipt": null
+  }
+}

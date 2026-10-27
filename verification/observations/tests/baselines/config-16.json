@@ -1,0 +1,43 @@
+{
+  "name": "removed-desktop",
+  "before": "model = \"fixed\"\n[desktop.preferences]\nflag = true\n",
+  "after": "model = \"fixed\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[desktop.preferences]",
+        "table": ["desktop", "preferences"],
+        "occurrence": 0,
+        "sha256": "07ed3d3484152c7bab27a8e0d03bb2cfa8bb635b86d011caf1a4f3a2e5acba42",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[desktop.preferences]",
+        "occurrence": 0,
+        "before_sha256": "07ed3d3484152c7bab27a8e0d03bb2cfa8bb635b86d011caf1a4f3a2e5acba42",
+        "after_sha256": null,
+        "classification": "externalDesktopSection"
+      }
+    ],
+    "allowed": true
+  }
+}

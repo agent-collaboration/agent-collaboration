@@ -1,0 +1,22 @@
+{
+  "name": "exact-params",
+  "steps": [
+    {
+      "action": "expect_request",
+      "requestName": "init",
+      "method": "initialize",
+      "params": {
+        "a": 1
+      },
+      "exactParams": true
+    }
+  ],
+  "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"a\":1,\"b\":2}}\n",
+  "expected": {
+    "status": 1,
+    "stdout": "",
+    "stderr": "ACP fixture step 1 mismatch\nexpected: {\"jsonrpc\": \"2.0\", \"method\": \"initialize\", \"params\": {\"a\": 1}}\nactual:   {\"id\": 1, \"jsonrpc\": \"2.0\", \"method\": \"initialize\", \"params\": {\"a\": 1, \"b\": 2}}\n",
+    "receipt": null,
+    "marker": false
+  }
+}

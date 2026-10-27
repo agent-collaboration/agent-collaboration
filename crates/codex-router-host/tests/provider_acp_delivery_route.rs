@@ -4,6 +4,9 @@
 )]
 //! Provider route decisions before any client effect.
 
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{
     ProviderAcpEffectEvidence, ProviderBindingReference, ProviderSettlementEffect,
     RouteEffectEvidence, SubmissionEffect,

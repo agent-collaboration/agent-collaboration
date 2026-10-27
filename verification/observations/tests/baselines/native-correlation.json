@@ -1,0 +1,271 @@
+[
+  {
+    "name": "distinct-native-id",
+    "thread": {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "accepted-turn",
+          "items": [
+            {
+              "id": "native-item",
+              "clientId": "push",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "synthetic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "thread_id": "thread",
+      "turn_id": "accepted-turn",
+      "push_id": "push"
+    },
+    "result": {
+      "threadId": "thread",
+      "matchingCount": 1,
+      "matches": [
+        {
+          "nativeId": "native-item",
+          "clientId": "push",
+          "turnId": "accepted-turn",
+          "textSHA256": "b3cc0475bb78a5026098858e9889acf666d31062d513d303314eca31d36e72f2"
+        }
+      ],
+      "supported": true
+    }
+  },
+  {
+    "name": "native-id-is-not-client-id",
+    "thread": {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "accepted-turn",
+          "items": [
+            {
+              "id": "push",
+              "clientId": "other",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "synthetic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "thread_id": "thread",
+      "turn_id": "accepted-turn",
+      "push_id": "push"
+    },
+    "result": {
+      "threadId": "thread",
+      "matchingCount": 0,
+      "matches": [],
+      "supported": false
+    }
+  },
+  {
+    "name": "wrong-turn",
+    "thread": {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "other-turn",
+          "items": [
+            {
+              "id": "native-item",
+              "clientId": "push",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "synthetic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "thread_id": "thread",
+      "turn_id": "accepted-turn",
+      "push_id": "push"
+    },
+    "result": {
+      "threadId": "thread",
+      "matchingCount": 1,
+      "matches": [
+        {
+          "nativeId": "native-item",
+          "clientId": "push",
+          "turnId": "other-turn",
+          "textSHA256": "b3cc0475bb78a5026098858e9889acf666d31062d513d303314eca31d36e72f2"
+        }
+      ],
+      "supported": false
+    }
+  },
+  {
+    "name": "duplicate",
+    "thread": {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "accepted-turn",
+          "items": [
+            {
+              "id": "native-item",
+              "clientId": "push",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "synthetic"
+                }
+              ]
+            },
+            {
+              "id": "native-item",
+              "clientId": "push",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "synthetic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "thread_id": "thread",
+      "turn_id": "accepted-turn",
+      "push_id": "push"
+    },
+    "result": {
+      "threadId": "thread",
+      "matchingCount": 2,
+      "matches": [
+        {
+          "nativeId": "native-item",
+          "clientId": "push",
+          "turnId": "accepted-turn",
+          "textSHA256": "b3cc0475bb78a5026098858e9889acf666d31062d513d303314eca31d36e72f2"
+        },
+        {
+          "nativeId": "native-item",
+          "clientId": "push",
+          "turnId": "accepted-turn",
+          "textSHA256": "b3cc0475bb78a5026098858e9889acf666d31062d513d303314eca31d36e72f2"
+        }
+      ],
+      "supported": false
+    }
+  },
+  {
+    "name": "wrong-thread",
+    "thread": {
+      "id": "other-thread",
+      "turns": [
+        {
+          "id": "accepted-turn",
+          "items": [
+            {
+              "id": "native-item",
+              "clientId": "push",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "synthetic"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "thread_id": "thread",
+      "turn_id": "accepted-turn",
+      "push_id": "push"
+    },
+    "result": {
+      "threadId": "other-thread",
+      "matchingCount": 1,
+      "matches": [
+        {
+          "nativeId": "native-item",
+          "clientId": "push",
+          "turnId": "accepted-turn",
+          "textSHA256": "b3cc0475bb78a5026098858e9889acf666d31062d513d303314eca31d36e72f2"
+        }
+      ],
+      "supported": false
+    }
+  },
+  {
+    "name": "multiple-text-parts",
+    "thread": {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "accepted-turn",
+          "items": [
+            {
+              "id": "native-item",
+              "clientId": "push",
+              "type": "userMessage",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "first"
+                },
+                {
+                  "type": "image"
+                },
+                {
+                  "type": "text",
+                  "text": "second"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "expected": {
+      "thread_id": "thread",
+      "turn_id": "accepted-turn",
+      "push_id": "push"
+    },
+    "result": {
+      "threadId": "thread",
+      "matchingCount": 1,
+      "matches": [
+        {
+          "nativeId": "native-item",
+          "clientId": "push",
+          "turnId": "accepted-turn",
+          "textSHA256": "4252f8d56b4bb236d0b1bc95a1202e392ca84ce0644bf628398fbb9517287da8"
+        }
+      ],
+      "supported": true
+    }
+  }
+]

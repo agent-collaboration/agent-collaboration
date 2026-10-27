@@ -1,0 +1,116 @@
+[
+  {
+    "action": "restore",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": "# retain spacing\nbase_url = \"http://127.0.0.1:43128/v1\"\n",
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": null,
+    "contention": null
+  },
+  {
+    "action": "body-error",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": "# retain spacing\nbase_url = \"http://127.0.0.1:43128/v1\"\n",
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": {
+      "category": "RuntimeError",
+      "message": "body failed"
+    },
+    "contention": null
+  },
+  {
+    "action": "changed-bytes",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": "# retain spacing\nbase_url = \"http://127.0.0.1:43128/v1\"\n",
+    "after": "newer owner bytes",
+    "failure": {
+      "category": "RuntimeError",
+      "message": "debug profile conflict; newer bytes left untouched"
+    },
+    "contention": null
+  },
+  {
+    "action": "changed-inode",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": "# retain spacing\nbase_url = \"http://127.0.0.1:43128/v1\"\n",
+    "after": "newer owner inode",
+    "failure": {
+      "category": "RuntimeError",
+      "message": "debug profile conflict; newer bytes left untouched"
+    },
+    "contention": null
+  },
+  {
+    "action": "symlink",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": null,
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": {
+      "category": "OSError",
+      "message": null
+    },
+    "contention": null
+  },
+  {
+    "action": "wrong-hash",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "projected": null,
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": {
+      "category": "ValueError",
+      "message": "debug profile hash mismatch"
+    },
+    "contention": null
+  },
+  {
+    "action": "shared-write",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": null,
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": {
+      "category": "ValueError",
+      "message": "unsafe debug profile owner or mode"
+    },
+    "contention": null
+  },
+  {
+    "action": "duplicate-endpoint",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "697b29f7ee932c95d5b07d0a728f15a832f0fe9a9464fc15dab6d2d96a894568",
+    "projected": null,
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": {
+      "category": "ValueError",
+      "message": "debug profile must contain exactly one loopback endpoint"
+    },
+    "contention": null
+  },
+  {
+    "action": "missing-endpoint",
+    "original": "no endpoint\n",
+    "hash": "3ac7648cbc8c8b4d4904eb70b161d3082907eb374a91adbdb20fd5fbef5bc7c1",
+    "projected": null,
+    "after": "no endpoint\n",
+    "failure": {
+      "category": "ValueError",
+      "message": "debug profile must contain exactly one loopback endpoint"
+    },
+    "contention": null
+  },
+  {
+    "action": "lock-contention",
+    "original": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "hash": "c9215f269ffbe8b061250c400b580476be7013ae088d5fdc1d9d564fa754db61",
+    "projected": "# retain spacing\nbase_url = \"http://127.0.0.1:43128/v1\"\n",
+    "after": "# retain spacing\nbase_url = \"http://127.0.0.1:18787/v1\"\n",
+    "failure": null,
+    "contention": "BlockingIOError"
+  }
+]

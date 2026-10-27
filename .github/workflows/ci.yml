@@ -96,10 +96,6 @@ jobs:
           pnpm --dir verification run format:check
       - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
-      - name: Test tool bootstrap
-        id: tool_bootstrap
-        background: true
-        run: python3 -m unittest scripts.tests.test_bootstrap_tools -v --durations 0
       - name: Check Rust formatting
         id: format
         background: true
@@ -108,40 +104,12 @@ jobs:
         id: module_cycles
         background: true
         run: cargo nextest run -p workspace-architecture-check --run-ignored only
-      - name: Test Homebrew release automation
-        id: homebrew_release_automation
+      - name: Test TypeScript tooling, fixtures and observations
+        id: verification_tests
         background: true
-        run: python3 -m unittest scripts.tests.test_update_homebrew_formula scripts.tests.test_publish_homebrew_tap_local -v --durations 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - name: Prepare verification checks
-        run: |
-          python3 -m venv "$RUNNER_TEMP/router-verification"
-          "$RUNNER_TEMP/router-verification/bin/python" -m pip install --disable-pip-version-check pydantic==2.14.1 basedpyright==1.40.2 ruff==0.17.0 pytest==9.1.1 websockets==17.3
-      - name: Check retained Python verification
-        id: verification_observations
-        background: true
-        run: |
-          verification_python="$RUNNER_TEMP/router-verification/bin/python"
-          # Keep main-branch Python and its import closure. The Rust and
-          # TypeScript lanes own board and central journey checks.
-          verification_paths=(
-            scripts/verification
-            scripts/tests/test_verification_observations.py
-            scripts/tests/test_verification_lifecycle.py
-            scripts/tests/test_tailnet_mcp_verification.py
-            scripts/tests/test_tailnet_mcp_https_transport.py
-            scripts/tests/test_acp_metadata_observation.py
-            scripts/tests/verification_controller_fixture.py
-          )
-          "$verification_python" -W error::ResourceWarning -m unittest scripts.tests.test_verification_observations scripts.tests.test_verification_lifecycle scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport scripts.tests.test_acp_metadata_observation -v --durations 0
-          "$verification_python" -m ruff check "${verification_paths[@]}"
-          "$verification_python" -m ruff format --check "${verification_paths[@]}"
-          "$verification_python" -m basedpyright --pythonversion 3.13 --pythonplatform All --pythonpath "$verification_python" "${verification_paths[@]}"
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 12.14.0
+        run: pnpm --dir verification test
+      # Each tooling package keeps its declared Node version. The background
+      # verification suite retains the earlier runtime in its own environment.
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'
@@ -167,11 +135,7 @@ jobs:
       - name: Enforce Rust file size limit
         id: rust_file_size
         background: true
-        run: python3 scripts/tooling/check-rust-file-size.py
-      - name: Test Rust file size checker
-        id: rust_file_size_tests
-        background: true
-        run: python3 -m unittest scripts.tests.test_rust_file_size -v --durations 0
+        run: node verification/tooling/check-rust-file-size.ts
       # Compiling checks run serially: the measured cold background variant
       # took 20m26s versus 18m27s serial, sharing CPU and Cargo build state.
       - name: Lint Rust workspace
@@ -181,12 +145,11 @@ jobs:
         id: sqlite_metadata
         run: |
           scripts/tooling/bootstrap-tools.sh sqlx
-          python3 scripts/tooling/prepare-sqlx.py --check
+          node verification/tooling/prepare-sqlx.ts --check
       - name: Check Turso SQLx metadata against native migrations
         id: turso_metadata
         run: |
-          python3 -m unittest scripts.tests.test_prepare_sqlx_turso -v --durations 0
-          python3 scripts/tooling/prepare-sqlx-turso.py --check
+          node verification/tooling/prepare-sqlx-turso.ts --check
       - name: Check the shared asynchronous core on native and wasm
         run: |
           cargo check --locked -p collaboration-central-core
@@ -241,9 +204,14 @@ jobs:
           sudo docker image prune --all --force > /dev/null
           df -h /
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: verification/package.json
       - uses: pnpm/action-setup@v4
         with:
-          version: 12.14.0
+          package_json_file: verification/package.json
+      - name: Install TypeScript fixture dependencies
+        run: pnpm --dir verification install --frozen-lockfile
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'
@@ -296,7 +264,10 @@ jobs:
         run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
       - name: Test Rust workspace
         id: workspace_tests
-        run: cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
+        run: |
+          # Exercise private fixture setup under the ordinary Unix mask.
+          umask 022
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
         wait-all:
       - name: Test isolated default Router port cutover
@@ -324,6 +295,14 @@ jobs:
       CODEX_ROUTER_E2E_PARENT: /tmp/router-board-e2e-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: verification/package.json
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: verification/package.json
+      - name: Install TypeScript fixture dependencies
+        run: pnpm --dir verification install --frozen-lockfile
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
@@ -405,10 +384,12 @@ jobs:
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: verification/package.json
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          package_json_file: verification/package.json
+      - name: Install TypeScript bundle guard dependencies
+        run: pnpm --dir verification install --frozen-lockfile
       - name: Restore pinned Worker build tool
         id: worker_tools
         uses: actions/cache/restore@v4
@@ -424,7 +405,7 @@ jobs:
           test "$("$RUNNER_TEMP/central-worker-tools/bin/worker-build" --version)" = '0.8.7'
           du -sb "$RUNNER_TEMP/central-worker-tools"
           mkdir -p "$RUNNER_TEMP/central-node-tools"
-          pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact miniflare@5.20261012.0-beta
+          pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact --allow-build workerd miniflare@5.20261012.0-beta
           echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
       - name: Check the workspace wasm shell and portable test contract
         run: |
@@ -434,14 +415,14 @@ jobs:
       - name: Build the production profile and reject test controls
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
-          python3 scripts/tooling/check-central-worker-bundle.py production
+          node verification/tooling/check-central-worker-bundle.ts production
       # Legacy default/conformance and Fleet feed/notice/outbox launchers retire
       # under decisions508/513. Their remaining functional obligations, including
       # normal Worker session/holder equivalence and G18, stay in the removal map.
       - name: Prove current composed controls, transactions and physical restart
         run: |
           worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
-          python3 scripts/tooling/check-central-worker-bundle.py faults
+          node verification/tooling/check-central-worker-bundle.ts faults
           for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"
             time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
@@ -465,7 +446,7 @@ jobs:
       - name: Build the deployment candidate without test features
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
-          python3 scripts/tooling/check-central-worker-bundle.py production
+          node verification/tooling/check-central-worker-bundle.ts production
       - name: Save pinned Worker build tool
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4

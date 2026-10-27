@@ -3,6 +3,9 @@
     reason = "A malformed fixed fixture must fail its test."
 )]
 //! A provider run waits for an idle actor and summarizes its own prompt settlement.
+#[path = "support/provider_fixture_launch.rs"]
+mod provider_fixture_launch;
+
 use agent_automation::{
     CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId, RunPhase, SubmissionEffect,
 };
@@ -161,58 +164,13 @@ fn rendered_schedule_line(
 }
 
 fn fixture_launch(event_socket: &Path, expected_scheduled_prompt: &str) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'schedule-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'scheduled-session'}}}})); sys.stdout.flush()
-active=json.loads(sys.stdin.readline())
-assert active['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'active')
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':active['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-scheduled=json.loads(sys.stdin.readline())
-assert scheduled['method']=='session/prompt'
-assert scheduled['params']['prompt']==[{{'type':'text','text':{:?}}}]
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as observed:
- observed.connect({:?})
- observed.sendall((json.dumps(scheduled['params'])+'\n').encode())
- observed.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','method':'session/update','params':{{'sessionId':'scheduled-session','update':{{'sessionUpdate':'agent_message_chunk','content':{{'type':'text','text':'provider summary text'}}}}}}}})); sys.stdout.flush()
-print(json.dumps({{'jsonrpc':'2.0','id':scheduled['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-cancelled=json.loads(sys.stdin.readline())
-assert cancelled['method']=='session/prompt'
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-print(json.dumps({{'jsonrpc':'2.0','id':cancelled['id'],'result':{{'stopReason':'cancelled'}}}})); sys.stdout.flush()
-refused=json.loads(sys.stdin.readline())
-assert refused['method']=='session/prompt'
-print(json.dumps({{'jsonrpc':'2.0','id':refused['id'],'result':{{'stopReason':'refusal'}}}})); sys.stdout.flush()
-for _ in range(256):
- prompt=json.loads(sys.stdin.readline())
- assert prompt['method']=='session/prompt'
- print(json.dumps({{'jsonrpc':'2.0','id':prompt['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-pending=json.loads(sys.stdin.readline())
-assert pending['method']=='session/prompt'
-cancel=json.loads(sys.stdin.readline())
-assert cancel['method']=='session/cancel'
-sys.stdin.read()
-"#,
-        event_socket.display().to_string(),
-        expected_scheduled_prompt,
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-scheduled-run-agent.ts",
+        vec![
+            event_socket.to_string_lossy().into_owned(),
+            expected_scheduled_prompt.to_owned(),
+        ],
+    )
 }
 
 #[tokio::test]

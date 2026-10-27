@@ -1,0 +1,15 @@
+<!doctype html><html><meta charset="utf-8"><title>Codex Router verification harness</title>
+<style>body{font:17px system-ui;margin:36px;max-width:1180px;color:#17212b;background:white}h1{font-size:30px}header{border-bottom:3px solid #17212b;padding-bottom:20px}table{border-collapse:collapse;width:100%;margin:24px 0}td,th{padding:12px;text-align:left;border-bottom:1px solid #bbc4ce}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;background:#edf3fa;padding:18px}section{margin-top:30px}.gap{color:#9b3019}</style>
+<header><h1>Codex Router — actual verification evidence</h1><p>HARNESS UI SCREENSHOT · Fixture &amp; &lt;host&gt; · not a native app screenshot · no delivery acceptance</p><p>Build 0.1.102 / Router bbbbbbbbbbbb · source aaaaaaaaaaaa<br>Host A fixture-service · epoch fixture-epoch</p></header>
+<table><tr><th>Claim</th><th>Observation</th><th>Conclusion</th></tr><tr><td>Claim &lt;one&gt;</td><td>Observed &#x27;quote&#x27; &amp; café</td><td>Supported</td></tr></table>
+<p>Harness evidence only &amp; no native UI claim.</p><section><h2>Retained &quot;details&quot;</h2><pre>{
+  &quot;number&quot;: 18446744073709551615,
+  &quot;unicode&quot;: &quot;caf\u00e9&quot;,
+  &quot;values&quot;: [
+    true,
+    null,
+    {
+      &quot;nested&quot;: 1
+    }
+  ]
+}</pre></section></html>

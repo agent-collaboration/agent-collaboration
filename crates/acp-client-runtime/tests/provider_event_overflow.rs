@@ -16,81 +16,25 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, LocalCause, SessionEvent, StopReason, TurnOutcome};
 use tokio_util::sync::CancellationToken;
 
-const OUTPUT_LIMIT_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'output-limit-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'agent_message_chunk',
-              'content':{'type':'text','text':'x'*1048577}}}})
-cancel=read()
-assert cancel['method']=='session/cancel',cancel
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const OUTPUT_LIMIT_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-output-limit-agent.ts"
+);
 
-const CLOSED_SINK_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'closed-sink-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'agent_message_chunk',
-              'content':{'type':'text','text':'Chunk'}}}})
-sys.stdin.read()
-"#;
+const CLOSED_SINK_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-closed-sink-agent.ts"
+);
 
-const CLOSED_AUTH_SINK_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'closed-auth-sink-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'_auth/status_update',
-    'params':{'authStatus':{'kind':'none','label':'Signed out'}}})
-sys.stdin.read()
-"#;
+const CLOSED_AUTH_SINK_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-closed-auth-agent.ts"
+);
 
-const LOST_PROVIDER_FIXTURE: &str = r#"
-import json,os,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'lost-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-os.close(1)
-sys.stdin.read()
-"#;
+const LOST_PROVIDER_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-lost-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -189,8 +133,8 @@ async fn run_fixture(
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec!["-u".to_owned(), "-c".to_owned(), fixture.to_owned()],
+            executable: PathBuf::from("node"),
+            arguments: vec![fixture.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

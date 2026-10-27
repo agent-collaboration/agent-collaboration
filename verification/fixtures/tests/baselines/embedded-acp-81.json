@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime#steer",
+  "originalSHA256": "fa8bf4d00e77c832166c60e729122b4d4fa7c4770a5e5f58ff4496e30b8fce7c",
+  "target": "host-approval-dispatch-agent.ts",
+  "arguments": ["steer"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"method\": \"_session/steering\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"result\": {\"outcome\": {\"outcome\": \"selected\", \"optionId\": \"allow-a\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"_meta\": {\"steering\": {\"supported\": true}}, \"agentInfo\": {\"name\": \"permission-steer-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"session-a\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"session-a\", \"toolCall\": {\"toolCallId\": \"permission-a\", \"title\": \"Run an approved command\", \"kind\": \"execute\"}, \"options\": [{\"optionId\": \"allow-a\", \"name\": \"Allow once\", \"kind\": \"allow_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"outcome\": \"injected\"}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"session-a\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"session-a-steered-and-approved\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

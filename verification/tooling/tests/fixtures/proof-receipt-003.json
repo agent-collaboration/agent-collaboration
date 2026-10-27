@@ -1,0 +1,26 @@
+{
+  "input": {
+    "name": "I-05b patch",
+    "operation": "patch",
+    "arguments": ["receipt.json", "I-05b"],
+    "originalArguments": ["receipt.json"],
+    "files": {
+      "receipt.json": "{\"git_head\":\"fixture-head\",\"retained\":\"keep\"}"
+    },
+    "commands": {
+      "git": "#!/bin/sh\nexit 0\n",
+      "codex": "#!/bin/sh\nprintf 'codex-fixture 1\\n'\n"
+    },
+    "observed": ["receipt.json"]
+  },
+  "expected": {
+    "exit": 0,
+    "stdout": "",
+    "stderr": "",
+    "files": {
+      "receipt.json": "{\n  \"exit_code\": 0,\n  \"freshness_check\": \"guarded_source_paths_clean_at_git_head\",\n  \"git_head\": \"fixture-head\",\n  \"notes\": \"Async comparison fixtures passed: blocked first WebSocket does not block survivor, served runtime drains active sessions on shutdown, and active duplex pumps cancel cleanly.\",\n  \"result\": \"pass\",\n  \"retained\": \"keep\",\n  \"status_after\": \"[x] passed\",\n  \"touched_targets\": [\n    \"crates/codex-router-proxy/src/server.rs\",\n    \"crates/codex-router-proxy/src/websocket.rs\",\n    \"crates/codex-router-proxy/src/lib.rs\"\n  ]\n}\n"
+    }
+  },
+  "original": "scripts/proof-matrix.sh#block-8",
+  "originalSHA256": "314d6653fd037add471c52619743eaaf74e2f544f5d3f6e04ee6639cbf60f1d0"
+}

@@ -1,0 +1,21 @@
+{
+  "input": {
+    "name": "HTTP release markers true",
+    "operation": "http",
+    "arguments": [],
+    "originalArguments": [],
+    "files": {
+      "crates/codex-router-proxy/src/server.rs": "struct AsyncProxyCredentialResolver\nprepare_streaming_http_request_async\nAsyncSqliteStateStore::open\nAsyncRepositoryBackedAccountSelector::new_with_runtime\nAsyncProxyCredentialResolver::new(\n            state_store.clone(),\n            self.secret_store.clone(),\nservice.prepare_streaming_request_async(request).await\nstate_store: AsyncSqliteStateStore\nsecret_store: ProxyRuntimeSecretStore\n.load_account(account_id)\n            .await\n.activate_account_credential_generation_if_current_and_invalidate_quota(\nimpl HttpAffinitySecretProvider"
+    },
+    "commands": {},
+    "observed": []
+  },
+  "expected": {
+    "exit": 1,
+    "stdout": "async credential resolver still has sync/path marker: SqliteStateStore::open\n",
+    "stderr": "",
+    "files": {}
+  },
+  "original": "scripts/proof-matrix.sh#block-12",
+  "originalSHA256": "e346fd65d20d9dbbaa468b895bf4181583790765567e5bd70187b2e257b3579d"
+}

@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests.rs#mcp-session/new",
+  "originalSHA256": "39a133db49d9cdc83956c3a9d22acfd162e756efaed33e20169dee189c566eb0",
+  "target": "host-basic-session-agent.ts",
+  "arguments": ["mcp", "session/new"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {\"mcpServers\": [{\"type\": \"http\", \"name\": \"router-collaboration\", \"url\": \"http://127.0.0.1:19090/mcp\", \"headers\": []}]}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"mcpCapabilities\": {\"http\": true}}, \"agentInfo\": {\"name\": \"mcp-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

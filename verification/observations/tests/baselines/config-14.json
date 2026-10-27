@@ -1,0 +1,36 @@
+{
+  "name": "multiline-basic",
+  "before": "note = \"\"\"\n[desktop.preferences]\nold\n\"\"\"\n",
+  "after": "note = \"\"\"\n[desktop.preferences]\nnew\n\"\"\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7bce15ba86a6d2009ec71ea49b24ee62577454b173dafcbed9d1f449b92393e3",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "559c2d01bee3ff0111037c0cfce9e72a791c6e150120caf36784f4a2d02ba1a0",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "<root>",
+        "occurrence": 0,
+        "before_sha256": "7bce15ba86a6d2009ec71ea49b24ee62577454b173dafcbed9d1f449b92393e3",
+        "after_sha256": "559c2d01bee3ff0111037c0cfce9e72a791c6e150120caf36784f4a2d02ba1a0",
+        "classification": "unexpected"
+      }
+    ],
+    "allowed": false
+  }
+}

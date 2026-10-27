@@ -1,0 +1,16 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/robustness_tests.rs#permission",
+  "originalSHA256": "237bb77c7ef4ee83f74283b26c4981ad7f15b3932b49bbe2ad655fd21997b24d",
+  "target": "host-output-pressure-agent.ts",
+  "arguments": ["permission"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"error\": {\"code\": -32601, \"message\": \"unknown method\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "828a1019ead3d6bcbbdcf7cc69865bac766ba0ad2776e60206860081fddfcc76",
+      "bytes": 2097754
+    },
+    "stderr": "",
+    "receipt": null
+  }
+}

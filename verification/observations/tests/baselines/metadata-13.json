@@ -1,0 +1,94 @@
+{
+  "name": "test_unemitted_usage_stays_an_explicit_runtime_gap",
+  "observation": {
+    "target": {
+      "endpoint": {
+        "serviceId": "service",
+        "endpointId": "cursor-local"
+      },
+      "sessionId": "thread"
+    },
+    "events": [
+      {
+        "sequence": 1,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "commands",
+            "kind": {
+              "kind": "notice"
+            },
+            "text": "{\"availableCommands\":[{\"name\":\"compact\",\"description\":\"Compact context\"}]}"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 2,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "assistant",
+            "kind": {
+              "kind": "agentMessage"
+            },
+            "text": "ACP_OK"
+          },
+          "turnId": null
+        }
+      }
+    ],
+    "epoch": 0,
+    "endReason": "deadlineReached"
+  },
+  "views": [
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "terminal": "• ACP_OK",
+  "resumedTerminal": "• ACP_OK",
+  "expectedReply": "ACP_OK",
+  "requireUsage": false,
+  "expected": {
+    "result": {
+      "thread_id": "thread",
+      "metadata_item_ids": ["commands"],
+      "metadata_kinds": ["notice"],
+      "command_catalogues": 1,
+      "usage_items": 0,
+      "assistant_item_ids": ["assistant"],
+      "historical_views": 2,
+      "terminal_reply_observed": true,
+      "terminal_views": 2,
+      "usage_limit": "Provider emitted no usage; context/cost runtime proof remains unobserved"
+    }
+  }
+}

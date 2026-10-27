@@ -444,7 +444,12 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
     if std::env::var_os("CLAUDE_PEER_INVENTORY_CONTROLLED_CHILD").is_none() {
         let root = tempfile::tempdir().unwrap();
         let executable = root.path().join("claude");
-        fs::write(&executable,"#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint('[]')\n").unwrap();
+        codex_router_test_support::node_fixture::write_node_fixture(
+            &executable,
+            "native-cli-catalogue-agent.ts",
+            &serde_json::json!({"kind":"text","text":"[]"}),
+        )
+        .unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
         let output=tokio::time::timeout(Duration::from_secs(20),tokio::process::Command::new(std::env::current_exe().unwrap())
             .args(["--exact","sessions::claude_launch_target::tests::active_inventory_uses_the_existing_claude_local_discovery","--nocapture"])

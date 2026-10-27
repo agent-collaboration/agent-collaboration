@@ -276,27 +276,9 @@ pub(super) fn start_quota_reconnect_sqlite_pressure(
     let handle = thread::Builder::new()
         .name("codex-router-quota-reconnect-sqlite-pressure".to_owned())
         .spawn(move || {
-            let mut child = Command::new("python3");
+            let mut child = Command::new("node");
             child
-                .arg("-c")
-                .arg(
-                    r#"
-import sqlite3
-import sys
-import time
-
-database_path = sys.argv[1]
-hold_seconds = float(sys.argv[2])
-connection = sqlite3.connect(database_path, timeout=0)
-try:
-    connection.execute("BEGIN IMMEDIATE")
-    print("acquired", flush=True)
-    time.sleep(hold_seconds)
-    connection.commit()
-finally:
-    connection.close()
-"#,
-                )
+                .arg(crate::node_fixture::fixture_program("sqlite-pressure-agent.ts")).arg("hold")
                 .arg(&config.state_path)
                 .arg(format!("{}", config.hold_duration.as_secs_f64()))
                 .stdout(Stdio::piped())
@@ -383,27 +365,9 @@ pub(super) fn start_s8_overlap_quota_sqlite_pressure(
     let handle = thread::Builder::new()
         .name("codex-router-s8-overlap-quota-sqlite-pressure".to_owned())
         .spawn(move || {
-            let mut child = Command::new("python3");
+            let mut child = Command::new("node");
             child
-                .arg("-c")
-                .arg(
-                    r#"
-import sqlite3
-import sys
-import time
-
-database_path = sys.argv[1]
-hold_seconds = float(sys.argv[2])
-connection = sqlite3.connect(database_path, timeout=0)
-try:
-    connection.execute("BEGIN IMMEDIATE")
-    print("acquired", flush=True)
-    time.sleep(hold_seconds)
-    connection.commit()
-finally:
-    connection.close()
-"#,
-                )
+                .arg(crate::node_fixture::fixture_program("sqlite-pressure-agent.ts")).arg("hold")
                 .arg(&config.state_path)
                 .arg(format!("{}", config.hold_duration.as_secs_f64()))
                 .stdout(Stdio::piped())

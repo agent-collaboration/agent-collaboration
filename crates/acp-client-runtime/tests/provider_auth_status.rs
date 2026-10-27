@@ -10,28 +10,10 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, ProviderAuthStatus, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const AUTH_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','method':'_auth/status_update','params':{
-    'authStatus':{'kind':'account','label':'Connected account',
-                  'account':{'email':'private@example.invalid'},'vendor':{'token':'private'}}}})
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'auth-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'_auth/status_update','params':{
-    'authStatus':{'kind':'none','label':'Signed out'}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const AUTH_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-auth-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -107,8 +89,8 @@ async fn auth_update_before_first_session_is_shared_without_private_fields() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec!["-u".to_owned(), "-c".to_owned(), AUTH_FIXTURE.to_owned()],
+            executable: PathBuf::from("node"),
+            arguments: vec![AUTH_FIXTURE.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
@@ -142,8 +124,8 @@ async fn later_auth_change_publishes_capabilities_and_logged_out_status() {
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec!["-u".to_owned(), "-c".to_owned(), AUTH_FIXTURE.to_owned()],
+            executable: PathBuf::from("node"),
+            arguments: vec![AUTH_FIXTURE.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

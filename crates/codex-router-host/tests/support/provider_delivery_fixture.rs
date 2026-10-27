@@ -4,6 +4,7 @@
 )]
 //! Provider route decisions before any client effect.
 
+use super::provider_fixture_launch;
 use agent_automation::RouteEffectEvidence;
 use codex_router_host::{
     ExternalProviderLaunch, LiveSessionOwnership, LiveSessionOwnershipCheck,
@@ -24,7 +25,7 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::EndpointDirectory;
 use std::{
-    path::{Path, PathBuf},
+    path::Path,
     sync::Arc,
 };
 
@@ -161,109 +162,44 @@ pub(super) fn cursor_prompt_fixture(
     event_socket: &Path,
     captured_prepared_prompt: &Path,
 ) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'cursor-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'first')
- event.recv(1)
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-with open({:?},'w') as capture:
- json.dump(request,capture)
-with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
- event.connect({:?})
- event.sendall(b'second')
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        event_socket.display().to_string(),
-        captured_prepared_prompt.display().to_string(),
-        event_socket.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-delivery-route-agent.ts",
+        vec![
+            "cursor".to_owned(),
+            event_socket.to_string_lossy().into_owned(),
+            captured_prepared_prompt.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 pub(super) fn refusing_load_fixture(load_marker: &Path, error_code: i32) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'load-fixture','version':'1'}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- assert request['method']=='session/load', request['method']
- assert request['params']['sessionId']=='fixture-session'
- with open({:?},'a') as marker: marker.write('session/load\n')
- print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'error':{{'code':{error_code},'message':'provider fixture refusal','data':{{'privateText':'must not escape'}}}}}})); sys.stdout.flush()
-"#,
-        load_marker.display().to_string(),
-        error_code = error_code,
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-loaded-route-agent.ts",
+        vec![
+            "refusal".to_owned(),
+            load_marker.to_string_lossy().into_owned(),
+            error_code.to_string(),
+        ],
+    )
 }
 
 pub(super) fn no_load_fixture() -> ExternalProviderLaunch {
-    let script = r#"
-import json,sys
-initialize=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':initialize['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'no-load-fixture','version':'1'}}})); sys.stdout.flush()
-for line in sys.stdin:
- request=json.loads(line)
- assert request['method']=='session/new', request['method']
- print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-"#;
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script.to_owned()],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch("provider-loaded-route-agent.ts", vec!["new".to_owned()])
 }
 
 pub(super) fn exited_provider_fixture(
     exit_marker: &Path,
     release_address: std::net::SocketAddr,
 ) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'exited-provider-fixture','version':'1'}}}}}})); sys.stdout.flush()
-with socket.create_connection(({:?}, {}), timeout=2) as release:
- assert release.recv(1)==b'X', 'initialization release missing'
-with open({:?},'w') as marker: marker.write('provider exited')
-sys.exit(0)
-"#,
-        release_address.ip().to_string(),
-        release_address.port(),
-        exit_marker.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    provider_fixture_launch::launch(
+        "provider-loaded-route-agent.ts",
+        vec![
+            "exit".to_owned(),
+            release_address.ip().to_string(),
+            release_address.port().to_string(),
+            exit_marker.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 pub(super) fn request(target: SessionRef, text: &str) -> PreparedDeliveryRequest {

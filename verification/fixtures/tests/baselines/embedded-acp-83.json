@@ -1,0 +1,13 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime#approve-cursor",
+  "originalSHA256": "1157d809d6ccd629fdf0acc2451bd917baadda06a7a775c5e0f9a02b2ecab1ca",
+  "target": "host-live-approval-agent.ts",
+  "arguments": ["approve", "cursor"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"result\": {\"outcome\": {\"outcome\": \"selected\", \"optionId\": \"allow\"}}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"cursor-permission-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-cursor-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"fixture-cursor-session\", \"toolCall\": {\"toolCallId\": \"echo-command\", \"title\": \"Run echo cursor-ok\", \"kind\": \"execute\"}, \"options\": [{\"optionId\": \"allow\", \"name\": \"Allow once\", \"kind\": \"allow_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-cursor-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"cursor-ok\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

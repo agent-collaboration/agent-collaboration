@@ -1,0 +1,65 @@
+[
+  {
+    "url": "https://node.tail.ts.net:8443/mcp",
+    "expected": {
+      "authority": "node.tail.ts.net:8443",
+      "origin": "https://node.tail.ts.net:8443"
+    }
+  },
+  {
+    "url": "https://node.ts.net/mcp",
+    "expected": {
+      "authority": "node.ts.net:443",
+      "origin": "https://node.ts.net:443"
+    }
+  },
+  {
+    "url": "https://node.ts.net:443/mcp",
+    "expected": {
+      "authority": "node.ts.net:443",
+      "origin": "https://node.ts.net:443"
+    }
+  },
+  {
+    "url": "http://node.ts.net/mcp",
+    "expected": {
+      "refused": true
+    }
+  },
+  {
+    "url": "https://public.example/mcp",
+    "expected": {
+      "refused": true
+    }
+  },
+  {
+    "url": "https://node.ts.net/not-mcp",
+    "expected": {
+      "refused": true
+    }
+  },
+  {
+    "url": "https://user@node.ts.net/mcp",
+    "expected": {
+      "refused": true
+    }
+  },
+  {
+    "url": "https://node.ts.net/mcp?token=x",
+    "expected": {
+      "refused": true
+    }
+  },
+  {
+    "url": "https://node.ts.net:0/mcp",
+    "expected": {
+      "refused": true
+    }
+  },
+  {
+    "url": "https://node.ts.net/other/../mcp",
+    "expected": {
+      "refused": true
+    }
+  }
+]

@@ -26,18 +26,12 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
     let root = tempfile::tempdir().expect("private runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private root");
-    let script = r#"
-import json, sys
-if sys.argv[1:] == ['status', '--json']:
-    print(json.dumps({'BackendState':'Running','Self':{'DNSName':'node.example.ts.net.'},'CertDomains':['node.example.ts.net']}))
-elif sys.argv[1:] == ['serve', 'status', '--json']:
-    print('{}')
-else:
-    sys.exit(23)
-"#;
+    let script = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../verification/fixtures/tailscale-startup-failure-agent.ts"
+    );
     let command = TailscaleCommand::fixture(
-        ChildCommandSpec::new(PathBuf::from("/usr/bin/python3"))
-            .with_arguments(["-u", "-c", script]),
+        ChildCommandSpec::new(PathBuf::from("node")).with_arguments([script]),
     );
     let prepared = PreparedTailscaleExposure::prepare_with_command(
         Some(RemoteAccess::tailscale(

@@ -1,0 +1,38 @@
+[
+  {
+    "source": "fn retained() {}\n#[cfg(test)]\nmod tests { fn test() {} }\nmod production;\n",
+    "relativePath": "src/server.rs",
+    "stripped": "fn retained() {}\nmod production;",
+    "modules": ["src/server/production.rs"]
+  },
+  {
+    "source": "#[cfg(test)]\n#[path = \"fixture.rs\"]\nmod fixture;\npub(crate) mod production;\n",
+    "relativePath": "src/server.rs",
+    "stripped": "pub(crate) mod production;",
+    "modules": ["src/server/production.rs"]
+  },
+  {
+    "source": "const TEXT: &str = r###\"{ mod hidden; }\"###;\n// mod commented;\n/* { } */\n#[path = \"custom.rs\"]\nmod child;\n",
+    "relativePath": "src/server.rs",
+    "stripped": "const TEXT: &str = r###\"{ mod hidden; }\"###;\n// mod commented;\n/* { } */\n#[path = \"custom.rs\"]\nmod child;",
+    "modules": ["src/custom.rs"]
+  },
+  {
+    "source": "mod inline {\n mod nested;\n}\nmod sibling;\n",
+    "relativePath": "src/server.rs",
+    "stripped": "mod inline {\n mod nested;\n}\nmod sibling;",
+    "modules": ["src/server/sibling.rs"]
+  },
+  {
+    "source": "pub fn before() {}\n#[cfg(test)]\nfn test()\n{\nlet text=\"{\";\n}\npub fn after() {}\n",
+    "relativePath": "src/server.rs",
+    "stripped": "pub fn before() {}",
+    "modules": []
+  },
+  {
+    "source": "",
+    "relativePath": "src/server.rs",
+    "stripped": "",
+    "modules": []
+  }
+]

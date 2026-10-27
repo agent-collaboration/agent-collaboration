@@ -1,0 +1,14 @@
+{
+  "original": "Host provider owner#hub-load",
+  "originalSHA256": "573186a1fc63e20c20472f658015e7baf9cb47d93bd0121b78b4076893c06c95",
+  "target": "host-hub-lifecycle-agent.ts",
+  "arguments": ["load"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true, \"sessionCapabilities\": {\"resume\": {}}}, \"agentInfo\": {\"name\": \"hub-lifecycle-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"user_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"Earlier input\"}}}}\n{\"jsonrpc\": \"2.0\", \"method\": \"session/update\", \"params\": {\"sessionId\": \"fixture-session\", \"update\": {\"sessionUpdate\": \"agent_message_chunk\", \"content\": {\"type\": \"text\", \"text\": \"Earlier output\"}}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

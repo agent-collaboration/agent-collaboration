@@ -1,0 +1,20 @@
+{
+  "function": "curl_http_reply",
+  "args": [
+    {
+      "exit": 0,
+      "stdout": {
+        "base64": "Ym9keQoyMDA="
+      },
+      "stderr": {
+        "base64": ""
+      }
+    }
+  ],
+  "expected": {
+    "result": {
+      "status": 200,
+      "body": "body"
+    }
+  }
+}

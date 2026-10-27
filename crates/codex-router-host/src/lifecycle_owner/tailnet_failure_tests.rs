@@ -6,19 +6,23 @@ async fn tailscale_failure_settles_actual_owned_children_before_returning_host_e
     let directory = tempfile::tempdir_in("/tmp").expect("short control socket");
     let socket_path = directory.path().join("child.sock");
     let listener = tokio::net::UnixListener::bind(&socket_path).expect("readiness listener");
-    let child_script = "import signal,socket,sys; s=socket.socket(socket.AF_UNIX); s.connect(sys.argv[1]); s.sendall(b'R'); signal.pause()";
+    let child_script = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../verification/fixtures/held-socket-child.ts"
+    );
+    let node_executable = codex_router_test_support::node_fixture::node_executable()
+        .expect("fixture Node executable");
     let make_command = || {
-        let mut command = tokio::process::Command::new("/usr/bin/python3");
+        let mut command = tokio::process::Command::new(&node_executable);
         command
-            .args(["-u", "-c", child_script])
+            .args([child_script])
             .arg(&socket_path)
             .kill_on_drop(true);
         command
     };
-    let identity =
-        codex_native_integration::executable_identity(std::path::Path::new("/usr/bin/python3"))
-            .await
-            .expect("fixture executable");
+    let identity = codex_native_integration::executable_identity(&node_executable)
+        .await
+        .expect("fixture executable");
     let app_process =
         ProcessGroupChild::spawn(&mut make_command()).expect("owned app-server stand-in");
     let app_pid = app_process.process_id();

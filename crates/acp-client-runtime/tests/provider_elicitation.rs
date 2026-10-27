@@ -17,40 +17,10 @@ use session_event_model::{
 };
 use tokio_util::sync::CancellationToken;
 
-const ELICITATION_FIXTURE: &str = r#"
-import json,sys
-mode,receipt=sys.argv[1:]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-assert request['params']['clientCapabilities']['elicitation']=={'form':{}},request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'elicitation-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-if mode=='unsupported':
-    params={'mode':'url','sessionId':'fixture-session','message':'Open a link','url':'https://example.invalid'}
-else:
-    params={'mode':'form','sessionId':'fixture-session','message':'Choose settings',
-        'requestedSchema':{'type':'object','properties':{
-            'count':{'type':'number','title':'Count'},
-            'active':{'type':'boolean','title':'Active'},
-            'color':{'type':'string','title':'Color','oneOf':[
-                {'const':'blue','title':'Blue'},{'const':'red','title':'Red'}]},
-            'tags':{'type':'array','title':'Tags','items':{'type':'string','anyOf':[
-                {'const':'a','title':'Alpha'},{'const':'b','title':'Beta'}]}}},
-            'required':['count','color']}}
-send({'jsonrpc':'2.0','id':'elicit-one','method':'elicitation/create','params':params})
-response=read()
-assert response['id']=='elicit-one',response
-with open(receipt,'w') as output: json.dump(response,output)
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const ELICITATION_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-elicitation-agent.ts"
+);
 
 struct QuestionPort {
     response: QuestionResponse,
@@ -135,10 +105,8 @@ async fn run_elicitation(
     });
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
+            executable: PathBuf::from("node"),
             arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
                 ELICITATION_FIXTURE.to_owned(),
                 mode.to_owned(),
                 receipt.to_string_lossy().into_owned(),

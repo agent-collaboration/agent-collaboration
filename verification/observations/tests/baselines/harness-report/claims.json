@@ -1,0 +1,7 @@
+{
+  "rows": [["Claim <one>", "Observed 'quote' & café", "Supported"]],
+  "details": {
+    "Retained \"details\"": "details.json"
+  },
+  "scope": "Harness evidence only & no native UI claim."
+}

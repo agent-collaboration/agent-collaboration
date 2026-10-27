@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#load",
+  "originalSHA256": "237f6e23157b2db2257245517ed83516d4df1b6adebd5d0869544686293e5ee5",
+  "target": "supervisor-integration-agent.ts",
+  "arguments": ["load"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"load-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

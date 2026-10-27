@@ -1,0 +1,14 @@
+{
+  "original": "Provider route integration#idle-no-load",
+  "originalSHA256": "97676239b85df8065e954ddf5e6e7d97343485cf9cf3e732f1ada0b2f1c97198",
+  "target": "provider-loaded-route-agent.ts",
+  "arguments": ["idle"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"no-load-fixture\", \"version\": \"1\"}}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

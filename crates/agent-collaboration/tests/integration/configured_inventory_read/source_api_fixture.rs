@@ -169,7 +169,12 @@ impl SourceApiFixture {
             let output = directory.join("native-output.json");
             std::fs::write(&output, serde_json::to_vec(&jobs).unwrap()).unwrap();
             let executable = directory.join("native-list-fixture");
-            std::fs::write(&executable,format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",serde_json::to_string(&output).unwrap())).unwrap();
+            codex_router_test_support::node_fixture::write_node_fixture(
+                &executable,
+                "native-cli-catalogue-agent.ts",
+                &serde_json::json!({"kind":"file","output":{"kind":"path","path":output}}),
+            )
+            .unwrap();
             std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
             let peers = directory.join("native-peers");
             std::fs::create_dir(&peers).unwrap();
@@ -275,7 +280,7 @@ impl SourceApiFixture {
         let output = directory.join("native-output.json");
         let count = directory.join("native-read-count");
         std::fs::write(&count, "0").unwrap();
-        std::fs::write(directory.join("native-list-fixture"),format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\np={}\nn=int(open(p).read())\nopen(p,'w').write(str(n+1))\nif n: sys.exit(7)\nprint(open({}).read())\n",serde_json::to_string(&count).unwrap(),serde_json::to_string(&output).unwrap())).unwrap();
+        codex_router_test_support::node_fixture::write_node_fixture(&directory.join("native-list-fixture"), "native-cli-catalogue-agent.ts", &serde_json::json!({"kind":"file","output":{"kind":"path","path":output},"failAfterFirstCount":count})).unwrap();
     }
 
     pub(crate) fn publish_native_peer_with_status(

@@ -1,0 +1,17 @@
+{
+  "original": "Composed Host integration#reopened",
+  "originalSHA256": "af9106dc39f45282941b2132a3ab4819fed076bd1f438c55e1bbbc7f527fb939",
+  "target": "provider-recovery-agent.ts",
+  "arguments": ["reopened", "<ROOT>/dispatch.log"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/load\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"loadSession\": true}, \"agentInfo\": {\"name\": \"reopened-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fresh-provider-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "dispatch.log": "session/new\nsession/load\n"
+    }
+  }
+}

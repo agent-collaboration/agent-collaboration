@@ -100,19 +100,10 @@ impl ClaudeProcessFixture {
             }
         });
         let executable = root.path().join("bin/claude");
-        fs::write(
+        codex_router_test_support::node_fixture::write_node_fixture(
             &executable,
-            r#"#!/usr/bin/python3
-import json, os, sys
-with open(os.environ['CLAUDE_FIXTURE_COUNT'], 'a') as count: count.write('launch\n')
-with open(os.environ['CLAUDE_FIXTURE_RECORD'], 'w') as record:
-    json.dump({'arguments':sys.argv[1:], 'working_directory':os.getcwd(), 'base_url':os.environ.get('ANTHROPIC_BASE_URL'), 'auth_token':os.environ.get('ANTHROPIC_AUTH_TOKEN')}, record)
-if not os.environ.get('CLAUDE_FIXTURE_NO_RECEIPT'):
-    print('bg-fixture-receipt-001', flush=True)
-if os.environ.get('CLAUDE_FIXTURE_STDERR'):
-    print(os.environ['CLAUDE_FIXTURE_STDERR'], file=sys.stderr, flush=True)
-sys.exit(int(os.environ.get('CLAUDE_FIXTURE_EXIT', '0')))
-"#,
+            "native-claude-background-agent.ts",
+            &serde_json::Value::Null,
         )?;
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700))?;
         Ok(Self {

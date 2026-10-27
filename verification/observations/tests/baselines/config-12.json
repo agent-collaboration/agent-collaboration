@@ -1,0 +1,78 @@
+{
+  "name": "move-child-earlier",
+  "before": "[[skills.config]]\npath = \"first\"\n[[skills.config]]\npath = \"second\"\n[skills.config.rules]\nx = 1\n",
+  "after": "[[skills.config]]\npath = \"first\"\n[skills.config.rules]\nx = 1\n[[skills.config]]\npath = \"second\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 0,
+        "sha256": "47dc6e3d42216c640f33345353556b6a36bbe29eaf3b7e7fdf388627940a2a27",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 1,
+        "sha256": "81dbe1163a7e37b337aaae9aa7322aab62bbabaa97d5f5793e19113c29ede92a",
+        "names_run": false
+      },
+      {
+        "header": "[skills.config.rules]",
+        "table": ["skills", "config", "rules"],
+        "occurrence": 0,
+        "sha256": "f785820fab3e375844ddf306899705a396c6c97de69387c35c0affb4ea636a54",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 0,
+        "sha256": "47dc6e3d42216c640f33345353556b6a36bbe29eaf3b7e7fdf388627940a2a27",
+        "names_run": false
+      },
+      {
+        "header": "[skills.config.rules]",
+        "table": ["skills", "config", "rules"],
+        "occurrence": 0,
+        "sha256": "f785820fab3e375844ddf306899705a396c6c97de69387c35c0affb4ea636a54",
+        "names_run": false
+      },
+      {
+        "header": "[[skills.config]]",
+        "table": ["skills", "config"],
+        "occurrence": 1,
+        "sha256": "81dbe1163a7e37b337aaae9aa7322aab62bbabaa97d5f5793e19113c29ede92a",
+        "names_run": false
+      }
+    ],
+    "changes": [
+      {
+        "header": "[skills.config.rules]",
+        "occurrence": 0,
+        "before_sha256": "f785820fab3e375844ddf306899705a396c6c97de69387c35c0affb4ea636a54",
+        "after_sha256": "f785820fab3e375844ddf306899705a396c6c97de69387c35c0affb4ea636a54",
+        "classification": "unexpected"
+      }
+    ],
+    "allowed": false
+  }
+}

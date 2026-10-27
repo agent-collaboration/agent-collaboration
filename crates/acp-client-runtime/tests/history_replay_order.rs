@@ -13,72 +13,20 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const REPLAY_FIXTURE: &str = r#"
-import json, os, sys
-marker = sys.argv[1]
-request = json.loads(sys.stdin.readline())
-assert request['method'] == 'initialize'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{'loadSession':True},'agentInfo':{'name':'replay-fixture','version':'1'}}}), flush=True)
-line = sys.stdin.readline()
-if line:
-    request = json.loads(line)
-    assert request['method'] == 'session/load'
-    if not os.path.exists(marker):
-        with open(marker + '.early', 'w') as receipt:
-            receipt.write('load preceded replay reset')
-    print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{
-        'configOptions':[{'id':'model','name':'Model','type':'select',
-                          'currentValue':'model-a',
-                          'options':[{'value':'model-a','name':'Model A'}]}]}}), flush=True)
-sys.stdin.read()
-"#;
+const REPLAY_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-history-agent.ts"
+);
 
-const REPLAY_ITEMS_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{'loadSession':True},
-    'agentInfo':{'name':'replay-items-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/load'
-for kind,text in [('user_message_chunk','First user'),('agent_message_chunk','First answer'),
-                  ('user_message_chunk','Second user'),('agent_message_chunk','Second answer')]:
-    send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-        'update':{'sessionUpdate':kind,'content':{'type':'text','text':text}}}})
-send({'jsonrpc':'2.0','id':request['id'],'result':{}})
-sys.stdin.read()
-"#;
+const REPLAY_ITEMS_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-history-agent.ts"
+);
 
-const REPLAY_LIVE_TOOL_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{'loadSession':True},
-    'agentInfo':{'name':'replay-live-tool-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/load'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'tool_call','toolCallId':'replayed-tool',
-              'title':'Old tool','kind':'execute','status':'pending'}}})
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'current_mode_update','currentModeId':'ask'}}})
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'modes':{'currentModeId':'auto','availableModes':[
-        {'id':'auto','name':'Auto'},{'id':'ask','name':'Ask'}]}}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'fixture-session',
-    'update':{'sessionUpdate':'tool_call_update','toolCallId':'replayed-tool',
-              'title':'Tool finished','status':'completed'}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const REPLAY_LIVE_TOOL_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-history-agent.ts"
+);
 
 struct TestInteractionPort;
 
@@ -168,11 +116,10 @@ impl SessionEventSink for ReplaySink {
 
 fn fixture_launch(marker: &std::path::Path) -> ExternalProviderLaunch {
     ExternalProviderLaunch {
-        executable: PathBuf::from("python3"),
+        executable: PathBuf::from("node"),
         arguments: vec![
-            "-u".to_owned(),
-            "-c".to_owned(),
             REPLAY_FIXTURE.to_owned(),
+            "reset".to_owned(),
             marker.to_string_lossy().into_owned(),
         ],
         environment: Vec::new(),
@@ -189,12 +136,8 @@ async fn live_update_continues_replayed_item_projection() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                REPLAY_LIVE_TOOL_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![REPLAY_LIVE_TOOL_FIXTURE.to_owned(), "live".to_owned()],
             environment: Vec::new(),
             persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
         },
@@ -347,12 +290,8 @@ async fn session_load_publishes_two_historical_turns_and_items() {
     let events = Arc::new(Mutex::new(Vec::new()));
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                REPLAY_ITEMS_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![REPLAY_ITEMS_FIXTURE.to_owned(), "items".to_owned()],
             environment: Vec::new(),
             persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
         },

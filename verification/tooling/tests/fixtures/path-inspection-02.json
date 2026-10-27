@@ -1,0 +1,146 @@
+[
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo"],
+    "expected": {
+      "exit": 0,
+      "stdout": ".\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/owned/new/tail"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/owned/new/tail\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/alias"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/dangling/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/missing/child\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/escape/../peer"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/outside/peer\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/loop-a"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/loop-a\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/loop-b/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/loop-b/child\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/chain-0/child"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/owned/child\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/..hidden/file"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/repo/..hidden/file\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/outside"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/outside\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "tmp/dev-state/owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "../outside"],
+    "expected": {
+      "exit": 0,
+      "stdout": "<ROOT>/outside\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", ""],
+    "expected": {
+      "exit": 0,
+      "stdout": ".\n",
+      "stderr": ""
+    }
+  },
+  {
+    "action": "relative",
+    "arguments": ["<ROOT>/repo", "<ROOT>/repo/tmp/dev-state/a/../owned"],
+    "expected": {
+      "exit": 0,
+      "stdout": "tmp/dev-state/owned\n",
+      "stderr": ""
+    }
+  }
+]

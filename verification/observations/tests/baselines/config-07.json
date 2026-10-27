@@ -1,0 +1,43 @@
+{
+  "name": "escaped-reference",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[desktop.preferences]\npath = \"/fixture/\\u0072un/owned\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[desktop.preferences]",
+        "table": ["desktop", "preferences"],
+        "occurrence": 0,
+        "sha256": "b801553950e91838bf895f50c89545164b1c1b6d07509a888bed702753f07c29",
+        "names_run": true
+      }
+    ],
+    "changes": [
+      {
+        "header": "[desktop.preferences]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "b801553950e91838bf895f50c89545164b1c1b6d07509a888bed702753f07c29",
+        "classification": "runReference"
+      }
+    ],
+    "allowed": false
+  }
+}

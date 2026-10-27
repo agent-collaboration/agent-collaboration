@@ -1,0 +1,105 @@
+{
+  "input": {
+    "name": "inspect-pending",
+    "action": "inspect",
+    "plan": {
+      "cli": "<CLI>",
+      "evidence": "<ROOT>/evidence",
+      "service_directory": "<ROOT>/service",
+      "caller_session_id": "caller",
+      "endpoint_id": "claude-local",
+      "settings": {
+        "mode": "manual-mode",
+        "model": "provider-model",
+        "effort": "low"
+      },
+      "tools": null,
+      "approver": {
+        "endpoint": {
+          "serviceId": "00000000-0000-7000-8000-000000000001",
+          "endpointId": "claude-local"
+        },
+        "sessionId": "approver"
+      }
+    },
+    "manifest": {
+      "serviceId": "00000000-0000-7000-8000-000000000001",
+      "serviceEpoch": "epoch",
+      "serviceVersion": "test",
+      "machineLabel": "synthetic",
+      "routerProxyEndpoint": "http://127.0.0.1:1",
+      "mcp": {
+        "url": "<RPC>"
+      }
+    },
+    "files": {
+      "create-intent": {
+        "operationId": "00000000-0000-7000-8000-000000000002"
+      }
+    },
+    "responses": {
+      "conversation_operation_show": [
+        {
+          "target": {
+            "endpoint": {
+              "serviceId": "00000000-0000-7000-8000-000000000001",
+              "endpointId": "claude-local"
+            },
+            "sessionId": "requester"
+          },
+          "binding": {
+            "binding": {
+              "generation": {
+                "serviceEpoch": "epoch",
+                "generation": 1
+              }
+            }
+          },
+          "stage": "pending",
+          "effect": "applied",
+          "reconciliation": "confirmed"
+        }
+      ]
+    }
+  },
+  "expected": {
+    "calls": [
+      {
+        "name": "conversation_operation_show",
+        "arguments": {
+          "operationId": "<OPERATION>"
+        }
+      }
+    ],
+    "files": {
+      "create-intent.json": {
+        "operationId": "<OPERATION>"
+      },
+      "create-operation-readback.json": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-7000-8000-000000000001",
+            "endpointId": "claude-local"
+          },
+          "sessionId": "requester"
+        },
+        "binding": {
+          "binding": {
+            "generation": {
+              "serviceEpoch": "epoch",
+              "generation": 1
+            }
+          }
+        },
+        "stage": "pending",
+        "effect": "applied",
+        "reconciliation": "confirmed"
+      }
+    },
+    "stdout": [],
+    "failure": {
+      "category": "RuntimeError",
+      "message": "create operation not confirmed; no replay"
+    }
+  }
+}

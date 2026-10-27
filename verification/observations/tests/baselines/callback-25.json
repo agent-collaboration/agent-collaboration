@@ -1,0 +1,33 @@
+{
+  "function": "question_response_for",
+  "name": "test_unexpected_required_field_gets_no_automatic_answer",
+  "args": [
+    {
+      "fields": [
+        {
+          "kind": "singleChoice",
+          "fieldId": "question_0",
+          "required": false,
+          "options": [
+            {
+              "optionId": "blue-id",
+              "label": "Blue"
+            },
+            {
+              "optionId": "green-id",
+              "label": "Green"
+            }
+          ]
+        },
+        {
+          "kind": "text",
+          "fieldId": "question_0_custom",
+          "required": true
+        }
+      ]
+    }
+  ],
+  "expected": {
+    "error": "unexpected additional Question field"
+  }
+}

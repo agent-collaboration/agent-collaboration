@@ -2,24 +2,15 @@ use super::*;
 use crate::ChildCommandSpec;
 use std::{num::NonZeroU16, path::PathBuf};
 
-const PREFLIGHT_FIXTURE: &str = r#"
-import json, os, sys
-mode = os.environ['TAILNET_TEST_MODE']
-if sys.argv[1:] == ['status', '--json']:
-    if mode == 'malformed':
-        print('not-json')
-    else:
-        print(json.dumps({'BackendState':'Stopped' if mode == 'offline' else 'Running','Self':{'DNSName':'node.example.ts.net.'},'CertDomains':[] if mode == 'no_https' else ['node.example.ts.net']}))
-elif sys.argv[1:] == ['serve', 'status', '--json']:
-    print(json.dumps({'Foreground':{'foreign':{'TCP':{'8443':{'HTTPS':True}}}}} if mode == 'collision' else {}))
-else:
-    sys.exit(73)
-"#;
+const PREFLIGHT_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/tailscale-preflight-agent.ts"
+);
 
 fn fixture(mode: &str) -> TailscaleCommand {
     TailscaleCommand::fixture(
-        ChildCommandSpec::new(PathBuf::from("/usr/bin/python3"))
-            .with_arguments(["-u", "-c", PREFLIGHT_FIXTURE])
+        ChildCommandSpec::new(PathBuf::from("node"))
+            .with_arguments([PREFLIGHT_FIXTURE])
             .with_environment("TAILNET_TEST_MODE", mode),
     )
 }
@@ -59,28 +50,10 @@ async fn preflight_rejects_foreign_cli_failures_before_granting_proxy_authority(
     assert_eq!(prepared.authority().authority(), "node.example.ts.net:8443");
 }
 
-const LEASE_FIXTURE: &str = r#"
-import json, os, signal, sys
-state_path = os.environ['TAILNET_TEST_STATE']
-if sys.argv[1:] == ['serve', 'status', '--json']:
-    with open(state_path) as state:
-        print(state.read())
-    sys.exit(0)
-def write_state(state):
-    with open(state_path, 'w') as output:
-        json.dump(state, output)
-state = {'Foreground':{'foreign':{'TCP':{'443':{'HTTPS':True}}},'fixture-owned':{'TCP':{'8443':{'HTTPS':True}}}}}
-write_state(state)
-def stop(*_):
-    if os.environ['TAILNET_TEST_KEEP_LEASE'] != 'yes':
-        state['Foreground'].pop('fixture-owned')
-        write_state(state)
-    sys.exit(0)
-signal.signal(signal.SIGINT, stop)
-print('https://node.example.ts.net:8443/', flush=True)
-while True:
-    signal.pause()
-"#;
+const LEASE_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/tailscale-lease-agent.ts"
+);
 
 #[tokio::test]
 async fn shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_retired() {
@@ -88,8 +61,8 @@ async fn shutdown_reaps_the_owned_child_and_verifies_only_its_foreground_lease_r
         let directory = tempfile::tempdir().expect("private state directory");
         let state_path = directory.path().join("foreign-serve-state.json");
         let command = TailscaleCommand::fixture(
-            ChildCommandSpec::new(PathBuf::from("/usr/bin/python3"))
-                .with_arguments(["-u", "-c", LEASE_FIXTURE])
+            ChildCommandSpec::new(PathBuf::from("node"))
+                .with_arguments([LEASE_FIXTURE])
                 .with_environment("TAILNET_TEST_STATE", &state_path)
                 .with_environment(
                     "TAILNET_TEST_KEEP_LEASE",

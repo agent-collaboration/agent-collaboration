@@ -1,0 +1,13 @@
+{
+  "original": "crates/acp-client-runtime/tests/provider_multiblock_prompt.rs#MULTIBLOCK_FIXTURE",
+  "originalSHA256": "c7cc76adb37f4184c4c6f8acff1bc41e07a8044c77e62d034329c36a8dbb7e80",
+  "target": "provider-multiblock-agent.ts",
+  "arguments": ["normal"],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/prompt\", \"params\": {\"_meta\": {\"steering\": {\"idleBehavior\": \"promptRequired\"}}, \"prompt\": [{\"type\": \"text\", \"text\": \"Read\"}, {\"type\": \"resource_link\", \"uri\": \"file:///notes.txt\", \"name\": \"notes.txt\", \"mimeType\": \"text/plain\"}]}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"multiblock-fixture\", \"version\": \"1\"}, \"_meta\": {}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n",
+    "stderr": "",
+    "receipt": null
+  }
+}

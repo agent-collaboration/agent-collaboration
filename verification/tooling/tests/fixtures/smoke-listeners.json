@@ -1,0 +1,22 @@
+[
+  {
+    "text": "none",
+    "address": null
+  },
+  {
+    "text": "listening: 127.0.0.1:1234",
+    "address": "127.0.0.1:1234"
+  },
+  {
+    "text": "noise\nlistening:\t127.0.0.1:4567\nsecond",
+    "address": "127.0.0.1:4567"
+  },
+  {
+    "text": "listening: 0.0.0.0:5",
+    "address": null
+  },
+  {
+    "text": "listening: 127.0.0.1:１２３",
+    "address": "127.0.0.1:１２３"
+  }
+]

@@ -1,0 +1,78 @@
+{
+  "name": "exchange-and-tail",
+  "steps": [
+    {
+      "action": "expect_request",
+      "requestName": "init",
+      "method": "initialize",
+      "params": {
+        "protocolVersion": 1
+      },
+      "recordPath": "<receipt>"
+    },
+    {
+      "action": "respond",
+      "requestName": "init",
+      "result": {
+        "protocolVersion": 1
+      }
+    },
+    {
+      "action": "send",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 91,
+        "method": "session/request_permission"
+      }
+    },
+    {
+      "action": "expect_message",
+      "message": {
+        "jsonrpc": "2.0",
+        "id": 91,
+        "result": {
+          "outcome": "cancelled"
+        }
+      }
+    },
+    {
+      "action": "expect_messages_unordered",
+      "messages": [
+        {
+          "method": "first"
+        },
+        {
+          "method": "second"
+        }
+      ]
+    },
+    {
+      "action": "expect_request",
+      "requestName": "prompt",
+      "method": "session/prompt",
+      "params": {
+        "sessionId": "session"
+      },
+      "promptTextContains": "EXACT_MARKER",
+      "recordPath": "<receipt>"
+    },
+    {
+      "action": "respond_error",
+      "requestName": "prompt",
+      "code": -32603,
+      "data": null
+    },
+    {
+      "action": "write_marker",
+      "path": "<marker>"
+    }
+  ],
+  "input": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":1}}\n{\"jsonrpc\":\"2.0\",\"id\":91,\"result\":{\"outcome\":\"cancelled\"}}\n{\"method\":\"second\"}\n{\"method\":\"first\"}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"session\",\"prompt\":[{\"type\":\"text\",\"text\":\"EXACT_MARKER café\"}]}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"late-request\",\"params\":{}}\n",
+  "expected": {
+    "status": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\"}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"error\": {\"code\": -32603, \"message\": \"private provider text\", \"data\": null}}\n",
+    "stderr": "",
+    "receipt": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {\"protocolVersion\": 1}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/prompt\", \"params\": {\"sessionId\": \"session\", \"prompt\": [{\"type\": \"text\", \"text\": \"EXACT_MARKER caf\\u00e9\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"late-request\", \"params\": {}}\n",
+    "marker": true
+  }
+}

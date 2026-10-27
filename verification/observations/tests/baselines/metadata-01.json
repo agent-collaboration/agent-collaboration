@@ -1,0 +1,108 @@
+{
+  "name": "test_actual_resume_row_can_be_followed_by_the_composer_on_the_same_line",
+  "observation": {
+    "target": {
+      "endpoint": {
+        "serviceId": "service",
+        "endpointId": "cursor-local"
+      },
+      "sessionId": "thread"
+    },
+    "events": [
+      {
+        "sequence": 1,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "commands",
+            "kind": {
+              "kind": "notice"
+            },
+            "text": "{\"availableCommands\":[{\"name\":\"compact\",\"description\":\"Compact context\"}]}"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 2,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "assistant",
+            "kind": {
+              "kind": "agentMessage"
+            },
+            "text": "ACP_OK"
+          },
+          "turnId": null
+        }
+      },
+      {
+        "sequence": 3,
+        "event": {
+          "kind": "itemStarted",
+          "item": {
+            "itemId": "usage",
+            "kind": {
+              "kind": "usage"
+            },
+            "text": "{\"used\":12,\"size\":100}"
+          },
+          "turnId": null
+        }
+      }
+    ],
+    "epoch": 0,
+    "endReason": "deadlineReached"
+  },
+  "views": [
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "thread",
+      "turns": [
+        {
+          "id": "turn",
+          "items": [
+            {
+              "id": "assistant",
+              "type": "agentMessage",
+              "text": "ACP_OK"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "terminal": "\n• ACP_OK\n",
+  "resumedTerminal": "\n• ACP_OK  › Ask Codex to do anything  Grok 4.6 default",
+  "expectedReply": "ACP_OK",
+  "requireUsage": false,
+  "expected": {
+    "result": {
+      "thread_id": "thread",
+      "metadata_item_ids": ["commands", "usage"],
+      "metadata_kinds": ["notice", "usage"],
+      "command_catalogues": 1,
+      "usage_items": 1,
+      "assistant_item_ids": ["assistant"],
+      "historical_views": 2,
+      "terminal_reply_observed": true,
+      "terminal_views": 2,
+      "usage_limit": null
+    }
+  }
+}

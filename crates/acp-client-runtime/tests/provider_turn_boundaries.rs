@@ -13,55 +13,10 @@ use tokio_util::sync::CancellationToken;
 #[path = "provider_turn_boundaries/failed_tool_plan.rs"]
 mod failed_tool_plan;
 
-const FAILED_PROMPT_ORDER_FIXTURE: &str = r#"
-import json,pathlib,queue,socket,sys,threading
-requests=queue.Queue()
-prompt_texts=[]
-receipt_path=pathlib.Path(sys.argv[2])
-stdin_closed=threading.Event()
-def receive_wire():
-    try:
-        for line in sys.stdin:
-            message=json.loads(line)
-            if message.get('method')=='session/prompt':
-                prompt_texts.append(message['params']['prompt'][0]['text'])
-                receipt_path.write_text(json.dumps({'promptCount':len(prompt_texts),'promptTexts':prompt_texts}))
-            requests.put(message)
-    finally:
-        stdin_closed.set()
-def read(): return requests.get(timeout=5)
-def send(value): print(json.dumps(value),flush=True)
-def update(text):
-    send({'jsonrpc':'2.0','method':'session/update','params':{'sessionId':'failed-stream-session',
-        'update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':text}}}})
-threading.Thread(target=receive_wire,daemon=True).start()
-control=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
-control.settimeout(15)
-control.connect(sys.argv[1])
-request=read()
-assert request['method']=='initialize',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':{},'agentInfo':{'name':'failed-stream-order-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new',request
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'failed-stream-session'}})
-first=read()
-assert first['method']=='session/prompt' and first['params']['prompt']==[{'type':'text','text':'FIRST_REQUEST'}],first
-update('FIRST_PARTIAL')
-# The owner test releases this only after the real item emitter publishes it.
-assert control.recv(1)==b'e'
-send({'jsonrpc':'2.0','id':first['id'],'error':{'code':-32603,'message':'first fixture prompt failed'}})
-# Keep the connection alive; the next prompt is an explicit different input.
-assert control.recv(1)==b's'
-second=read()
-assert second['method']=='session/prompt' and second['params']['prompt']==[{'type':'text','text':'SECOND_REQUEST'}],second
-update('SECOND_ONLY')
-send({'jsonrpc':'2.0','id':second['id'],'result':{'stopReason':'end_turn'}})
-control.sendall(b'd')
-assert control.recv(1)==b'q'
-control.close()
-assert stdin_closed.wait(timeout=15),'owner did not close fixture stdin'
-"#;
+const FAILED_PROMPT_ORDER_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-failed-turn-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -140,11 +95,10 @@ async fn failed_prompt_partial_item_is_not_a_successor_turn_item() {
             std::time::Duration::from_secs(5),
             AgentSessionClient::initialize(
                 ExternalProviderLaunch {
-                    executable: PathBuf::from("/usr/bin/python3"),
+                    executable: PathBuf::from("node"),
                     arguments: vec![
-                        "-u".into(),
-                        "-c".into(),
                         FAILED_PROMPT_ORDER_FIXTURE.into(),
+                        "stream".into(),
                         control_path.to_string_lossy().into_owned(),
                         receipt_path.to_string_lossy().into_owned(),
                     ],

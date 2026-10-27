@@ -1,0 +1,18 @@
+import assert from "node:assert/strict";
+import { writeFileSync } from "node:fs";
+import { field } from "../exact-json.ts";
+import { requireArgument } from "./acp-stdio.ts";
+import { AcpExchange } from "./acp-exchange.ts";
+import { legacyModes } from "./provider-settings-options.ts";
+const receipt = requireArgument(2);
+const agent = new AcpExchange();
+await agent.initialize("legacy-mode-fixture");
+await agent.newSession("fixture-session", { modes: legacyModes });
+const setting = await agent.read("session/set_mode");
+assert.equal(field(setting, "params", "modeId"), "ask");
+agent.respond(setting, {});
+const prompt = await agent.read("session/prompt");
+writeFileSync(receipt, "mode-before-prompt");
+agent.endTurn(prompt);
+await agent.drain();
+agent.close();

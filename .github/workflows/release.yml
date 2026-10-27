@@ -51,6 +51,11 @@ jobs:
           persist-credentials: false
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && github.sha || env.RELEASE_TAG }}
 
+      - name: Install Node for release formula checks
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: release-source/verification/package.json
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
@@ -323,6 +328,36 @@ jobs:
             echo "sha256=${asset_sha256}"
           } >> "${GITHUB_OUTPUT}"
 
+      - name: Verify release formula generation
+        env:
+          ASSET_SHA256: ${{ steps.artifact.outputs.sha256 }}
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+          SOURCE_COMMIT: ${{ steps.metadata.outputs.source_commit }}
+        run: |
+          set -euo pipefail
+          formula_preview="$RUNNER_TEMP/codex-router-formula.rb"
+          cp release-source/verification/tooling/tests/fixtures/current-formula.rb "$formula_preview"
+          node release-source/verification/tooling/update-homebrew-formula.ts \
+            --formula "$formula_preview" \
+            --version "$RELEASE_VERSION" \
+            --sha256 "$ASSET_SHA256" \
+            --source-commit "$SOURCE_COMMIT"
+          cp "$formula_preview" "$formula_preview.first"
+          node release-source/verification/tooling/update-homebrew-formula.ts \
+            --formula "$formula_preview" \
+            --version "$RELEASE_VERSION" \
+            --sha256 "$ASSET_SHA256" \
+            --source-commit "$SOURCE_COMMIT"
+          cmp "$formula_preview.first" "$formula_preview"
+          ruby -c "$formula_preview"
+
+      - name: Retain dry-run formula preview
+        if: env.RELEASE_DRY_RUN == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-formula-preview
+          path: ${{ runner.temp }}/codex-router-formula.rb
+
       - name: Publish GitHub release asset
         if: env.RELEASE_DRY_RUN != 'true'
         env:
@@ -419,6 +454,11 @@ jobs:
           path: automation
           persist-credentials: false
 
+      - name: Install Node for formula automation
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: automation/verification/package.json
+
       - name: Checkout Homebrew tap
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -434,7 +474,7 @@ jobs:
           SOURCE_COMMIT: ${{ needs.release.outputs.source_commit }}
         run: |
           set -euo pipefail
-          python3 automation/scripts/update_homebrew_formula.py \
+          node automation/verification/tooling/update-homebrew-formula.ts \
             --formula homebrew-taps/Formula/codex-router.rb \
             --version "${RELEASE_VERSION}" \
             --sha256 "${ASSET_SHA256}" \
@@ -534,7 +574,7 @@ jobs:
           if git push origin HEAD:main; then
             exit 0
           fi
-          # scripts/publish_homebrew_tap_local.py may have pushed this release
+          # verification/tooling/publish-homebrew-tap-local.ts may have pushed this release
           # first. The formula is deterministic, so identical content on the tap
           # means the release is already published.
           git fetch origin main

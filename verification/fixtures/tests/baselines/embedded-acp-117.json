@@ -1,0 +1,15 @@
+{
+  "original": "Host supervisor integration#settings-invalid_no_close",
+  "originalSHA256": "89815912483faed1839571924b1d44aa3528b8245e8f685c55111a8135663959",
+  "target": "supervisor-settings-create-agent.ts",
+  "arguments": ["invalid_no_close"],
+  "pidFiles": [],
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {\"sessionCapabilities\": {}}, \"agentInfo\": {\"name\": \"supervisor-settings\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"settings-session\", \"configOptions\": [{\"id\": \"mode\", \"name\": \"mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"auto\", \"options\": [{\"value\": \"auto\", \"name\": \"auto\"}, {\"value\": \"ask\", \"name\": \"ask\"}]}, {\"id\": \"model\", \"name\": \"model\", \"category\": \"model\", \"type\": \"select\", \"currentValue\": \"a\", \"options\": [{\"value\": \"a\", \"name\": \"a\"}, {\"value\": \"b\", \"name\": \"b\"}]}]}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

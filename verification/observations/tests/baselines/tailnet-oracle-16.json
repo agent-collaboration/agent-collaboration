@@ -1,0 +1,43 @@
+{
+  "function": "require_marker",
+  "args": [
+    {
+      "topicId": "wrong",
+      "messageId": "01900000-0000-7000-8000-000000000003",
+      "placement": {
+        "kind": "thread",
+        "rootMessageId": "01900000-0000-7000-8000-000000000002"
+      },
+      "text": "unique",
+      "actor": {
+        "kind": "session",
+        "session": {
+          "endpoint": {
+            "serviceId": "01900000-0000-7000-8000-000000000010",
+            "endpointId": "codex-local"
+          },
+          "sessionId": "01900000-0000-7000-8000-000000000011"
+        }
+      }
+    },
+    {
+      "topic_id": "01900000-0000-7000-8000-000000000001",
+      "message_id": "01900000-0000-7000-8000-000000000003",
+      "root_message_id": "01900000-0000-7000-8000-000000000002",
+      "text": "unique"
+    },
+    {
+      "kind": "session",
+      "session": {
+        "endpoint": {
+          "serviceId": "01900000-0000-7000-8000-000000000010",
+          "endpointId": "codex-local"
+        },
+        "sessionId": "01900000-0000-7000-8000-000000000011"
+      }
+    }
+  ],
+  "expected": {
+    "refused": true
+  }
+}

@@ -89,79 +89,27 @@ impl Write for CapturedProviderTraceBuffer {
 }
 
 fn create_fixture() -> ExternalProviderLaunch {
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'race-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-sys.stdin.read()
-"#
-            .to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-supervisor-agent.ts",
+        vec!["create".to_owned()],
+    )
 }
 
 fn pending_prompt_fixture() -> ExternalProviderLaunch {
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec![
-            "-c".to_owned(),
-            r#"
-import json,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,'agentCapabilities':{},'agentInfo':{'name':'dispatch-fixture','version':'1'}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/prompt'
-sys.stdin.read()
-"#
-            .to_owned(),
-        ],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-supervisor-agent.ts",
+        vec!["pending".to_owned()],
+    )
 }
 
 fn ordered_prompt_fixture(socket_path: &std::path::Path) -> ExternalProviderLaunch {
-    let script = format!(
-        r#"
-import json,socket,sys
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{}},'agentInfo':{{'name':'fifo-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=='session/new'
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'sessionId':'fixture-session'}}}})); sys.stdout.flush()
-for expected in ('first','second'):
- request=json.loads(sys.stdin.readline())
- assert request['method']=='session/prompt'
- text=request['params']['prompt'][0]['text']
- assert text.startswith(f'✉️ sender · "{{expected}}" · router://')
- machine_and_push_id=text.split('router://',1)[1]
- machine_id,separator,push_id=machine_and_push_id.partition('/push/')
- assert separator and machine_id and push_id
- with socket.socket(socket.AF_UNIX,socket.SOCK_STREAM) as event:
-  event.connect({:?})
-  event.sendall(text.encode())
- print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'stopReason':'end_turn'}}}})); sys.stdout.flush()
-sys.stdin.read()
-"#,
-        socket_path.display().to_string()
-    );
-    ExternalProviderLaunch {
-        persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
-        environment: Vec::new(),
-    }
+    crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+        "host-supervisor-agent.ts",
+        vec![
+            "ordered".to_owned(),
+            socket_path.to_string_lossy().into_owned(),
+        ],
+    )
 }
 
 fn endpoint() -> EndpointRef {

@@ -1,0 +1,43 @@
+{
+  "name": "run-project",
+  "before": "model = \"fixed\"\n",
+  "after": "model = \"fixed\"\n[projects.\"/fixture/run/owned\"]\ntrust_level = \"trusted\"\n",
+  "references": ["/fixture/run", "exact-run-identifier"],
+  "expected": {
+    "before": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      }
+    ],
+    "after": [
+      {
+        "header": "<root>",
+        "table": [],
+        "occurrence": 0,
+        "sha256": "7b1ff8c0303a98f8551214c335bb99876cd44c846f7ca5a8d5ef0a6ad9c6f4f6",
+        "names_run": false
+      },
+      {
+        "header": "[projects.\"/fixture/run/owned\"]",
+        "table": ["projects", "/fixture/run/owned"],
+        "occurrence": 0,
+        "sha256": "d16dafad8191042ee00c777f7eaafc619cc33516373f40b2ada280bcbd11eea9",
+        "names_run": true
+      }
+    ],
+    "changes": [
+      {
+        "header": "[projects.\"/fixture/run/owned\"]",
+        "occurrence": 0,
+        "before_sha256": null,
+        "after_sha256": "d16dafad8191042ee00c777f7eaafc619cc33516373f40b2ada280bcbd11eea9",
+        "classification": "runReference"
+      }
+    ],
+    "allowed": false
+  }
+}

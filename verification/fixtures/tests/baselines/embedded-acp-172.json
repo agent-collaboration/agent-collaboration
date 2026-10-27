@@ -1,0 +1,20 @@
+{
+  "original": "crates/codex-router-host/src/external_provider_runtime/tests/admission_lifecycle_tests.rs#oversized_initialize_frame_is_rejected_and_reaps_owned_process",
+  "originalSHA256": "13422ed591d88c1eb4a650a4b3a5bb15e2a4ee38cf5b6785ddb9aa8cad76f866",
+  "target": "host-failing-initialization-agent.ts",
+  "arguments": ["oversized", "<ROOT>/provider.pid", "67108864"],
+  "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n",
+  "pidFiles": ["provider.pid"],
+  "expected": {
+    "exit": 0,
+    "stdout": {
+      "sha256": "d2e69798dd4b1912460a6fa8f25967cfeccd4815903935685454a34dd4e18673",
+      "bytes": 67108866
+    },
+    "stderr": "",
+    "receipt": null,
+    "files": {
+      "provider.pid": "<OWN_PID>"
+    }
+  }
+}

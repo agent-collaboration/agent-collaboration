@@ -121,50 +121,34 @@ fn working_directory() -> TestResult<ProviderWorkingDirectory> {
     Ok(ProviderWorkingDirectory::try_from("/tmp".to_owned())?)
 }
 
-fn launch(script: String) -> ExternalProviderLaunch {
+fn launch(arguments: Vec<String>) -> ExternalProviderLaunch {
+    let script =
+        codex_router_test_support::node_fixture::fixture_program("provider-recovery-agent.ts");
     ExternalProviderLaunch {
         persistence_target: acp_client_runtime::ProviderPersistenceTarget::Unspecified,
-        executable: PathBuf::from("/usr/bin/python3"),
-        arguments: vec!["-c".to_owned(), script],
+        executable: PathBuf::from("node"),
+        arguments: std::iter::once(script.to_string_lossy().into_owned())
+            .chain(arguments)
+            .collect(),
         environment: vec![],
     }
 }
 
 fn held_dispatch_fixture(dispatch_log: &Path, expected_method: &str) -> ExternalProviderLaunch {
     let process_id_path = dispatch_log.with_extension("pid");
-    launch(format!(
-        r#"
-import json,os,sys
-log={:?}
-open({:?},'w').write(str(os.getpid()))
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'recovery-fixture','version':'1'}}}}}})); sys.stdout.flush()
-request=json.loads(sys.stdin.readline())
-assert request['method']=={:?}
-open(log,'a').write(request['method']+'\n')
-sys.stdin.read()
-"#,
-        dispatch_log.display().to_string(),
-        process_id_path.display().to_string(),
-        expected_method
-    ))
+    launch(vec![
+        "held".to_owned(),
+        dispatch_log.to_string_lossy().into_owned(),
+        process_id_path.to_string_lossy().into_owned(),
+        expected_method.to_owned(),
+    ])
 }
 
 fn reopened_provider_fixture(dispatch_log: &Path) -> ExternalProviderLaunch {
-    launch(format!(
-        r#"
-import json,sys
-log={:?}
-request=json.loads(sys.stdin.readline())
-print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':{{'protocolVersion':1,'agentCapabilities':{{'loadSession':True}},'agentInfo':{{'name':'reopened-fixture','version':'1'}}}}}})); sys.stdout.flush()
-for line in sys.stdin:
-    request=json.loads(line)
-    open(log,'a').write(request.get('method','unknown')+'\n')
-    result={{'sessionId':'fresh-provider-session'}} if request['method']=='session/new' else {{}}
-    print(json.dumps({{'jsonrpc':'2.0','id':request['id'],'result':result}}),flush=True)
-"#,
-        dispatch_log.display().to_string()
-    ))
+    launch(vec![
+        "reopened".to_owned(),
+        dispatch_log.to_string_lossy().into_owned(),
+    ])
 }
 
 async fn supervisor(

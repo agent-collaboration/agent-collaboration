@@ -17,58 +17,10 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, InputId, PromptContent, SessionEvent};
 use tokio_util::sync::CancellationToken;
 
-const MULTIBLOCK_FIXTURE: &str = r#"
-import json,sys
-mode=sys.argv[1]
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-capabilities={'promptCapabilities':{'image':True}} if mode=='image' else {}
-meta={'steering':{'supported':True}} if mode=='steer' else {}
-send({'jsonrpc':'2.0','id':request['id'],'result':{'protocolVersion':1,
-    'agentCapabilities':capabilities,'agentInfo':{'name':'multiblock-fixture','version':'1'},
-    '_meta':meta}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-request=read()
-if mode=='unsupported':
-    assert request['method']=='session/prompt',request
-    assert request['params']['prompt']==[{'type':'text','text':'After rejection'}],request
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-elif mode=='image':
-    assert request['method']=='session/prompt',request
-    assert request['params']['prompt']==[
-        {'type':'image','data':'aGVsbG8=','mimeType':'image/png'}],request
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-elif mode=='steer':
-    assert request['method']=='_session/steering',request
-    assert request['params']['prompt']==[
-        {'type':'text','text':'Read'},
-        {'type':'resource_link','uri':'file:///notes.txt','name':'notes.txt',
-         'mimeType':'text/plain'}],request
-    assert request['params']['_meta']['steering']['idleBehavior']=='promptRequired'
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'outcome':'promptRequired'}})
-elif mode=='approval':
-    assert request['method']=='session/prompt',request
-    assert len(request['params']['prompt'])==2,request
-    send({'jsonrpc':'2.0','id':91,'method':'session/request_permission','params':{
-        'sessionId':'fixture-session',
-        'toolCall':{'toolCallId':'tool-1','title':'Run command','kind':'execute'},
-        'options':[{'optionId':'allow-once','name':'Allow','kind':'allow_once'}]}})
-    answer=read()
-    assert answer['id']==91 and answer['result']['outcome']['outcome']=='cancelled',answer
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-else:
-    assert request['method']=='session/prompt',request
-    assert request['params']['prompt']==[
-        {'type':'text','text':'Read'},
-        {'type':'resource_link','uri':'file:///notes.txt','name':'notes.txt',
-         'mimeType':'text/plain'}],request
-    send({'jsonrpc':'2.0','id':request['id'],'result':{'stopReason':'end_turn'}})
-sys.stdin.read()
-"#;
+const MULTIBLOCK_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/provider-multiblock-agent.ts"
+);
 
 #[derive(Default)]
 struct NoopInteractionPort {
@@ -146,13 +98,8 @@ async fn fixture_client(
     let port = Arc::new(NoopInteractionPort::default());
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                MULTIBLOCK_FIXTURE.to_owned(),
-                mode.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![MULTIBLOCK_FIXTURE.to_owned(), mode.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },

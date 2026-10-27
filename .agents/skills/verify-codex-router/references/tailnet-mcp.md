@@ -6,9 +6,9 @@ The outcome comes from [Tailnet Specification R1–R7](../../../../docs/specs/20
 
 ## Entry and required inputs
 
-Run from the repository/package root. The apparatus is the [CLI](../../../../scripts/verification/tailnet_mcp.py), [typed plans](../../../../scripts/verification/tailnet_mcp_models.py), [MCP client/readback](../../../../scripts/verification/tailnet_mcp_client.py), [Host lifecycle](../../../../scripts/verification/tailnet_mcp_host.py), [permanent ownership/observation tests](../../../../scripts/tests/test_tailnet_mcp_verification.py) and [HTTPS transport tests](../../../../scripts/tests/test_tailnet_mcp_https_transport.py). It reuses the existing ownership helpers; it does not implement SSH or inject faults. One agent owns each instance for its whole run. The caller sequences the two machines and any separately authorized transport.
+Run from the repository root. The [Rust Host driver](../../../../crates/tailnet-verification-host/README.md) owns the Host lifetime, profile guard and process cleanup. The TypeScript [peer/readback CLI](../../../../verification/observations/tailnet-mcp.ts), [BoardPlan](../../../../verification/observations/tailnet-plans.ts) and [transport](../../../../verification/observations/tailnet-transport.ts) own peer operations. One agent owns each instance for its whole run. The caller sequences the two machines and any separately authorized transport.
 
-Use Python 3.13 with Pydantic 2.14.1. A copied package needs the four Tailnet modules and their canonical `owned_runtime`, `process_ownership`, `runtime_qualification` and `typed_observations` dependencies. Bind their hashes on both machines; the Host run records them in `driver-binding.json`.
+Install the pinned Node dependencies with `pnpm --dir verification install --frozen-lockfile` and build the Host with `cargo build -p codex-router-tailnet-verification-host`. Bind source and executable hashes on both machines; the Host records them in `driver-binding.json`.
 
 Peer HTTPS observations use the ordinary system `/usr/bin/curl`, version8.4 or newer; record its actual `--version` on each machine. This minimum makes the 4MiB transfer limit apply to unknown-length bodies too. The driver keeps normal system certificate/hostname validation, disables curl config, proxies, redirects and retries, sends the same JSON POST and explicit Host/Origin headers, and permits 65 seconds for connection and 75 seconds total, with a 76-second subprocess guard. This peer-only budget allows the certificate window; it proves no acquisition or peer success by itself. The curl child omits custom CA/backend and TLS-key-log environment overrides. No CA file, certificate bypass, redirect target, DNS mapping or plaintext fallback is added. HTTP error status/body remain available to negative probes; nonzero curl exit, malformed status or oversized body fails. Unix and loopback HTTP observations retain five-second bounds. Earlier failed observations stay failed.
 
@@ -24,7 +24,7 @@ Have the caller supply actual values for these plans before any live command:
 On each machine, within its live grant:
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tailnet_mcp host "$HOST_PLAN"
+target/debug/codex-router-tailnet-verification-host host "$HOST_PLAN"
 ```
 
 This invokes the declared normal `codex-router host` with the fresh root, selected proxy port, `--mcp-bind 127.0.0.1:0`, `--require-debug-isolation`, `--remote-access tailscale` and selected HTTPS port. It keeps that instance alive until its explicit owned stop request or deadline. Deadline expiry is failure, not a pass or authorization to retry.
@@ -49,7 +49,7 @@ The adopted path is CLI Host configuration → `HostCollaborationInputs` → pre
 On the allowed peer, run exactly one operation for that direction:
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tailnet_mcp peer "$BOARD_PLAN"
+node verification/observations/tailnet-mcp.ts peer "$BOARD_PLAN"
 ```
 
 The driver checks service ID/epoch, actual `tools/list`, Origin-free success, and 403 for the destination’s actual HTTPS Origin plus a foreign Origin. It reads the seeded root and requires the exact root ID/topic/Session actor and Topic placement that identifies the root. It saves exclusive `peer-intent.json`, including exact post arguments, before one `board_message_post` with `placement: {kind: thread, rootMessageId: <the seeded root>}`. Session actors cannot post directly at Topic placement; [the storage owner](../../../../crates/message-board-storage/src/message_write_operations.rs) rejects that before insertion and requires an open participant for Thread replies.
@@ -61,7 +61,7 @@ The caller allocation is checked at peer entry and rechecked immediately before 
 On the **destination machine**, use the destination-local BoardPlan/evidence path:
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m scripts.verification.tailnet_mcp readback "$BOARD_PLAN"
+node verification/observations/tailnet-mcp.ts readback "$BOARD_PLAN"
 ```
 
 This independently checks the destination manifest/service/epoch, reads the exact message through its owner-only Unix MCP socket, then opens that root’s existing `agent-communication/project-board.sqlite` read-only and verifies the persisted message joined to its actual actor, including `board_messages.root_id` matching the seeded Thread. Wrong or null root fails even when ID/topic/text/actor match. Keep `destination-readback.json`. Two reads through the proxy alone cannot establish this destination-store binding; no database copy or source-machine substitute is an input. This proves the scoped persisted marker, not persistence across a Host restart.
@@ -93,10 +93,15 @@ To attribute cleanup to the Host, bind the pre-fault inventory to `host-before-f
 The permanent local suite is:
 
 ```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 python -m unittest scripts.tests.test_tailnet_mcp_verification scripts.tests.test_tailnet_mcp_https_transport -v
+pnpm --dir verification run check
+pnpm --dir verification run lint
+pnpm --dir verification run format:check
+pnpm --dir verification test
+cargo test -p codex-router-tailnet-verification-host
+cargo clippy -p codex-router-tailnet-verification-host --all-targets -- -D warnings
 ```
 
-Run scoped Ruff/format/basedpyright over the four Tailnet modules and both test files when changing them, using the repository’s qualified tool versions. These tests use literal protocol fixtures and harmless retained processes. They qualify the apparatus only. Preserve failed/unknown IDs and raw results; do not weaken an expected outcome to manufacture a pass.
+These tests use literal protocol fixtures and harmless retained processes. They qualify the apparatus only. Preserve failed/unknown IDs and raw results; do not weaken an expected outcome to manufacture a pass.
 
 The curl fixtures exercise real local HTTP POST/Origin/error/redirect/known-and-unknown-size behavior and ordinary TLS rejection of an untrusted local certificate. The HTTP fixtures change only their own test URL/protocol allowance; the TLS rejection fixture maps its own test name to its local socket. Neither route exists in the live driver, neither changes machine trust or networking, and neither proves successful private HTTPS, remote identity or board persistence. Those positive observations still require the declared Hosts and real certificate validation.
 

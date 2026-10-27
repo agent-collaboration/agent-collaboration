@@ -81,7 +81,7 @@ fn prepare_fixture(mode: ProviderFixtureMode) -> ProofResult<()> {
     let script = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .ok_or("crate parent missing")?
-        .join("codex-router-host/src/external_provider_runtime/acp_scripted_fixture.py")
+        .join("../verification/fixtures/scripted-acp-agent.ts")
         .canonicalize()?;
     let mut steps = vec![
         json!({"action":"expect_request","requestName":"initialize","method":"initialize","params":{"protocolVersion":1}}),
@@ -134,13 +134,13 @@ fn prepare_fixture(mode: ProviderFixtureMode) -> ProofResult<()> {
             json!({"action":"respond","requestName":"approval-prompt","result":{"stopReason":"end_turn"}}),
         ];
         json!({"version":1,"providers":{
-            "claude":{"enabled":true,"executable":"/usr/bin/env","arguments":["python3","-u",&script,serde_json::to_string(&requester_steps)?]},
-            "cursor":{"enabled":true,"executable":"/usr/bin/env","arguments":["python3","-u",&script,serde_json::to_string(&target_steps)?]}
+            "claude":{"enabled":true,"executable":"/usr/bin/env","arguments":["node",&script,serde_json::to_string(&requester_steps)?]},
+            "cursor":{"enabled":true,"executable":"/usr/bin/env","arguments":["node",&script,serde_json::to_string(&target_steps)?]}
         }})
     } else {
         json!({"version":1,"providers":{
             "claude":{"enabled":false,"executable":null,"arguments":[]},
-            "cursor":{"enabled":true,"executable":"/usr/bin/env","arguments":["python3","-u",script,serde_json::to_string(&steps)?]}
+            "cursor":{"enabled":true,"executable":"/usr/bin/env","arguments":["node",script,serde_json::to_string(&steps)?]}
         }})
     };
     write_private_file(

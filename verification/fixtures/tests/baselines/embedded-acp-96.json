@@ -1,0 +1,18 @@
+{
+  "original": "Tailscale synthetic foreign-command fixture#PREFLIGHT_FIXTURE",
+  "originalSHA256": "5f47536b34df22e5f2f84145612ea71d0d760ef9e79393e14555fca7be75e71c",
+  "target": "tailscale-preflight-agent.ts",
+  "arguments": ["status", "--json"],
+  "environment": {
+    "TAILNET_TEST_MODE": "collision"
+  },
+  "initialFiles": {},
+  "stdin": "",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"BackendState\": \"Running\", \"Self\": {\"DNSName\": \"node.example.ts.net.\"}, \"CertDomains\": [\"node.example.ts.net\"]}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

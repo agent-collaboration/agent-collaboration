@@ -20,7 +20,12 @@ async fn native_background_active_list_and_resume_directory_survive_public_api_p
         let jobs = root.path().join("jobs.json");
         fs::write(&jobs,serde_json::to_vec(&serde_json::json!([{"kind":"background","id":"separate-background-handle","sessionId":SESSION_ID,"cwd":observed_directory,"name":"Active native background","state":"working","startedAt":1760000000000_i64}])).unwrap()).unwrap();
         let executable = root.path().join("native-list");
-        fs::write(&executable,format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",serde_json::to_string(&jobs).unwrap())).unwrap();
+        codex_router_test_support::node_fixture::write_node_fixture(
+            &executable,
+            "native-cli-catalogue-agent.ts",
+            &serde_json::json!({"kind":"file","output":{"kind":"path","path":jobs}}),
+        )
+        .unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
         let description=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
         let mut identity = ApplicationFixture::new(

@@ -1,0 +1,15 @@
+{
+  "original": "crates/agent-collaboration/tests/human_approver_cli.rs#undefined",
+  "originalSHA256": "64ba40f2e279163f5309a7b4b431e3db4a96417fa24da318dd67daa0f0c60faf",
+  "target": "human-approver-agent.ts",
+  "arguments": [],
+  "stdin": "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"session/new\",\"params\":{}}\n{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"session/prompt\",\"params\":{\"sessionId\":\"sample\"}}\n{\"jsonrpc\":\"2.0\",\"id\":91,\"result\":{\"outcome\":{\"outcome\":\"selected\",\"optionId\":\"allow-once\"}}}\n{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"session/new\",\"params\":{}}\n",
+  "configuration": null,
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"human-approver-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"human-approval-session-1\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 91, \"method\": \"session/request_permission\", \"params\": {\"sessionId\": \"sample\", \"toolCall\": {\"toolCallId\": \"permission-tool\"}, \"options\": [{\"optionId\": \"allow-once\", \"name\": \"Allow once\", \"kind\": \"allow_once\"}]}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"result\": {\"stopReason\": \"end_turn\"}}\n{\"jsonrpc\": \"2.0\", \"id\": 4, \"result\": {\"sessionId\": \"human-approval-session-2\"}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

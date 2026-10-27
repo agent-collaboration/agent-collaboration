@@ -1,0 +1,15 @@
+{
+  "original": "crates/acp-client-runtime/tests/create_settings_order.rs#SILENT_SETTING_RESPONSE_FIXTURE",
+  "originalSHA256": "1bae3d7610cdbc50260b1144a2d96587731a56ed05d9f55506249876e3dc30ee",
+  "target": "provider-setting-response-agent.ts",
+  "arguments": ["silent"],
+  "initialFiles": {},
+  "stdin": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"initialize\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"method\": \"session/new\", \"params\": {}}\n{\"jsonrpc\": \"2.0\", \"id\": 3, \"method\": \"session/set_config_option\", \"params\": {\"configId\": \"mode\", \"value\": \"ask\"}}\n",
+  "expected": {
+    "exit": 0,
+    "stdout": "{\"jsonrpc\": \"2.0\", \"id\": 1, \"result\": {\"protocolVersion\": 1, \"agentCapabilities\": {}, \"agentInfo\": {\"name\": \"silent-setting-fixture\", \"version\": \"1\"}}}\n{\"jsonrpc\": \"2.0\", \"id\": 2, \"result\": {\"sessionId\": \"fixture-session\", \"configOptions\": [{\"id\": \"mode\", \"name\": \"Mode\", \"category\": \"mode\", \"type\": \"select\", \"currentValue\": \"auto\", \"options\": [{\"value\": \"auto\", \"name\": \"Auto\"}, {\"value\": \"ask\", \"name\": \"Ask\"}]}]}}\n",
+    "stderr": "",
+    "receipt": null,
+    "files": {}
+  }
+}

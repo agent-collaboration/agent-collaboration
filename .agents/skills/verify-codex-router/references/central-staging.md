@@ -1,5 +1,14 @@
 # Central staging: G4 / OB7
 
+## Current entry
+
+The wrapper retired in 0.1.102. Current cross-machine/staging orchestration is `node verification/run.ts "$PRIVATE_DECLARATION"`, using `verification/declaration.ts`, `verification/case-registry.ts` and `verification/targets/staging-central.ts`. The declaration binds the HTTPS staging target, qualified artifacts, both machines, selected governing rows and a deadline. Staging attachment owns no deployed process; guarded deployment remains a separately declared, authorized external operation. The runner records unmapped rows as open and cannot return confirmation credit for them. Do not infer that every historical group below has a mapped replacement.
+
+## Retained obligations and historical evidence
+
+The sections below preserve the governing obligations and earlier qualification limits. Descriptions of retired wrappers and their inputs are historical; they are not current command contracts. Use the retained source above to determine actual coverage, and report any obligation without a current route as unavailable. This documentation change supplies no new runtime proof or operating authority.
+
+
 The replacement entry is `scripts.verification.central_staging`, commissioned
 by decision 1098. Its four groups are qualified on local workerd with two real Routers;
 deployed staging remains unobserved. Adopted sources are board
@@ -9,15 +18,12 @@ and local workerd do not close deployed staging obligations.
 ## Declaration and execution
 
 Use an owner-private JSON declaration outside the checkout. Checked inputs are
-in `scripts/verification/central_staging_models.py`. Pin a full source SHA,
+in `scripts/verification/central_staging_models` (retired wrapper). Pin a full source SHA,
 actual Router binaries, native reqwest probe and Worker bundle hashes. Private
 evidence and runtime directories must be fresh and isolated. Credential fields
 carry environment **names**, never values.
 
-```sh
-uv run --offline --no-project --with pydantic==2.14.1 --python 3.13 \
-  python -m scripts.verification.central_staging --plan "$PRIVATE_PLAN"
-```
+The retired command is unavailable; use the current entry and declaration above.
 
 Default preparation resolves no credential, launches nothing, makes no request
 and records OB7 unobserved. A `localWorkerd` declaration selects
@@ -80,8 +86,8 @@ production-bundle smoke. G47’s same-call Health sample correction is in
 compiler control. The Lead retains acceptance authority; see the G4 handback for
 exact apparatus source, counts, evidence and artifact hashes.
 
-Run permanent `central_staging_test.py`, private namespace guard tests, language
-checks, and each group on the real Worker and both Router binaries. Keep failing
+Run the current TypeScript package checks, retained private namespace guard tests,
+and every selected mapped group on the real Worker and both Router binaries. Keep failing
 controls at the deciding boundaries; restore sources for the final run. Build
 production and conformance separately with the public Worker README commands
 and bundle guards. Retain both hashes and the workerd/Miniflare tool root.

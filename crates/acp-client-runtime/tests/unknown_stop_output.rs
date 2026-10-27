@@ -10,27 +10,10 @@ use acp_client_runtime::{
 use session_event_model::{ApprovalRequest, SessionEvent, StopReason};
 use tokio_util::sync::CancellationToken;
 
-const UNKNOWN_STOP_FIXTURE: &str = r#"
-import json,sys
-def read(): return json.loads(sys.stdin.readline())
-def send(value): print(json.dumps(value),flush=True)
-request=read()
-assert request['method']=='initialize'
-send({'jsonrpc':'2.0','id':request['id'],'result':{
-    'protocolVersion':1,'agentCapabilities':{},
-    'agentInfo':{'name':'unknown-stop-fixture','version':'1'}}})
-request=read()
-assert request['method']=='session/new'
-send({'jsonrpc':'2.0','id':request['id'],'result':{'sessionId':'fixture-session'}})
-prompt=read()
-assert prompt['method']=='session/prompt'
-for text in ['first ','second']:
-    send({'jsonrpc':'2.0','method':'session/update','params':{
-        'sessionId':'fixture-session',
-        'update':{'sessionUpdate':'agent_message_chunk','content':{'type':'text','text':text}}}})
-send({'jsonrpc':'2.0','id':prompt['id'],'result':{'stopReason':'future_reason'}})
-sys.stdin.read()
-"#;
+const UNKNOWN_STOP_FIXTURE: &str = concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../verification/fixtures/unknown-stop-agent.ts"
+);
 
 struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
@@ -96,12 +79,8 @@ async fn unknown_stop_reason_preserves_both_output_chunks() {
     let root = tempfile::tempdir().expect("fixture root");
     let client = AgentSessionClient::initialize(
         ExternalProviderLaunch {
-            executable: PathBuf::from("python3"),
-            arguments: vec![
-                "-u".to_owned(),
-                "-c".to_owned(),
-                UNKNOWN_STOP_FIXTURE.to_owned(),
-            ],
+            executable: PathBuf::from("node"),
+            arguments: vec![UNKNOWN_STOP_FIXTURE.to_owned()],
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         },
