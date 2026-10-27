@@ -18,6 +18,19 @@ use tokio::{
 const READY_BOUND: Duration = Duration::from_secs(45);
 const STOP_BOUND: Duration = Duration::from_secs(20);
 const CALL_BOUND: Duration = Duration::from_secs(20);
+const MAX_START_ATTEMPTS: usize = 3;
+
+enum ReadyListener {
+    Accepted,
+    ProtectedPort(u16),
+}
+
+#[must_use]
+pub(super) fn protected_listener_port(actual_port: u16, reported_port: u16) -> Option<u16> {
+    [actual_port, reported_port]
+        .into_iter()
+        .find(|port| matches!(*port, 8787 | 8788 | 43127))
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -28,11 +41,19 @@ struct Ready {
     native_backend: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BeforeServeHeld {
+    kind: String,
+    directory: PathBuf,
+}
+
 pub struct BoardHost {
     pub directory: PathBuf,
     pub mcp_url: String,
     child: Child,
     output: BufReader<ChildStdout>,
+    hold_before_serve: bool,
 }
 
 /// Evidence that this exact owned child was joined before native fixture readback.
@@ -123,6 +144,49 @@ pub fn artifact_command(binary: &Path) -> FixtureResult<Command> {
 
 impl BoardHost {
     pub async fn start(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
+        Self::start_with_port_reports(directory, session, std::convert::identity)
+            .await
+            .map(|(host, _)| host)
+    }
+
+    /// Port reports can force rejection, but cannot permit a protected actual listener.
+    pub async fn start_with_port_reports(
+        directory: &Path,
+        session: Option<&Path>,
+        mut report_port: impl FnMut(u16) -> u16,
+    ) -> FixtureResult<(Self, Vec<StoppedHost>)> {
+        let mut rejected_ports = Vec::new();
+        let mut stopped_attempts = Vec::new();
+        for _ in 0..MAX_START_ATTEMPTS {
+            let mut host = Self::spawn_owned(directory, session)?;
+            match host.read_ready(&mut report_port).await {
+                Ok(ReadyListener::Accepted) => return Ok((host, stopped_attempts)),
+                Ok(ReadyListener::ProtectedPort(port)) => {
+                    // Port 0 can select a protected port on Linux. Join this
+                    // exact child before asking the OS for a fresh listener.
+                    stopped_attempts.push(host.stop_for_readback().await.map_err(|error| {
+                        format!("Host on protected listener port {port} failed to stop: {error}")
+                    })?);
+                    rejected_ports.push(port);
+                }
+                Err(error) => {
+                    return match host.stop().await {
+                        Ok(()) => Err(error),
+                        Err(cleanup) => Err(format!(
+                            "Host readiness failed: {error}; cleanup failed: {cleanup}"
+                        )
+                        .into()),
+                    };
+                }
+            }
+        }
+        Err(format!(
+            "Host reported protected listener ports {rejected_ports:?} after {MAX_START_ATTEMPTS} attempts; every rejected child was stopped"
+        )
+        .into())
+    }
+
+    fn spawn_owned(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
         let binary = std::env::var_os("CODEX_ROUTER_E2E_HOST_BINARY")
             .map(PathBuf::from)
             .ok_or("set CODEX_ROUTER_E2E_HOST_BINARY to prebuilt target/debug/examples/board-debug-runtime")?;
@@ -151,26 +215,19 @@ impl BoardHost {
             .kill_on_drop(true);
         let mut child = command.spawn()?;
         let output = child.stdout.take().ok_or("owned Host stdout is absent")?;
-        let mut host = Self {
+        Ok(Self {
             directory: directory.to_owned(),
             mcp_url: String::new(),
             child,
             output: BufReader::new(output),
-        };
-        let ready = host.read_ready().await;
-        if let Err(error) = ready {
-            let cleanup = host.stop().await;
-            return match cleanup {
-                Ok(()) => Err(error),
-                Err(cleanup) => {
-                    Err(format!("Host readiness failed: {error}; cleanup failed: {cleanup}").into())
-                }
-            };
-        }
-        Ok(host)
+            hold_before_serve: directory.join("fixture-hold-before-serve").is_file(),
+        })
     }
 
-    async fn read_ready(&mut self) -> FixtureResult {
+    async fn read_ready(
+        &mut self,
+        report_port: &mut impl FnMut(u16) -> u16,
+    ) -> FixtureResult<ReadyListener> {
         let mut line = String::new();
         if tokio::time::timeout(READY_BOUND, self.output.read_line(&mut line)).await?? == 0 {
             return Err("owned Host exited before its ready record".into());
@@ -188,7 +245,7 @@ impl BoardHost {
         if ready.mcp_url != manifest.mcp.url
             || url.host_str() != Some("127.0.0.1")
             || url.scheme() != "http"
-            || matches!(url.port(), None | Some(8787 | 8788 | 43127))
+            || url.port().is_none()
         {
             return Err(format!(
                 "Host ready/manifest/listener identity mismatch: same_url={}, http={}, loopback={}, port={:?}",
@@ -199,7 +256,28 @@ impl BoardHost {
             )
             .into());
         }
+        if self.hold_before_serve {
+            self.wait_before_serve_hold().await?;
+        }
+        let actual_port = url.port().ok_or("owned Host listener port is absent")?;
+        if let Some(port) = protected_listener_port(actual_port, report_port(actual_port)) {
+            return Ok(ReadyListener::ProtectedPort(port));
+        }
         self.mcp_url = ready.mcp_url;
+        Ok(ReadyListener::Accepted)
+    }
+
+    async fn wait_before_serve_hold(&mut self) -> FixtureResult {
+        let mut line = String::new();
+        if tokio::time::timeout(READY_BOUND, self.output.read_line(&mut line)).await?? == 0 {
+            return Err("owned Host exited before its pre-serve hold acknowledgement".into());
+        }
+        let held: BeforeServeHeld = serde_json::from_str(&line)?;
+        if held.kind != "boardDebugRuntimeBeforeServeHeld"
+            || held.directory.canonicalize()? != self.directory.canonicalize()?
+        {
+            return Err("pre-serve hold acknowledgement names a different Host".into());
+        }
         Ok(())
     }
 

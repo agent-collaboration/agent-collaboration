@@ -1,4 +1,5 @@
 //! Test-only stdin queries drive real project copies and observe committed Local cancellation.
+use super::shutdown_signals::ShutdownSignals;
 use codex_router_host::CollaborationRuntime;
 use fleet_sync_protocol::ItemId;
 use serde::Deserialize;
@@ -15,15 +16,16 @@ enum ProjectQuery {
     SeededHandoffFrontier { project: message_board::ProjectId },
 }
 
-pub async fn serve_until_shutdown(runtime: &mut CollaborationRuntime) -> io::Result<()> {
+pub(super) async fn serve_until_shutdown(
+    runtime: &mut CollaborationRuntime,
+    shutdown_signals: &mut ShutdownSignals,
+) -> io::Result<()> {
     let mut input = BufReader::new(tokio::io::stdin()).lines();
     let mut input_open = true;
     let mut output = tokio::io::stdout();
-    let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     loop {
         let line = tokio::select! {
-            result = tokio::signal::ctrl_c() => return result,
-            _ = terminate.recv() => return Ok(()),
+            result = shutdown_signals.wait_for_signal() => return result,
             error = runtime.listener_failure() => return Err(io::Error::other(error)),
             line = input.next_line(), if input_open => line?,
         };
