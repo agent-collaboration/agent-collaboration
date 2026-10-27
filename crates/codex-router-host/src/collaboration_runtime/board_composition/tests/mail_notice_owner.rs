@@ -404,22 +404,22 @@ impl MailOwner {
         &self,
         reference: fleet_sync_protocol::DeliveryItemRef,
     ) -> Result<
-        fleet_sync_delivery::ResolvedSubmit<collaboration_service::RouterDeliveryTypes>,
+        fleet_sync_delivery::ResolvedSubmit<collaboration_contracts::RouterDeliveryTypes>,
         TestError,
     > {
-        let limits = DeliveryLimits::new::<collaboration_service::RouterDeliveryTypes>(
+        let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
             10_000,
             64 * 1024 * 1024,
-            minimum_settlement_allowance::<collaboration_service::RouterDeliveryTypes>()?,
+            minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>()?,
         )?;
         Ok(self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, collaboration_service::RouterDeliveryTypes>::new(scope, limits)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
                         .resolve_submit(&reference)
                         .await
                         .map_err(delivery_rollback)
