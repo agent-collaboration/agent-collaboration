@@ -82,16 +82,28 @@ sign_with_debug_identity() {
   # no output). Sign a private copy instead and rename it over the original:
   # the rename is atomic, a process already running keeps the old file, and
   # concurrent signers each install a complete signed file.
+  # Any failure (no space for the copy, codesign, the rename) removes the copy
+  # and leaves the original in place, which then runs linker-signed.
   local signed_copy
-  signed_copy="$(mktemp "${executable}.signing.XXXXXX")"
-  cp -p "${executable}" "${signed_copy}"
-  # Debug builds skip Apple's timestamp server so signing works offline.
-  if signing_output="$(codesign --force --sign "${signing_identity}" --identifier "${debug_identifier}" --timestamp=none "${signed_copy}" 2>&1)"; then
-    mv -f "${signed_copy}" "${executable}"
+  if ! signed_copy="$(mktemp "${executable}.signing.XXXXXX" 2>&1)"; then
+    warn_unsigned "${executable}" "could not create a private copy: ${signed_copy}"
     return 0
   fi
-  rm -f "${signed_copy}"
-  warn_unsigned "${executable}" "codesign failed: ${signing_output}"
+  if ! signing_output="$(cp -p "${executable}" "${signed_copy}" 2>&1)"; then
+    rm -f "${signed_copy}"
+    warn_unsigned "${executable}" "could not copy for signing: ${signing_output}"
+    return 0
+  fi
+  # Debug builds skip Apple's timestamp server so signing works offline.
+  if ! signing_output="$(codesign --force --sign "${signing_identity}" --identifier "${debug_identifier}" --timestamp=none "${signed_copy}" 2>&1)"; then
+    rm -f "${signed_copy}"
+    warn_unsigned "${executable}" "codesign failed: ${signing_output}"
+    return 0
+  fi
+  if ! signing_output="$(mv -f "${signed_copy}" "${executable}" 2>&1)"; then
+    rm -f "${signed_copy}"
+    warn_unsigned "${executable}" "could not install the signed copy: ${signing_output}"
+  fi
 }
 
 if [[ "${1:-}" == "--sign-only" ]]; then
