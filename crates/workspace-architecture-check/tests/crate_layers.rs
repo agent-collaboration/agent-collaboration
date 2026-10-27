@@ -10,7 +10,7 @@ const LAYER_POLICY: [(&str, &[&str]); 4] = [
     ("collaboration-contracts", &[]),
     ("collaboration-runtime", &["collaboration-contracts"]),
     (
-        "collaboration-application",
+        "collaboration-service",
         &["collaboration-contracts", "collaboration-runtime"],
     ),
     (
@@ -18,7 +18,7 @@ const LAYER_POLICY: [(&str, &[&str]); 4] = [
         &[
             "collaboration-contracts",
             "collaboration-runtime",
-            "collaboration-application",
+            "collaboration-service",
         ],
     ),
 ];
@@ -201,7 +201,7 @@ fn fixture_graph(
     let packages: Vec<_> = [
         ("contracts", "collaboration-contracts"),
         ("runtime", "collaboration-runtime"),
-        ("application", "collaboration-application"),
+        ("service", "collaboration-service"),
         ("host", "codex-router-host"),
     ]
     .into_iter()
