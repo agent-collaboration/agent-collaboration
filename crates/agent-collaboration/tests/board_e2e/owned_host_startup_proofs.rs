@@ -37,16 +37,27 @@ fn a_port_report_cannot_permit_any_protected_actual_listener() {
 #[tokio::test]
 async fn a_protected_ready_port_is_joined_before_a_new_host_is_accepted() -> FixtureResult {
     let (_root, directory) = private_host_directory()?;
+    let hold_marker = directory.join("fixture-hold-before-serve");
+    std::fs::write(&hold_marker, [])?;
     run_scenario(
         None::<BoardHost>,
         async |owned| {
             let mut reports = 0;
+            let mut removed_hold = Ok(());
             let (host, stopped) = BoardHost::start_with_port_reports(&directory, None, |port| {
                 reports += 1;
-                if reports == 1 { 43127 } else { port }
+                if reports == 1 {
+                    // read_ready has acknowledged the child is held before serve entry.
+                    // Its captured hold survives removal; only later children serve normally.
+                    removed_hold = std::fs::remove_file(&hold_marker);
+                    43127
+                } else {
+                    port
+                }
             })
             .await?;
             *owned = Some(host);
+            removed_hold?;
             assert!(!stopped.is_empty(), "forced protected report was accepted");
             assert_eq!(reports, stopped.len() + 1);
             for rejected in stopped {

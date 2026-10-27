@@ -41,11 +41,19 @@ struct Ready {
     native_backend: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BeforeServeHeld {
+    kind: String,
+    directory: PathBuf,
+}
+
 pub struct BoardHost {
     pub directory: PathBuf,
     pub mcp_url: String,
     child: Child,
     output: BufReader<ChildStdout>,
+    hold_before_serve: bool,
 }
 
 /// Evidence that this exact owned child was joined before native fixture readback.
@@ -212,6 +220,7 @@ impl BoardHost {
             mcp_url: String::new(),
             child,
             output: BufReader::new(output),
+            hold_before_serve: directory.join("fixture-hold-before-serve").is_file(),
         })
     }
 
@@ -247,12 +256,29 @@ impl BoardHost {
             )
             .into());
         }
+        if self.hold_before_serve {
+            self.wait_before_serve_hold().await?;
+        }
         let actual_port = url.port().ok_or("owned Host listener port is absent")?;
         if let Some(port) = protected_listener_port(actual_port, report_port(actual_port)) {
             return Ok(ReadyListener::ProtectedPort(port));
         }
         self.mcp_url = ready.mcp_url;
         Ok(ReadyListener::Accepted)
+    }
+
+    async fn wait_before_serve_hold(&mut self) -> FixtureResult {
+        let mut line = String::new();
+        if tokio::time::timeout(READY_BOUND, self.output.read_line(&mut line)).await?? == 0 {
+            return Err("owned Host exited before its pre-serve hold acknowledgement".into());
+        }
+        let held: BeforeServeHeld = serde_json::from_str(&line)?;
+        if held.kind != "boardDebugRuntimeBeforeServeHeld"
+            || held.directory.canonicalize()? != self.directory.canonicalize()?
+        {
+            return Err("pre-serve hold acknowledgement names a different Host".into());
+        }
+        Ok(())
     }
 
     #[allow(dead_code)] // Only takeover targets need the private replay observation.

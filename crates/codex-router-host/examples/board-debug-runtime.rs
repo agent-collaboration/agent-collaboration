@@ -92,11 +92,21 @@ async fn main() -> Result<(), Box<dyn Error>> {
     }
     let manifest: ServiceManifest =
         serde_json::from_slice(&std::fs::read(directory.join("service.json"))?)?;
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    let hold_before_serve = directory.join("fixture-hold-before-serve").is_file();
     println!(
         "{}",
         serde_json::json!({"kind":"boardDebugRuntimeReady","directory":directory,
             "mcpUrl":manifest.mcp.url,"nativeBackend":"absent"})
     );
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    if hold_before_serve {
+        println!(
+            "{}",
+            serde_json::json!({"kind":"boardDebugRuntimeBeforeServeHeld","directory":directory})
+        );
+        std::future::pending::<()>().await;
+    }
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     let outcome = local_cancel_observation::serve_until_shutdown(&mut runtime).await;
     #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
