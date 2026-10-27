@@ -16,6 +16,8 @@ mod follow_fixture;
 #[path = "board_e2e/owned_host.rs"]
 #[allow(dead_code)]
 mod owned_host;
+#[path = "board_e2e/owned_host_startup_proofs.rs"]
+mod owned_host_startup_proofs;
 #[path = "board_e2e/records_reopen.rs"]
 #[allow(dead_code)]
 mod records_reopen;
