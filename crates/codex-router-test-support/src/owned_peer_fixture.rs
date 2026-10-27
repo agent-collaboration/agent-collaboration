@@ -70,6 +70,10 @@ impl PeerFixture {
         .await
     }
 
+    #[expect(
+        clippy::unused_async,
+        reason = "The public async fixture constructors defer registration and socket creation until polled."
+    )]
     async fn start_named(
         registry: &Path,
         endpoint: &EndpointRef,

@@ -219,6 +219,10 @@ impl RecordingRefreshClient {
 }
 
 impl CredentialRefreshClient for RecordingRefreshClient {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     fn refresh_credentials(
         &self,
         account_id: &codex_router_core::ids::AccountId,

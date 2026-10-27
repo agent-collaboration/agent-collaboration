@@ -11,7 +11,7 @@ async fn cli_creates_and_reads_instruction_through_host() -> Result<(), Box<dyn 
         OperationId::generate().as_str()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
@@ -21,7 +21,7 @@ async fn cli_creates_and_reads_instruction_through_host() -> Result<(), Box<dyn 
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     // Act: the documented CLI operation must reach Host-created persistent state.
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))

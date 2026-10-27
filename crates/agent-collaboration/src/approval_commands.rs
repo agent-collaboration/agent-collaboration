@@ -65,7 +65,7 @@ fn operation_failure_exit(failure: &OperationFailure) -> i32 {
         _ if failure.effect == OperationEffect::Unknown => 5,
         OperationFailureKind::Timeout => 124,
         OperationFailureKind::UnsupportedCapability | OperationFailureKind::ProtocolViolation => 2,
-        _ => 3,
+        OperationFailureKind::Unavailable => 3,
     }
 }
 

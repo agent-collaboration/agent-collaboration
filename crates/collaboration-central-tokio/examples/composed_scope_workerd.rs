@@ -1,9 +1,6 @@
 //! Modern shared scenarios use one real Worker process wrapper and physical reopen.
 #![forbid(unsafe_code)]
-#[allow(
-    dead_code,
-    reason = "The common process wrapper serves other lifecycle cases too."
-)]
+
 #[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
 mod workerd_process;
 use collaboration_central_conformance::{ConformanceClient, ConformanceResult, JwksFixtureServer};

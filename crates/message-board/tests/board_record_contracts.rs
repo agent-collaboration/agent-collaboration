@@ -3,7 +3,10 @@ use serde::{Serialize, de::DeserializeOwned};
 use serde_json::json;
 mod support;
 
-#[allow(clippy::expect_used)] // This helper asserts a test contract, not a recovery path.
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // This helper asserts a test contract, not a recovery path.
 fn roundtrip<T: Serialize + DeserializeOwned + PartialEq + std::fmt::Debug>(value: T) {
     let encoded = serde_json::to_value(&value).expect("serialize contract");
     assert_eq!(

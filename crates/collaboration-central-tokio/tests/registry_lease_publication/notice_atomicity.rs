@@ -2,7 +2,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn mark_write_failure_rolls_back_notice_admission_before_delivery_and_retry_recovers()
 -> TestResult {
     let fixture = RegistryFixture::open(false).await?;

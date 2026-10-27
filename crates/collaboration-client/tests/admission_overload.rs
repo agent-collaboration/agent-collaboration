@@ -2,8 +2,12 @@
 //! its own typed `overloaded` failure with "retry later", never as a protocol violation or an
 //! uncertain outcome. The served API runs one request at a time on its socket; a held wake
 //! wait takes that one, so every other call is shed.
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
 use automation_storage::AutomationStore;
 use collaboration_client::{

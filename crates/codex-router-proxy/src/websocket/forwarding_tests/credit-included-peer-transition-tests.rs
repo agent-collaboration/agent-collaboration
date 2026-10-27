@@ -386,7 +386,10 @@ fn bind_loopback_upstream() -> (TcpListener, SocketAddr) {
 }
 
 // Tungstenite's handshake callback fixes the large HTTP response error type.
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn accept_upstream_websocket(
     stream: TcpStream,
     authorization_sender: &mpsc::Sender<String>,

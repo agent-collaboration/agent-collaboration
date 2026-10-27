@@ -6,7 +6,13 @@ use collaboration_central_conformance::{
 };
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    ClientAnswer, ClientFrame, CommitSequence, DatabaseId, Epoch, FrameId, LeaseAnswer,
+    LeaseRequest, OperationAnswer, OperationRequest, PeerId, PieceRefusal, ReleaseAnswer,
+    ReleaseRequest, RenewAnswer, RenewRequest, ReplicationAnswer, ReplicationPosition,
+    ReplicationRequest, RequestId, ServerCall, ServerCallAnswer, ServerFrame, ServerRequest,
+    SnapshotRead, SqlValue, SyncTime, TakeoverPreview,
+};
 use futures_util::{SinkExt, StreamExt};
 use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, WebSocket};

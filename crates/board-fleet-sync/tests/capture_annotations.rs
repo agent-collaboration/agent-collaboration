@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use board_fleet_sync::BoardPieceAnnotation;
 use board_sync_protocol::BoardAnnotation;
 use fleet_sync_protocol::{
@@ -39,6 +38,10 @@ fn feed(position: i64, time: Option<&str>) -> RowChange {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn annotation_uses_the_highest_feed_position_including_unknown_time() -> TestResult {
     let transaction = ReplicatedTransaction::Rows {
@@ -73,6 +76,10 @@ fn annotation_uses_the_highest_feed_position_including_unknown_time() -> TestRes
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn no_feed_keeps_the_summary_and_malformed_captured_metadata_refuses() -> TestResult {
     let transaction = ReplicatedTransaction::Rows {

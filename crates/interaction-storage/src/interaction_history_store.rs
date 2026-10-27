@@ -1,5 +1,10 @@
 //! Serialized typed-history transactions and acknowledged cache with creation-time retention.
-use super::*;
+use super::{
+    ApprovalRequest, ApprovalScope, Identity, InteractionCancelReason, InteractionHistoryError,
+    InteractionHistoryRecord, InteractionHistoryState, LegacyApprovalMetadata, OfferedOptionId,
+    QuestionHistoryState, QuestionRequest, QuestionResponse, RefusedTypedApproval, SessionRef,
+    validate_question_response_record,
+};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use std::{
     collections::BTreeMap,

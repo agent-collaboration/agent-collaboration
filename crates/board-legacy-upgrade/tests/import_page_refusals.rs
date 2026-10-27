@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Invalid owner requests must not poison or publish the retained native seed.
 #![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]

@@ -8,6 +8,10 @@ use tracing_subscriber::{Layer, layer::SubscriberExt};
 #[derive(Clone, Default)]
 struct DiagnosticCapture(Arc<Mutex<Vec<u8>>>);
 impl Write for DiagnosticCapture {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
         self.0.lock().expect("capture").extend_from_slice(bytes);
         Ok(bytes.len())

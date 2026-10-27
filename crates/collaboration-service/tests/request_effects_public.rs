@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::indexing_slicing)] // Strict JSON assertions exercise the real public carrier.
 #[allow(dead_code)] // This scenario uses only the Fleet portion of the shared real fixture.
 #[path = "support/board_fixture.rs"]

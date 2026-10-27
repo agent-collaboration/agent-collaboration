@@ -1,11 +1,16 @@
 //! Original Native forwarding lifecycle oracles on real socket/control boundaries.
 use super::forwarded_post_wire::{next, send, send_forward};
-use board_sync_protocol::*;
+use board_sync_protocol::{
+    BoardClientAnswer, BoardConsumerAnswer, BoardPayload, BoardServerRequest, ForwardOutcome,
+    ForwardedPost, ForwardedPostKind,
+};
 use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeFaultObservation,
 };
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    ClientAnswer, ClientFrame, DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest,
+};
 use message_board::ProjectId;
 use reqwest_websocket::WebSocket;
 use std::future::Future;

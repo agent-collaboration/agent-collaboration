@@ -58,7 +58,7 @@ impl TokioCentralPlatform {
     {
         self.objects.runtime_control(request).await
     }
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "Native composition takes runtime capabilities and independent deployment policies explicitly."
     )]
@@ -88,7 +88,7 @@ impl TokioCentralPlatform {
     }
 
     #[cfg(feature = "conformance")]
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "Conformance adds only initial per-object arming controls to native composition."
     )]
@@ -117,7 +117,7 @@ impl TokioCentralPlatform {
         .await
     }
 
-    #[allow(
+    #[expect(
         clippy::too_many_arguments,
         reason = "Keep deployment capabilities and test-only arming controls explicit at composition."
     )]

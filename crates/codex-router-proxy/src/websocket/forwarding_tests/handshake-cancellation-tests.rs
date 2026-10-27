@@ -105,9 +105,9 @@ async fn weekly_floor_notification_during_upstream_handshake_prevents_first_fram
     };
 
     let (router_result, upstream_received, client_message) =
-        tokio::time::timeout(Duration::from_secs(1), async {
+        Box::pin(tokio::time::timeout(Duration::from_secs(1), async {
             tokio::join!(router_future, upstream_future, peer_future)
-        })
+        }))
         .await
         .unwrap_or_else(|_elapsed| {
             panic!("floor cutoff should not wait for upstream handshake; router_completed={}, upstream_accepted={}", router_completed.get(), upstream_accepted.get())

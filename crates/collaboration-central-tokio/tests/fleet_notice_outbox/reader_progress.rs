@@ -2,6 +2,10 @@ use super::{session_fixture, support::*};
 use board_sync_protocol::{BoardReadPage, FleetFeedRead};
 use std::sync::Arc;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_lost_offered_page_keeps_the_applied_cursor_and_a_later_append_still_hints() -> TestResult
 {
@@ -46,6 +50,10 @@ async fn a_lost_offered_page_keeps_the_applied_cursor_and_a_later_append_still_h
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn future_and_expired_cursors_neither_register_a_reader_nor_advance_an_existing_one()
 -> TestResult {

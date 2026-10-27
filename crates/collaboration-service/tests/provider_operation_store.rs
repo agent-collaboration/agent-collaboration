@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 use collaboration_protocol::{
     CodexGeneration, ConversationBindingIdentity, EndpointId, EndpointRef, GenerationNumber,
     NonEmptyText, OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,

@@ -10,6 +10,10 @@ use serde_json::{Value, json};
 use std::time::Duration;
 use tokio::sync::oneshot;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/scripted_api.rs"]
 mod scripted_api;
 use scripted_api::{ScriptedApi, ScriptedCalls};
@@ -33,7 +37,10 @@ fn scope() -> Value {
     json!({"kind":"thread","thread":{"thread":"01900000-0000-7000-8000-000000000001"}})
 }
 
-#[allow(clippy::expect_used)] // Static test JSON construction.
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Static test JSON construction.
 fn mutation(fields: Value) -> Value {
     let mut value = json!({"requestId":RequestId::generate(),"protocolVersion":1,"actor":actor(),"actingFor":null});
     value
@@ -380,7 +387,7 @@ async fn subscription_wait_malformed_success_preserves_inspection_identity() -> 
 
 async fn connected_client() -> Result<(ScriptedApi, CollaborationClient, ScriptedCalls), TestError>
 {
-    let (api, calls) = ScriptedApi::start().await?;
+    let (api, calls) = ScriptedApi::start()?;
     let client =
         CollaborationClient::connect(api.directory(), "subscription-client-test", "1").await?;
     Ok((api, client, calls))

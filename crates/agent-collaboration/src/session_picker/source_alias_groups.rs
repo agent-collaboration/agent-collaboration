@@ -1,6 +1,10 @@
 //! Invocation-local alias ownership after every configured profile has observed its binding.
 use super::super::{SourceContinuation, SourceInventoryResult};
-use super::*;
+use super::{
+    BTreeMap, BoundSourceSnapshots, PickerRecordsSnapshot, PickerSourceContext,
+    SourceInventoryBinding, SourceInventoryRejection, SourceInventoryRequest, SourceReadProgress,
+    SourceReadState, VecDeque,
+};
 
 pub(super) struct QualifiedSourceRead {
     request: SourceInventoryRequest,

@@ -1,7 +1,16 @@
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
 use collaboration_service as mail_service;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
 mod native_mail_owner;
 use collaboration_client::CollaborationClient;
@@ -19,6 +28,10 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod fake_api_support;
 #[path = "thread_subscription_cli/wait_uncertainty.rs"]
 mod wait_uncertainty;

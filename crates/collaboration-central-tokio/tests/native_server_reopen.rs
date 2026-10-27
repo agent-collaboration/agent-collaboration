@@ -20,11 +20,11 @@ use std::{path::Path, time::Duration};
 use tokio::task::JoinSet;
 #[path = "native_http/support.rs"]
 mod configuration;
-#[path = "support/holder_writer_retry.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "The real writer fixture also serves the existing loss scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "support/holder_writer_retry.rs"]
 mod writer_fixture;
 
 struct FrozenRelease {

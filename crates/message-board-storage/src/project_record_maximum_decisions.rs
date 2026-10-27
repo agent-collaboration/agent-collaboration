@@ -5,6 +5,10 @@ use super::{
 };
 use message_board::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn decision_headers_and_full_or_abridged_evidence_fit_native_storage() -> TestResult {
     let state = project_state()?;

@@ -124,7 +124,6 @@ fn normalize_definition(sql: &str) -> String {
         .collect()
 }
 
-#[allow(deprecated)]
 fn map_migration_error(error: MigrateError) -> JournalError {
     match error {
         MigrateError::Execute(error) | MigrateError::ExecuteMigration(error, _) => {

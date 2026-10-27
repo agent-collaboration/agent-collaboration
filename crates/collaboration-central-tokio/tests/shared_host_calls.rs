@@ -1,5 +1,4 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_core::{CoreHost, ObjectAddress, PlatformIo};
 use durable_steps::{CallFailure, CallId, CallTarget, Host, OperationId, StepName};
@@ -66,6 +65,10 @@ fn copy_read() -> Result<CopyRead, Box<dyn std::error::Error + Send + Sync>> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn registry_call_carries_its_bound_face_target_and_original_call_identity() -> TestResult {
     let calls = Arc::new(Mutex::new(Vec::new()));
@@ -107,6 +110,10 @@ async fn registry_call_carries_its_bound_face_target_and_original_call_identity(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_unregistered_call_is_refused_before_dispatch() -> TestResult {
     let calls = Arc::new(Mutex::new(Vec::new()));
@@ -139,6 +146,10 @@ impl CallTarget for UnregisteredTarget {
     type Answer = ();
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_unreadable_reply_after_dispatch_is_an_unknown_outcome() -> TestResult {
     let calls = Arc::new(Mutex::new(Vec::new()));

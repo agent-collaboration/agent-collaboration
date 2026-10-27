@@ -394,7 +394,7 @@ async fn await_directory_holder(
                 {
                     return Ok(());
                 }
-                other => {
+                other @ DirectorySide::Known(_) => {
                     return Err(format!(
                         "imported Claim published another holder/expiry: {other:?}"
                     )

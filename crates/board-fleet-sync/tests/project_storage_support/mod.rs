@@ -1,5 +1,5 @@
 //! Shared real-library fixtures for the separate storage and cursor integration targets.
-#![allow(dead_code, clippy::unwrap_used)]
+
 use board_fleet_sync::BoardProjectSchema;
 use fleet_sync_lease::{LeaseHolder, LeasePolicy};
 use fleet_sync_protocol::{DatabaseId, PeerId};
@@ -8,6 +8,10 @@ use message_board::*;
 use message_board_storage::{ImportRowKeys, ImportRowKind, ProjectStore, StoreSchemaState};
 use std::{path::Path, sync::Arc, time::Duration};
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub async fn open_project(
     path: &Path,
     project: &ProjectId,
@@ -45,9 +49,19 @@ pub async fn open_project(
     ));
     (database, store)
 }
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn peer() -> PeerId {
     PeerId::new(durable_steps::Uuid::now_v7()).unwrap()
 }
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn origin(number: u8, label: &str) -> ActorOrigin {
     ActorOrigin {
         installation: ServiceId::try_from(format!("00000000-0000-4000-8000-{number:012x}"))
@@ -55,9 +69,18 @@ pub fn origin(number: u8, label: &str) -> ActorOrigin {
         machine: MachineLabel::try_from(label.to_owned()).unwrap(),
     }
 }
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn reader(number: u8) -> Identity {
     serde_json::from_value(serde_json::json!({"kind":"session","session":{"endpoint":{"serviceId":format!("00000000-0000-4000-8000-{number:012x}"),"endpointId":"fixture"},"sessionId":"same-provider-session"}})).unwrap()
 }
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn project_record(project: &ProjectId, source: &ActorOrigin) -> Record {
     Record::Project(ProjectState {
         envelope: RecordEnvelope {
@@ -84,6 +107,11 @@ pub fn project_record(project: &ProjectId, source: &ActorOrigin) -> Record {
         description: Description::try_from(String::new()).unwrap(),
     })
 }
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn revised(record: &Record, revision: u64) -> Record {
     let mut row = match record {
         Record::Project(row) => Some(row.clone()),
@@ -94,6 +122,10 @@ pub fn revised(record: &Record, revision: u64) -> Record {
     Record::Project(row)
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn accepted_entries(read: FeedRead) -> (Vec<FeedEntry>, FeedCursor) {
     match read {
         FeedRead::Entries {
@@ -101,10 +133,15 @@ pub fn accepted_entries(read: FeedRead) -> (Vec<FeedEntry>, FeedCursor) {
             covered_through,
             ..
         } => Some((entries, covered_through)),
-        _ => None,
+        FeedRead::CursorSuperseded { .. } => None,
     }
     .unwrap()
 }
+
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn mark(record: &Record, id: RecordId, through: FeedCursor) -> ReadMark {
     ReadMark {
         envelope: RecordEnvelope {
@@ -139,6 +176,10 @@ impl ImportRowKeys for FixedImportKeys {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub async fn open_granted_project(
     path: &Path,
     project: &ProjectId,

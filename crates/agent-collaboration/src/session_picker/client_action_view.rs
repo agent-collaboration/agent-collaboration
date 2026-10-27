@@ -4,6 +4,7 @@ use super::{
     client_action_state::{ClientResultAction, PickerClientAction, interrupt_client_action},
     picker_model::SessionsPickerModel,
 };
+use crate::presentation::session_picker::picker_rendering::iocraft_cell_count;
 use crate::sessions::{
     source_client_action::{CapturedClientAction, SessionClientEffect},
     source_ssh_protocol::{
@@ -220,7 +221,7 @@ pub(super) fn render_client_action(
     let dialog = model
         .show_help
         .then(|| super::picker_help_view::render_help(model, state, height));
-    element!(View(width:model.width as u32,height:height as u32) {
+    element!(View(width:iocraft_cell_count(model.width),height:iocraft_cell_count(height)) {
         DialogHost(width:u16::try_from(model.width).unwrap_or(u16::MAX),height:u16::try_from(height).unwrap_or(u16::MAX),background:vec![background],dialog)
     })
 }

@@ -23,6 +23,10 @@ fn ledger(
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn project_receipt_pages_keep_every_historical_version_after_update_and_reopen() -> TestResult
 {
@@ -162,6 +166,10 @@ async fn project_receipt_pages_keep_every_historical_version_after_update_and_re
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn empty_changed_already_so_and_rejected_receipts_remain_distinct() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -214,6 +222,10 @@ async fn empty_changed_already_so_and_rejected_receipts_remain_distinct() -> Tes
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn mismatched_commitment_and_noncanonical_receipt_metadata_are_refused() -> TestResult {
     let directory = tempfile::tempdir()?;

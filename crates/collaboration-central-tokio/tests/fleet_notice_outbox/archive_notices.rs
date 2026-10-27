@@ -62,6 +62,10 @@ fn projection(project: &str, incarnation: &Value, held: bool, now: SyncTime) -> 
     .collect::<String>();
     Ok(json!({"snapshot":snapshot,"holder":holder,"incarnation":incarnation,"digest":digest}))
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn board_archiving_notifies_a_known_holder_once_and_final_unheld_publication_hints_the_feed()
 -> TestResult {

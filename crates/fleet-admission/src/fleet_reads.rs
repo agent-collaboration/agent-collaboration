@@ -1,5 +1,9 @@
 use crate::{FleetOperation, FleetRequest};
-use message_board::*;
+use message_board::{
+    AdrTransition, Board, BoardId, DecisionEffect, FleetPosition, ProjectDirectoryEntry, ProjectId,
+    Record, RecordRef, RepositoryRef, RequestId, RequestLedgerEntry, ResourceName, ServiceId,
+    StoredDecision, WorkspaceId,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

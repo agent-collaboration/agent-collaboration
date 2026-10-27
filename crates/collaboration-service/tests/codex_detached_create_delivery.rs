@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! A detached Codex ACP create keeps both its operation evidence and empty native binding.
 #[path = "../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
 mod native_permission_echo;

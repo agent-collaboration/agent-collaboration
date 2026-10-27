@@ -1,5 +1,5 @@
 //! Generic secret dispatch must keep Fleet plaintext out of production files and temps.
-#![allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture I/O errors.
+// Assertions prove behavior; Result propagates fixture I/O errors.
 #![deny(clippy::too_many_lines)]
 use crate::{
     SecretStore,
@@ -23,6 +23,10 @@ const CANARIES: [&str; 4] = [
     "Bearer fleet-machine-runtime-update-canary",
 ];
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn production_store(
     root: &std::path::Path,
 ) -> Result<(EncryptedCredentialStore, FileWriteTrace), Box<dyn Error>> {
@@ -42,6 +46,10 @@ fn production_store(
     Ok((EncryptedCredentialStore::new(files, key), trace))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_generic_dispatch_encrypts_access_and_machine_secrets_before_every_file_write() -> TestResult
 {
@@ -67,6 +75,10 @@ fn fleet_generic_dispatch_encrypts_access_and_machine_secrets_before_every_file_
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_ciphertext_write(
     root: &std::path::Path,
     trace: &FileWriteTrace,
@@ -102,6 +114,10 @@ fn assert_no_plaintext(bytes: &[u8]) {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn unmarked_file_store_cannot_write_fleet_secrets() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -123,6 +139,10 @@ fn unmarked_file_store_cannot_write_fleet_secrets() -> TestResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_key_validation_and_generic_dispatch_fail_closed_for_every_backend() -> TestResult {
     use crate::fleet_secret_key::{FleetSecretKey, FleetSecretKind};
@@ -162,6 +182,10 @@ fn fleet_key_validation_and_generic_dispatch_fail_closed_for_every_backend() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_ciphertext_authenticates_purpose_installation_and_generation() -> TestResult {
     use crate::fleet_secret_key::{FleetSecretKey, FleetSecretKind};
@@ -198,6 +222,10 @@ fn fleet_ciphertext_authenticates_purpose_installation_and_generation() -> TestR
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_key_unavailable_and_migration_incomplete_never_fall_back_to_plaintext() -> TestResult {
     use crate::model::CredentialMigrationFailure;
@@ -231,6 +259,10 @@ fn fleet_key_unavailable_and_migration_incomplete_never_fall_back_to_plaintext()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn account_enumeration_pruning_and_reopen_preserve_fleet_generations() -> TestResult {
     use crate::account_tokens::provider_credential_bundle_key;
@@ -293,6 +325,10 @@ fn account_enumeration_pruning_and_reopen_preserve_fleet_generations() -> TestRe
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn declared_debug_is_the_only_fleet_plaintext_path_and_production_refuses_it() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -333,6 +369,10 @@ fn declared_debug_is_the_only_fleet_plaintext_path_and_production_refuses_it() -
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_only_ciphertext_prevents_replacing_a_missing_keychain_data_key() -> TestResult {
     use crate::keychain_data_key::{KeychainAccess, KeychainAccessError};

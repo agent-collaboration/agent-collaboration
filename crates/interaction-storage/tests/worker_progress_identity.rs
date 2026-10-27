@@ -31,7 +31,10 @@ async fn observer(path: &std::path::Path) -> Result<TursoConnection, TestError> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove stored behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove stored behavior; Result propagates fixture errors.
 async fn updates_and_replays_preserve_uuidv7_keys_and_scan_order() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("interaction.sqlite");
@@ -122,7 +125,10 @@ async fn updates_and_replays_preserve_uuidv7_keys_and_scan_order() -> Result<(),
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove stored behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove stored behavior; Result propagates fixture errors.
 async fn non_v7_worker_keys_are_rejected_without_repairing_or_mutating_payloads()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -182,7 +188,10 @@ async fn non_v7_worker_keys_are_rejected_without_repairing_or_mutating_payloads(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove stored behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove stored behavior; Result propagates fixture errors.
 async fn second_window_write_failure_rolls_back_the_whole_selection_batch() -> Result<(), TestError>
 {
     let directory = tempfile::tempdir()?;

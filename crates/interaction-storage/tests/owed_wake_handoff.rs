@@ -16,7 +16,9 @@ fn admission_draft(
 ) -> TestResult<&PushRecordDraft> {
     match &operation.operation {
         automation_storage::PushOperation::Admit { push } => Ok(push.as_ref()),
-        _ => Err("expected owed wake admission".into()),
+        automation_storage::PushOperation::SettleScheduleRun { .. } => {
+            Err("expected owed wake admission".into())
+        }
     }
 }
 

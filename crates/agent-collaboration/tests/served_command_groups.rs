@@ -3,7 +3,6 @@
 //! (refused by an application with no native route, as it refuses them today).
 //! Each runs the compiled CLI against the served API and checks its JSON against the
 //! published `FiniteCommandRecord` contract.
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::{CollaborationApplication, ServiceIdentity};
@@ -22,6 +21,10 @@ struct ServedFixture {
 }
 
 impl ServedFixture {
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     /// An application with an automation store, an interaction broker and a lifecycle
     /// journal, publishing a Codex endpoint whose native backend is absent.
     async fn start() -> Self {
@@ -89,6 +92,10 @@ impl ServedFixture {
         self.directory.path()
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     async fn finish(self) {
         self.served.stop().await.expect("collaboration API stops");
         if let Ok(journal) = Arc::try_unwrap(self.journal) {
@@ -105,6 +112,14 @@ fn session(session_id: &str) -> Value {
     json!({"endpoint":codex_endpoint(),"sessionId":session_id})
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::panic,
+    reason = "Broken fixture invariants must fail the test immediately."
+)]
 /// Runs the CLI as the caller Session and returns its exit status and one JSON record,
 /// checked against the published finite-command contract.
 async fn run_finite(directory: &Path, arguments: &[&str]) -> (Option<i32>, Value) {
@@ -123,6 +138,14 @@ async fn run_finite(directory: &Path, arguments: &[&str]) -> (Option<i32>, Value
     (status, record)
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::panic,
+    reason = "Broken fixture invariants must fail the test immediately."
+)]
 /// Runs the CLI as the caller Session and returns its exit status and one JSON record.
 async fn run_json(directory: &Path, arguments: &[&str]) -> (Option<i32>, Value) {
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))

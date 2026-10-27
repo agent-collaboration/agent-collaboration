@@ -1,5 +1,5 @@
 //! Real Router-local key reopen and hard rejection of the retired token format.
-#![allow(clippy::panic_in_result_fn)]
+
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
 use message_board_storage::{
@@ -26,6 +26,10 @@ async fn stored_key_identity(path: &Path) -> TestResult<String> {
     Ok(identity)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn signing_key_uses_a_uuid_v7_identity_that_survives_reopen() -> TestResult {
     // Arrange an empty native store; installation owns both the key and its identity.
@@ -56,6 +60,10 @@ async fn signing_key_uses_a_uuid_v7_identity_that_survives_reopen() -> TestResul
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_second_valid_signing_key_row_is_refused_without_replacement() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -91,6 +99,10 @@ async fn a_second_valid_signing_key_row_is_refused_without_replacement() -> Test
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn malformed_signing_key_identities_are_refused_without_replacement() -> TestResult {
     for invalid in [
@@ -142,6 +154,10 @@ async fn malformed_signing_key_identities_are_refused_without_replacement() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_malformed_signing_key_is_refused_without_replacement() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -174,6 +190,10 @@ async fn a_malformed_signing_key_is_refused_without_replacement() -> TestResult 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn key_reopen_accepts_current_tokens_and_refuses_validly_signed_old_format() -> TestResult {
     // Arrange the real native store, then reopen with a different candidate key.

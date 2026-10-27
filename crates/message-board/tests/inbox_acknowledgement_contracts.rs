@@ -58,7 +58,10 @@ fn an_unanswered_entry_never_claims_that_the_project_did_not_apply_it() {
 }
 
 #[test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 fn acknowledgement_scopes_are_distinct_by_kind_and_id_before_routing()
 -> Result<(), Box<dyn std::error::Error>> {
     use message_board::{InboxAcknowledgeRequestProps, ThreadId};

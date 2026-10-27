@@ -364,7 +364,10 @@ fn handle_upstream_http(
         .map_err(|error| format!("route-native upstream failed to write HTTP response: {error}"))
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn handle_upstream_websocket(
     stream: TcpStream,
     transcript: &Arc<Mutex<Vec<RouteNativeRecordedRequest>>>,

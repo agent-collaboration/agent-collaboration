@@ -39,6 +39,10 @@ async fn complete(runtime: &MailRuntime, bytes: &[u8]) -> TestResult {
     saved(runtime, bytes).await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn two_reopen_cycles_preserve_refusals_and_old_lifecycle_replays_after_store_restart()
 -> TestResult {

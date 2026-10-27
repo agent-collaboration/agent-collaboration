@@ -1,7 +1,10 @@
 //! Current subscription facts use exact reader keys; historical generations never become duplicate live scopes.
 use crate::project_actor_rows::{actor_id, decode_actor};
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    Identity, MembershipEnd, ProjectId, Record, RecordId, RecordKind, RecordRef, RecordedActor,
+    SubscriptionGeneration, SubscriptionMembership, SubscriptionScope, ThreadId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

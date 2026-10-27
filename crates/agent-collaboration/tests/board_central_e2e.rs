@@ -1,5 +1,5 @@
 //! BC01–BC06: approved local central journeys through compiled CLI and real Hosts.
-#![allow(clippy::panic_in_result_fn)]
+
 #![deny(clippy::too_many_lines)]
 #[path = "board_e2e/central_archive.rs"]
 mod central_archive;
@@ -11,23 +11,39 @@ mod central_holders;
 mod central_import;
 #[path = "board_e2e/central_joint.rs"]
 mod central_joint;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/central_pair.rs"]
 mod central_pair;
 #[path = "board_e2e/central_replication.rs"]
 mod central_replication;
 #[path = "board_e2e/fixture.rs"]
-#[allow(dead_code)] // The single shared fixture has additional board-record consumers.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // The single shared fixture has additional board-record consumers.
 mod fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture_inputs.rs"]
-#[allow(dead_code)]
 mod fixture_inputs;
 #[path = "../../board-legacy-upgrade/tests/upload_support/actual_cli.rs"]
 mod legacy_publisher;
 #[path = "board_e2e/owned_host.rs"]
-#[allow(dead_code)] // Crash-only shared APIs belong to the takeover target.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // Crash-only shared APIs belong to the takeover target.
 mod owned_host;
 #[path = "board_e2e/records_reopen.rs"]
-#[allow(dead_code)] // Reuse the owner's stopped native readback, without a second SQL owner.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // Reuse the owner's stopped native readback, without a second SQL owner.
 mod records_reopen;
 use codex_router_test_support::FixtureResult;
 

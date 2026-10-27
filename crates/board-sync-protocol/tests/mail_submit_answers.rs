@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use board_sync_protocol::BoardConsumerProtocol;
 use fleet_sync_protocol as wire;
 use serde_json::{Value, json};

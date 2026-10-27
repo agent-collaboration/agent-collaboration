@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use message_board::*;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
@@ -7,6 +5,10 @@ use serde_json::{Value, json};
 const REQUEST: &str = "019a1234-5678-7000-8000-000000000001";
 const PROJECT: &str = "019a1234-5678-7000-8000-000000000002";
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn rejects_obsolete_headers<T: DeserializeOwned>(base: Value) {
     assert!(serde_json::from_value::<T>(base.clone()).is_ok());
     for (field, value) in [("observedEpoch", json!(1)), ("resubmits", json!(REQUEST))] {

@@ -5,6 +5,10 @@ use message_board::{FeedPosition, ProjectId};
 use sqlx::{ConnectOptions, Connection};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn moving_a_populated_native_store_preserves_tables_still_in_the_wal() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -46,6 +50,10 @@ async fn moving_a_populated_native_store_preserves_tables_still_in_the_wal() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_busy_move_checkpoint_keeps_the_source_and_pauses_new_admission() -> TestResult {
     let directory = tempfile::tempdir()?;

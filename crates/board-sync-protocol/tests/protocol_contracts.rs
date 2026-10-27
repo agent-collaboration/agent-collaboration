@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use board_sync_protocol::*;
 use fleet_sync_protocol as wire;
 use serde::{Serialize, de::DeserializeOwned};
@@ -8,6 +6,10 @@ use serde_json::{Value, json};
 const PROJECT: &str = "019a1234-5678-7000-8000-000000000001";
 const REQUEST: &str = "019a1234-5678-7000-8000-000000000002";
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn mapping<Surface, Wire>(cases: Vec<(Value, Value)>)
 where
     Surface: Serialize + DeserializeOwned + From<Wire> + Into<Wire>,

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Empty refused registrations leave aggregate scope without discarding healthy context.
 #![allow(clippy::indexing_slicing)] // Exact test fixture arrays/JSON; no production access.
 #[path = "support/board_fixture.rs"]

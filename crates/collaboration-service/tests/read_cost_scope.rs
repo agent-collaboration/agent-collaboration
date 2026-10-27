@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! A measured future excludes concurrent native SQL outside its subscriber.
 #![allow(clippy::panic_in_result_fn)]
 #![deny(clippy::too_many_lines)]

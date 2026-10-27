@@ -9,7 +9,7 @@ fn target() -> Value {
 }
 const ID: &str = "019f0000-0000-7000-8000-000000000001";
 #[test]
-#[allow(clippy::unwrap_used)] // Fixed independent wire examples must fail when decoding changes.
+// Fixed independent wire examples must fail when decoding changes.
 fn wake_send_and_every_control_round_trip_as_closed_typed_mail() {
     let mut creator = target();
     creator["kind"] = json!("session");
@@ -55,7 +55,7 @@ fn wake_send_and_every_control_round_trip_as_closed_typed_mail() {
 }
 
 #[test]
-#[allow(clippy::unwrap_used)] // Fixed independent wire examples must fail when decoding changes.
+// Fixed independent wire examples must fail when decoding changes.
 fn typed_refusals_return_through_the_existing_acceptance_without_changing_old_variants() {
     for reason in [
         json!({"kind":"wakeExists","wakeup":ID,"creator":{"kind":"owner"}}),
@@ -83,7 +83,7 @@ fn typed_refusals_return_through_the_existing_acceptance_without_changing_old_va
 }
 
 #[test]
-#[allow(clippy::unwrap_used)] // Fixed independent wire examples must fail when decoding changes.
+// Fixed independent wire examples must fail when decoding changes.
 fn snapshot_mutation_and_wait_results_keep_their_complete_wire_shapes() {
     let snapshot = json!({
         "definition":{"wakeupId":ID,"changeId":ID,"createdBy":{"kind":"owner"},
@@ -107,7 +107,7 @@ fn snapshot_mutation_and_wait_results_keep_their_complete_wire_shapes() {
 }
 
 #[test]
-#[allow(clippy::unwrap_used)] // Fixed independent wire examples must fail when decoding changes.
+// Fixed independent wire examples must fail when decoding changes.
 fn remote_timing_preserves_exact_utc_and_required_nullable_outputs() {
     for text in ["2026-10-23T22:00:00.000Z", "2026-10-23T22:00:00.000123Z"] {
         let parsed: collaboration_mail_protocol::RemoteWakeTimestamp =

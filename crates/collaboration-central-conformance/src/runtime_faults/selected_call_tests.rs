@@ -1,6 +1,7 @@
 //! The selected fault remains armed when another call uses the same destination.
-#![allow(clippy::panic_in_result_fn)]
+
 use super::*;
+use crate::DispatchCallSelector;
 use serde_json::json;
 use std::time::Duration;
 
@@ -132,6 +133,10 @@ async fn installation_peer_hold_ignores_other_outer_kinds_and_releases_only_the_
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn copy_write_hold_ignores_status_and_unknown_calls_without_freezing_later_writes()
 -> TestResult {
@@ -220,6 +225,10 @@ async fn copy_write_reply_drop_selects_only_the_outer_write_kind_once() -> TestR
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_next_hold()
 -> TestResult {

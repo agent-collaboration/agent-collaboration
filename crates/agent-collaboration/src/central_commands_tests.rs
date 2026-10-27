@@ -1,5 +1,5 @@
 //! Parse real command arguments and build the production request without network I/O.
-#![allow(clippy::panic_in_result_fn)]
+
 use super::*;
 use serde_json::{Value, json};
 const PROJECT: &str = "019f0000-0000-7000-8000-000000005881";
@@ -40,6 +40,10 @@ fn central_is_explicit_and_invalid_page_limits_fail_before_owner_sign_in() {
         assert!(prepare(args.command).is_err());
     }
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn copy_and_page_commands_build_one_exact_request_each() -> Result<(), Box<dyn std::error::Error>> {
     for (args, method, suffix) in [
@@ -90,6 +94,10 @@ fn copy_and_page_commands_build_one_exact_request_each() -> Result<(), Box<dyn s
     }
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn move_retire_and_confirmation_preserve_native_ids_positions_and_preview()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -166,6 +174,10 @@ fn move_retire_and_confirmation_preserve_native_ids_positions_and_preview()
     );
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn preview_labels_distinguish_presence_from_renewal_and_warn_about_unsent_work()
 -> Result<(), Box<dyn std::error::Error>> {

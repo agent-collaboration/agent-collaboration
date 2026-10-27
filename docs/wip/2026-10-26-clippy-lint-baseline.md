@@ -1,0 +1,101 @@
+# Clippy lint baseline lane handback
+
+Branch: `lane/dag-lints`, based on `02ceeade`. **Static gates pass; the original full runtime-test requirement remains open.** The owner stopped all built-executable launches on this Mac because of security prompts. Do not resume nextest, tests, examples, or built tools here while that instruction remains active.
+
+## Result
+
+The exact 18-lint baseline is denied in workspace configuration. `large_futures` keeps its 16 KiB threshold. Native workspace Clippy, both Wasm CI lint commands, formatting, and the mail-protocol static check exit 0.
+
+Before the execution stop, 18 of 34 changed-package suites passed: 1681 tests passed and 37 were skipped. Mail-protocol compilation ended with SIGKILL before tests; its subsequent all-target `cargo check` passes. The other 15 suites were not run. No complete runtime sweep or CI acceptance is claimed.
+
+The two authorized overflow policies saturate instead of wrapping: `ceil_percent` and picker dimensions converted into Iocraft cell counts. Each has an in-range test and an overflow regression. Targeted old-cast RED and corrected GREEN were observed before the execution stop. Other casts retain established clamping or checked-error behavior.
+
+An assertion-token audit observed 7,673 existing assertions unchanged. Four scalar tests were added. The final Worker amendment changes only five explicit-import lists in conformance code; it passes the all-features Wasm lint gate. The Worker native tests predate that import amendment and were not rerun after the owner stop.
+
+## Lint hit counts
+
+Before is the supplied production census. After counts emitted diagnostics from strict Clippy, with deferred and approved expectation scopes listed below. Five additional Worker conformance wildcard hits were found and fixed by the Wasm all-features check.
+
+| Lint | Before | After emitted |
+|---|---:|---:|
+| `wildcard_imports` | 468 | 0 |
+| `allow_attributes` | 180 | 0 |
+| `allow_attributes_without_reason` | 198 | 0 |
+| `large_futures` | 46 | 0 |
+| `cast_possible_truncation` | 87 | 0 |
+| `cast_sign_loss` | 10 | 0 |
+| `cast_possible_wrap` | 5 | 0 |
+| `match_wildcard_for_single_variants` | 17 | 0 |
+| `unwrap_in_result` | 9 | 0 |
+| `unused_async` | 12 | 0 |
+| `trivially_copy_pass_by_ref` | 4 | 0 |
+| `large_stack_arrays` | 1 | 0 |
+| `large_types_passed_by_value` | 0 | 0 |
+| `large_stack_frames` | 0 | 0 |
+| `enum_glob_use` | 0 | 0 |
+| `dbg_macro` | 0 | 0 |
+| `implicit_clone` | 0 | 0 |
+| `inefficient_to_string` | 0 | 0 |
+
+## Package tests
+
+The serial sweep used `CARGO_PROFILE_TEST_DEBUG=0 CARGO_BUILD_JOBS=4 cargo nextest run -p <package> --no-fail-fast --status-level fail --final-status-level all`. Debug assertions and overflow checks were unchanged; existing ignored cases remain skipped.
+
+| Package | Passed | Skipped | Exit / status |
+|---|---:|---:|---|
+| `acp-client-runtime` | 85 | 0 | 0 |
+| `agent-collaboration` | — | — | not run; owner stop |
+| `automation-storage` | 94 | 1 | 0 |
+| `board-central-test-support` | 2 | 0 | 0 |
+| `board-fleet-sync` | 26 | 0 | 0 |
+| `board-legacy-upgrade` | — | — | not run; owner stop |
+| `board-sync-protocol` | 50 | 0 | 0 |
+| `claude-code-peer-messaging` | 25 | 0 | 0 |
+| `codex-acp-adapter` | 72 | 0 | 0 |
+| `codex-native-integration` | 84 | 0 | 0 |
+| `codex-router-auth` | 79 | 0 | 0 |
+| `codex-router-cli` | — | — | not run; owner stop |
+| `codex-router-host` | — | — | not run; owner stop |
+| `codex-router-proxy` | 524 | 0 | 0 |
+| `codex-router-quota-reset-test-harness` | 55 | 12 | 0 |
+| `codex-router-secret-store` | 82 | 4 | 0 |
+| `codex-router-selection` | 122 | 0 | 0 |
+| `codex-router-state` | 176 | 0 | 0 |
+| `codex-router-test-support` | 44 | 18 | 0 |
+| `codex-router-tui` | 27 | 1 | 0 |
+| `collaboration-central-cloudflare` | 2 | 0 | 0 |
+| `collaboration-central-conformance` | — | — | not run; owner stop |
+| `collaboration-central-core` | — | — | not run; owner stop |
+| `collaboration-central-tokio` | — | — | not run; owner stop |
+| `collaboration-client` | 132 | 1 | 0 |
+| `collaboration-mail-protocol` | — | — | 101; build interrupted |
+| `collaboration-mcp` | — | — | not run; owner stop |
+| `collaboration-protocol` | — | — | not run; owner stop |
+| `collaboration-service` | — | — | not run; owner stop |
+| `fleet-admission` | — | — | not run; owner stop |
+| `interaction-storage` | — | — | not run; owner stop |
+| `lifecycle-observation` | — | — | not run; owner stop |
+| `message-board` | — | — | not run; owner stop |
+| `message-board-storage` | — | — | not run; owner stop |
+
+## Exception boundaries
+
+- Cargo rejected mixing `workspace = true` with package lint overrides. The six excluded packages use 214 temporary target-root `#![expect(...)]` / `#![cfg_attr(..., expect(...))]` attributes, all with reason `lint pass follows the crate split`. No other source in those packages changed.
+- 16 generated-module declarations expect only `allow_attributes_without_reason`; generated bytes and freshness checks remain unchanged. See [UW-6](../upstream-workarounds/fleet-query-generator-lint-header.md).
+- 152 shared-fixture includes expect `dead_code` where it fires, without artificial public exports.
+- 21 includes of split-owned fixture sources temporarily expect `allow_attributes` and/or `allow_attributes_without_reason`; remove them when the split lane fixes its source.
+
+Every location is listed in the [exception inventory](2026-10-26-clippy-lint-baseline-exceptions.md). Public ACP async APIs and Serde reference predicates retain item-level expectations where their existing signatures carry required contracts.
+
+## Evidence and open gates
+
+- [Machine-readable proof](2026-10-26-clippy-lint-baseline-proof.json). Raw logs remain in this checkout under `tmp/dag-lints/`: `strict.log`, both Wasm lint logs, `fmt-check.log`, scalar RED/GREEN logs, and `packages/<package>.log`.
+- **Open:** runtime verification for 16 packages, including the interrupted mail-protocol build, requires an owner-approved environment. The Mac execution stop was not bypassed.
+- The initial combined-package build was interrupted before completion and is not counted as passing proof. Free space briefly reached an observed 57 GiB while pausing; workspace cleanup removed 101.9 GiB and restored 163 GiB. Recorded serial-package snapshots of `target/debug` stayed below 17 GiB before the execution stop.
+- Final workspace cleanup: Removed 6953 files, 8.9GiB total. Disk snapshot: `/dev/disk3s5   926Gi   676Gi   218Gi    76%     33M  2.3G    1%   /System/Volumes/Data`.
+- No changed Rust file exceeds 1,000 lines.
+- No push, PR, release, merge, production process replacement, or independent reviewer observation is claimed. The Fleet Lead owns integration, the second lint pass, and final CI acceptance.
+
+Cargo also prints nonfatal diagnostics about template manifests in its cached workers-rs checkout; the recorded static commands still exit 0. No workspace Clippy finding remains.
+
+The proof hash uses `git diff --full-index` so Git's automatic object-id abbreviation does not change the digest after committing.

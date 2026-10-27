@@ -291,7 +291,10 @@ fn require_successful_cli_output(turns: &[Value], marker: &str) -> ProofResult<(
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The fixture names each independent input explicitly."
+)]
 fn verify_sdk_observations(
     root: &collaboration_client::board::Post,
     contribution: &collaboration_client::board::Post,

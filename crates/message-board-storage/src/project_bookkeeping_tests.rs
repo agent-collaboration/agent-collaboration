@@ -2,6 +2,10 @@ use super::ProjectStore;
 use message_board::ProjectId;
 use sqlx::{ConnectOptions, Connection};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn holder_bookkeeping_uses_an_independent_uncaptured_migration_track()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

@@ -2,6 +2,10 @@
 use serde_json::{Value, json};
 use std::{error::Error, ffi::OsString, time::Duration};
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 

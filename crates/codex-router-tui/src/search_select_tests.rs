@@ -75,7 +75,7 @@ async fn real_inline_component_pointer_and_keyboard_select_the_same_key() {
                         TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
                             3,
-                            row as u16,
+                            u16::try_from(row).expect("fixture coordinates fit terminal cells"),
                         ))
                     } else {
                         TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter))

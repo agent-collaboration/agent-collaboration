@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use codex_acp_adapter::{
     AcpConnectionInputs, AcpSchemaCatalog, AcpSessionBinding, AcpStoredSessions,
     HeldBindingCheckout, PromptTaskInputs, SessionSetupInputs, UnmaterializedBindingStore,
@@ -43,12 +41,20 @@ struct TestBindingHolder {
     host_tasks: tokio_util::task::TaskTracker,
 }
 impl UnmaterializedBindingStore for TestBindingHolder {
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn hold(&self, binding: AcpSessionBinding) {
         self.bindings
             .lock()
             .unwrap()
             .insert(binding.session_id().to_owned(), binding);
     }
+    #[expect(
+        clippy::unwrap_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn checkout(&self, session_id: &str) -> HeldBindingCheckout {
         self.bindings
             .lock()
@@ -73,6 +79,10 @@ impl AcpStoredSessions for EmptyCatalog {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn fixture_schemas() -> Arc<NativePayloadSchemas> {
     let mut definitions = serde_json::Map::new();
     for name in [
@@ -94,6 +104,10 @@ fn fixture_schemas() -> Arc<NativePayloadSchemas> {
     Arc::new(NativePayloadSchemas::from_bundle(&bundle).unwrap())
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn read_native_request(wire: &mut WebSocketStream<tokio::net::UnixStream>) -> Value {
     let frame = tokio::time::timeout(std::time::Duration::from_secs(3), wire.next())
         .await
@@ -103,6 +117,10 @@ async fn read_native_request(wire: &mut WebSocketStream<tokio::net::UnixStream>)
     serde_json::from_str(frame.to_text().unwrap()).unwrap()
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn reply_native(
     wire: &mut WebSocketStream<tokio::net::UnixStream>,
     request: &Value,

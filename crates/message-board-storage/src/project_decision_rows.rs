@@ -5,7 +5,11 @@ use crate::project_record_codec::{
     intent_recipient_key, stored_counter, stored_json, stored_project_row, stored_tag, stored_text,
     stored_timestamp,
 };
-use message_board::*;
+use message_board::{
+    CanonicalHash, FeedCursor, NotifyIntent, NotifyIntentId, NotifyIntentProps, ProjectId, Record,
+    RecordId, RecordKind, RecordRef, RequestId, RequestLedgerEntry, SubscriptionMembership,
+    SubscriptionMembershipProps, SubscriptionScope, ThreadId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

@@ -1,3 +1,4 @@
+#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! Provider-only proof Host: real collaboration runtime, no native Codex process or home.
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,

@@ -227,10 +227,6 @@ impl Drop for ReplyWaiter {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::panic_in_result_fn,
-    reason = "Test assertions fail the case; fixture construction remains fallible."
-)]
 mod tests {
     use super::*;
     use fleet_sync_protocol::{PeerId, ServerCallAnswer, SessionId, WithdrawAnswer};
@@ -255,6 +251,10 @@ mod tests {
         SyncTime::from_unix_millis(200)
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn only_the_exact_session_connection_and_frame_can_resolve_a_waiter()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -320,6 +320,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn close_timeout_drop_and_instance_loss_cancel_only_their_pending_replies()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -348,6 +352,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn an_answer_at_the_expiry_boundary_is_lost_even_before_the_alarm_runs()
     -> Result<(), Box<dyn std::error::Error>> {

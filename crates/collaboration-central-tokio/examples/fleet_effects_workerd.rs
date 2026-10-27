@@ -4,10 +4,7 @@
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer};
 #[path = "../tests/support/fleet_effects_scenarios.rs"]
 mod scenarios;
-#[allow(
-    dead_code,
-    reason = "The shared process harness also serves other lifecycle scenarios."
-)]
+
 #[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
 mod workerd_harness;
 use workerd_harness::{WorkerdProcess, WorkerdSettings};

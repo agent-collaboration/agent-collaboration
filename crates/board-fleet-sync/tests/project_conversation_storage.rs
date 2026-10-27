@@ -1,5 +1,9 @@
 //! Native typed conversation, reader and historical-authority queries share one real owner.
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod project_storage_support;
 
 use message_board::*;
@@ -10,6 +14,10 @@ use project_storage_support::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn conversation_reopen_preserves_references_participation_inbox_and_historical_lead()
 -> TestResult {

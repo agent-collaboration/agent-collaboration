@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Imported history stays covered; only real live admission supplies window time.
 #![allow(clippy::panic_in_result_fn)]
 #[path = "support/board_fixture.rs"]

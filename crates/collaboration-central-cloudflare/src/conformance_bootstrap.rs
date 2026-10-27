@@ -10,7 +10,10 @@ use fleet_sync_protocol::ReceiverId;
 use serde::Deserialize;
 use std::time::Duration;
 use std::{cell::OnceCell, sync::Arc};
-use worker::{send::SendWrapper, *};
+use worker::{
+    DurableObject, Env, Error, Method, Request, RequestInit, Response, Result, State,
+    durable_object, send::SendWrapper, wasm_bindgen,
+};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

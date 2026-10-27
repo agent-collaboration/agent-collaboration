@@ -1,6 +1,10 @@
 use super::*;
 use fleet_sync_protocol::CopyStatusAnswer;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_failure_after_hook_write_rolls_back_rows_ack_summary_and_admitted_follow_ups()
 -> TestResult {

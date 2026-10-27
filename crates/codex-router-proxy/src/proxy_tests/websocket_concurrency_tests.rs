@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-#[allow(clippy::result_large_err)]
+
 fn legacy_single_lane_accept_loop_reproducer_blocks_second_client_until_first_finishes() {
     let listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -87,7 +87,10 @@ fn legacy_single_lane_accept_loop_reproducer_blocks_second_client_until_first_fi
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_accepts_second_websocket_while_first_is_blocked() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_concurrent_websockets");
     let database_path = temp_dir.path().join("state.sqlite");

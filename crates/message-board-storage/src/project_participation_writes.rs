@@ -1,7 +1,10 @@
 //! Conversation intervals retain their join key as activity and closure advance.
 use crate::project_participant_io::{invalid, role_name};
 use crate::{ImportRowKind, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    Participant, ParticipantClosedReason, ParticipantNote, ParticipantProps, RecordId,
+    RecordedActor, RecordedParticipantRole, ThreadId,
+};
 
 impl ProjectWriteTransaction {
     pub async fn put_participant(

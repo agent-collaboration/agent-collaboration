@@ -122,8 +122,8 @@ async fn shared_action_pointer_matches_the_native_button_and_disabled_guard() {
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column).expect("fixture coordinates fit terminal cells"),
+                            u16::try_from(row).expect("fixture coordinates fit terminal cells"),
                         )))
                         .unwrap();
                     let mut exit = KeyEvent::new(KeyEventKind::Press, KeyCode::Char('d'));

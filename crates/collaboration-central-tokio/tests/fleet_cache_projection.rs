@@ -1,9 +1,16 @@
 //! Cache transaction and reader cases now take their inputs from native central.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
-#[allow(dead_code)]
 mod native_source;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/fleet_cache_source.rs"]
 mod source;
 use fleet_admission::{FleetOperation, FleetRequest};
@@ -96,6 +103,10 @@ impl Fixture {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn held_catchup_keeps_active_readers_on_the_old_projection_until_one_atomic_publication()
 -> TestResult {
@@ -178,6 +189,10 @@ async fn held_catchup_keeps_active_readers_on_the_old_projection_until_one_atomi
     fixture.close().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn dropped_rebuild_survives_reopen_as_old_active_rows_and_the_next_build_discards_staging()
 -> TestResult {
@@ -224,6 +239,10 @@ async fn dropped_rebuild_survives_reopen_as_old_active_rows_and_the_next_build_d
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn changed_snapshot_cut_and_gapped_catchup_abort_without_publishing() -> TestResult {
     let fixture = Fixture::open().await?;
@@ -279,6 +298,10 @@ async fn changed_snapshot_cut_and_gapped_catchup_abort_without_publishing() -> T
     fixture.close().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn stored_staging_corruption_is_decoded_before_active_rows_are_replaced() -> TestResult {
     let fixture = Fixture::open().await?;
@@ -304,6 +327,10 @@ async fn stored_staging_corruption_is_decoded_before_active_rows_are_replaced() 
     fixture.close().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_failed_final_insert_rolls_back_the_active_rows_and_checkpoint_together() -> TestResult {
     let fixture = Fixture::open().await?;
@@ -336,6 +363,10 @@ async fn a_failed_final_insert_rolls_back_the_active_rows_and_checkpoint_togethe
     fixture.close().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_authoritative_full_rebuild_can_replace_a_cache_with_a_different_checkpoint()
 -> TestResult {

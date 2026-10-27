@@ -1,6 +1,9 @@
 //! Readmission opens the mailbox before its reserved identities become active.
 
-use super::*;
+use super::{
+    AtomicStore, ColumnIndex, Database, Decode, Deserialize, Encode, IntoArguments, PeerId,
+    Serialize, StoreError, TransactionScope, Type, queries,
+};
 use durable_steps::{OperationContext, OperationFailure, Task};
 use std::marker::PhantomData;
 #[cfg(feature = "conformance")]

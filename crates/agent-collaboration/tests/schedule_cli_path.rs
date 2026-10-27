@@ -9,7 +9,7 @@ async fn cli_creates_and_inspects_disabled_schedule() -> Result<(), Box<dyn std:
     let root = std::path::PathBuf::from("/tmp")
         .join(format!("schedule-cli-{}", OperationId::generate().as_str()));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
@@ -19,7 +19,7 @@ async fn cli_creates_and_inspects_disabled_schedule() -> Result<(), Box<dyn std:
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     let client = CollaborationClient::connect(&root, "schedule-cli-fixture", "1").await?;
     let instruction = client

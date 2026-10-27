@@ -1,6 +1,10 @@
 //! Explicit root-local debug plaintext policy and its guarded file operations.
 
-use super::*;
+use super::{
+    FileCredentialPolicy, FileSecretStore, Path, PathBuf, SecretKey, SecretStoreError, fs,
+    has_credential_bundle_marker, reject_codex_home_path, reject_pooled_credential_key,
+    reject_symlink_path, validate_existing_parent,
+};
 #[cfg(debug_assertions)]
 use crate::credential_key::AccountCredentialKey;
 #[cfg(debug_assertions)]

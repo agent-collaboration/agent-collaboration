@@ -1,5 +1,8 @@
 //! Attach held or persisted Codex sessions while preserving the original binding evidence.
-use super::*;
+use super::{
+    AcpSchemaCatalog, AcpSessionBinding, CodexGeneration, McpConfiguration, NativeOperation, Path,
+    RouterSessionProfile, SessionSetupError, Value, json, map_native_failure, normalized_directory,
+};
 
 impl AcpSessionBinding {
     pub async fn adopt_unmaterialized(

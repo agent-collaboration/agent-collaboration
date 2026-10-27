@@ -80,6 +80,10 @@ async fn unheld_call(fixture: &Fixture) -> TestResult<Vec<u8>> {
         durable_steps::Uuid::now_v7(),
     )
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_finalized(before: &ArchiveState, after: &ArchiveState) -> TestResult {
     let mut position = FleetPosition::try_from(u64::try_from(
         before.feed.last().ok_or("archive feed absent")?.0,
@@ -119,6 +123,10 @@ fn assert_finalized(before: &ArchiveState, after: &ArchiveState) -> TestResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn refused_reservation_and_archive_completion_roll_back_and_retry_together() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -183,6 +191,10 @@ async fn refused_reservation_and_archive_completion_roll_back_and_retry_together
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn ordinary_unheld_projection_and_archive_completion_roll_back_and_retry_together()
 -> TestResult {
@@ -233,6 +245,10 @@ async fn ordinary_unheld_projection_and_archive_completion_roll_back_and_retry_t
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn final_report_and_archive_completion_roll_back_and_retry_together() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -302,6 +318,10 @@ fn archive_report_call(project: &str) -> TestResult<Vec<u8>> {
     }))?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn stored_legacy_and_mixed_positions_cannot_count_as_archive_reports() -> TestResult {
     for invalid_position in [

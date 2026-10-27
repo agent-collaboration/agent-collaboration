@@ -7,6 +7,10 @@ use crate::{ProjectStore, project_test_support::origin};
 use fleet_sync_protocol::SqlValue;
 use message_board::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn maximum_reader_metadata_fits_native_rows_without_acquiring_a_feed_position() -> TestResult
 {

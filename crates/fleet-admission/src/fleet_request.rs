@@ -1,4 +1,8 @@
-use message_board::*;
+use message_board::{
+    ActingForIdentity, AdrId, AdrTransition, ArtifactRef, BoardId, BoardKind, CanonicalHash,
+    Description, MarkdownText, ProjectId, ProtocolVersion, RecordRef, RecordedActor, RepositoryRef,
+    RequestId, ResourceName, SubjectRevision, WorkspaceId,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

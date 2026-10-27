@@ -136,6 +136,10 @@ impl ExpansionFixture {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn expansions_replay_exactly_follow_commit_order_and_reopen_with_the_original_envelope()
 -> TestResult {
@@ -230,6 +234,10 @@ async fn expansions_replay_exactly_follow_commit_order_and_reopen_with_the_origi
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn expansion_requires_an_earlier_follow_with_the_exact_membership_activation_and_generation()
 -> TestResult {
@@ -299,6 +307,10 @@ async fn expansion_requires_an_earlier_follow_with_the_exact_membership_activati
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn rolled_back_expansion_leaves_no_association_and_does_not_consume_its_sequence()
 -> TestResult {
@@ -328,6 +340,10 @@ async fn rolled_back_expansion_leaves_no_association_and_does_not_consume_its_se
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn invalid_expansion_relationships_and_corrupt_frozen_content_are_refused() -> TestResult {
     let directory = tempfile::tempdir()?;

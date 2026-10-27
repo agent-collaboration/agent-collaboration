@@ -14,6 +14,10 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod recorded_api_listener;
 
 pub(crate) struct SourceApiFixture {

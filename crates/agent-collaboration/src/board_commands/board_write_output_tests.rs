@@ -5,7 +5,10 @@ const CHILD: &str =
     "board_commands::board_execution::board_write_output_tests::forward_cli_output_child";
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions compare captured bytes and process status.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions compare captured bytes and process status.
 async fn forwarding_receipts_render_their_kind_and_keep_typed_reply_exit_zero()
 -> Result<(), Box<dyn std::error::Error>> {
     for machine in [false, true] {

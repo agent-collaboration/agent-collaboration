@@ -1,6 +1,8 @@
 //! One snapshot resolves this reader's stored cutoffs before inbox filtering compares positions.
 use crate::{CursorValidity, ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{
+    FeedCursor, Identity, RecordId, RecordKind, RecordRef, RecordedActor, ThreadId,
+};
 use serde::Serialize;
 use std::collections::BTreeMap;
 

@@ -1,5 +1,5 @@
 //! Key batches must seek each supplied record key on the actual Turso engine.
-#![allow(clippy::panic_in_result_fn)]
+
 use message_board_storage::PROJECT_MIGRATOR;
 use sqlx::{ConnectOptions, Connection, Row};
 
@@ -18,6 +18,10 @@ macro_rules! batch {
     };
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn every_keyed_record_batch_uses_an_index_search_instead_of_a_record_scan() -> TestResult {
     // Arrange: use the application's complete native schema, including its

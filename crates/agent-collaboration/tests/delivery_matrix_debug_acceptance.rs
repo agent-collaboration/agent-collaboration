@@ -1,7 +1,9 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Opt-in recipient-observed delivery proof on the owned automation debug Host.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "automation_live_support/proof_context.rs"]
-#[allow(dead_code)]
 mod proof_context;
 
 use collaboration_client::protocol::{
@@ -390,6 +392,10 @@ async fn create_empty_conversation(
     }
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 async fn cli_codex_create_then_prompt_load_route(
     proof: &ProofContext,
     creator: &SessionRef,
@@ -502,6 +508,10 @@ async fn cli_send(
     Ok(())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 async fn cli_send_receipt(
     proof: &ProofContext,
     sender: &SessionRef,
@@ -535,6 +545,10 @@ async fn cli_send_receipt(
     Ok(receipt["result"]["record"].clone())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 async fn wake_send(
     proof: &ProofContext,
     sender: &SessionRef,

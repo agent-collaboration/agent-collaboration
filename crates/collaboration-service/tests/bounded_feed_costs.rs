@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 //! One feed page must not decode history or visit unrelated project contents.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;

@@ -13,7 +13,10 @@ enum UpstreamHandshakeScenario {
     AcceptThenAuthError,
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
     let fixture = AuthRejectionFixture::new("request_local_websocket_recovery");
     let original_credential_metadata = fixture.credential_metadata();
@@ -182,7 +185,10 @@ fn request_local_websocket_accepted_auth_error_is_forwarded_without_replay() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn request_local_websocket_auth_rejection_preserves_hard_previous_response_owner() {
     let fixture = AuthRejectionFixture::new("request_local_websocket_hard_owner");
     fixture.persist_hard_owner("resp_request_local_ws_owner");

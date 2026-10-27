@@ -1,8 +1,23 @@
 //! Parse domain command families without opening a connection or local store.
-use super::board_entity_arguments::*;
+use super::board_entity_arguments::{
+    EntityListArguments, EntityShowArguments, ProjectWriteArguments, SubtaskCommand, TaskCommand,
+    WorkstreamCommand,
+};
 use super::board_preparation::{CommandContext, PreparedBoardCommand, finalize_identity};
-use super::board_value_parsing::*;
-use collaboration_client::{CollaborationClient, board::*};
+use super::board_value_parsing::{
+    command_context, parse_bounded_text, parse_mutation_identity, parse_uuid_v7,
+    prepare_page_request,
+};
+use collaboration_client::{
+    CollaborationClient,
+    board::{
+        AdrCreateRequest, AdrTransitionRequest, BoardOperation, FeedReadRequest,
+        FleetRecordListRequest, FleetRecordShowRequest, ProjectReadKind, ProjectRecordListRequest,
+        ProjectRecordShowRequest, ProjectRequest, ProtocolVersion, ReadActor, RecordRef,
+        SubjectRevision, SubtaskId, SubtaskListRequest, TaskAction, TaskId, TaskLink,
+        TaskLinkInput, TaskLinkTarget, TaskStatusChange, WorkTrailShowRequest, WorkstreamId,
+    },
+};
 use serde::de::DeserializeOwned;
 
 #[derive(Clone, Copy)]
@@ -56,11 +71,11 @@ impl PreparedEntityCommand {
             Self::AdrTransition(request) => finalize_identity(&mut request.actor, client),
             Self::Feed(request) => match &mut request.reader {
                 ReadActor::Identified { reader } => finalize_identity(reader, client),
-                _ => Ok(()),
+                ReadActor::Anonymous { .. } => Ok(()),
             },
             Self::Trail(request) => match &mut request.reader {
                 ReadActor::Identified { reader } => finalize_identity(reader, client),
-                _ => Ok(()),
+                ReadActor::Anonymous { .. } => Ok(()),
             },
             _ => Ok(()),
         }

@@ -1,5 +1,4 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_core::{FleetDecisionFault, ObjectHost, StepConformance};
 use collaboration_central_tokio::TokioStorageHost;
@@ -124,6 +123,10 @@ async fn stored_receipt_count(fixture: &Fixture) -> Result<String, TestError> {
         .await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn nonempty_receipts_survive_reopen_and_replay_the_original_effects() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -169,6 +172,10 @@ async fn nonempty_receipts_survive_reopen_and_replay_the_original_effects() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn both_rollback_causes_discard_the_header_and_every_effect_row() -> TestResult {
     for fault in [
@@ -219,6 +226,10 @@ async fn both_rollback_causes_discard_the_header_and_every_effect_row() -> TestR
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn committed_receipt_and_first_decision_survive_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -440,6 +451,10 @@ impl ObjectHost for HeldHost {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn effects_are_unavailable_while_the_real_transaction_waits_to_commit() -> TestResult {
     let directory = tempfile::tempdir()?;

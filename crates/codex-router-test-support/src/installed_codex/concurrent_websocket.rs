@@ -1,6 +1,18 @@
-use super::*;
+use super::{
+    Arc, AtomicBool, ConcurrentUpstreamConfig, ConcurrentUpstreamSharedState,
+    ConcurrentUpstreamState, Duration, Instant, Message, Mutex, Ordering, PressureHandles,
+    QUOTA_RECONNECT_FALLBACK, QUOTA_RECONNECT_PRIMARY, QuotaReconnectSqlitePressureConfig, Request,
+    Response, S8OverlapQuotaErrorContext, SMOKE_TARGET_MODEL, SOAK_PROOF_MARGIN, Shutdown,
+    UpstreamClientSessionObservation, Value, WebSocket, accept_hdr, bearer_token_from_headers,
+    is_non_prewarm_response_create_frame, is_prewarm_request_frame,
+    quota_reconnect_usage_limit_frame, smoke_prewarm_events, smoke_response_events,
+    start_s8_overlap_quota_sqlite_pressure, thread, timestamp_millis,
+};
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 pub(super) fn run_concurrent_mock_websocket_session(
     stream: std::net::TcpStream,
     state: Arc<ConcurrentUpstreamSharedState>,

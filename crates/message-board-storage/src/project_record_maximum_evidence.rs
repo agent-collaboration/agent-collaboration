@@ -25,6 +25,10 @@ pub(super) fn evidence() -> TestResult<EvidenceRef> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn maximum_receipt_rows_fit_the_adopted_record_budget() -> TestResult {
     let mut state = project_state()?;

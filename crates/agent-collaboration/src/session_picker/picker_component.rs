@@ -1,3 +1,4 @@
+use crate::presentation::session_picker::picker_rendering::iocraft_cell_count;
 use std::time::Duration;
 
 use super::picker_machine_controls::{PickerMachineFilter, PickerMachineStage};
@@ -253,7 +254,7 @@ pub(crate) fn SessionsPickerComponent<'a>(
         }
         system.exit();
         return element! {
-            View(width: width as u32, flex_direction: FlexDirection::Column) {
+            View(width: iocraft_cell_count(width), flex_direction: FlexDirection::Column) {
                 Text(content: "terminal too narrow\n")
             }
         };

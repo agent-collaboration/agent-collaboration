@@ -68,7 +68,7 @@ pub(super) fn ceil_percent(numerator: u64, denominator: u64) -> u32 {
         return 0;
     }
     let scaled = u128::from(numerator) * 100;
-    scaled.div_ceil(u128::from(denominator)) as u32
+    u32::try_from(scaled.div_ceil(u128::from(denominator))).unwrap_or(u32::MAX)
 }
 
 pub(super) const fn clamp_i64(value: i64, min: u32, max: u32) -> u32 {
@@ -77,7 +77,13 @@ pub(super) const fn clamp_i64(value: i64, min: u32, max: u32) -> u32 {
     } else if value > max as i64 {
         max
     } else {
-        value as u32
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "The branches above bound value between the unsigned min and max."
+        )]
+        let bounded = value as u32;
+        bounded
     }
 }
 
@@ -134,3 +140,18 @@ pub(super) const DEFAULT_SELECTABLE_WEIGHT_MIN: u32 = 0;
 pub(super) const DEFAULT_SELECTABLE_WEIGHT_MAX: u32 = 100;
 
 pub(super) const DEFAULT_UNKNOWN_FALLBACK_WEIGHT: u32 = 1;
+
+#[cfg(test)]
+mod tests {
+    use super::ceil_percent;
+
+    #[test]
+    fn ceil_percent_preserves_in_range_rounding() {
+        assert_eq!(ceil_percent(1, 3), 34);
+    }
+
+    #[test]
+    fn ceil_percent_saturates_instead_of_wrapping() {
+        assert_eq!(ceil_percent(u64::from(u32::MAX) + 1, 100), u32::MAX);
+    }
+}

@@ -3,6 +3,7 @@ use super::{
     InteractiveSessionChoiceRow, SessionPickerRecord, SessionsPickerModel, SessionsPickerOutcome,
     compact_age, truncate_end,
 };
+use crate::presentation::session_picker::picker_rendering::iocraft_cell_count;
 use iocraft::prelude::*;
 
 const STATUS_COLUMN_WIDTH: usize = 6;
@@ -111,8 +112,8 @@ pub(super) fn render_session_list(
 
     element! {
         View(
-            width: width as u32,
-            height: panel_height as u32,
+            width: iocraft_cell_count(width),
+            height: iocraft_cell_count(panel_height),
             flex_direction: FlexDirection::Column,
             border_style: BorderStyle::Single,
             border_color: Color::DarkGrey,
@@ -147,7 +148,7 @@ pub(super) fn start_new_args_label(model: &SessionsPickerModel) -> String {
 pub(super) fn render_session_header(width: usize, stacked: bool) -> AnyElement<'static> {
     if stacked {
         return element! {
-            View(width:width as u32,border_style:BorderStyle::Single,border_edges:Edges::Bottom,
+            View(width:iocraft_cell_count(width),border_style:BorderStyle::Single,border_edges:Edges::Bottom,
                 border_color:Color::DarkGrey,padding_left:1,padding_right:1) {
                 View(width:2)
                 Text(content:"Session",color:Color::White,weight:Weight::Bold,wrap:TextWrap::NoWrap)
@@ -158,7 +159,7 @@ pub(super) fn render_session_header(width: usize, stacked: bool) -> AnyElement<'
     let (title_width, status_width, age_width) = session_column_widths(width);
     element! {
         View(
-            width: width as u32,
+            width: iocraft_cell_count(width),
             border_style: BorderStyle::Single,
             border_edges: Edges::Bottom,
             border_color: Color::DarkGrey,
@@ -166,13 +167,13 @@ pub(super) fn render_session_header(width: usize, stacked: bool) -> AnyElement<'
             padding_right: 1,
         ) {
             View(width: 2) { Text(content: "  ", color: Color::White, weight: Weight::Bold) }
-            View(width: title_width as u32) { Text(content: "Session", color: Color::White, weight: Weight::Bold) }
+            View(width: iocraft_cell_count(title_width)) { Text(content: "Session", color: Color::White, weight: Weight::Bold) }
             Text(content: " ")
-            View(width: status_width as u32, overflow: Overflow::Hidden) { Text(content: if width < 43 { "St" } else { "Status" }, color: Color::White, weight: Weight::Bold) }
+            View(width: iocraft_cell_count(status_width), overflow: Overflow::Hidden) { Text(content: if width < 43 { "St" } else { "Status" }, color: Color::White, weight: Weight::Bold) }
             Text(content: " ")
-            View(width: age_width as u32, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: "Upd", color: Color::White, weight: Weight::Bold) }
+            View(width: iocraft_cell_count(age_width), overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: "Upd", color: Color::White, weight: Weight::Bold) }
             Text(content: " ")
-            View(width: age_width as u32, overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: "New", color: Color::White, weight: Weight::Bold) }
+            View(width: iocraft_cell_count(age_width), overflow: Overflow::Hidden, justify_content: JustifyContent::FlexEnd) { Text(content: "New", color: Color::White, weight: Weight::Bold) }
         }
     }
     .into_any()
@@ -207,7 +208,7 @@ pub(super) fn render_record_row(
 
     element! {
         View(
-            width: width as u32,
+            width: iocraft_cell_count(width),
             flex_direction: FlexDirection::Column,
             padding_left: 1,
             padding_right: 1,
@@ -220,10 +221,10 @@ pub(super) fn render_record_row(
                         Text(content:title,color:if selected {Color::Yellow}else{foreground},weight:Weight::Bold,wrap:TextWrap::NoWrap)
                     }
                 }.into_any() } else { element! { View(width: 100pct,column_gap:1) {
-                    View(width: title_width as u32, overflow: Overflow::Hidden) { Text(content: title, color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
-                    View(width: status_width as u32, overflow: Overflow::Hidden) { Text(content: status, color:foreground,wrap:TextWrap::NoWrap) }
-                    View(width: age_width as u32, overflow: Overflow::Hidden, justify_content:JustifyContent::FlexEnd) {Text(content:compact_age(&record.recency),color:foreground,wrap:TextWrap::NoWrap)}
-                    View(width: age_width as u32, overflow: Overflow::Hidden, justify_content:JustifyContent::FlexEnd) {Text(content:compact_age(&record.created),color:foreground,wrap:TextWrap::NoWrap)}
+                    View(width: iocraft_cell_count(title_width), overflow: Overflow::Hidden) { Text(content: title, color: if selected { Color::Yellow } else { foreground }, weight: Weight::Bold, wrap: TextWrap::NoWrap) }
+                    View(width: iocraft_cell_count(status_width), overflow: Overflow::Hidden) { Text(content: status, color:foreground,wrap:TextWrap::NoWrap) }
+                    View(width: iocraft_cell_count(age_width), overflow: Overflow::Hidden, justify_content:JustifyContent::FlexEnd) {Text(content:compact_age(&record.recency),color:foreground,wrap:TextWrap::NoWrap)}
+                    View(width: iocraft_cell_count(age_width), overflow: Overflow::Hidden, justify_content:JustifyContent::FlexEnd) {Text(content:compact_age(&record.created),color:foreground,wrap:TextWrap::NoWrap)}
                 }}.into_any() })
                 #(stacked.then(||element! {
                     View(width:100pct,column_gap:1) {

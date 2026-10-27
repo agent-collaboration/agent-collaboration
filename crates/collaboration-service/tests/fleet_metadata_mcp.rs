@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Fleet metadata uses the public MCP/client path and a real central/session/cache.
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::{

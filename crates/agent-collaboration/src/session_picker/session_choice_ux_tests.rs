@@ -99,8 +99,10 @@ async fn machine_cancel_pointer_returns_to_browse_without_selecting_a_source() {
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column)
+                                .expect("captured fixture coordinates fit terminal cells"),
+                            u16::try_from(row)
+                                .expect("captured fixture coordinates fit terminal cells"),
                         )))
                         .unwrap();
                     sender.send(key(KeyCode::F(1))).unwrap();
@@ -249,8 +251,10 @@ async fn assert_no_match_action_at(surface: ChoiceSurface, width: usize, height:
                         sender
                             .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                                 MouseEventKind::Down(MouseButton::Left),
-                                column as u16,
-                                row as u16,
+                                u16::try_from(column)
+                                    .expect("captured fixture coordinates fit terminal cells"),
+                                u16::try_from(row)
+                                    .expect("captured fixture coordinates fit terminal cells"),
                             )))
                             .unwrap();
                         sender.send(key(KeyCode::F(1))).unwrap();

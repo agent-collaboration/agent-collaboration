@@ -1,6 +1,9 @@
 //! Surface codecs translate names while retaining the library's typed payloads.
 
-use crate::surface_codecs::*;
+use crate::surface_codecs::{
+    CancelResultCodec, ClaimAnswerCodec, DeliveryStatusCodec, LeaseRefusalCodec, PieceRefusalCodec,
+    RegistrationRefusalCodec,
+};
 use fleet_sync_protocol as wire;
 use serde::{Deserialize, Serialize};
 

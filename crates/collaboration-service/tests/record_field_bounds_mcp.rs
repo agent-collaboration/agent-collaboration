@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Caller limits are terminal keyed refusals through real MCP and native admission.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;

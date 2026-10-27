@@ -1,3 +1,14 @@
+#![cfg_attr(
+    not(test),
+    expect(clippy::wildcard_imports, reason = "lint pass follows the crate split")
+)]
+#![cfg_attr(
+    test,
+    expect(
+        clippy::allow_attributes_without_reason,
+        reason = "lint pass follows the crate split"
+    )
+)]
 //! One-time legacy board translation, separate from the running Router.
 #![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 mod import_digest;

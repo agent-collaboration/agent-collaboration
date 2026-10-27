@@ -1,3 +1,4 @@
+#![expect(clippy::unused_async, reason = "lint pass follows the crate split")]
 #[path = "support/claude_clients_debug_acceptance.rs"]
 mod claude_clients_debug_acceptance;
 #[path = "support/claude_fake_anthropic.rs"]

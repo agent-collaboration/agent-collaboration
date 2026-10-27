@@ -4,7 +4,10 @@ use crate::project_actor_rows::decode_actor;
 use crate::project_record_codec::{
     stored_bool, stored_counter, stored_json, stored_project_row, stored_text,
 };
-use message_board::*;
+use message_board::{
+    FeedCursor, ImplementerHolder, OrchestratorHolder, Placement, Post, PostId, PostReferences,
+    PostText, ProjectId, Record, RecordId, RecordKind, RecordRef, Thread, ThreadId, ThreadRefiled,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 use std::collections::BTreeMap;

@@ -1,3 +1,16 @@
+#![cfg_attr(
+    not(test),
+    expect(clippy::wildcard_imports, reason = "lint pass follows the crate split")
+)]
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::cast_possible_wrap,
+    clippy::large_futures,
+    clippy::match_wildcard_for_single_variants,
+    clippy::unused_async,
+    reason = "lint pass follows the crate split"
+)]
 //! Owner-local communication service, independent of the Host executable.
 pub mod collaboration_application;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};

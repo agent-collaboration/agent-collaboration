@@ -1,12 +1,11 @@
 //! The original staged-part expiry obligation survives a whole store reopen.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
-#[path = "copy_receiver/mod.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "Only the real copy fixture is reused for this alarm case."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "copy_receiver/mod.rs"]
 mod support;
 
 use board_sync_protocol::BoardAnnotation;
@@ -19,6 +18,10 @@ use sqlx_core::{query::query, row::Row};
 use std::sync::atomic::Ordering;
 use support::{Fixture, TestResult, position};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_reopened_copy_alarm_removes_expired_staged_parts() -> TestResult {
     let root = tempfile::tempdir()?;

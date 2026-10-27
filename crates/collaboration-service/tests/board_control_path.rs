@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Retained public SDK journeys on separate native project and fleet stores.
 use collaboration_client::board::RequestResult;
 use message_board::*;

@@ -126,13 +126,13 @@ impl Drop for CopyChangeWaiter {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::panic_in_result_fn,
-    reason = "Assertions expose broken notification guarantees."
-)]
 mod tests {
     use super::*;
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn a_commit_between_subscribe_and_wait_remains_ready_for_every_reader()
     -> Result<(), Box<dyn std::error::Error>> {
@@ -153,6 +153,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn expiry_and_instance_loss_cancel_the_wait_without_reporting_a_change()
     -> Result<(), Box<dyn std::error::Error>> {

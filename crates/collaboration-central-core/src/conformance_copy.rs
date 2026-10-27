@@ -306,7 +306,7 @@ where
         serde_json::to_vec(&observation).map_err(|_| CallFailure::AnswerLost)
     }
 
-    pub(crate) async fn observe_drive_tokens(
+    pub(crate) fn observe_drive_tokens(
         &self,
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {

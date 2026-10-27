@@ -23,6 +23,10 @@ mod prerequisites;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn oversized_trail_fields_are_refused_at_the_native_write_boundary() -> TestResult {
     let state = project_state()?;
@@ -91,6 +95,10 @@ fn maximum_integer_width(value: &mut serde_json::Value) {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn maximum_numeric_width_row(row: &[SqlValue]) -> TestResult<usize> {
     // Keep the native row and exact round-trip oracle intact. This separate
     // upper bound permits every assigned integer to use its largest encoded
@@ -434,6 +442,10 @@ async fn measure_native_row_with_effects(
     Ok(result)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn maximum_record_rows_and_reconstructed_schema_fit_storage_budgets() -> TestResult {
     // Arrange: all supplied fields reach the current byte/count limits. More

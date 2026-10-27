@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! CLI subprocess proof for conversation failures before any ACP dispatch.
 
 use serde_json::Value;
@@ -8,6 +7,14 @@ use std::process::Stdio;
 use std::time::Duration;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn create_result_line(stdout: &[u8]) -> Value {
     let lines: Vec<_> = String::from_utf8_lossy(stdout)
         .lines()
@@ -23,6 +30,14 @@ fn create_result_line(stdout: &[u8]) -> Value {
     serde_json::from_str(&lines[1]).expect("create result JSON")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn preflight_create_error_line(stdout: &[u8]) -> Value {
     let lines = String::from_utf8_lossy(stdout)
         .lines()
@@ -36,6 +51,14 @@ fn preflight_create_error_line(stdout: &[u8]) -> Value {
     serde_json::from_str(&lines[0]).expect("preflight error JSON")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn create_prompt_result_line(stdout: &[u8]) -> Value {
     let lines: Vec<_> = String::from_utf8_lossy(stdout)
         .lines()
@@ -697,7 +720,11 @@ async fn resumed_prompt_load_rejection_retains_target_code_and_data_without_prom
     );
 }
 
-#[allow(clippy::expect_used, clippy::indexing_slicing)]
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "Invalid test fixtures must fail the test immediately."
+)]
 async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::process::Output {
     let root = std::path::PathBuf::from(format!("/tmp/clr-{}", uuid::Uuid::now_v7()));
     std::fs::DirBuilder::new()

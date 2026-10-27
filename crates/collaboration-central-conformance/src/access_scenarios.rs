@@ -1,9 +1,12 @@
 use crate::{
     AccessCallerClass, AccessVerificationOutcome, ConformanceClient, ConformanceResult,
-    access_fixture::*,
+    access_fixture::{
+        FIXTURE_KID, access_client_id, fixture_claims, fixture_policy, flip_signature_byte,
+        machine_assertion, owner_assertion, sign_assertion,
+    },
     scenario_assertions::{check, equal},
 };
-use collaboration_central_core::*;
+use collaboration_central_core::{AccessCaller, AccessRefusal};
 
 /// The same signed assertion must stop being valid at its own expiry.
 pub async fn run_access_expiry_conformance(client: &ConformanceClient) -> ConformanceResult<()> {

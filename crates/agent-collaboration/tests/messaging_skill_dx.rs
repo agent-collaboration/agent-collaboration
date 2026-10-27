@@ -1,7 +1,11 @@
 //! Two-phase, opt-in proof of goal-driven direct messaging through the repo skill and real CLI.
 #[path = "messaging_skill_dx_support/mod.rs"]
 mod messaging_skill_dx_support;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "automation_live_support/proof_context.rs"]
 mod proof_context;
 

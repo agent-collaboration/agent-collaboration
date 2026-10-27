@@ -1,3 +1,10 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    clippy::match_wildcard_for_single_variants,
+    reason = "lint pass follows the crate split"
+)]
 //! Real Router APIs, two installation stores, authenticated central and mail custody.
 //! Only the final external session carrier is a local Unix peer fixture; no model runs.
 use board_central_test_support::{EnrolledTestMachine, TestCentral};

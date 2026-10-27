@@ -1,3 +1,4 @@
+#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! Opt-in acceptance Host: normal Codex home, existing debug provider, fresh runtime and Luna only.
 #[path = "automation_debug_host/host_replacement.rs"]
 mod host_replacement;

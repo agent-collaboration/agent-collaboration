@@ -60,6 +60,10 @@ pub async fn assert_forwarded(
     assert_forwarded_entry(&feed, sender, request)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 pub fn assert_forwarded_entry(feed: &Value, sender: &SecondHost, request: &Value) -> FixtureResult {
     let posts = matching_posts(feed, at(request, "/postId")?)?;
     assert_eq!(

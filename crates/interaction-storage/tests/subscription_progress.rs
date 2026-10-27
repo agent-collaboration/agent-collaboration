@@ -3,7 +3,10 @@ use message_board::{ProjectId, RecordId};
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove stored behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove stored behavior; Result propagates fixture errors.
 async fn selected_local_delivery_progress_survives_restart_and_is_project_isolated()
 -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::temp_dir().join(format!(

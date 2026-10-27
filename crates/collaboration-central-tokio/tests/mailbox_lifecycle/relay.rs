@@ -66,6 +66,10 @@ fn fetch() -> Value {
     )
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn fetch_retains_held_payload_and_receipt_releases_it_without_forgetting_identity()
 -> TestResult {
@@ -143,6 +147,10 @@ async fn fetch_retains_held_payload_and_receipt_releases_it_without_forgetting_i
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn relay_rejects_foreign_session_identity_and_mailbox_before_touching_custody() -> TestResult
 {
@@ -223,6 +231,10 @@ async fn relay_rejects_foreign_session_identity_and_mailbox_before_touching_cust
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn mailbox_capacity_refuses_before_custody_and_keeps_receipt_progress_available() -> TestResult
 {
@@ -265,6 +277,10 @@ async fn mailbox_capacity_refuses_before_custody_and_keeps_receipt_progress_avai
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn checked_settlement_keeps_its_digest_and_refusal_after_reopen_without_allocating_delivery()
 -> TestResult {

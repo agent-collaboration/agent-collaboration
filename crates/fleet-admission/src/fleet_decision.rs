@@ -1,5 +1,9 @@
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    ActorOrigin, BoardId, DecisionEffect, FleetPosition, NumericValidationError, ProjectId, Record,
+    RecordEnvelope, RecordId, RecordPlacement, RecordScope, RecordTime, RepositoryRef,
+    RequestDecision, RequestId, RequestLedgerEntry, ServiceId, WorkspaceId,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, thiserror::Error)]

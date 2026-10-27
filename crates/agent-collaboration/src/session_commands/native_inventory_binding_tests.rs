@@ -25,6 +25,10 @@ fn native(endpoint_id: &str) -> Value {
     })
 }
 
+#[expect(
+    clippy::unwrap_in_result,
+    reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+)]
 fn bind(
     endpoints: Vec<Value>,
     view: NativeSessionView,

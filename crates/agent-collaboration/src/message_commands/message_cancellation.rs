@@ -1,5 +1,8 @@
 //! Print the stable control identity before dispatch; never retry an uncertain call.
-use super::*;
+use super::{
+    MessageCancelArguments, OperationEffect, Write, io, operation_failure_exit,
+    operation_failure_line, report_message_failure,
+};
 use collaboration_client::protocol::{MailItemId, MessageCancelRequest, MessageCancelSender};
 use collaboration_client::{ClientError, CollaborationClient, operation_failure_from_client_error};
 use serde_json::json;

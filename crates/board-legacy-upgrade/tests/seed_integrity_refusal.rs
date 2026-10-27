@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    clippy::match_wildcard_for_single_variants,
+    reason = "lint pass follows the crate split"
+)]
 //! The real publisher preserves an injected typed server refusal over HTTP.
 #![allow(clippy::panic_in_result_fn)]
 mod support;

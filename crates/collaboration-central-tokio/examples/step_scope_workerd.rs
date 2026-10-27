@@ -1,9 +1,6 @@
 //! Real-workerd product proof for central's first checked transaction rule.
 #![forbid(unsafe_code)]
-#[allow(
-    dead_code,
-    reason = "The shared process harness also serves other lifecycle scenarios."
-)]
+
 #[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
 mod workerd_process;
 

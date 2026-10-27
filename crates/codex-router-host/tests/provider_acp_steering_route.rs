@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used)]
 //! A running Claude prompt identifies the operation receiving a steered message.
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};

@@ -1,6 +1,9 @@
 //! Publication failures and finalize rollback on normally enrolled connections.
 
-use super::{normal_capability_cases::observe, normal_session_support::*};
+use super::{
+    normal_capability_cases::observe,
+    normal_session_support::{NormalSession, data, frame, physical_close},
+};
 use collaboration_central_conformance::ConformanceResult;
 use futures_util::SinkExt;
 use reqwest_websocket::Message;

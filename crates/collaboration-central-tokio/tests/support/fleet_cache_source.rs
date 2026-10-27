@@ -76,10 +76,7 @@ impl NativeFleetSource {
             records: keyed.into_iter().map(|(_, _, record)| record).collect(),
         })
     }
-    #[allow(
-        dead_code,
-        reason = "The projection-only test binary shares this native source fixture."
-    )]
+
     pub async fn record(&self, reference: &RecordRef) -> TestResult<Option<Record>> {
         Ok(self
             .snapshot()

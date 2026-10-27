@@ -82,9 +82,9 @@ async fn runtime_shutdown_cancels_pending_first_frame_routing() {
             .unwrap_or_else(|_elapsed| panic!("selector should start before shutdown"));
         session_shutdown.cancel();
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(1), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(1), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .unwrap_or_else(|_elapsed| panic!("router should exit while routing is pending"));
 
@@ -140,9 +140,9 @@ async fn all_accounts_exhausted_sends_scrubbed_router_error_before_upstream_conn
         assert!(rendered.contains("codex_router_all_accounts_exhausted"));
     };
 
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(1), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(1), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .unwrap_or_else(|_elapsed| panic!("router should return exhausted error promptly"));
 
@@ -198,9 +198,9 @@ async fn short_quota_exhaustion_sends_retryable_response_failed_before_upstream_
         );
     };
 
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(1), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(1), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .unwrap_or_else(|_elapsed| panic!("router should deliver a short quota wait event promptly"));
 
@@ -258,9 +258,9 @@ async fn state_unavailable_sends_scrubbed_router_error_before_upstream_connect()
         assert!(!rendered.contains("Authorization"));
     };
 
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(1), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(1), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .unwrap_or_else(|_elapsed| panic!("router should return state-unavailable error promptly"));
 
@@ -333,9 +333,9 @@ async fn runtime_shutdown_cancels_pending_upstream_connect() {
         assert_eq!(registry.snapshot().active_sessions, 1);
         session_shutdown.cancel();
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(1), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(1), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .unwrap_or_else(|_elapsed| panic!("router should exit while connect is pending"));
     accept_task.abort();

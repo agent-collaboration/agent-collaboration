@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use board_fleet_sync::{MachineNoticeProgressStore, MachineSessionStore};
 use fleet_sync_protocol::{NoticePosition, SessionId};
 use fleet_sync_session::{ClientSessionState, SessionClientStore, StoreError};
@@ -6,6 +5,10 @@ use std::os::unix::fs::PermissionsExt;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cold_reopen_retains_machine_progress_without_changing_transport_state() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -44,6 +47,10 @@ async fn cold_reopen_retains_machine_progress_without_changing_transport_state()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn corrupt_progress_refuses_without_rewriting_or_resetting_the_file() -> TestResult {
     let directory = tempfile::tempdir()?;

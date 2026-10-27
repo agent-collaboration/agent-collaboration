@@ -1,6 +1,5 @@
 //! A disconnected delivery leaf completes only after preserving fetchable status.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo, SessionKind};
@@ -30,9 +29,9 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
 type Runtime = ObjectRuntime<SessionKind, TokioStorageHost<CoreHost<NoObjectCalls>>, NoObjectCalls>;
 
-#[allow(
+#[expect(
     dead_code,
-    reason = "Shared real-store fixture also supports rollback cases."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "session_publication/support.rs"]
 mod session_fixture;
@@ -155,6 +154,10 @@ fn call() -> TestResult<CallId> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_after_reopen()
 -> TestResult {
@@ -217,6 +220,10 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_status_route_for_another_installation_is_refused_without_forwarding() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -241,6 +248,10 @@ async fn a_status_route_for_another_installation_is_refused_without_forwarding()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn reopening_between_storage_and_the_live_attempt_keeps_status_fetchable() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -269,6 +280,10 @@ async fn reopening_between_storage_and_the_live_attempt_keeps_status_fetchable()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keeps_its_cursor()
 -> TestResult {

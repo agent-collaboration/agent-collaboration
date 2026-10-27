@@ -4,7 +4,10 @@ use crate::{
     fleet_rules::{OperationPlan, board, name_conflict, workspace},
 };
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    ActorOrigin, Board, BoardKind, BoardState, FleetPosition, ProjectDirectoryEntry, Record,
+    Refusal, Workspace, WorkspaceState,
+};
 
 pub(crate) fn workspace_plan(
     request: &FleetRequest,

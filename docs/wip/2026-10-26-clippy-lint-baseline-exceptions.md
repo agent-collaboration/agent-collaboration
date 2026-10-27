@@ -1,0 +1,443 @@
+# Clippy lint baseline exceptions
+
+Current inventory: 214 temporary split-package target roots, 16 generated-module declarations, 152 shared-fixture includes, and 21 includes of split-owned fixtures.
+
+## Temporary split-package target roots
+
+Cargo rejects combining `lints.workspace = true` with package lint overrides. These targets instead use `#![expect(...)]` or `#![cfg_attr(..., expect(...))]`, restricted to the configurations where each lint fires. Every temporary root expectation uses the exact reason `lint pass follows the crate split`. Remove them during the second lint pass after the split.
+
+### board-central-test-support (1)
+
+- `crates/board-central-test-support/src/lib.rs`
+
+### board-legacy-upgrade (29)
+
+- `crates/board-legacy-upgrade/src/lib.rs`
+- `crates/board-legacy-upgrade/src/main.rs`
+- `crates/board-legacy-upgrade/tests/activity_range_cutover.rs`
+- `crates/board-legacy-upgrade/tests/attribution_refusals.rs`
+- `crates/board-legacy-upgrade/tests/command_refusals.rs`
+- `crates/board-legacy-upgrade/tests/expiry_origin_cutover.rs`
+- `crates/board-legacy-upgrade/tests/fleet_bundle_limits.rs`
+- `crates/board-legacy-upgrade/tests/fleet_owner_routes.rs`
+- `crates/board-legacy-upgrade/tests/historical_text.rs`
+- `crates/board-legacy-upgrade/tests/import_digest_identity.rs`
+- `crates/board-legacy-upgrade/tests/import_http_failures.rs`
+- `crates/board-legacy-upgrade/tests/import_page_refusals.rs`
+- `crates/board-legacy-upgrade/tests/import_scaling.rs`
+- `crates/board-legacy-upgrade/tests/imported_claims.rs`
+- `crates/board-legacy-upgrade/tests/interval_and_membership_fidelity.rs`
+- `crates/board-legacy-upgrade/tests/legacy_transform.rs`
+- `crates/board-legacy-upgrade/tests/legacy_unknown_roles.rs`
+- `crates/board-legacy-upgrade/tests/message_cutover.rs`
+- `crates/board-legacy-upgrade/tests/message_cutover_cli.rs`
+- `crates/board-legacy-upgrade/tests/message_cutover_crash.rs`
+- `crates/board-legacy-upgrade/tests/message_report_guard.rs`
+- `crates/board-legacy-upgrade/tests/native_inbox_fidelity.rs`
+- `crates/board-legacy-upgrade/tests/project_description.rs`
+- `crates/board-legacy-upgrade/tests/seed_integrity_refusal.rs`
+- `crates/board-legacy-upgrade/tests/source_schema_refusals.rs`
+- `crates/board-legacy-upgrade/tests/upgrade_binary_e2e.rs`
+- `crates/board-legacy-upgrade/tests/upgrade_singleton.rs`
+- `crates/board-legacy-upgrade/tests/upload_publication.rs`
+- `crates/board-legacy-upgrade/tests/watch_row_fidelity.rs`
+
+### codex-router-cli (7)
+
+- `crates/codex-router-cli/src/lib.rs`
+- `crates/codex-router-cli/src/main.rs`
+- `crates/codex-router-cli/tests/claude_clients_debug_acceptance.rs`
+- `crates/codex-router-cli/tests/fleet_enrollment_cli.rs`
+- `crates/codex-router-cli/tests/fleet_enrollment_producer.rs`
+- `crates/codex-router-cli/tests/proxy_overload_passthrough.rs`
+- `crates/codex-router-cli/tests/responses_account_recovery.rs`
+
+### codex-router-host (42)
+
+- `crates/codex-router-host/examples/automation-debug-host.rs`
+- `crates/codex-router-host/examples/board-debug-runtime.rs`
+- `crates/codex-router-host/examples/provider-only-debug-host.rs`
+- `crates/codex-router-host/src/lib.rs`
+- `crates/codex-router-host/tests/acp_client_dependency_structure.rs`
+- `crates/codex-router-host/tests/acp_metadata_projection.rs`
+- `crates/codex-router-host/tests/automation_composition.rs`
+- `crates/codex-router-host/tests/automation_configuration_rpc.rs`
+- `crates/codex-router-host/tests/automation_retention_runtime.rs`
+- `crates/codex-router-host/tests/board_failure_isolation.rs`
+- `crates/codex-router-host/tests/claude_code_peer_delivery_route.rs`
+- `crates/codex-router-host/tests/claude_code_peer_scheduled_runs.rs`
+- `crates/codex-router-host/tests/claude_peer_held_dm.rs`
+- `crates/codex-router-host/tests/claude_peer_subscription_resume.rs`
+- `crates/codex-router-host/tests/collaboration_runtime.rs`
+- `crates/codex-router-host/tests/external_provider_composition.rs`
+- `crates/codex-router-host/tests/external_provider_supervisor.rs`
+- `crates/codex-router-host/tests/fixed_mcp_bind.rs`
+- `crates/codex-router-host/tests/global_harness_selection.rs`
+- `crates/codex-router-host/tests/host_replacement_failures.rs`
+- `crates/codex-router-host/tests/journal_failure_isolation.rs`
+- `crates/codex-router-host/tests/local_mail_cancellation.rs`
+- `crates/codex-router-host/tests/maintenance_authority.rs`
+- `crates/codex-router-host/tests/message_upgrade_startup.rs`
+- `crates/codex-router-host/tests/native_claude_catalogue.rs`
+- `crates/codex-router-host/tests/production_enrollment.rs`
+- `crates/codex-router-host/tests/provider_acp_delivery_route.rs`
+- `crates/codex-router-host/tests/provider_acp_loaded_only_races.rs`
+- `crates/codex-router-host/tests/provider_acp_message_fifo.rs`
+- `crates/codex-router-host/tests/provider_acp_queue_route.rs`
+- `crates/codex-router-host/tests/provider_acp_scheduled_runs.rs`
+- `crates/codex-router-host/tests/provider_acp_steering_route.rs`
+- `crates/codex-router-host/tests/provider_configuration_file.rs`
+- `crates/codex-router-host/tests/provider_content_commands.rs`
+- `crates/codex-router-host/tests/provider_face_composition.rs`
+- `crates/codex-router-host/tests/provider_pending_hub_races.rs`
+- `crates/codex-router-host/tests/provider_startup_isolation.rs`
+- `crates/codex-router-host/tests/remote_wake.rs`
+- `crates/codex-router-host/tests/runtime_lifecycle.rs`
+- `crates/codex-router-host/tests/session_message_route_composition.rs`
+- `crates/codex-router-host/tests/update_reexec.rs`
+- `crates/codex-router-host/tests/wakeup_timer_composition.rs`
+
+### collaboration-mcp (1)
+
+- `crates/collaboration-mcp/src/lib.rs`
+
+### collaboration-service (134)
+
+- `crates/collaboration-service/src/lib.rs`
+- `crates/collaboration-service/tests/accepted_prefix_admission.rs`
+- `crates/collaboration-service/tests/acknowledgement_scope_identity.rs`
+- `crates/collaboration-service/tests/acp_provider_interactions.rs`
+- `crates/collaboration-service/tests/admission_gate_mcp.rs`
+- `crates/collaboration-service/tests/aggregate_cursor_order.rs`
+- `crates/collaboration-service/tests/aggregate_position_recovery.rs`
+- `crates/collaboration-service/tests/aggregate_scope_sweep.rs`
+- `crates/collaboration-service/tests/aggregate_sweep_regressions.rs`
+- `crates/collaboration-service/tests/aggregate_unavailable_paging.rs`
+- `crates/collaboration-service/tests/app_server_client_rejection.rs`
+- `crates/collaboration-service/tests/app_server_provider_interactions.rs`
+- `crates/collaboration-service/tests/archived_read_marks.rs`
+- `crates/collaboration-service/tests/authority_and_fact_corrections.rs`
+- `crates/collaboration-service/tests/board_admission_mcp.rs`
+- `crates/collaboration-service/tests/board_behaviors.rs`
+- `crates/collaboration-service/tests/board_concurrency_behaviors.rs`
+- `crates/collaboration-service/tests/board_control_path.rs`
+- `crates/collaboration-service/tests/board_lifecycle_contracts.rs`
+- `crates/collaboration-service/tests/board_lookup_failures.rs`
+- `crates/collaboration-service/tests/board_metadata_records.rs`
+- `crates/collaboration-service/tests/board_read_error_corrections.rs`
+- `crates/collaboration-service/tests/board_replay_cases_mcp.rs`
+- `crates/collaboration-service/tests/board_repository_ownership.rs`
+- `crates/collaboration-service/tests/board_search_behaviors.rs`
+- `crates/collaboration-service/tests/board_write_scale.rs`
+- `crates/collaboration-service/tests/bounded_entity_reads.rs`
+- `crates/collaboration-service/tests/bounded_feed_corruption.rs`
+- `crates/collaboration-service/tests/bounded_feed_costs.rs`
+- `crates/collaboration-service/tests/bounded_fleet_reads.rs`
+- `crates/collaboration-service/tests/bounded_fleet_writes.rs`
+- `crates/collaboration-service/tests/bounded_gate_reads.rs`
+- `crates/collaboration-service/tests/bounded_membership_reads.rs`
+- `crates/collaboration-service/tests/bounded_participant_pages.rs`
+- `crates/collaboration-service/tests/bounded_pending_cards.rs`
+- `crates/collaboration-service/tests/bounded_post_lookup.rs`
+- `crates/collaboration-service/tests/bounded_read_costs.rs`
+- `crates/collaboration-service/tests/bounded_thread_history.rs`
+- `crates/collaboration-service/tests/bounded_thread_reads.rs`
+- `crates/collaboration-service/tests/bounded_trail_reads.rs`
+- `crates/collaboration-service/tests/bounded_view_reads.rs`
+- `crates/collaboration-service/tests/bounded_view_scope.rs`
+- `crates/collaboration-service/tests/bounded_window_reads.rs`
+- `crates/collaboration-service/tests/bounded_write_costs.rs`
+- `crates/collaboration-service/tests/canonical_project_text.rs`
+- `crates/collaboration-service/tests/capture_feed_marks.rs`
+- `crates/collaboration-service/tests/card_intent_reopen.rs`
+- `crates/collaboration-service/tests/card_response_budget_mcp.rs`
+- `crates/collaboration-service/tests/codex_app_server_delivery_route.rs`
+- `crates/collaboration-service/tests/codex_app_server_held_thread_route.rs`
+- `crates/collaboration-service/tests/codex_detached_create_delivery.rs`
+- `crates/collaboration-service/tests/context_scope_corrections.rs`
+- `crates/collaboration-service/tests/covered_read_marks_mcp.rs`
+- `crates/collaboration-service/tests/cross_project_behavior.rs`
+- `crates/collaboration-service/tests/filtered_inboxes.rs`
+- `crates/collaboration-service/tests/fleet_client.rs`
+- `crates/collaboration-service/tests/fleet_lifecycle_mcp.rs`
+- `crates/collaboration-service/tests/fleet_metadata_mcp.rs`
+- `crates/collaboration-service/tests/fleet_registration.rs`
+- `crates/collaboration-service/tests/fleet_registration_start.rs`
+- `crates/collaboration-service/tests/forwarded_post_origin.rs`
+- `crates/collaboration-service/tests/held_queue_depth.rs`
+- `crates/collaboration-service/tests/inbox_acknowledgement_mcp.rs`
+- `crates/collaboration-service/tests/inbox_cursor_contracts.rs`
+- `crates/collaboration-service/tests/inbox_initializations_mcp.rs`
+- `crates/collaboration-service/tests/inbox_lifecycle_mcp.rs`
+- `crates/collaboration-service/tests/inbox_scope_isolation.rs`
+- `crates/collaboration-service/tests/inbox_summary_membership.rs`
+- `crates/collaboration-service/tests/inbox_summary_paging.rs`
+- `crates/collaboration-service/tests/intent_claim_race.rs`
+- `crates/collaboration-service/tests/intent_delivery_mcp.rs`
+- `crates/collaboration-service/tests/intent_local_eligibility.rs`
+- `crates/collaboration-service/tests/late_facts_mcp.rs`
+- `crates/collaboration-service/tests/m2b_intent_sets.rs`
+- `crates/collaboration-service/tests/m2b_role_operand_costs.rs`
+- `crates/collaboration-service/tests/m2b_role_rules.rs`
+- `crates/collaboration-service/tests/m2b_subject_byte_budget.rs`
+- `crates/collaboration-service/tests/m2b_subject_read_costs.rs`
+- `crates/collaboration-service/tests/m2b_thread_subjects.rs`
+- `crates/collaboration-service/tests/message_admission.rs`
+- `crates/collaboration-service/tests/message_delivery_paths.rs`
+- `crates/collaboration-service/tests/native_admission_gates.rs`
+- `crates/collaboration-service/tests/native_control_calls.rs`
+- `crates/collaboration-service/tests/operation_context_reads.rs`
+- `crates/collaboration-service/tests/participant_join_history.rs`
+- `crates/collaboration-service/tests/pending_project_scope.rs`
+- `crates/collaboration-service/tests/pending_views_mcp.rs`
+- `crates/collaboration-service/tests/plain_watch_state.rs`
+- `crates/collaboration-service/tests/post_cooldown_mcp.rs`
+- `crates/collaboration-service/tests/post_page_mcp.rs`
+- `crates/collaboration-service/tests/project_creation.rs`
+- `crates/collaboration-service/tests/project_description.rs`
+- `crates/collaboration-service/tests/project_description_encoded_sizes.rs`
+- `crates/collaboration-service/tests/project_failure_isolation_mcp.rs`
+- `crates/collaboration-service/tests/project_registry.rs`
+- `crates/collaboration-service/tests/project_store_registry.rs`
+- `crates/collaboration-service/tests/provider_operation_store.rs`
+- `crates/collaboration-service/tests/push_surface.rs`
+- `crates/collaboration-service/tests/read_cost_counter_contracts.rs`
+- `crates/collaboration-service/tests/read_cost_scope.rs`
+- `crates/collaboration-service/tests/reader_metadata_retention.rs`
+- `crates/collaboration-service/tests/reader_metadata_scopes.rs`
+- `crates/collaboration-service/tests/reader_state_corrections.rs`
+- `crates/collaboration-service/tests/reader_subject_metadata.rs`
+- `crates/collaboration-service/tests/record_field_bounds_mcp.rs`
+- `crates/collaboration-service/tests/replication_view_progress.rs`
+- `crates/collaboration-service/tests/repository_locator_boundaries.rs`
+- `crates/collaboration-service/tests/repository_locator_control_boundary.rs`
+- `crates/collaboration-service/tests/request_effects_public.rs`
+- `crates/collaboration-service/tests/retained_epoch_public_reads.rs`
+- `crates/collaboration-service/tests/retained_project_registry.rs`
+- `crates/collaboration-service/tests/role_authority_mcp.rs`
+- `crates/collaboration-service/tests/seeded_registry_restart.rs`
+- `crates/collaboration-service/tests/selection_failure_atomicity.rs`
+- `crates/collaboration-service/tests/service_identity_storage.rs`
+- `crates/collaboration-service/tests/session_context_mcp.rs`
+- `crates/collaboration-service/tests/session_delivery_presence.rs`
+- `crates/collaboration-service/tests/session_delivery_router.rs`
+- `crates/collaboration-service/tests/subscription_unavailable_projects.rs`
+- `crates/collaboration-service/tests/subscription_windows.rs`
+- `crates/collaboration-service/tests/task_review_corrections.rs`
+- `crates/collaboration-service/tests/task_rules_mcp.rs`
+- `crates/collaboration-service/tests/thread_reference_routing.rs`
+- `crates/collaboration-service/tests/thread_reference_subscriptions.rs`
+- `crates/collaboration-service/tests/thread_subscription_control_path.rs`
+- `crates/collaboration-service/tests/trail_feed_mcp.rs`
+- `crates/collaboration-service/tests/trail_page_budget.rs`
+- `crates/collaboration-service/tests/trail_pending_rules_mcp.rs`
+- `crates/collaboration-service/tests/unknown_time_windows.rs`
+- `crates/collaboration-service/tests/wait_renewals_mcp.rs`
+- `crates/collaboration-service/tests/watch_history_guidance.rs`
+- `crates/collaboration-service/tests/watch_read_lifecycle.rs`
+- `crates/collaboration-service/tests/work_view_fact_bound.rs`
+- `crates/collaboration-service/tests/work_view_mcp.rs`
+
+## Generated query modules
+
+Only `clippy::allow_attributes_without_reason` is expected. Generated output and freshness metadata are unchanged. Removal criterion: [UW-6](../upstream-workarounds/fleet-query-generator-lint-header.md).
+
+- `crates/collaboration-central-core/src/lib.rs:10` — `generated_admin_imports`
+- `crates/collaboration-central-core/src/lib.rs:62` — `generated_bootstrap`
+- `crates/collaboration-central-core/src/lib.rs:67` — `generated_copy_summary`
+- `crates/collaboration-central-core/src/lib.rs:72` — `generated_enrollment`
+- `crates/collaboration-central-core/src/lib.rs:77` — `generated_forwards`
+- `crates/collaboration-central-core/src/lib.rs:82` — `generated_registry_lease`
+- `crates/collaboration-central-core/src/lib.rs:131` — `generated_session_conformance`
+- `crates/collaboration-central-core/src/lib.rs:192` — `generated_machine_notices`
+- `crates/collaboration-central-core/src/lib.rs:206` — `generated_bootstrap_probes`
+- `crates/collaboration-central-core/src/lib.rs:212` — `generated_fleet_archive`
+- `crates/collaboration-central-core/src/lib.rs:217` — `generated_fleet_feed`
+- `crates/collaboration-central-core/src/lib.rs:222` — `generated_fleet_lease`
+- `crates/collaboration-central-core/src/lib.rs:227` — `generated_fleet_record_reads`
+- `crates/collaboration-central-core/src/lib.rs:232` — `generated_fleet_record_writes`
+- `crates/collaboration-central-core/src/lib.rs:237` — `generated_fleet_repositories`
+- `crates/collaboration-central-core/src/lib.rs:242` — `generated_statements`
+
+## Shared test fixtures
+
+Test builds and the approved workerd verification harness only. Each include expects `dead_code` with reason `shared fixture module serves separate integration targets with different helper subsets`. These retain the same shared fixture surface without artificial public exports.
+
+- `crates/agent-collaboration/src/session_command_dispatch.rs:82` — `fake_api_support`
+- `crates/agent-collaboration/tests/board_central_e2e.rs:14` — `central_pair`
+- `crates/agent-collaboration/tests/board_central_e2e.rs:22` — `fixture`
+- `crates/agent-collaboration/tests/board_central_e2e.rs:28` — `fixture_inputs`
+- `crates/agent-collaboration/tests/board_central_e2e.rs:36` — `owned_host`
+- `crates/agent-collaboration/tests/board_central_e2e.rs:42` — `records_reopen`
+- `crates/agent-collaboration/tests/board_debug_acceptance.rs:5` — `proof_context`
+- `crates/agent-collaboration/tests/board_records_e2e.rs:6` — `fixture`
+- `crates/agent-collaboration/tests/board_records_e2e.rs:15` — `follow_fixture`
+- `crates/agent-collaboration/tests/board_records_e2e.rs:29` — `owned_host`
+- `crates/agent-collaboration/tests/board_records_e2e.rs:66` — `takeover_readbacks`
+- `crates/agent-collaboration/tests/board_skill_dx_recovery.rs:3` — `proof_context`
+- `crates/agent-collaboration/tests/board_skill_dx.rs:5` — `proof_context`
+- `crates/agent-collaboration/tests/board_takeover_e2e.rs:4` — `central_pair`
+- `crates/agent-collaboration/tests/board_takeover_e2e.rs:10` — `fixture`
+- `crates/agent-collaboration/tests/board_takeover_e2e.rs:16` — `fixture_inputs`
+- `crates/agent-collaboration/tests/board_takeover_e2e.rs:26` — `records_reopen`
+- `crates/agent-collaboration/tests/board_write_uncertainty.rs:4` — `fake_api_support`
+- `crates/agent-collaboration/tests/debug_luna_acceptance.rs:12` — `proof_context`
+- `crates/agent-collaboration/tests/delivery_matrix_debug_acceptance.rs:2` — `proof_context`
+- `crates/agent-collaboration/tests/installation_directory_e2e.rs:5` — `owned_host`
+- `crates/agent-collaboration/tests/integration/configured_inventory_read/source_api_fixture.rs:17` — `recorded_api_listener`
+- `crates/agent-collaboration/tests/local_mail_cli_mcp.rs:3` — `local_mail_surfaces`
+- `crates/agent-collaboration/tests/local_mail_cli_mcp.rs:16` — `native_sql`
+- `crates/agent-collaboration/tests/local_mail_e2e.rs:12` — `owned_host`
+- `crates/agent-collaboration/tests/local_mail_failures_cli_mcp.rs:3` — `local_mail_surfaces`
+- `crates/agent-collaboration/tests/local_mail_failures_cli_mcp.rs:38` — `native_sql`
+- `crates/agent-collaboration/tests/mail_reconcile_e2e.rs:5` — `central_pair`
+- `crates/agent-collaboration/tests/mail_reconcile_e2e.rs:14` — `fixture`
+- `crates/agent-collaboration/tests/mail_reconcile_e2e.rs:21` — `fixture_inputs`
+- `crates/agent-collaboration/tests/mail_reconcile_e2e.rs:30` — `owned_host`
+- `crates/agent-collaboration/tests/mail_retirement_e2e.rs:4` — `central_pair`
+- `crates/agent-collaboration/tests/mail_retirement_e2e.rs:10` — `fixture`
+- `crates/agent-collaboration/tests/mail_retirement_e2e.rs:16` — `fixture_inputs`
+- `crates/agent-collaboration/tests/mail_retirement_e2e.rs:24` — `owned_host`
+- `crates/agent-collaboration/tests/messaging_rules_e2e.rs:4` — `central_pair`
+- `crates/agent-collaboration/tests/messaging_rules_e2e.rs:10` — `fixture`
+- `crates/agent-collaboration/tests/messaging_rules_e2e.rs:16` — `fixture_inputs`
+- `crates/agent-collaboration/tests/messaging_rules_e2e.rs:22` — `native_sql`
+- `crates/agent-collaboration/tests/messaging_rules_e2e.rs:28` — `owned_host`
+- `crates/agent-collaboration/tests/messaging_rules_e2e.rs:34` — `records_reopen`
+- `crates/agent-collaboration/tests/messaging_skill_dx.rs:5` — `proof_context`
+- `crates/agent-collaboration/tests/native_control_commands.rs:3` — `fake_api_support`
+- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:2` — `board_fixture`
+- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:21` — `local_mail_surfaces`
+- `crates/agent-collaboration/tests/provider_conversation_cli.rs:9` — `fake_api_support`
+- `crates/agent-collaboration/tests/provider_inventory_source_reads.rs:6` — `fake_api_support`
+- `crates/agent-collaboration/tests/provider_source_actions.rs:16` — `recorded_api_listener`
+- `crates/agent-collaboration/tests/push_delivery_matrix.rs:14` — `native_registry`
+- `crates/agent-collaboration/tests/push_delivery_matrix.rs:31` — `proof_context`
+- `crates/agent-collaboration/tests/push_message_cli.rs:5` — `fake_api_support`
+- `crates/agent-collaboration/tests/remote_mail_cli_mcp.rs:3` — `local_mail_surfaces`
+- `crates/agent-collaboration/tests/remote_mail_cli_mcp.rs:16` — `native_sql`
+- `crates/agent-collaboration/tests/requested_cancel_cli_mcp.rs:3` — `local_mail_surfaces`
+- `crates/agent-collaboration/tests/thread_subscription_cli.rs:31` — `fake_api_support`
+- `crates/agent-collaboration/tests/whoami_machine_identity.rs:10` — `fake_api_support`
+- `crates/board-fleet-sync/tests/project_conversation_storage.rs:3` — `project_storage_support`
+- `crates/board-fleet-sync/tests/project_cursors.rs:3` — `project_storage_support`
+- `crates/board-fleet-sync/tests/project_merge_time_storage.rs:3` — `project_storage_support`
+- `crates/board-fleet-sync/tests/project_storage.rs:4` — `project_storage_support`
+- `crates/collaboration-central-tokio/tests/archived_claim.rs:4` — `clocked_server`
+- `crates/collaboration-central-tokio/tests/archived_claim.rs:11` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/archived_claim.rs:18` — `imported_claim_scenarios`
+- `crates/collaboration-central-tokio/tests/archived_claim.rs:25` — `native_fleet`
+- `crates/collaboration-central-tokio/tests/archived_claim.rs:32` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/archived_claim.rs:39` — `imported_board_fixture`
+- `crates/collaboration-central-tokio/tests/copy_owner_health.rs:19` — `copy_wait_scenarios`
+- `crates/collaboration-central-tokio/tests/copy_owner_health.rs:26` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/copy_owner_health.rs:33` — `fleet_setup`
+- `crates/collaboration-central-tokio/tests/copy_owner_health.rs:41` — `imported_board_fixture`
+- `crates/collaboration-central-tokio/tests/copy_owner_health.rs:52` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/copy_owner_health.rs:61` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/copy_reads.rs:6` — `copy_wait_scenarios`
+- `crates/collaboration-central-tokio/tests/copy_receiver_session.rs:8` — `copy_wait_scenarios`
+- `crates/collaboration-central-tokio/tests/copy_rollback_reopen.rs:4` — `support`
+- `crates/collaboration-central-tokio/tests/copy_staged_alarm.rs:4` — `support`
+- `crates/collaboration-central-tokio/tests/copy_staged_expiry.rs:4` — `support`
+- `crates/collaboration-central-tokio/tests/directory_session.rs:8` — `native_fleet`
+- `crates/collaboration-central-tokio/tests/directory_session.rs:14` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/fleet_cache_projection.rs:4` — `native_source`
+- `crates/collaboration-central-tokio/tests/fleet_cache_projection.rs:10` — `source`
+- `crates/collaboration-central-tokio/tests/fleet_cache_records.rs:4` — `native_source`
+- `crates/collaboration-central-tokio/tests/fleet_metadata_records.rs:4` — `native_source`
+- `crates/collaboration-central-tokio/tests/fleet_metadata_records.rs:10` — `source`
+- `crates/collaboration-central-tokio/tests/fleet_notice_outbox.rs:8` — `session_fixture`
+- `crates/collaboration-central-tokio/tests/forwarded_posts.rs:7` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/forwarded_posts.rs:24` — `forwarded_post_scenarios`
+- `crates/collaboration-central-tokio/tests/forwarded_posts.rs:39` — `holder_writer_retry`
+- `crates/collaboration-central-tokio/tests/forwarded_posts.rs:51` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/forwarded_posts.rs:58` — `session_support`
+- `crates/collaboration-central-tokio/tests/forwarding_real_timer.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/forwarding_real_timer.rs:26` — `forwarded_post_scenarios`
+- `crates/collaboration-central-tokio/tests/forwarding_real_timer.rs:41` — `holder_writer_retry`
+- `crates/collaboration-central-tokio/tests/holder_delivery.rs:3` — `support`
+- `crates/collaboration-central-tokio/tests/machine_enrollment.rs:29` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/machine_notices.rs:4` — `session_fixture`
+- `crates/collaboration-central-tokio/tests/mail_status.rs:32` — `session_fixture`
+- `crates/collaboration-central-tokio/tests/mail_submit_http.rs:26` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/native_http.rs:39` — `copy_wait_scenarios`
+- `crates/collaboration-central-tokio/tests/native_server_reopen.rs:23` — `writer_fixture`
+- `crates/collaboration-central-tokio/tests/normal_redeploy.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/normal_redeploy.rs:15` — `imported_board_fixture`
+- `crates/collaboration-central-tokio/tests/normal_redeploy.rs:22` — `native_fleet`
+- `crates/collaboration-central-tokio/tests/normal_redeploy.rs:29` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/normal_redeploy.rs:36` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/owner_admin_sessions.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/owner_admin_sessions.rs:13` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/owner_fence_ordering.rs:6` — `creation`
+- `crates/collaboration-central-tokio/tests/owner_registry.rs:11` — `native_fleet`
+- `crates/collaboration-central-tokio/tests/owner_registry.rs:22` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/owner_registry.rs:31` — `support`
+- `crates/collaboration-central-tokio/tests/owner_takeover_recovery.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/owner_takeover_recovery.rs:15` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/process_restart.rs:10` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/process_restart.rs:18` — `imported_board_fixture`
+- `crates/collaboration-central-tokio/tests/process_restart.rs:24` — `imported_claim_scenarios`
+- `crates/collaboration-central-tokio/tests/process_restart.rs:32` — `native_fleet`
+- `crates/collaboration-central-tokio/tests/process_restart.rs:42` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/registry_claim_settlement.rs:8` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/registry_claim_settlement.rs:15` — `support`
+- `crates/collaboration-central-tokio/tests/registry_lease_publication.rs:6` — `notice_receiver`
+- `crates/collaboration-central-tokio/tests/registry_lease_publication.rs:14` — `registry_setup`
+- `crates/collaboration-central-tokio/tests/registry_lease_publication.rs:23` — `support`
+- `crates/collaboration-central-tokio/tests/session_carryover.rs:11` — `copy_read_scenarios`
+- `crates/collaboration-central-tokio/tests/session_carryover.rs:17` — `copy_wait_scenarios`
+- `crates/collaboration-central-tokio/tests/session_credentials.rs:7` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/session_credentials.rs:14` — `fixture`
+- `crates/collaboration-central-tokio/tests/session_credentials.rs:21` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/session_inflight_replacement.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/session_inflight_replacement.rs:13` — `fixture`
+- `crates/collaboration-central-tokio/tests/session_inflight_replacement.rs:20` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/session_lost_row.rs:6` — `creation`
+- `crates/collaboration-central-tokio/tests/session_move.rs:6` — `copy_wait_scenarios`
+- `crates/collaboration-central-tokio/tests/session_move.rs:13` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/session_move.rs:22` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/session_publication.rs:3` — `support`
+- `crates/collaboration-central-tokio/tests/session_renewal_history.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/session_renewal_history.rs:13` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/transfer_floor_repair.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/transfer_floor_repair.rs:13` — `fixture`
+- `crates/collaboration-central-tokio/tests/transfer_floor_repair.rs:20` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/transfer_ordered_rows.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/transfer_ordered_rows.rs:13` — `fixture`
+- `crates/collaboration-central-tokio/tests/transfer_ordered_rows.rs:20` — `owner_registry_scenarios`
+- `crates/collaboration-central-tokio/tests/transfer_schema_support.rs:6` — `creation_scenarios`
+- `crates/collaboration-central-tokio/tests/transfer_schema_support.rs:13` — `fixture`
+- `crates/collaboration-central-tokio/tests/transfer_schema_support.rs:24` — `owner_registry_scenarios`
+- `crates/collaboration-client/src/lib.rs:97` — `scripted_api`
+- `crates/collaboration-client/tests/api_rejection_decoding.rs:9` — `scripted_api`
+- `crates/collaboration-client/tests/board_mutation_uncertainty.rs:8` — `scripted_api`
+- `crates/collaboration-client/tests/provider_wait_timeout.rs:8` — `scripted_api`
+- `crates/collaboration-client/tests/subscription_calls.rs:13` — `scripted_api`
+
+## Includes of split-owned fixture source
+
+Temporary expectations cover `clippy::allow_attributes` and/or `clippy::allow_attributes_without_reason`, only where they fire. Their reason names the split lane as source owner. Remove them after that lane repairs the shared source.
+
+- `crates/agent-collaboration/tests/admission_overload_cli.rs:5` — `native_registry`
+- `crates/agent-collaboration/tests/board_aggregate_cli.rs:4` — `native_registry`
+- `crates/agent-collaboration/tests/board_fleet_lifecycle_cli.rs:4` — `board_fixture`
+- `crates/agent-collaboration/tests/board_model_cli.rs:2` — `native_registry`
+- `crates/agent-collaboration/tests/board_request_effects_cli.rs:4` — `board_fixture`
+- `crates/agent-collaboration/tests/board_task_corrections_cli.rs:4` — `board_fixture`
+- `crates/agent-collaboration/tests/board_views_cli.rs:4` — `board_fixture`
+- `crates/agent-collaboration/tests/local_mail_cli_mcp.rs:9` — `native_mail_owner`
+- `crates/agent-collaboration/tests/local_mail_failures_cli_mcp.rs:9` — `native_mail_owner`
+- `crates/agent-collaboration/tests/m2b_repository_subjects.rs:4` — `board_fixture`
+- `crates/agent-collaboration/tests/m2b_surface_parity.rs:4` — `board_fixture`
+- `crates/agent-collaboration/tests/project_creation_reply_cli.rs:5` — `board_fixture`
+- `crates/agent-collaboration/tests/project_description_cli.rs:5` — `board_fixture`
+- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:2` — `board_fixture`
+- `crates/agent-collaboration/tests/project_notification_cancel_cli.rs:13` — `board_read_setup`
+- `crates/agent-collaboration/tests/push_delivery_matrix.rs:14` — `native_registry`
+- `crates/agent-collaboration/tests/remote_mail_cli_mcp.rs:9` — `native_mail_owner`
+- `crates/agent-collaboration/tests/requested_cancel_cli_mcp.rs:9` — `native_mail_owner`
+- `crates/agent-collaboration/tests/thread_subscription_cli.rs:1` — `native_registry`
+- `crates/agent-collaboration/tests/thread_subscription_cli.rs:9` — `native_mail_owner`
+- `crates/collaboration-client/tests/admission_overload.rs:5` — `native_registry`

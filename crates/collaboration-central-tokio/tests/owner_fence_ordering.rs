@@ -2,7 +2,11 @@
 #![cfg(feature = "conformance")]
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
 mod creation;
 

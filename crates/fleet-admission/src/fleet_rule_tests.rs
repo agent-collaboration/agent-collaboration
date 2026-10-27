@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use crate::*;
 use message_board::*;
 
@@ -26,6 +25,10 @@ pub(crate) fn request(
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn canonical_content_distinguishes_full_session_refs_without_recording_context() -> TestResult {
     // Arrange: the same request names a session on its home Router.
@@ -58,6 +61,10 @@ fn canonical_content_distinguishes_full_session_refs_without_recording_context()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn human_fleet_records_keep_the_admitted_origin_across_replay_from_another_machine() -> TestResult {
     let request = request(FleetOperation::WorkspaceCreate {
@@ -98,6 +105,10 @@ fn human_fleet_records_keep_the_admitted_origin_across_replay_from_another_machi
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn declared_sessions_keep_their_home_while_only_router_actors_bind_to_record_origin() -> TestResult
 {
@@ -162,6 +173,10 @@ fn declared_sessions_keep_their_home_while_only_router_actors_bind_to_record_ori
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn create_replay_conflict_and_name_collision_are_decision_table_cases() -> TestResult {
     let req = request(FleetOperation::WorkspaceCreate {

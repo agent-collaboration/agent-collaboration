@@ -11,6 +11,10 @@ use serde_json::json;
 use sqlx_core::{query::query, row::Row};
 use std::time::Duration;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Result<(), TestError> {
     let root = tempfile::tempdir()?;

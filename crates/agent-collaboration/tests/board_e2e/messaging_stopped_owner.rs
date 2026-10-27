@@ -8,6 +8,10 @@ use std::os::unix::fs::OpenOptionsExt as _;
 
 pub use collaboration_service::MailStoreTestFault as MailFault;
 
+#[expect(
+    clippy::unused_async,
+    reason = "The async fault fixture defers filesystem changes until the caller awaits setup."
+)]
 pub async fn install_fault(stopped: &StoppedHost, fault: MailFault) -> FixtureResult {
     let path = stopped
         .directory()
@@ -21,6 +25,10 @@ pub async fn install_fault(stopped: &StoppedHost, fault: MailFault) -> FixtureRe
     Ok(())
 }
 
+#[expect(
+    clippy::unused_async,
+    reason = "The async fault fixture defers filesystem changes until the caller awaits cleanup."
+)]
 pub async fn remove_faults(stopped: &StoppedHost) -> FixtureResult {
     std::fs::remove_file(
         stopped

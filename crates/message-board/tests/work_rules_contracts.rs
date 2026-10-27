@@ -11,7 +11,10 @@ fn identity(sequence: u32) -> String {
     format!("01890f2e-7b4c-7cc0-98c4-{sequence:012x}")
 }
 
-#[allow(clippy::unwrap_used)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)]
 fn task_record(sequence: u32, project: u32) -> Task {
     Task {
         envelope: support::record_envelope(
@@ -28,7 +31,10 @@ fn task_record(sequence: u32, project: u32) -> Task {
     }
 }
 
-#[allow(clippy::unwrap_used)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)]
 fn requester() -> Identity {
     Identity::Human {
         human_id: HumanId::try_from("writer".to_owned()).unwrap(),
@@ -205,7 +211,10 @@ fn dependency_refusals_distinguish_missing_dropped_cross_project_and_cycle() {
     );
 }
 
-#[allow(clippy::unwrap_used)]
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)]
 fn semantic_request() -> ProjectRequest {
     ProjectRequest {
         request_id: RequestId::try_from(identity(20)).unwrap(),
@@ -301,7 +310,10 @@ fn canonical_task_creation_treats_initial_links_as_sets() {
     );
 }
 
-#[allow(clippy::indexing_slicing)] // Every index is in the fixed matrix's 0..6 range.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Test assertions access fixed fixture positions."
+)] // Every index is in the fixed matrix's 0..6 range.
 fn transitive_closure(edges: &[[bool; 6]; 6]) -> [[bool; 6]; 6] {
     let mut reachable = *edges;
     for through in 0..6 {

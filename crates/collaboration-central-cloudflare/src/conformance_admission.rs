@@ -3,7 +3,7 @@
 use crate::{access_verification, cloudflare_transport};
 use collaboration_central_core::{AccessCaller, ObjectAddress};
 use serde::Deserialize;
-use worker::*;
+use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 
 #[derive(Deserialize)]
 #[serde(

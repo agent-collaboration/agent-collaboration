@@ -2,37 +2,30 @@
 #![cfg(feature = "conformance")]
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Shared normal Fleet/Register fixture also covers unrelated creation refusals."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
-#[allow(
-    dead_code,
-    reason = "The exact clock boundary runs separately from this actual timer target."
-)]
+
 #[path = "support/forwarded_post_deadline_boundaries.rs"]
 mod forwarded_post_deadline_boundaries;
-#[allow(
-    dead_code,
-    reason = "Original lifecycle oracles are retained and reused by several entrypoints."
-)]
+
 #[path = "support/forwarded_post_lifecycle_oracles.rs"]
 mod forwarded_post_lifecycle_oracles;
 #[path = "support/forwarded_post_native_cases.rs"]
 mod forwarded_post_native_cases;
-#[allow(
-    dead_code,
-    reason = "Shared forwarding scenario module includes fast origin and routing cases."
-)]
+
 #[path = "support/forwarded_post_oracles.rs"]
 mod forwarded_post_oracles;
 #[path = "support/forwarded_post_route_overlap.rs"]
 mod forwarded_post_route_overlap;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Shared scenario enum serves native and Worker entrypoints."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/forwarded_post_scenarios.rs"]
 mod forwarded_post_scenarios;
@@ -44,9 +37,10 @@ mod forwarded_post_state_oracles;
 mod forwarded_post_terminal_slots;
 #[path = "support/forwarded_post_wire.rs"]
 mod forwarded_post_wire;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Shared owner HTTP helper also contains independent real writer scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/holder_writer_retry.rs"]
 mod holder_writer_retry;
