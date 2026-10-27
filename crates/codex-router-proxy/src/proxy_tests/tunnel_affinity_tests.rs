@@ -1,13 +1,6 @@
 use super::*;
 
 #[tokio::test(flavor = "current_thread")]
-#[cfg_attr(
-    target_os = "linux",
-    expect(
-        clippy::large_futures,
-        reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
-    )
-)]
 async fn async_websocket_tunnel_records_top_level_response_owner() {
     let upstream_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,
@@ -130,13 +123,6 @@ async fn async_websocket_tunnel_records_top_level_response_owner() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[cfg_attr(
-    target_os = "linux",
-    expect(
-        clippy::large_futures,
-        reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
-    )
-)]
 async fn async_websocket_tunnel_does_not_gate_forwarding_on_slow_affinity_recorder() {
     let upstream_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,
