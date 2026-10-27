@@ -21,11 +21,13 @@ export interface QuotaInputPaths {
 
 export const quotaSupportInputs: QuotaInputPaths = {
   // capture_tools.rs embeds and executes these adapters, with their package dependencies.
-  directories: ["scripts/verification/tui", ".cargo"],
+  // SQLx checked query macros also read the workspace's offline descriptions.
+  directories: ["scripts/verification/tui", ".cargo", ".sqlx"],
   files: [
     // Workspace build inputs and nextest's test profile.
     "Cargo.toml",
     "Cargo.lock",
+    "rust-toolchain",
     "rust-toolchain.toml",
     ".config/nextest.toml",
     // collaboration-protocol/src/acp_schema_catalog.rs embeds this schema.

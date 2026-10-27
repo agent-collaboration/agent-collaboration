@@ -62,6 +62,14 @@ test("external adapters, embedded schema and invocation controls remain quota in
   );
 });
 
+test("a workspace SQLx offline query description alone selects the quota stage", (): void => {
+  assert.equal(isQuotaInputPath(".sqlx/query-x.json", quotaSupportInputs), true);
+});
+
+test("a new extensionless root Rust toolchain file selects the quota stage", (): void => {
+  assert.equal(isQuotaInputPath("rust-toolchain", quotaSupportInputs), true);
+});
+
 test("missing or malformed Cargo selection fails instead of claiming an unrelated change", (): void => {
   assert.throws(() => deriveQuotaPackageDirectories({}, tree, repositoryRoot));
   assert.throws(
