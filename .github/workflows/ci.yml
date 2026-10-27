@@ -85,6 +85,24 @@ jobs:
           pnpm --dir verification run check
           pnpm --dir verification run lint
           pnpm --dir verification run format:check
+      # Finish both Node suites before Rust background work so TUI's process
+      # qualification can keep its existing 10 s test deadline.
+      - name: Test TypeScript tooling, fixtures and observations
+        id: verification_tests
+        run: pnpm --dir verification test
+      # Complete verification on its declared Node before switching to TUI's.
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26.12.1'
+          package-manager-cache: false
+      - name: Check Quota and Sessions verification TypeScript
+        id: tui_verification
+        run: |
+          pnpm --dir scripts/verification/tui install --frozen-lockfile
+          pnpm --dir scripts/verification/tui typecheck
+          pnpm --dir scripts/verification/tui lint
+          pnpm --dir scripts/verification/tui format:check
+          pnpm --dir scripts/verification/tui test
       - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
       - name: Test main cache pruning
@@ -93,25 +111,6 @@ jobs:
         id: format
         background: true
         run: cargo fmt --all -- --check
-      - name: Test TypeScript tooling, fixtures and observations
-        id: verification_tests
-        background: true
-        run: pnpm --dir verification test
-      # Each tooling package keeps its declared Node version. The background
-      # verification suite retains the earlier runtime in its own environment.
-      - uses: actions/setup-node@v5
-        with:
-          node-version: '26.12.1'
-          package-manager-cache: false
-      - name: Check Quota and Sessions verification TypeScript
-        id: tui_verification
-        background: true
-        run: |
-          pnpm --dir scripts/verification/tui install --frozen-lockfile
-          pnpm --dir scripts/verification/tui typecheck
-          pnpm --dir scripts/verification/tui lint
-          pnpm --dir scripts/verification/tui format:check
-          pnpm --dir scripts/verification/tui test
       - name: Enforce dependency policy
         id: dependency_policy
         background: true
