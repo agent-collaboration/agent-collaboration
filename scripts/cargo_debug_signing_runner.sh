@@ -76,18 +76,21 @@ sign_with_debug_identity() {
     return 0
   fi
 
+  # nextest launches one binary several times at once (to list it, then per
+  # test). Re-signing the file in place while another launch is executing it
+  # invalidates that process's code signature and macOS kills it (SIGKILL,
+  # no output). Sign a private copy instead and rename it over the original:
+  # the rename is atomic, a process already running keeps the old file, and
+  # concurrent signers each install a complete signed file.
+  local signed_copy
+  signed_copy="$(mktemp "${executable}.signing.XXXXXX")"
+  cp -p "${executable}" "${signed_copy}"
   # Debug builds skip Apple's timestamp server so signing works offline.
-  if signing_output="$(codesign --force --sign "${signing_identity}" --identifier "${debug_identifier}" --timestamp=none "${executable}" 2>&1)"; then
+  if signing_output="$(codesign --force --sign "${signing_identity}" --identifier "${debug_identifier}" --timestamp=none "${signed_copy}" 2>&1)"; then
+    mv -f "${signed_copy}" "${executable}"
     return 0
   fi
-  # Concurrent runs of one build race on codesign's temporary file; the loser
-  # waits briefly for the winner's signature to land.
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    if has_debug_identity "${executable}" "${debug_identifier}"; then
-      return 0
-    fi
-    sleep 0.1
-  done
+  rm -f "${signed_copy}"
   warn_unsigned "${executable}" "codesign failed: ${signing_output}"
 }
 
