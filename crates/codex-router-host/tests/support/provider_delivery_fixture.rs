@@ -24,10 +24,7 @@ use collaboration_protocol::{
     SessionId, SessionRef, UuidIdentity,
 };
 use collaboration_runtime::EndpointDirectory;
-use std::{
-    path::Path,
-    sync::Arc,
-};
+use std::{path::Path, sync::Arc};
 
 pub(super) struct NoLivePeer;
 

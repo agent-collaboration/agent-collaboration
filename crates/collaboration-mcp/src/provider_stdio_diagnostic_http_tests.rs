@@ -1,6 +1,9 @@
 //! Real public MCP and ACP pipes; only the external provider response is a stand-in.
 #[path = "../../codex-router-test-support/src/node_fixture.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This shared fixture module also exposes launch helpers used by other test suites."
+)]
 mod node_fixture;
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,

@@ -1,4 +1,7 @@
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions fail these tests while fixture errors propagate through Result."
+)]
 
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};

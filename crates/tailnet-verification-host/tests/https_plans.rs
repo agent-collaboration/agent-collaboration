@@ -1,4 +1,7 @@
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions fail these tests while fixture errors propagate through Result."
+)]
 use codex_router_tailnet_verification_host::host_plan::HttpsEndpoint;
 use serde::Deserialize;
 use serde_json::{Value, json};
