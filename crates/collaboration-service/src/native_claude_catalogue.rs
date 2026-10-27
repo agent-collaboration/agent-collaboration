@@ -1,5 +1,5 @@
 //! Compose independent native observations without taking ownership of their lifecycle.
-use crate::collaboration_application::ProviderInventoryFailure;
+use crate::inventory_failures::ProviderInventoryFailure;
 use claude_code_peer_messaging::{NativeClaudeJobReadError, PeerSessionSummary};
 use collaboration_protocol::{
     ClaudeCodeBackgroundOrigin, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,

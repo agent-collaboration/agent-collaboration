@@ -1,8 +1,9 @@
 //! Stored catalog and live native inventory keep separate, endpoint-bound pagination.
-use crate::collaboration_application::{
+use crate::inventory_failures::{
     INVALID_INVENTORY_PARAMETERS, NativeSessionFailure, NativeSessionFailureKind,
-    NativeSessionStage, ResultByteBudget,
+    NativeSessionStage,
 };
+use crate::response_budget::ResultByteBudget;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use codex_native_integration::{
     NativeConnectionError, NativeOperation, NativeProtocolConnection, StoredThreadCatalog,

@@ -1,5 +1,6 @@
 //! Native Codex session inspection, interruption and rename through the active generation.
 use super::{NativeSessionFailure, NativeSessionFailureKind, NativeSessionStage, ResultByteBudget};
+use crate::inventory_failures::NATIVE_FAILURE_MESSAGE;
 use codex_native_integration::{NativeConnectionError, NativeOperation, NativeProtocolConnection};
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, EndpointDescription, NativeInspectParams,
@@ -455,9 +456,5 @@ pub(crate) fn rename_method_unsupported() -> NativeSessionFailure {
     }
 }
 
-pub(super) const NATIVE_FAILURE_MESSAGE: &str = "Native control operation failed";
 /// The correction for an invalid native session call.
 pub(crate) const INVALID_NATIVE_PARAMETERS: &str = "Invalid native control parameters";
-/// The correction for an invalid session inventory request.
-pub(crate) const INVALID_INVENTORY_PARAMETERS: &str =
-    "Invalid session inventory parameters or cursor";

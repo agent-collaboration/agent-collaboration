@@ -34,6 +34,8 @@ mod push_record_resolver;
 pub use codex_acp_adapter::BrokeredApprovalOutcome;
 pub use codex_acp_adapter::{ACP_SCHEMA_DIGEST, NativeStoredSessions};
 mod codex_session_inventory;
+mod inventory_failures;
+mod response_budget;
 pub use codex_session_inventory::CodexSessionInventory;
 mod instruction_projection;
 mod mail_push_delivery;

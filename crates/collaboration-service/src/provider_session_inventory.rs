@@ -1,8 +1,7 @@
 //! Read-only provider inventory from Router's durable Session records.
 
-use crate::collaboration_application::{
-    ProviderInventoryFailure, ProviderInventoryFailureKind, ResultByteBudget,
-};
+use crate::inventory_failures::{ProviderInventoryFailure, ProviderInventoryFailureKind};
+use crate::response_budget::ResultByteBudget;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_protocol::{
     ChannelDescription, HostedProviderOrigin, NativeSessionScope, NativeSessionSource,
