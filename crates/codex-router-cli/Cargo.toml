@@ -26,8 +26,8 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
-codex-router-quota-service = { path = "../codex-router-quota-service" }
-codex-router-quota-tui = { path = "../codex-router-quota-tui" }
+codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service" }
+codex-router-quota-tui = { version = "0.1.105", path = "../codex-router-quota-tui" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 base64.workspace = true
 chrono.workspace = true
@@ -73,7 +73,7 @@ tracing-subscriber.workspace = true
 unicode-width.workspace = true
 
 [dev-dependencies]
-codex-router-quota-service = { path = "../codex-router-quota-service", features = ["test-support"] }
+codex-router-quota-service = { version = "0.1.105", path = "../codex-router-quota-service", features = ["test-support"] }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.96" }
 codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.96" }
 tempfile = "3.27.0"

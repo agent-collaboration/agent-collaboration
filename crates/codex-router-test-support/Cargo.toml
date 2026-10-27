@@ -9,7 +9,7 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-node-test-fixture = { path = "../node-test-fixture" }
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", features = ["keychain-test-support"] }
 codex-native-integration.workspace = true

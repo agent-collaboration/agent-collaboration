@@ -73,7 +73,7 @@ toml = "1.1.2"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
-node-test-fixture = { path = "../node-test-fixture" }
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 reqwest-websocket = "=0.5.1"
 board-legacy-upgrade = { version = "0.1.100", path = "../board-legacy-upgrade" }

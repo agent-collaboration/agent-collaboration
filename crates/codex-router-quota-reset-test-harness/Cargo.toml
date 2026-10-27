@@ -17,7 +17,7 @@ quota-reset-test-harness = ["agent-collaboration/quota-reset-test-harness"]
 workspace = true
 
 [dependencies]
-agent-collaboration = { path = "../agent-collaboration", features = ["quota-reset-test-harness"] }
+agent-collaboration = { version = "0.1.105", path = "../agent-collaboration", features = ["quota-reset-test-harness"] }
 codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", default-features = false, features = ["quota-reset-test-harness", "keychain-test-support"] }
 tokio.workspace = true
 

@@ -12,7 +12,7 @@ workspace = true
 quota-reset-test-harness = []
 
 [dependencies]
-agent-session-inventory = { path = "../agent-session-inventory" }
+agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
 futures-util.workspace = true
 collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
 codex-native-integration.workspace = true
@@ -25,8 +25,8 @@ unicode-width.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
-node-test-fixture = { path = "../node-test-fixture" }
-agent-session-inventory = { path = "../agent-session-inventory", features = ["test-support"] }
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
+agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory", features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 sqlx = { workspace = true, features = ["sqlite"] }
 futures-util.workspace = true

@@ -42,7 +42,7 @@ tokio = { workspace = true, features = ["io-std", "fs"] }
 sqlx = { workspace = true, features = ["sqlite"], optional = true }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", optional = true }
 axum = { workspace = true, features = ["http1", "tokio", "json"], optional = true }
-node-test-fixture = { path = "../node-test-fixture", optional = true }
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture", optional = true }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"], optional = true }
 claude-code-peer-messaging = { path = "../claude-code-peer-messaging", version = "0.1.37", optional = true }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"], optional = true }
