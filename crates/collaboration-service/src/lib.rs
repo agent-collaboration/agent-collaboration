@@ -13,9 +13,9 @@ pub use project_admission::{
     ProjectAdmissionError, ProjectAdmissionProps, ProjectArchiveObservation,
 };
 pub use project_commit_publication::after_project_commit_publish_and_reconcile;
-#[cfg(any(test, feature = "runtime-test-support"))]
+#[cfg(any(test, feature = "test-support"))]
 mod application_fixture;
-#[cfg(any(test, feature = "runtime-test-support"))]
+#[cfg(any(test, feature = "test-support"))]
 pub use application_fixture::ApplicationFixture;
 mod subscription_delivery;
 pub use subscription_delivery::{

@@ -38,6 +38,6 @@ automation-storage = { path = "../automation-storage", version = "0.1.16" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.30" }
-collaboration-service = { path = "../collaboration-service", version = "0.1.14" }
+collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3.27.0"
