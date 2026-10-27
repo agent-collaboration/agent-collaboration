@@ -10,7 +10,7 @@
 | [pty-process.test.ts](https://github.com/agent-collaboration/agent-collaboration/blob/424fbc238/verification/terminal/pty-process.test.ts) | Exercise real terminal I/O, child replies, resize, exit, stale output, overflow and invalid launches | Passing these tests proves driver behavior, not the feature |
 | [codex-pty.ts](https://github.com/agent-collaboration/agent-collaboration/blob/424fbc238/verification/terminal/codex-pty.ts) | Run the installed Codex executable's version/help under the PTY; record executable/output hashes and unchanged named config files | Never opens a conversation, invokes a model or tests a menu |
 
-The test file currently declares 13 tests. This is a source count, not a new-base passing result. No xterm/headless renderer is used.
+The test file declares 13 tests; all 13 passed within the 848-test Sunclaw verification run described below. No xterm/headless renderer is used.
 
 The pinned `node-pty` dependency needs its supported source-build route on the observed macOS setup because the packaged spawn-helper was not executable. [UW-8](../../upstream-workarounds/uw-8-node-pty-macos-spawn-helper.md) keeps that evidence and removal condition. Package import alone does not prove a PTY can spawn.
 
@@ -32,4 +32,13 @@ Reuse existing target allocation, Router recording and process helpers. The feat
 
 ## Current proof status
 
-The source was moved onto #173. Its CI and package scripts were preserved, and the PTY tests joined the aggregate TypeScript test command. Static HTML checks and source inspection do not replace compilation or tests. The new-base Rust/TypeScript runs and the Sunclaw interactive menu proof remain open. Four old test-helper crate qualifiers found during this inventory were corrected to `collaboration-contracts`; that correction has formatting/diff checks only so far.
+Observed on Sunclaw in the isolated checkout at product source `424fbc238`, 2026-10-27:
+
+| Check | Observed result | What it establishes |
+| --- | --- | --- |
+| `pnpm --dir verification` install, check, lint, format:check | Each exited 0; lint reported zero warnings/errors | Dependency install and TypeScript static gates |
+| Supported `build:pty`, then `pnpm --dir verification test` | Both exited 0; 848 passed, zero failed/skipped, including all 13 PTY cases | Harness behavior and scripted regression cases on this Mac |
+| `cargo check --locked -p acp-client-runtime --tests` | Exit 0; one existing unused-import warning | This package and its test targets compile |
+| `cargo test --locked -p acp-client-runtime submitted_prompt_tests` | Exit 0; four passed, zero failed | Actual actor/SDK behavior with the scripted provider |
+
+The full Rust workspace/lint gates and new menus remain unverified. These checks do not run real Claude/Cursor conversations or observe the actual terminal menus. The four old test-helper crate qualifiers found during this inventory were corrected to `collaboration-contracts`; Host compilation has not yet validated that separate correction. Sunclaw currently has no usable Developer ID signing identity for a new debug Router; no new Router was launched by these checks.

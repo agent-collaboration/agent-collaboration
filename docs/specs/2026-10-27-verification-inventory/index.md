@@ -24,6 +24,6 @@ That entrypoint, its supporting modules, wrapper and native fixture skills are n
 
 `pty-process.ts` controls one real child terminal. Product tests exercise Router's own ACP handling. A future menu journey must connect the real client to the isolated Router and provider, select an action, and check the provider's result. Actual terminal-window captures establish visible menu membership. Neither unit tests nor raw PTY output can replace that last observation.
 
-**Still unverified:** the #173 source port has not passed its new-base Rust gates on Sunclaw, and the new skill/slash menus have not been implemented or demonstrated. Old successful runs do not close either gap.
+**Current result:** on Sunclaw at product source `424fbc238`, the TypeScript verification suite passed 848 tests, including 13 real OS PTY cases. ACP runtime checking and four submitted-input tests also passed. **Still unverified:** full Rust workspace gates, the new skill/slash menus and real-provider/screen behavior. One existing Rust unused-import warning remains.
 
 Inventory basis: the 94-path native-verification snapshot at `5f5c49a4`, eight additional unique PTY-support paths and one later fixture repair. [Machine-readable path inventory](inventory.json). This is the verification work from this task, not every test or verification file in the repository.
