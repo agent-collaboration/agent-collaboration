@@ -1,9 +1,6 @@
 //! Portable engine bootstrap on real DO SQL, including owning process restart.
 #![forbid(unsafe_code)]
-#[allow(
-    dead_code,
-    reason = "The established process harness also serves socket scenarios."
-)]
+
 #[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
 mod workerd_process;
 

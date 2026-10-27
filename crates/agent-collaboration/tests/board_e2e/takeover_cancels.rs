@@ -354,6 +354,10 @@ async fn recipient_before_transfer(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_local_replay(local: &[Value], prefix: EndPrefix, expansions: &[Value]) -> FixtureResult {
     if matches!(prefix, EndPrefix::Discarded) {
         assert!(local.is_empty(), "discarded end invented a Local cancel");
@@ -583,6 +587,10 @@ async fn await_pending(fixture: &BoardFixture, follow: &FollowMembership) -> Fix
     .await?
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_end_groups(
     handoffs: &[message_board_storage::MailHandoffItem],
     follow: &FollowMembership,

@@ -1,9 +1,16 @@
 //! Bounded controls over the real bootstrap, library rules and store boundary.
 
-use super::*;
+use super::{
+    AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EngineSchema,
+    Executor, Infallible, IntoArguments, ObjectBootstrap, ObjectHost, Serialize, StepCallback,
+    StepResult, StoreError, TransactionScope, Type, corrupt,
+};
 use crate::generated_bootstrap_probes as queries;
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    AttachSequence, CopyOrigin, CopyStatusAnswer, CreateCopy, DatabaseId, DeliveryTypes, Epoch,
+    ItemId, PeerId, QueryResult, ReplicationAnswer, ReportSchemaSupport, SchemaSupport, SessionId,
+};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

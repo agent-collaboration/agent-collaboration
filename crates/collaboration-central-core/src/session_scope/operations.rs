@@ -1,5 +1,9 @@
 //! An admitted frame stages exactly one operation; consumer cases are exhaustive.
-use super::*;
+use super::{
+    AtomicStore, ColumnIndex, ConnectionId, CoreSessionScope, Database, Decode, Encode,
+    IntoArguments, ObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect, StoreError,
+    SyncTime, TransactionScope, Type,
+};
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardReadCursor,
     BoardReadPage, BoardReadScope,

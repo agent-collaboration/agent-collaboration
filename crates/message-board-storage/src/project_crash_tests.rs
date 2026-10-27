@@ -4,6 +4,10 @@ use message_board::ProjectId;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn killed_writer_leaves_no_record_feed_checkpoint_or_captured_change() -> TestResult {
     use sqlx::{ConnectOptions, Connection};

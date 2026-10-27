@@ -15,8 +15,15 @@ fn membership_value() -> Result<serde_json::Value, Box<dyn std::error::Error>> {
     )
 }
 
+#[expect(
+    clippy::unwrap_in_result,
+    reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+)]
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions are the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions are the test contract; Result propagates fixture errors.
 fn subscription_membership_contains_no_router_local_delivery_progress()
 -> Result<(), Box<dyn std::error::Error>> {
     let value = membership_value()?;
@@ -30,8 +37,15 @@ fn subscription_membership_contains_no_router_local_delivery_progress()
     Ok(())
 }
 
+#[expect(
+    clippy::unwrap_in_result,
+    reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+)]
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions are the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions are the test contract; Result propagates fixture errors.
 fn membership_expiry_and_draining_are_derived_without_an_automated_end_write()
 -> Result<(), Box<dyn std::error::Error>> {
     let mut value = membership_value()?;

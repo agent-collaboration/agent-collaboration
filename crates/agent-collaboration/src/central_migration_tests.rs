@@ -1,5 +1,5 @@
 //! Literal server pages and observed requests pin continuation without network I/O.
-#![allow(clippy::panic_in_result_fn)]
+
 use super::*;
 use serde_json::{Value, json};
 const FIRST: &str = "019f0000-0000-7000-8000-000000005881";
@@ -72,6 +72,10 @@ async fn migration_follows_pages_and_prints_every_result_then_counts()
     }
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn migration_stops_once_at_a_page_error_with_the_last_completed_resume_cursor()
 -> Result<(), Box<dyn std::error::Error>> {
@@ -153,6 +157,10 @@ async fn migration_copy_failure_keeps_later_pages_and_returns_nonzero_totals()
     }
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn migration_http_failure_stops_without_following_another_page()
 -> Result<(), Box<dyn std::error::Error>> {

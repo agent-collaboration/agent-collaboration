@@ -158,6 +158,10 @@ async fn reservation_state(fixture: &Fixture) -> TestResult<Value> {
     Ok(serde_json::from_str(&state)?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn incarnation_allocation_preserves_large_integers_and_skips_a_repeated_call() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -182,6 +186,10 @@ async fn incarnation_allocation_preserves_large_integers_and_skips_a_repeated_ca
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn receipt_write_failure_rolls_back_the_projection_and_keeps_the_reservation_active()
 -> TestResult {
@@ -221,6 +229,10 @@ async fn receipt_write_failure_rolls_back_the_projection_and_keeps_the_reservati
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_earlier_claim_settles_without_overwriting_a_later_published_revision() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -279,6 +291,10 @@ async fn an_earlier_claim_settles_without_overwriting_a_later_published_revision
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn untrusted_source_and_invalid_snapshot_digest_create_no_projection_or_receipt() -> TestResult
 {
@@ -308,6 +324,10 @@ async fn untrusted_source_and_invalid_snapshot_digest_create_no_projection_or_re
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn claim_granted_commits_the_projection_settlement_and_replay_receipt() -> TestResult {
     // Arrange: imported directory data is real; the Registry-owned call is the component input.

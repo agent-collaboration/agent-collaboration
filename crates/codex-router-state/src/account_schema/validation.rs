@@ -3,7 +3,7 @@ use std::collections::BTreeMap;
 use sqlx::Row;
 use sqlx::SqliteConnection;
 
-use super::definitions::*;
+use super::definitions::{ColumnSpec, INCOMPATIBLE_SCHEMA_MESSAGE};
 use crate::sqlite::StateStoreError;
 
 pub(super) async fn validate_named_indexes(

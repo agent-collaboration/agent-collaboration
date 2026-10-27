@@ -1,4 +1,16 @@
-use super::*;
+use super::{
+    AccountCredentialBundle, AccountRecord, AccountStateRepository, AccountStatus, Arc, AtomicBool,
+    BTreeSet, CodexChildEnvironment, CodexRouterProfile, CodexRouterProfileWriter,
+    CodexTransportMode, Duration, ErrorKind, Instant, Message, Mutex, Ordering, Output, Path,
+    PersistedSelectorQuotaWindow, Request, Response, RouterProcessStartOptions, SecretStore,
+    SelectorQuotaRepository, SelectorQuotaWindowStatus, SmokeTempRoot, SqliteStateStore,
+    TcpListener, accept_hdr, account_id, bearer_token_from_headers, fs, is_prewarm_request_frame,
+    join_result, looks_like_websocket_upgrade, openai_account_credential_bundle_key,
+    process_output_markers, quota_reconnect_usage_limit_frame, redacted_process_output_preview,
+    reserve_loopback_port, respond_to_http_request, run_codex_exec_with_timeout,
+    smoke_prewarm_events, smoke_response_events, start_router_process_with_options, thread,
+    timestamp_seconds, wake_mock_upstream_accept,
+};
 
 const TEST_STREAM_MAX_RETRIES: u64 = 100;
 const TEST_ACCOUNT_TOKENS: [&str; 3] = [
@@ -286,7 +298,10 @@ fn run_retry_upstream(
     Ok(())
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn run_retry_websocket(
     stream: std::net::TcpStream,
     scenario: RetryScenario,

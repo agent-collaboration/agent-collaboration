@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Retained, synthetic-only measurements for the offline import's actual CLI path.
 #![allow(clippy::panic_in_result_fn)]
 mod support;

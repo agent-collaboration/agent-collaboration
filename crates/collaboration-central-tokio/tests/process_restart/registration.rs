@@ -6,6 +6,10 @@ use fleet_sync_protocol::{
 };
 use futures_util::SinkExt;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn registration_replays_the_committed_answer_after_the_server_process_dies()
 -> ConformanceResult<()> {

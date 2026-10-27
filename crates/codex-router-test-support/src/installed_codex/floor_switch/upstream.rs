@@ -19,7 +19,7 @@ use tungstenite::handshake::server::Response;
 use super::super::QUOTA_RECONNECT_FALLBACK;
 use super::super::QUOTA_RECONNECT_PRIMARY;
 use super::super::bearer_token_from_headers;
-use super::super::frame_contains_function_call_output;
+use super::super::concurrent_websocket::frame_contains_function_call_output;
 use super::super::is_non_prewarm_response_create_frame;
 use super::super::is_prewarm_request_frame;
 use super::super::looks_like_websocket_upgrade;
@@ -131,7 +131,10 @@ fn run_floor_upstream(
     })
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn accept_real_request(
     listener: &TcpListener,
     deadline: Instant,

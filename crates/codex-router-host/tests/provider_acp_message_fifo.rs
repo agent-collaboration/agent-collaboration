@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used)]
 //! Queue draining and inspectable provider queue operation behavior.
 

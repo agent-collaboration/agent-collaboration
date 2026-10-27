@@ -5,9 +5,17 @@
 
 #[path = "registry_claim_settlement/adapter_outcomes.rs"]
 mod adapter_outcomes;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "registry_lease/support.rs"]
 mod support;
 use collaboration_central_core::{
@@ -29,7 +37,10 @@ const SUCCESSOR: &str = "550e8400-e29b-41d4-a716-4466554400b0";
 const ATTEMPT: &str = "019f0000-0000-7000-8000-000000000b01";
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates setup errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove the contract; Result propagates setup errors.
 async fn granted_settlement_reads_the_public_snapshot_and_replays_its_original_call_after_answer_loss()
 -> TestResult {
     // Arrange: real enrollment and a genuine library grant, with the existing setup gate.

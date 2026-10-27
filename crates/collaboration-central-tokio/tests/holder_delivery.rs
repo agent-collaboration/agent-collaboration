@@ -1,9 +1,8 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
-#[allow(
+#[expect(
     dead_code,
-    reason = "Shared real-store fixture also supports rollback cases."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "session_publication/support.rs"]
 mod support;
@@ -91,6 +90,10 @@ async fn completed(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_a_healthy_replacement()
 -> Result<(), TestError> {
@@ -175,6 +178,10 @@ async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn separate_answer_events_require_the_exact_connection_and_frame_without_holding_the_local_section()
 -> Result<(), TestError> {
@@ -214,6 +221,10 @@ async fn separate_answer_events_require_the_exact_connection_and_frame_without_h
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn close_and_the_existing_alarm_fail_sent_requests_as_answer_lost() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -242,6 +253,10 @@ async fn close_and_the_existing_alarm_fail_sent_requests_as_answer_lost() -> Res
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn dropping_a_wait_retries_the_same_call_with_a_fresh_frame_and_drops_the_late_answer()
 -> Result<(), TestError> {
@@ -275,6 +290,10 @@ async fn dropping_a_wait_retries_the_same_call_with_a_fresh_frame_and_drops_the_
 // Decision533 retires the old multi-peer/single-installation overlap setup.
 // Library session_rules.rs:232-239 closes the previous connection before new
 // schema publication; EffectDriver::Close fails its exact-bound waiter.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn replacing_the_holder_during_schema_publication_loses_the_old_attempt_and_retries_on_the_new_socket()
 -> Result<(), TestError> {

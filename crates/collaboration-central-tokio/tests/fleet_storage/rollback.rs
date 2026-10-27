@@ -128,6 +128,10 @@ impl ObjectHost for FaultHost {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn failure_after_all_import_writes_rolls_back_every_canonical_table() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -174,6 +178,10 @@ async fn failure_after_all_import_writes_rolls_back_every_canonical_table() -> T
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn creation_directory_ledger_and_binding_roll_back_together_then_retry_once() -> TestResult {
     use super::metadata::request;

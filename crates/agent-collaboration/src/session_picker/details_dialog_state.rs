@@ -82,7 +82,7 @@ impl SessionDetailsDialog {
             | DetailsClientReadState::Ready(DetailsClientCapabilities::Unavailable(reason)) => {
                 Some(reason)
             }
-            _ => None,
+            DetailsClientReadState::Ready(_) => None,
         }
     }
 

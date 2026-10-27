@@ -1,3 +1,4 @@
+#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! Opt-in real board listeners and stores, without native or provider processes.
 //!
 //! Run with `<directory> <MCP port> [<private fixture session JSON>]`.

@@ -1,7 +1,11 @@
 //! Typed project board calls; uncertain writes are never retransmitted.
 use super::{BoardClientError, CollaborationClient};
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    BoardReadReply, FeedRead, FeedReadRequest, ProjectRecordListRequest, ProjectRecordShowRequest,
+    ProjectRequest, ProjectWatchRequest, Record, RecordListResult, ResourceIdentity,
+    SubtaskListRequest, WorkTrailReadResult, WorkTrailShowRequest,
+};
 impl CollaborationClient {
     pub async fn workstream_create(
         &self,

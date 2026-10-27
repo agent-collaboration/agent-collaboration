@@ -78,6 +78,10 @@ async fn state(fixture: &Fixture) -> TestResult<ClaimReservationState> {
     Ok(serde_json::from_str(&payload)?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_settled(answer: GateAnswer, outcome: ClaimReservationOutcome) -> TestResult {
     let GateAnswer::Refused { reason } = answer else {
         return Err(format!("a settled attempt was reactivated: {answer:?}").into());
@@ -90,6 +94,10 @@ fn assert_settled(answer: GateAnswer, outcome: ClaimReservationOutcome) -> TestR
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cancel_before_reserve_stays_refused_after_reopen() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -127,6 +135,10 @@ async fn cancel_before_reserve_stays_refused_after_reopen() -> TestResult {
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn granted_attempt_refuses_the_original_reserve_call_even_after_reopen() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -193,6 +205,10 @@ async fn granted_attempt_refuses_the_original_reserve_call_even_after_reopen() -
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cancel_closes_an_active_reservation_and_its_old_call_cannot_reactivate_it() -> TestResult {
     let root = tempfile::tempdir()?;

@@ -1,6 +1,9 @@
 //! Public initialization entry points for one ACP provider connection.
 
-use super::*;
+use super::{
+    AgentSessionClient, Arc, Duration, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    INITIALIZE_TIMEOUT, InteractionPort, McpServer, McpServerHttp, SessionEventSink,
+};
 
 impl<P: InteractionPort> AgentSessionClient<P> {
     /// Native model-setting proof uses the production transport and picker

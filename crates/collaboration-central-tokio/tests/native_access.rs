@@ -1,5 +1,4 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_conformance::{
     JwksFixtureServer, fixture_key_profile_jwks, fixture_policy, flip_signature_byte,
@@ -15,6 +14,10 @@ use std::sync::{Arc, atomic::Ordering};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn the_core_application_uses_real_native_key_fetch_and_signature_verification() -> TestResult
 {
@@ -63,6 +66,10 @@ async fn the_core_application_uses_real_native_key_fetch_and_signature_verificat
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn the_native_key_fetch_preserves_cache_metadata_and_reports_http_errors() -> TestResult {
     let keys = JwksFixtureServer::start().await?;
@@ -91,6 +98,10 @@ async fn the_native_key_fetch_preserves_cache_metadata_and_reports_http_errors()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn the_core_application_refetches_zero_age_keys_through_the_native_capability() -> TestResult
 {

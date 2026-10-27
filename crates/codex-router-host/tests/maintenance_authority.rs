@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Maintenance holds the shipped Host lock while leaving socket publication to HostInstance.
 #![allow(clippy::panic_in_result_fn)] // Contract assertions must fail the proof.
 use codex_router_host::{

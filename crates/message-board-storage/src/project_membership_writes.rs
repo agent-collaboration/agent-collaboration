@@ -2,7 +2,7 @@ use crate::project_record_codec::{
     ProjectRowEnvelope, ProjectRowWrite, require_one_row, timestamp,
 };
 use crate::{ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{RecordKind, RecordRef, RecordedActor, SubscriptionMembership};
 
 impl ProjectWriteTransaction {
     pub(crate) async fn write_membership(

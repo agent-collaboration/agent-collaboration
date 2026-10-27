@@ -202,7 +202,6 @@ fn main_repository_root(cwd: &Path) -> Option<PathBuf> {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use std::{error::Error, process::Command};
@@ -220,6 +219,10 @@ mod tests {
         )
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     /// Oracle: Codex config/src/loader/mod.rs:1027-1041 and 1366-1382.
     #[test]
     fn exact_and_canonical_working_directory_keys() -> Result<(), Box<dyn Error>> {
@@ -245,6 +248,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     /// Oracle: Codex config/src/loader/mod.rs:1359-1371.
     #[test]
     fn canonical_key_precedes_the_raw_alias_when_both_have_trust() -> Result<(), Box<dyn Error>> {
@@ -271,6 +278,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     /// Oracle: Codex config/src/loader/mod.rs:1041-1054,1464-1490.
     #[test]
     fn marker_root_matches_but_arbitrary_parent_does_not() -> Result<(), Box<dyn Error>> {
@@ -317,6 +328,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     /// Oracle: Codex git-utils/src/trust.rs:9-140; config/src/loader/mod.rs:1054-1067.
     #[test]
     fn linked_worktree_inherits_verified_main_repository_trust() -> Result<(), Box<dyn Error>> {
@@ -366,6 +381,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     /// Oracle: Codex config/src/loader/mod.rs:1027-1072.
     #[test]
     fn missing_or_invalid_config_fails_closed() -> Result<(), Box<dyn Error>> {

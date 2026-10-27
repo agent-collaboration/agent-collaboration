@@ -106,9 +106,9 @@ async fn initial_session_update_can_switch_before_first_response_create() {
             "first create must not reach the old account"
         );
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .expect("fixture should finish");
     assert!(

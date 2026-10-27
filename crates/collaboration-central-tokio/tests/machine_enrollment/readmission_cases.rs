@@ -63,6 +63,10 @@ async fn activation_window() -> TestResult<ActivationWindow> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_active_same_content_repeat_answers_enrolled_while_engine_finish_is_pending()
 -> TestResult {
@@ -95,6 +99,10 @@ async fn an_active_same_content_repeat_answers_enrolled_while_engine_finish_is_p
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_active_row_revokes_immediately_while_its_enrollment_finish_is_pending() -> TestResult {
     let window = activation_window().await?;
@@ -137,6 +145,10 @@ async fn pending_snapshot(fixture: &Fixture) -> TestResult<serde_json::Value> {
     })).await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_unanswered_open_keeps_reserved_readmission_revoked_and_refuses_overlapping_changes()
 -> TestResult {

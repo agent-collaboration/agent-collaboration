@@ -94,6 +94,10 @@ fn router_version_warning(
         })
 }
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 /// The scripted API the integration tests also use, for this crate's unit tests.
 #[cfg(test)]
 #[path = "../tests/support/scripted_api.rs"]

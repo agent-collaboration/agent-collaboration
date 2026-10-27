@@ -1,13 +1,28 @@
 //! The root project CLI reaches requested cancellation over real frozen rows and SDK custody.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
-#[allow(dead_code)]
 mod board_fixture;
+#[expect(
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/board_read_setup.rs"]
 mod board_read_setup;
 #[path = "support/closed_mail_session.rs"]
 mod closed_mail_session;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/local_mail_surfaces.rs"]
-#[allow(dead_code)]
 mod local_mail_surfaces;
 use board_fixture::native_mail_owner;
 use board_fixture::{BoardFixture, TestError};
@@ -39,7 +54,10 @@ async fn cli(surface: &Surfaces, path: &std::path::Path) -> Result<(i32, Value),
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn project_notification_cancel_cli_preserves_pending_authority_and_requester_without_recording_a_project_request()
 -> Result<(), TestError> {
     let board = BoardFixture::start().await?;

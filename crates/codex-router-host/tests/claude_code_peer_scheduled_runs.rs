@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used, clippy::panic)]
 //! A peer scheduled run is a write-only acceptance through the real socket client.
 use agent_automation::{

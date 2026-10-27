@@ -1,6 +1,11 @@
 //! Hold and replay real enrollment lifecycle calls; observe the owning row and journal.
 
-use super::*;
+use super::{
+    AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EnrollmentState,
+    Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, PeerId, PlatformIo,
+    RegistryKind, Serialize, ServiceId, StepCallback, StepDriver, StepResult, StoreError,
+    StoredMachine, TransactionScope, Type, corrupt, queries,
+};
 use crate::{
     AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress,
     caller_context::CallAuthority, object_call_envelope::ObjectCallEnvelope,

@@ -1,8 +1,11 @@
 //! Retained cache/repository cases consume the real native Fleet owner.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
-#[allow(dead_code)]
 mod native_source;
 #[path = "support/fleet_cache_source.rs"]
 mod source;
@@ -30,6 +33,10 @@ fn request(
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn fleet_cache_installs_a_real_snapshot_and_rejects_a_gapped_page_atomically() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -94,6 +101,10 @@ async fn fleet_cache_installs_a_real_snapshot_and_rejects_a_gapped_page_atomical
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn repository_attachments_travel_in_workspace_feed_cache_and_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;

@@ -5,6 +5,10 @@ use sqlx::{ConnectOptions, Connection, migrate::Migrator};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn every_migration_prefix_matches_sqlite_without_cdc_engine_tables() -> TestResult {
     let mut native = sqlx_turso::TursoConnectOptions::new().connect().await?;

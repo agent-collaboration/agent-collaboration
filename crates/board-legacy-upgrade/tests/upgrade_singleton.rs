@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Offline upgrade and the running Host share the shipped singleton artifact.
 #![allow(clippy::panic_in_result_fn)]
 mod support;

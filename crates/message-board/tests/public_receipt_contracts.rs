@@ -2,7 +2,10 @@ use message_board::{public_replies as public, *};
 use serde_json::{Value, json};
 mod support;
 
-#[allow(clippy::unwrap_used)] // Fixture construction must fail on invalid domain values.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Fixture construction must fail on invalid domain values.
 fn effects(count: u64, fleet: bool) -> Vec<DecisionEffect> {
     let reference: RecordRef = if fleet {
         WorkspaceId::generate().into()

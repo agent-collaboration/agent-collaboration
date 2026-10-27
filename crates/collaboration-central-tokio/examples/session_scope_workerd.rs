@@ -1,9 +1,6 @@
 //! Real workerd sockets and attachments around the core session composition.
 #![forbid(unsafe_code)]
-#[allow(
-    dead_code,
-    reason = "The shared harness serves multiple lifecycle scenarios."
-)]
+
 #[path = "../../collaboration-central-conformance/examples/support/workerd_process.rs"]
 mod workerd_process;
 

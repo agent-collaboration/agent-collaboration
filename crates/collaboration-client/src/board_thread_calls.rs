@@ -7,7 +7,13 @@ use collaboration_protocol::{
     ThreadSubscriptionsRequest, ThreadSubscriptionsResult, ThreadUnsubscribeRequest,
 };
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    ResourceIdentity, ThreadCreateRequest, ThreadJoinRequest, ThreadLeaveRequest,
+    ThreadListRequest, ThreadListResult, ThreadParticipantListRequest, ThreadParticipantListResult,
+    ThreadPostRequest, ThreadRefileRequest, ThreadRenewRequest, ThreadResolveRequest,
+    ThreadShowRequest, ThreadShowResult, ThreadUnresolveRequest, ThreadUnwatchRequest,
+    ThreadWatchRequest,
+};
 use std::time::Duration;
 impl CollaborationClient {
     pub async fn thread_renew(

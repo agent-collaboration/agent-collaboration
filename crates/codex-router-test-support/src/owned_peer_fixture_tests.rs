@@ -322,6 +322,10 @@ async fn preexisting_key_file_is_preserved_and_not_adopted() -> ProofResult<()> 
     require_absent(&registry.record, "registry record")
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn barrier_counts_every_authenticated_frame_without_counting_itself() -> ProofResult<()> {
     let registry = PrivateRegistry::create()?;
@@ -367,6 +371,10 @@ async fn barrier_counts_every_authenticated_frame_without_counting_itself() -> P
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn named_peer_uses_this_process_pid_and_exact_supplied_session() -> ProofResult<()> {
     let registry = PrivateRegistry::create()?;
@@ -428,6 +436,10 @@ async fn named_peer_uses_this_process_pid_and_exact_supplied_session() -> ProofR
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn matching_barrier_excludes_grants_and_counts_duplicate_post_frames() -> ProofResult<()> {
     let registry = PrivateRegistry::create()?;

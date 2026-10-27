@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used)]
 #[path = "support/native_delivery.rs"]
 mod native_delivery;

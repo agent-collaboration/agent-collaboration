@@ -45,7 +45,7 @@ impl StoppedHost {
     }
 
     // SIGKILL skips listener Drop; only this joined child's three paths qualify.
-    #[allow(dead_code)] // Shared by targets that exercise joined SIGKILL readback.
+    // Shared by targets that exercise joined SIGKILL readback.
     async fn remove_listener_residue(&self) -> FixtureResult {
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -203,7 +203,7 @@ impl BoardHost {
         Ok(())
     }
 
-    #[allow(dead_code)] // Only takeover targets need the private replay observation.
+    // Only takeover targets need the private replay observation.
     pub async fn local_cancel_delivery_recorded(
         &mut self,
         cancel: fleet_sync_protocol::ItemId,
@@ -342,7 +342,7 @@ impl BoardHost {
     }
 
     /// Readback begins only after this owned child is killed, reaped and drained.
-    #[allow(dead_code)] // Some process-test roots only need graceful readback.
+    // Some process-test roots only need graceful readback.
     pub async fn crash_for_readback(mut self) -> FixtureResult<StoppedHost> {
         use std::os::unix::process::ExitStatusExt;
 

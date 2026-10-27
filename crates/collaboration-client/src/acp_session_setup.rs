@@ -1,5 +1,10 @@
 //! ACP session selection and its setup evidence.
-use super::*;
+use super::{
+    AcpConversation, ClientError, ConversationCreateRequest, ConversationCreateResult,
+    ConversationEvent, SessionRef, SetupUpdateDelivery, Value, create_private_scratch, json,
+    prepare_project_write_areas, router_metadata_effort, session_scratch_scope,
+    validate_conversation_create_request, validate_conversation_endpoint,
+};
 
 impl AcpConversation {
     /// Connects, initializes, and selects exactly one existing or newly-created

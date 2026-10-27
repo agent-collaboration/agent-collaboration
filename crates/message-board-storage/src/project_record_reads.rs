@@ -1,7 +1,9 @@
 //! Snapshot-consistent typed collections and independent task-link rows.
 use crate::project_record_codec::{stored_text, task_link_kind_tag};
 use crate::{ImportRowKind, ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    LinkChange, ProjectId, Record, RecordId, RecordKind, RecordRef, TaskId, TaskLink,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

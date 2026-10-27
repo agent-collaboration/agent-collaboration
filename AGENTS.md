@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Module Cycle Ratchet
+
+With cargo-modules 0.28.0 installed, run `cargo nextest run -p workspace-architecture-check --run-ignored only`.
+After reducing cycles or their edges, update `architecture/module-cycle-baseline.json` with `ARCHITECTURE_BLESS=1 cargo nextest run -p workspace-architecture-check --run-ignored only`; blessing an existing baseline refuses growth.
+
 ## Languages
 
 - No Python in this repository. Write code in TypeScript or Rust; for any

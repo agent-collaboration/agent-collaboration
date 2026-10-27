@@ -41,6 +41,10 @@ async fn publish(fixture: &Fixture, projection: Value) -> TestResult<Value> {
     Ok(serde_json::from_slice(&answer)?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn directory_keeps_epoch_first_registry_version_across_late_repeated_and_reopened_reads()
 -> TestResult {

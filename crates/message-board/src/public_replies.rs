@@ -180,7 +180,10 @@ mod tests {
     use serde_json::json;
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)] // Assertions check wire values; Result propagates codec failures.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Test assertions must fail the test while fixture errors propagate."
+    )] // Assertions check wire values; Result propagates codec failures.
     fn forwarding_outcomes_are_public_receipts_without_a_ledger_decision()
     -> Result<(), serde_json::Error> {
         for value in [

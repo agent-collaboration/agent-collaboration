@@ -236,7 +236,7 @@ where
         self.read_probe_status::<HolderProbeReply>(operation).await
     }
 
-    pub(crate) async fn registry_dispatches(
+    pub(crate) fn registry_dispatches(
         &self,
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {

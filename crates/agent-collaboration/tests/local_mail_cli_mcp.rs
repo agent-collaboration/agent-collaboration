@@ -1,11 +1,23 @@
 //! Real CLI/MCP Local mail observations, sharing only the isolated surface fixture.
 use collaboration_service as mail_service;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/local_mail_surfaces.rs"]
 mod local_mail_surfaces;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
 mod native_mail_owner;
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code)] // Companion failure tests use the shared fault helpers.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // Companion failure tests use the shared fault helpers.
 mod native_sql;
 use collaboration_protocol::MailItemId;
 use local_mail_surfaces::{Surfaces, TestResult};

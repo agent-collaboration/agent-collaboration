@@ -378,7 +378,7 @@ pub(super) fn survival_margin_basis_points(
     let remaining_basis_points = i128::from(window.remaining_basis_points);
     let margin = remaining_basis_points - i128::try_from(projected_burn_basis_points).ok()?;
 
-    Some(margin.clamp(i128::from(i64::MIN), i128::from(i64::MAX)) as i64)
+    i64::try_from(margin.clamp(i128::from(i64::MIN), i128::from(i64::MAX))).ok()
 }
 
 pub(super) const fn is_short_window(window_seconds: u64, policy: BurnDownRouteBandPolicy) -> bool {

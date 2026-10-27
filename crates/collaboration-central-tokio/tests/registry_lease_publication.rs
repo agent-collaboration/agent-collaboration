@@ -2,16 +2,28 @@
 #![cfg(feature = "conformance")]
 #[path = "registry_lease_publication/notice_atomicity.rs"]
 mod notice_atomicity;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "session_publication/support.rs"]
 mod notice_receiver;
 #[path = "registry_lease_publication/owner_retirement_recovery.rs"]
 mod owner_retirement_recovery;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[path = "registry_lease_publication/retiring_publication.rs"]
 mod retiring_publication;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "registry_lease/support.rs"]
 mod support;
 
@@ -47,7 +59,10 @@ const DATABASE: &str = "019f0000-0000-7000-8000-000000000a83";
 const SERVICE: &str = "550e8400-e29b-41d4-a716-4466554400a9";
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Result carries setup errors; assertions preserve the obligations.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Result carries setup errors; assertions preserve the obligations.
 async fn an_unacknowledged_unheld_snapshot_repairs_after_store_reopen_then_leaves_no_idle_alarm()
 -> TestResult {
     let RegistryFixture {
@@ -228,7 +243,10 @@ async fn an_unacknowledged_unheld_snapshot_repairs_after_store_reopen_then_leave
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions are the proof; Result propagates fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions are the proof; Result propagates fixture failures.
 async fn alarm_discovers_a_public_snapshot_and_an_acknowledged_idle_registry_sets_no_alarm()
 -> TestResult {
     let delivery_root = tempfile::tempdir()?;
@@ -371,10 +389,13 @@ async fn alarm_discovers_a_public_snapshot_and_an_acknowledged_idle_registry_set
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Result carries setup errors; assertions decide the availability contract.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Result carries setup errors; assertions decide the availability contract.
 async fn renewal_and_replay_answer_while_the_separate_publication_rpc_is_blocked() -> TestResult {
     let fixture = RegistryFixture::open(false).await?;
-    let proof=async {
+    let proof=Box::pin(async {
         let owner=OwnerIdentity::from_access(AccessCaller::Owner {email:"fixture@example.test".into()})?;
         let request:EnrollMachine=serde_json::from_value(json!({
             "installation":SERVICE,"peer":"019f0000-0000-7000-8000-000000001f13","label":"publication writer","access_client_id":"publication-writer",
@@ -415,7 +436,7 @@ async fn renewal_and_replay_answer_while_the_separate_publication_rpc_is_blocked
         fixture.io.publication_release.notify_one();
         alarm.await?;
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
-    }.await;
+    }).await;
     fixture.objects.close().await?;
     fixture.fleet.objects.close().await?;
     proof

@@ -376,3 +376,25 @@ mod tests {
         }
     }
 }
+
+// Iocraft represents fixed cell dimensions as u32.
+pub(super) fn iocraft_cell_count(cells: usize) -> u32 {
+    u32::try_from(cells).unwrap_or(u32::MAX)
+}
+
+#[cfg(test)]
+mod cell_count_tests {
+    use super::iocraft_cell_count;
+
+    #[test]
+    fn iocraft_cell_count_preserves_terminal_dimensions() {
+        assert_eq!(iocraft_cell_count(120), 120);
+    }
+
+    #[test]
+    fn iocraft_cell_count_saturates_instead_of_wrapping() {
+        if let Ok(overflow) = usize::try_from(u64::from(u32::MAX) + 1) {
+            assert_eq!(iocraft_cell_count(overflow), u32::MAX);
+        }
+    }
+}

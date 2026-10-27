@@ -161,6 +161,10 @@ fn write_private_file(path: &Path, bytes: &[u8]) -> ProofResult<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 pub(super) async fn mcp_send(
     proof: &ProofContext,
     sender: &SessionRef,

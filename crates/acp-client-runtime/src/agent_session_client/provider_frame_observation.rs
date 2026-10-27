@@ -1,6 +1,6 @@
 //! Bounded ACP frame-limit observation shared by connection and Session actors.
 
-use super::*;
+use super::{AtomicBool, Duration, Ordering};
 
 #[derive(Debug, Default)]
 pub(crate) struct ProviderFrameObservation {

@@ -1,5 +1,9 @@
 //! Session callers can reach only these explicit DAG edges.
-use super::*;
+use super::{
+    CallFailure, CallId, CallTarget, CallerContext, CopyKind, CopyRead, DeliveryKind, FleetKind,
+    MailboxKind, ReceiverId, RegistryKind, SerializedObjectCall, SessionKind, decode,
+    encode_shared_call, no_route,
+};
 
 pub(super) fn classify_session(
     kind: &str,

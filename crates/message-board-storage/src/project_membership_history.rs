@@ -40,7 +40,7 @@ impl ProjectSnapshot {
                 }
                 _ => Err(ProjectStorageError::InvalidFeed),
             },
-            _ => Err(ProjectStorageError::InvalidFeed),
+            FeedContent::Redacted => Err(ProjectStorageError::InvalidFeed),
         }
     }
 }

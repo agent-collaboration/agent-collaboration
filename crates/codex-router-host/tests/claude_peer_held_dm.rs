@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 //! Closed Claude peers hold Auto DMs until their owner publishes a writer.
 

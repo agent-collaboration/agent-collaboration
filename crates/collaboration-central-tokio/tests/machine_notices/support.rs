@@ -37,6 +37,10 @@ pub async fn state_rows(fixture: &Fixture) -> Result<i64, TestError> {
         })
         .await?)
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 pub fn snapshot_closed_owner(
     source: &std::path::Path,
     destination: &std::path::Path,
@@ -158,7 +162,7 @@ pub async fn read(
     assert_eq!(actual, frame);
     Ok(read)
 }
-#[allow(
+#[expect(
     clippy::panic,
     reason = "The test oracle must reject a different notice-read outcome."
 )]

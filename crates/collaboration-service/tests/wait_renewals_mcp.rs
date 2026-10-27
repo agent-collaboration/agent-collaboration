@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 //! Caller-keyed poll renewals use independent native ledgers and expose partial outcomes.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;

@@ -1,4 +1,35 @@
-use super::*;
+use super::{
+    AccountRecord, AccountStatus, Arc, AsyncAccountSelectorRuntimeState,
+    AsyncHttpAffinityOwnerRecorder, AsyncHttpBodyError, AsyncProxyCredentialResolverFactory,
+    AsyncRepositoryBackedAccountSelector, AsyncSqliteProviderErrorObserver, AsyncSqliteStateStore,
+    AsyncStreamingHttpProxyResponse, AsyncStreamingUpstreamHttpTransport, AsyncWebSocketTunnel,
+    AuditFileSink, AuditRouteKind, AuthenticatedHttpProxyService, BodyExt, BoxBody, Bytes,
+    CancellationToken, ClaudeEdgeRuntimeConfig, ClaudeFiveHourReservePercent, ClaudeServerRuntime,
+    CredentialStoreAvailability, DEFAULT_ACCOUNT_HOLD_COOLDOWN_SECONDS, DbWriteActor, HttpMethod,
+    HttpProxyError, HttpProxyRequest, HttpRequest, HttpResponse, HyperHttpUpstreamTransport,
+    HyperProtocolDispatch, HyperProtocolSwitchpoint, Incoming, Infallible, LocalAuthError,
+    LoopbackRouterRuntimeError, Method, PrecommitAuthRecoveryScope, PrecommitHttpResponseFailure,
+    PrecommitHttpResponseProbe, PreparedAsyncStreamingHttpProxyRequest,
+    PreparedHttpResponseForCommit, RouteBand, RouteBandAccountHolds, RouteBandQueueHealth,
+    RouteBandReservationBooks, RouteBandRuntimeExhaustions, RouteBandWeightedSelectors, RouteClass,
+    RouterCompatibility, RuntimeAccountAdmissionAssessor, RuntimeAffinitySecretProvider,
+    SelectionReservationLock, SharedSessionAccountAffinityCache, SocketAddr,
+    SqliteActiveClientLeaseReporter, StateStoreError, StatusCode, StderrAuditFailureReporter,
+    StreamingHttpProxyCompletion, SystemTime, TaskTracker, TokioIo, TransportKind, UNIX_EPOCH,
+    UpstreamEndpoint, Uri, WebSocketHandshakeRequest, WebSocketProtocolRouter,
+    WebSocketRevocationRegistry, all_accounts_exhausted_response, append_audit_event_with_reporter,
+    async_streaming_http_response_to_hyper, box_body_from_bytes, classify_route, empty_body,
+    empty_response, extract_presented_local_token_from_request,
+    finish_hyper_connection_after_serve_result, has_forbidden_websocket_subprotocol_auth_carrier,
+    header_value, http_error_response, http1, hyper_request_to_streaming_proxy_request,
+    is_claude_edge_path, is_websocket_upgrade, local_auth_rejection_audit_event, method_from_hyper,
+    observe_precommit_http_quota_exhaustion_for_retry, path_without_query,
+    provider_credential_failure_response, quota_state_unavailable_response,
+    request_metadata_prefix_is_complete_json, router_websocket_config, sanitize_error_for_log,
+    sanitize_route_path_for_log, service_fn, split_precommit_http_response,
+    unsupported_claude_path_response, websocket_handshake_from_hyper_headers,
+    websocket_runtime_error_kind,
+};
 
 #[derive(Clone)]
 pub(super) struct LoopbackProtocolConnectionHandler {
@@ -186,14 +217,13 @@ impl LoopbackProtocolConnectionHandler {
         let upgrade_task = tokio::spawn(async move {
             match websocket.await {
                 Ok(local_websocket) => {
-                    task_context
-                        .handle_hyper_websocket_upgraded(
-                            local_websocket,
-                            handshake,
-                            path,
-                            local_peer_addr,
-                        )
-                        .await
+                    Box::pin(task_context.handle_hyper_websocket_upgraded(
+                        local_websocket,
+                        handshake,
+                        path,
+                        local_peer_addr,
+                    ))
+                    .await
                 }
                 Err(error) => Err(LoopbackRouterRuntimeError::WebSocket(
                     crate::websocket::WebSocketTunnelError::Transport(error),

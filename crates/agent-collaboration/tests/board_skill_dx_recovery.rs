@@ -1,5 +1,9 @@
 //! Opt-in proof that an agent can recover from the combined-argument CLI diagnostic.
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "automation_live_support/proof_context.rs"]
 mod proof_context;
 

@@ -1,5 +1,8 @@
 //! The copy's journal invokes the board follow-up after its publication commits.
-use super::*;
+use super::{
+    CallFailure, CallId, CallerContext, CopyKind, CoreHost, DatabaseId, FleetKind, PlatformIo,
+    ReceiverId, SharedTaskCaller, decode, encode_refusal, encode_shared_call, no_route,
+};
 use crate::{CopyDirectorySummary, copy_directory_summary::DirectorySummaryUpdate};
 use fleet_sync_receiver::{
     FollowUpAnswer, FollowUpCall, FollowUpDone, FollowUpFailure, FollowUpHandler,

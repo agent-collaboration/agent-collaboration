@@ -2,7 +2,7 @@ use crate::project_record_codec::{
     ProjectRowEnvelope, ProjectRowWrite, intent_recipient_key, require_one_row,
 };
 use crate::{ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{NotifyIntent, RequestLedgerEntry};
 
 impl ProjectWriteTransaction {
     pub(crate) async fn write_notify_intent(

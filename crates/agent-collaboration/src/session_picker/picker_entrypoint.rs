@@ -1,5 +1,8 @@
 //! Terminal lifecycle and fixture entry points for the actual picker component.
-use super::*;
+use super::{
+    ElementExt, SessionsPickerComponent, SessionsPickerOutcome, SessionsPickerRecordLoader,
+    SessionsPickerRequest, element,
+};
 use std::io;
 
 pub(crate) fn run_sessions_picker(

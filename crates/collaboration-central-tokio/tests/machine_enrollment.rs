@@ -1,5 +1,4 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_core::{
     AccessCaller, AccessClientId, AdmittedMachine, CoreHost, EnrollMachine, EnrollmentDecision,
@@ -27,6 +26,10 @@ mod native_fixture;
 mod peer_binding;
 #[path = "machine_enrollment/presence_cases.rs"]
 mod presence_cases;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 
@@ -157,6 +160,10 @@ fn peer(result: EnrollmentDecision, request: &EnrollMachine) -> TestResult<PeerI
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn v4_service_keeps_one_v7_peer_across_updates_and_pending_readmission_after_reopen()
 -> TestResult {
@@ -260,6 +267,10 @@ async fn v4_service_keeps_one_v7_peer_across_updates_and_pending_readmission_aft
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn client_and_hash_conflicts_leave_every_prior_enrollment_unchanged() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -336,6 +347,10 @@ async fn client_and_hash_conflicts_leave_every_prior_enrollment_unchanged() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn stored_domain_corruption_is_an_error_instead_of_an_authentication_refusal() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -362,6 +377,10 @@ async fn stored_domain_corruption_is_an_error_instead_of_an_authentication_refus
 #[path = "machine_enrollment/readmission_cases.rs"]
 mod readmission_cases;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn expired_input_cannot_replace_a_valid_enrollment_and_stored_expiry_is_enforced()
 -> TestResult {
@@ -401,6 +420,10 @@ async fn expired_input_cannot_replace_a_valid_enrollment_and_stored_expiry_is_en
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn verified_edge_authority_reaches_the_shared_registry_and_forged_sources_are_refused()
 -> TestResult {

@@ -1,7 +1,11 @@
-#![allow(clippy::unwrap_used)] // Test-only fixture failures must fail the test.
+// Test-only fixture failures must fail the test.
 
 use message_board::*;
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn actor_origin() -> ActorOrigin {
     ActorOrigin {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())
@@ -10,6 +14,10 @@ pub fn actor_origin() -> ActorOrigin {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 pub fn record_envelope(id: RecordId, project: ProjectId) -> RecordEnvelope {
     RecordEnvelope {
         id,

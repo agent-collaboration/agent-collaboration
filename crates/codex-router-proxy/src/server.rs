@@ -2,10 +2,7 @@
 
 use std::collections::VecDeque;
 use std::convert::Infallible;
-#[cfg(test)]
-use std::io::Read;
-#[cfg(test)]
-use std::io::Write;
+
 use std::net::AddrParseError;
 use std::net::IpAddr;
 use std::net::Ipv4Addr;
@@ -182,15 +179,21 @@ mod runtime_config;
 mod runtime_lifecycle;
 
 pub use auth_reloader::*;
-use connection_diagnostics::*;
-use db_affinity::*;
+use connection_diagnostics::{LoopbackConnectionDiagnostic, loopback_connection_diagnostic};
+use db_affinity::{AsyncSqliteProviderErrorObserver, DbWriteAffinityOwnerRecorder};
 pub use errors_and_adapters::*;
 pub(crate) use hyper_request::*;
 pub use loopback_bind::*;
-use protocol_handler::*;
+use protocol_handler::{
+    LoopbackProtocolConnectionHandler, SharedUpgradeTasks, UpgradeTaskHandle, current_unix_seconds,
+};
 pub(crate) use response_body::*;
 pub use runtime_config::*;
-use runtime_lifecycle::*;
+use runtime_lifecycle::{
+    active_session_event_compaction_before, claim_session_affinity_cleanup_day,
+    store_connection_join_error, store_optional_connection_join_error,
+    supervise_detached_connection_handler,
+};
 
 #[cfg(test)]
 #[path = "server/tests.rs"]

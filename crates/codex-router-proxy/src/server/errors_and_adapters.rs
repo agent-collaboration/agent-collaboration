@@ -1,4 +1,30 @@
-use super::*;
+use super::{
+    AddrParseError, ProxyRuntimeCredentialResourcesOpenError, SocketAddr, StateStoreError,
+};
+#[cfg(test)]
+use crate::server::Header;
+#[cfg(test)]
+use crate::server::HttpProxyError;
+#[cfg(test)]
+use crate::server::HttpProxyRequest;
+#[cfg(test)]
+use crate::server::HttpProxyResponse;
+#[cfg(test)]
+use crate::server::HttpRequestHandler;
+#[cfg(test)]
+use crate::server::MAX_HTTP_HEADER_BYTES;
+#[cfg(test)]
+use crate::server::Method;
+#[cfg(test)]
+use crate::server::StreamingHttpProxyResponse;
+#[cfg(test)]
+use crate::server::StreamingHttpRequestHandler;
+#[cfg(test)]
+use crate::server::TcpListener;
+#[cfg(test)]
+use crate::server::TcpStream;
+#[cfg(test)]
+use std::io::{Read, Write};
 
 /// Assembled router runtime failure.
 #[derive(Debug, thiserror::Error)]

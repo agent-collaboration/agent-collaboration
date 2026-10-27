@@ -3,6 +3,10 @@ use fixture::{Live, Reader, assert_visible, create, update};
 use futures_util::FutureExt;
 use ingress::ReadPoint;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn trigger_during_sync_reads_changes_committed_after_its_first_read() -> TestResult {
     // Hold a real central reply after its read. Coalescing the next trigger
@@ -41,6 +45,10 @@ async fn trigger_during_sync_reads_changes_committed_after_its_first_read() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn trigger_during_resync_requires_another_fresh_read() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -94,6 +102,10 @@ async fn trigger_during_creation_reads_changes_after_releasing_admission() -> Te
     trigger_during_submission(true).await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn completed_sync_and_queued_mutation_finish_before_a_later_generation() -> TestResult {
     let directory = tempfile::tempdir()?;

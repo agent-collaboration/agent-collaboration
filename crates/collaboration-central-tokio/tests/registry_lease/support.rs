@@ -1,5 +1,5 @@
 //! Shared real Registry/Fleet storage; each case selects its explicit transport fault.
-#[allow(dead_code)]
+
 #[path = "../fleet_storage/support.rs"]
 mod fleet_fixture;
 pub(super) use fleet_fixture::Fixture as FleetFixture;

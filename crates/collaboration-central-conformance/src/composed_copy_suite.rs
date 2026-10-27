@@ -1,9 +1,15 @@
 //! Surviving shared-copy assertions, using real sessions and physical restart.
 use crate::{
-    ConformanceClient, ConformanceResult, RuntimeControl, composed_client::control,
-    composed_copy_fixture::*,
+    ConformanceClient, ConformanceResult, RuntimeControl,
+    composed_client::control,
+    composed_copy_fixture::{CopyFixture, equal, parts, piece, position, row, row_key, rows},
 };
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    CommitSequence, CopyUnavailableReason, DatabaseId, Epoch, FenceExpectation, FenceRequest,
+    FenceResult, PeerId, PieceDigest, PieceRefusal, ReplicatedTransaction, ReplicationAnswer,
+    RowChange, SchemaStatementForm, SchemaSupport, SnapshotCursor, SnapshotRead, SqlValue,
+    TransferId,
+};
 use std::{future::Future, num::NonZeroU64};
 
 pub async fn run_composed_copy_suite<F, Fut>(

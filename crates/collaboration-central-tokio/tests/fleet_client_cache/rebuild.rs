@@ -29,6 +29,10 @@ async fn large_snapshot(live: &mut Live) -> TestResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finishes() -> TestResult {
     // Wrong behavior: publishing snapshot or older replay pages before catch-up.
@@ -80,6 +84,10 @@ async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finish
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn router_restart_discards_a_partial_snapshot_after_its_cut_expires() -> TestResult {
     // A partial build survives on disk; after restart its expired cut must not
@@ -157,6 +165,10 @@ async fn router_reopen_replaces_an_expired_view_from_a_fresh_snapshot() -> TestR
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn router_publication_failure_preserves_active_records_and_checkpoint_until_retry()
 -> TestResult {

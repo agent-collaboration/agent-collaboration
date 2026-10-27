@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! A held subscription Batch reaches its real Claude peer once the peer returns.
 

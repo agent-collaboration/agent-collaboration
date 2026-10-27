@@ -1,7 +1,5 @@
 //! ACP v1 list, resume, and close through one scripted agent subprocess.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{
@@ -133,6 +131,15 @@ impl SessionEventSink for CountingEventSink {
         self.0.fetch_add(1, Ordering::Relaxed);
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         self.1.lock().expect("session events").push(event);
         Ok(())

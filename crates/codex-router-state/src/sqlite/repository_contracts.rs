@@ -1,5 +1,9 @@
 //! SQLite repository contracts responsibilities.
-use super::*;
+use super::{
+    AccountId, AffinityKeyHash, AsyncSqliteStateStore, BoxFuture, PersistedQuotaHistoryObservation,
+    PinObservation, PreviousResponseAffinityOwnerLookup, PreviousResponseAffinityOwnerRecord,
+    Provider, SelectorQuotaInput, SessionAccountAffinity, StateStoreError,
+};
 /// Async quota history repository contract for Tokio runtime callers.
 pub trait AsyncQuotaHistoryRepository {
     /// Appends one quota history observation.

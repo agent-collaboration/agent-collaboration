@@ -306,7 +306,7 @@ where
 }
 
 /// BC05's importer reads the same preexisting Host identity through its Router root.
-#[allow(dead_code)] // The shared fixture also compiles in targets that use only host-a.
+// The shared fixture also compiles in targets that use only host-a.
 pub async fn router_root_scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
@@ -333,7 +333,7 @@ where
 }
 
 /// A real small mailbox makes missing retirement observable as admission refusal.
-#[allow(dead_code)] // Only the mail retirement root reaches it, through central_pair.
+// Only the mail retirement root reaches it, through central_pair.
 pub async fn scenario_with_small_mailbox<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,

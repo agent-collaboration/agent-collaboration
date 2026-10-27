@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::panic_in_result_fn)]
 mod support;
 use fleet_sync_protocol::SqlValue;

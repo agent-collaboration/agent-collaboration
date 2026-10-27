@@ -274,10 +274,7 @@ impl Fixture {
     pub async fn reopen(path: &std::path::Path) -> Result<Self, TestError> {
         Self::open_with(path, false, Self::default_installation()?).await
     }
-    #[allow(
-        dead_code,
-        reason = "Used by multi-installation holder and forward cases sharing this fixture."
-    )]
+
     pub async fn open_for_installation(
         path: &std::path::Path,
         installation: message_board::ServiceId,

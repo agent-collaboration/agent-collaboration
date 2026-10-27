@@ -22,6 +22,10 @@ pub(super) fn request(operation: FleetOperation) -> TestResult<FleetRequest> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn conflicting_import_commits_no_other_candidate_records_or_feed() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -42,6 +46,10 @@ async fn conflicting_import_commits_no_other_candidate_records_or_feed() -> Test
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn live_update_keeps_original_import_digest_and_replays_one_ledger_and_feed() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -73,6 +81,10 @@ async fn live_update_keeps_original_import_digest_and_replays_one_ledger_and_fee
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn corrupt_origin_header_refuses_import_replay_without_writes() -> TestResult {
     let root = tempfile::tempdir()?;

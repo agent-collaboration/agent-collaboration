@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Fail-fast fake socket assertions at the peer wire boundary.
 
 use agent_automation::PeerProcessId;
@@ -12,6 +11,10 @@ use sha2::{Digest as _, Sha256};
 use std::{os::unix::fs::PermissionsExt as _, path::Path};
 use tokio::io::{AsyncBufReadExt as _, AsyncReadExt as _, BufReader};
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn fixture_record(root: &Path) -> PeerSessionRecord {
     PeerSessionRecord {
         session_id: SessionId::try_from("fixture-session".to_owned()).expect("session ID"),
@@ -22,6 +25,10 @@ fn fixture_record(root: &Path) -> PeerSessionRecord {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn publish_fixture_key(root: &Path, record: &PeerSessionRecord) {
     let digest = Sha256::digest(record.socket_path.to_str().expect("socket path").as_bytes());
     let pid = u32::from(record.process_id);

@@ -141,7 +141,7 @@ async fn sessions_help_click_opens_overlay_with_surface_and_section_styles() {
                 let help_style = canvas.cell(column, row).unwrap().text_style().unwrap();
                 assert_eq!(help_style.color, Some(Color::Grey), "Help is secondary, not a second heading");
                 assert_eq!(help_style.weight, Weight::Normal);
-                sender.send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), column as u16, row as u16))).unwrap();
+                sender.send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), u16::try_from(column).expect("captured fixture coordinates fit terminal cells"), u16::try_from(row).expect("captured fixture coordinates fit terminal cells")))).unwrap();
                 opened = true;
             } else if text.contains("Sessions Help") {
                 let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Sessions") && !line.contains("Sessions Help") && !line.contains("Sessions ·")).unwrap_or_else(|| panic!("actual Help section must be painted: {text}"));

@@ -1,7 +1,10 @@
 use message_board::*;
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Contract assertions; Result propagates fixture errors.
 fn advisory_and_procedure_roles_do_not_obscure_a_single_implicit_trail_assignment()
 -> Result<(), Box<dyn std::error::Error>> {
     let project = ProjectId::generate();

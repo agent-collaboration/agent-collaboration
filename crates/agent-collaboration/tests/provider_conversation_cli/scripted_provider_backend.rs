@@ -85,6 +85,10 @@ impl ScriptedProviderBackend {
             .unwrap_or_default()
     }
 
+    #[expect(
+        clippy::panic,
+        reason = "Broken fixture invariants must fail the test immediately."
+    )]
     fn next_step(&self, method: &'static str, request: &Value) -> ScriptedAnswer {
         let step = self
             .steps
@@ -98,6 +102,10 @@ impl ScriptedProviderBackend {
         (step.respond)(request)
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn answer<TRequest: Serialize, TResult: DeserializeOwned + Send + 'static>(
         &self,
         method: &'static str,
@@ -119,6 +127,14 @@ impl ScriptedProviderBackend {
         })
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::panic,
+        reason = "Broken fixture invariants must fail the test immediately."
+    )]
     fn settled<TRequest: Serialize, TResult: DeserializeOwned>(
         &self,
         method: &'static str,

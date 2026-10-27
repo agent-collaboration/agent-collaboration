@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 #[path = "../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
 mod native_permission_echo;

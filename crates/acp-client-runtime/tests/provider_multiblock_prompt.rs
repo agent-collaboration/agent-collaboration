@@ -1,7 +1,5 @@
 //! Model-neutral prompt content reaches ACP in order and under R11 gates.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{
@@ -133,6 +131,10 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn fixture_client(
     mode: &str,
 ) -> (
@@ -166,6 +168,10 @@ async fn fixture_client(
     (root, client, port)
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn text_and_link() -> Vec<PromptContent> {
     vec![
         PromptContent::text("Read".to_owned()).expect("text"),

@@ -4,6 +4,10 @@ use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_new_recording_router_advances_the_same_declared_readers_mark() -> TestResult {
     // Arrange: one reader's replicated mark, written by the first Router.

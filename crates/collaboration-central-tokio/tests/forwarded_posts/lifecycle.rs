@@ -83,6 +83,10 @@ async fn the_original_deadline_times_out_once_and_a_late_holder_reply_cannot_ans
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn reopening_preserves_correlation_slots_and_deadlines_without_persisting_the_opaque_post()
 -> ConformanceResult<()> {

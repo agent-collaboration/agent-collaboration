@@ -1,5 +1,9 @@
 //! Independent local Stored and native-live provider partitions, within one read budget.
-use super::*;
+use super::{
+    BTreeSet, ChannelDescription, ClientError, CollaborationClient, EndpointRef, MAX_RUNTIME_ROWS,
+    NativeBindingRejection, NativeEndpointSelector, NativeSessionScope, NativeSessionSource,
+    NativeSessionView, ProviderSessionListParams, SessionPickerRecord, bind_native_inventory,
+};
 use crate::picker_runtime_status::{
     NativeCatalogueView, NativeLiveCoverage, NativeLiveReadState, NativeLiveUnavailableReason,
 };
@@ -104,7 +108,9 @@ pub(super) async fn read_provider_records(
                         state = NativeLiveReadState::Unavailable(reason);
                         break;
                     }
-                    failure => return Err(failure.into_client()),
+                    failure @ InventoryReadFailure::Invalid { .. } => {
+                        return Err(failure.into_client());
+                    }
                 },
                 Err(error) => return Err(InventoryReadFailure::from_client(&error).into_client()),
             };

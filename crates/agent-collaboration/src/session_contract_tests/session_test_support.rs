@@ -350,7 +350,7 @@ impl crate::sessions::SessionsPicker for FakeSessionsPicker {
         self.offered_session_ids = request
             .records
             .iter()
-            .map(|record| record.session_id.to_owned())
+            .map(|record| record.session_id.clone())
             .collect();
         self.offered_labels = request
             .records

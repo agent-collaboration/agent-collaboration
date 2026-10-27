@@ -1,5 +1,10 @@
 use super::board_preparation::{self, CommandContext, PreparedBoardCommand};
-use collaboration_client::board::*;
+use collaboration_client::board::{
+    BoardError, BoardErrorDetails, BoardNextAction, BoardShowRequest, Identity, PageRequest,
+    PostListRequest, PostListScope, PostSelection, PostShowRequest, ProtocolVersion, ReadActor,
+    RepositoryAttachRequest, RepositoryDetachRequest, ResourceIdentity, ThreadListRequest,
+    ThreadRef, ThreadShowRequest, WorkspaceListRequest,
+};
 use collaboration_client::protocol::ThreadSubscriptionWaitFilter;
 use collaboration_client::{BoardClientError, ClientError, CollaborationClient};
 use serde::Serialize;

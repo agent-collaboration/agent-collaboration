@@ -6,7 +6,10 @@ const SHORT_WINDOW_SECONDS: u64 = 18_000;
 const WEEKLY_WINDOW_SECONDS: u64 = 604_800;
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_generation_renewal() {
     let temp_dir = ProxyTestTempDir::new("ordinary_websocket_credential_renewal");
     let database_path = temp_dir.path().join("state.sqlite");

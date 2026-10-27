@@ -1,6 +1,6 @@
 use crate::project_record_codec::{ProjectRowEnvelope, ProjectRowWrite, require_one_row};
 use crate::{ImportRowKind, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{Placement, Post, RecordKind, RecordRef, Thread, ThreadId, ThreadRefiled};
 
 impl ProjectWriteTransaction {
     pub(crate) async fn write_thread(

@@ -1,7 +1,16 @@
 //! Typed fleet board calls; uncertain writes are never retransmitted.
 use super::{BoardClientError, CollaborationClient};
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    AdrCreateRequest, AdrTransitionRequest, BoardArchiveRequest, BoardCloseRequest,
+    BoardCreateRequest, BoardListRequest, BoardListResult, BoardShowRequest, BoardShowResult,
+    BoardUpdateRequest, FleetRecordListRequest, FleetRecordShowRequest, ProjectCreateRequest,
+    ProjectListRequest, ProjectListResult, ProjectShowRequest, ProjectShowResult,
+    ProjectUpdateRequest, Record, RecordListResult, RepositoryAttachRequest,
+    RepositoryDetachRequest, RepositoryListRequest, RepositoryListResult, ResourceIdentity,
+    WorkspaceArchiveRequest, WorkspaceCreateRequest, WorkspaceListRequest, WorkspaceListResult,
+    WorkspaceShowRequest, WorkspaceShowResult, WorkspaceUpdateRequest,
+};
 impl CollaborationClient {
     pub async fn project_show(
         &self,

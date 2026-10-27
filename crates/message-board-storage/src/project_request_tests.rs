@@ -4,6 +4,10 @@ use message_board::*;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn rejection_shape_is_checked_at_native_admission_and_decode() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -84,6 +88,10 @@ async fn rejection_shape_is_checked_at_native_admission_and_decode() -> TestResu
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn request_rows_are_insert_once_and_a_persisted_voided_decision_is_refused() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -157,6 +165,10 @@ async fn request_rows_are_insert_once_and_a_persisted_voided_decision_is_refused
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_rejected_decision_cannot_commit_record_effects() -> TestResult {
     let directory = tempfile::tempdir()?;

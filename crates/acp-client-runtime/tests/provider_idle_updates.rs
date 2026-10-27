@@ -1,7 +1,5 @@
 //! Session updates keep their identity and settings outside an active prompt.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use acp_client_runtime::{

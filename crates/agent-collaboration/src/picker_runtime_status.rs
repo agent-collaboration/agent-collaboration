@@ -128,7 +128,7 @@ pub(crate) enum PickerRuntimeStatus {
 }
 
 impl PickerRuntimeStatus {
-    pub(crate) const fn from_provider(state: &ProviderSessionState) -> Self {
+    pub(crate) const fn from_provider(state: ProviderSessionState) -> Self {
         match state {
             ProviderSessionState::Unloaded | ProviderSessionState::Closed => Self::NotLoaded,
             ProviderSessionState::Idle => Self::Idle,

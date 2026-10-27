@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! The retained Fleet obligations run on current owner and normal-session routes.
 #![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]

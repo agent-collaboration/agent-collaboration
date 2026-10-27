@@ -19,7 +19,6 @@ async fn prompt_actor_cancellation_during_native_startup_includes_null_final_rep
     assert_early_cancellation(CancellationPoint::DuringNativeStart).await
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn assert_early_cancellation(cancellation_point: CancellationPoint) -> TestResult {
     ensure_test_scratch();
     let mut catalog = AcpSchemaCatalog::load()?;
@@ -166,7 +165,6 @@ async fn run_native_fixture(
     Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn receive_request(
     socket: &mut WebSocketStream<tokio::net::UnixStream>,
     expected_method: &str,

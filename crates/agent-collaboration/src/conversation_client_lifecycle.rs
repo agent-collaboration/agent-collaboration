@@ -1,6 +1,10 @@
 //! Provider-only lifecycle commands with durable operation IDs.
 
-use super::*;
+use super::{
+    CloseArguments, CollaborationClient, ConversationAccess, ConversationClientError,
+    LoadArguments, OperationId, RouterAccess, Write, current_session_ref, emit_operation_start, io,
+    parse_cli_generation, parse_cli_operation_id, parse_session_ref, report_create_client_error,
+};
 use collaboration_client::protocol::{
     ConversationCloseRequest, ConversationOperationWaitRequest, ConversationResumeRequest,
     PositiveSeconds, ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory,

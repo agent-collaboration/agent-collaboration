@@ -22,6 +22,10 @@ fn request(
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -76,6 +80,10 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cursor_key_is_stable_and_signed_payloads_refuse_tampering() -> TestResult {
     let directory = tempfile::tempdir()?;

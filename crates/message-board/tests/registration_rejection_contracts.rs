@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 use message_board::{
     ProjectId, ProjectRegistrationRejection, ProjectRejection, Refusal, ScopeRefusal,
 };

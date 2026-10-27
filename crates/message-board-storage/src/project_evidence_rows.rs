@@ -3,7 +3,10 @@ use crate::ProjectStorageError;
 use crate::project_record_codec::{
     stored_bool, stored_counter, stored_json, stored_project_row, stored_text, stored_timestamp,
 };
-use message_board::*;
+use message_board::{
+    Fact, FactId, FeedContent, FeedCursor, PlanRevision, PlanRevisionHash, ProjectId, Record,
+    RecordId, RecordKind, RecordRef, TrailTag, TrailText, WorkTrailRow, WorkTrailRowId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 use std::collections::BTreeMap;

@@ -200,9 +200,9 @@ async fn initially_included_source_reconnects_when_credit_entitlement_depletes()
             "depleted turn 2 must not reach upstream: {upstream_end:?}"
         );
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(8), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(8), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .expect("initial included source depletion should finish through the loopback WebSocket");
     assert!(

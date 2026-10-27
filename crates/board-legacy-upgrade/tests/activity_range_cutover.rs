@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Legacy global bounds must retain their thread's imported coverage.
 #![allow(clippy::panic_in_result_fn)]
 mod message_support;

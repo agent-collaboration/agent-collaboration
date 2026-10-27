@@ -1,5 +1,9 @@
 //! Native metadata keeps unknown import time and applies a precise cross-project sweep cut.
-#![allow(clippy::panic_in_result_fn)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod project_storage_support;
 use message_board::*;
 use message_board_storage::{
@@ -31,6 +35,10 @@ impl ImportRowKeys for ImportFixtureKeys {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn imported_known_time_and_unknown_time_round_trip_and_exact_second_sweeps_keep_ties()
 -> TestResult {

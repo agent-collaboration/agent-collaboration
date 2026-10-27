@@ -37,6 +37,10 @@ async fn add_case(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn thread_unread_case_dispatch_preserves_every_original_predicate_and_bounded_order()
 -> TestResult {

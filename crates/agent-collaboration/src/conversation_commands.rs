@@ -455,7 +455,7 @@ fn operation_failure_exit(failure: &OperationFailure) -> i32 {
         OperationFailureKind::UnsupportedCapability | OperationFailureKind::ProtocolViolation => 2,
         OperationFailureKind::Unavailable if failure.effect == OperationEffect::None => 3,
         OperationFailureKind::Timeout => 124,
-        _ => 4,
+        OperationFailureKind::Unavailable => 4,
     }
 }
 

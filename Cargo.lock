@@ -7593,6 +7593,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "workspace-architecture-check"
+version = "0.1.103"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "write16"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

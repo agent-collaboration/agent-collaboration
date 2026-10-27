@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #[path = "test_support/message_backend_fixture.rs"]
 mod message_backend_fixture;
 use collaboration_protocol::{

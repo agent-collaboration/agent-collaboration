@@ -1,7 +1,10 @@
 use super::*;
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_fragmented_upgrade");
     let database_path = temp_dir.path().join("state.sqlite");
@@ -157,7 +160,10 @@ fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
     const NOW: u64 = 1_030;
     let temp_dir = ProxyTestTempDir::new("served_new_websocket_weekly_floor");
@@ -260,7 +266,10 @@ fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_accepts_http_while_websocket_is_blocked() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_concurrent_accept");
     let database_path = temp_dir.path().join("state.sqlite");

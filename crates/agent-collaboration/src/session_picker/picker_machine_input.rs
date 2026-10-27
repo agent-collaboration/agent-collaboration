@@ -1,5 +1,7 @@
 //! Machine keyboard and pointer commits share the existing source-reload boundary.
-use super::*;
+use super::{
+    ConversationPreviewCache, KeyCode, SessionRecordsReloadPort, SessionsPickerModel, State,
+};
 use crate::presentation::session_picker::picker_machine_controls::{
     MachineChoiceKey, PickerMachineStage,
 };

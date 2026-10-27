@@ -1,3 +1,4 @@
+#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;

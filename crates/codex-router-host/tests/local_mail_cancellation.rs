@@ -1,3 +1,4 @@
+#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! The real Host resolves a pending Local cancel before admitting its original.
 #[path = "support/local_mail_cancellation_fixture.rs"]
 mod fixture;

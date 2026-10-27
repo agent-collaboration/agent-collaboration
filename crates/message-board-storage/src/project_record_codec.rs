@@ -1,6 +1,11 @@
 use crate::{ProjectStorageError, project_actor_rows::decode_actor};
 use chrono::{DateTime, SecondsFormat, Utc};
-use message_board::*;
+use message_board::{
+    ActorOrigin, AuthorityRole, BoardId, EpochNumber, FeedCursor, FeedPosition, Identity,
+    IntentRecipient, MachineLabel, MergeKey, MergeTime, ProjectFeedEntry, ProjectId, Record,
+    RecordEnvelope, RecordId, RecordKind, RecordPlacement, RecordRef, RecordScope, RecordTime,
+    RecordedActor, RequestId, RoleSubject, ServiceId, TaskLinkKind, WorkspaceId,
+};
 
 pub(crate) struct ProjectRowEnvelope {
     pub actor_id: RecordId,

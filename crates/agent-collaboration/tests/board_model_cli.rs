@@ -1,6 +1,10 @@
 //! V8 uses the executable, v3 manifest, MCP socket, admission and native stores.
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
@@ -24,7 +28,10 @@ fn request_file(directory: &Path, name: &str, value: &Value) -> Result<String, T
     Ok(path.to_str().ok_or("non-UTF8 fixture path")?.to_owned())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions prove the test contract; Result propagates fixture errors.
 async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_request_ids()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

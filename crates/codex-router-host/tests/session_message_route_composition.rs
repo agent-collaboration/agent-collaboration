@@ -1,3 +1,9 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::large_futures,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! The Host's real router selects provider and peer clients through the collaboration API.
 #[path = "support/registered_route_project.rs"]

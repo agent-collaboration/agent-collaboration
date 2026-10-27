@@ -2,6 +2,10 @@ use crate::schema_fingerprint::fingerprint_entries;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn reserved_names_are_excluded_case_insensitively_including_local_platform_tables() -> TestResult {
     let empty = fingerprint_entries(Vec::new())?;
@@ -41,6 +45,10 @@ fn reserved_names_are_excluded_case_insensitively_including_local_platform_table
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn identifier_quotes_and_punctuation_spacing_do_not_change_schema_identity() -> TestResult {
     let first = fingerprint_entries(vec![(
@@ -54,6 +62,10 @@ fn identifier_quotes_and_punctuation_spacing_do_not_change_schema_identity() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn string_literal_whitespace_and_constraint_changes_remain_distinct() -> TestResult {
     let identity =
@@ -69,6 +81,10 @@ fn string_literal_whitespace_and_constraint_changes_remain_distinct() -> TestRes
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn bookkeeping_exclusion_is_exact_for_sqlx_history() -> TestResult {
     let empty = fingerprint_entries(Vec::new())?;

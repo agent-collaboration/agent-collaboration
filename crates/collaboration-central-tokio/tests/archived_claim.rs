@@ -1,37 +1,45 @@
 //! The same Archived-board refusal and owning-row observations run on both runtimes.
 #![cfg(feature = "conformance")]
 
-#[allow(
+#[expect(
     dead_code,
-    reason = "The shared server also exposes clock controls used by other scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/clocked_server.rs"]
 mod clocked_server;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "The shared module also serves the Open-board Worker scenario."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "The shared module also serves the Open-board Worker scenario."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/imported_claim_scenarios.rs"]
 mod imported_claim_scenarios;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Only the existing canonical Fleet import arranger is used here."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "fleet_storage/support.rs"]
 mod native_fleet;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Only the existing public ImportTask/Copy seed arranger is used here."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/imported_board_fixture.rs"]
 mod imported_board_fixture;
 

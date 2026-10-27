@@ -57,6 +57,10 @@ async fn an_empty_rejection_is_refused_before_its_first_write() -> TestResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_post_reference_is_refused_even_with_a_matching_header() -> TestResult {
     let root = tempfile::tempdir()?;
@@ -121,6 +125,10 @@ async fn overwrite_encoded_payload(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn stored_origin_text_is_refused_instead_of_normalized_on_read_page_and_replay() -> TestResult
 {
@@ -200,6 +208,10 @@ async fn a_stored_empty_rejection_is_refused_on_read_page_and_replay() -> TestRe
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_stored_post_effect_with_a_matching_digest_is_refused_on_page_and_replay() -> TestResult {
     let root = tempfile::tempdir()?;

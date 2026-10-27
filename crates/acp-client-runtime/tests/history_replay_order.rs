@@ -1,7 +1,5 @@
 //! A subprocess checks the ACP wire order around history replay admission.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -152,6 +150,14 @@ impl SessionEventSink for ReplaySink {
         })
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if let Some(events) = &self.events {
             events.lock().expect("replay events").push(event);

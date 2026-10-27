@@ -168,6 +168,10 @@ async fn assert_unallocated(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 pub fn submitted_item(request: &Value) -> FixtureResult<DeliveryItem<BoardDeliveryTypes>> {
     assert_eq!(request.get("kind"), Some(&json!("central.mailbox-submit")));
     let envelope: DeliveryEnvelope<BoardDeliveryTypes> =

@@ -3,6 +3,10 @@ use crate::{CodexGeneration, SessionRef};
 use message_board::Identity;
 use serde::{Deserialize, Serialize};
 
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "Serde skip_serializing_if requires a predicate taking a reference."
+)]
 fn is_false(value: &bool) -> bool {
     !*value
 }

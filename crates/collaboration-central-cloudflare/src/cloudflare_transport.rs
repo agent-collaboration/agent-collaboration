@@ -2,7 +2,7 @@
 
 use collaboration_central_core::ObjectAddress;
 use durable_steps::{CallFailure, NotSentReason};
-use worker::*;
+use worker::{Env, Headers, Method, Request, RequestInit, Result, Stub, js_sys};
 
 // The library's transport error deliberately has no Serde implementation.
 // This private HTTP codec preserves every outcome and diagnostic at this edge.

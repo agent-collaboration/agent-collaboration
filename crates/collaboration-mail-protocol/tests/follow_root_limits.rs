@@ -1,5 +1,5 @@
 //! The mail codec preserves the producer's existing twenty-root batch bound.
-#![allow(clippy::panic_in_result_fn)] // Assertions are test oracles; Result propagates fixture errors.
+// Assertions are test oracles; Result propagates fixture errors.
 use collaboration_mail_protocol::{FollowDeliveryPolicy, NotificationSource, RootRange};
 use message_board::{
     BatchTiming, FeedCursor, Identity, MAX_SUBSCRIPTION_NOTICE_ROOTS, PendingRootNotice, ProjectId,
@@ -65,6 +65,10 @@ fn follow_source_wire(
     }))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn follow_batch_construction_refuses_more_roots_than_the_producer_bound() -> TestResult {
     let (allowed, policy) = follow_batch_inputs(MAX_SUBSCRIPTION_NOTICE_ROOTS)?;
@@ -94,6 +98,10 @@ fn follow_batch_construction_refuses_more_roots_than_the_producer_bound() -> Tes
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn follow_batch_wire_refuses_more_roots_without_truncating_the_allowed_batch() -> TestResult {
     let (allowed, policy) = follow_batch_inputs(MAX_SUBSCRIPTION_NOTICE_ROOTS)?;
@@ -113,6 +121,10 @@ fn follow_batch_wire_refuses_more_roots_without_truncating_the_allowed_batch() -
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn root_range_preserves_mixed_assigning_epochs_and_refuses_decreasing_epochs() -> TestResult {
     let from: FeedCursor = serde_json::from_value(json!({"epoch":1,"position":3}))?;

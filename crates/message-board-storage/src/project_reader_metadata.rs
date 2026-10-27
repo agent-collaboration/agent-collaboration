@@ -1,6 +1,9 @@
 //! Reader-state counts and bounded references use existing feed and subject metadata.
 use crate::{ProjectSnapshot, ProjectStorageError, project_record_io::record_kind_tag};
-use message_board::*;
+use message_board::{
+    FeedCursor, ReaderState, RecordId, RecordKind, RecordRef, SubtaskId, TaskId, TrailSubject,
+    WorkTrailRowId,
+};
 
 struct UnreadMetadataRow {
     kind: String,

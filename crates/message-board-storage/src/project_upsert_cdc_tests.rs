@@ -33,6 +33,10 @@ fn capturing_project_statements_do_not_use_conflict_updates() {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn product_sized_intent_state_change_captures_emitted_before_and_handed_off_after()
 -> TestResult {

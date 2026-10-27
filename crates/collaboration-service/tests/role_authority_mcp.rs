@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Authority and terminal replay run against real native stores.
 #![deny(clippy::too_many_lines)]
 #[path = "support/board_fixture.rs"]

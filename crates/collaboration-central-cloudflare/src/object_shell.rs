@@ -10,8 +10,10 @@ use fleet_sync_lease::RegistryConfig;
 use runtime_primitives::{AlarmOwner, Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::{cell::OnceCell, future::Future, sync::Arc};
 use worker::{
+    DurableObject, Env, Error, Request, Response, Result, State, WebSocket,
+    WebSocketIncomingMessage, WebSocketPair, durable_object,
     send::{SendFuture, SendWrapper},
-    *,
+    wasm_bindgen,
 };
 
 #[cfg(feature = "conformance")]

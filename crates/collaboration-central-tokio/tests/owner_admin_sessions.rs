@@ -2,10 +2,18 @@
 #![cfg(feature = "conformance")]
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/owner_registry_scenarios.rs"]
 mod owner_registry_scenarios;
 #[tokio::test]

@@ -1,6 +1,10 @@
 use super::*;
 use fixture::{Live, Reader, assert_visible, create};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn pending_request_replays_through_the_session_and_keeps_central_provenance_after_reopen()
 -> TestResult {

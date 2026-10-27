@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! Compiled-CLI conversations against the real collaboration API, whose in-Host composition
 //! drives a scripted provider backend; fixture assertions fail fast at that boundary.
 
@@ -7,6 +6,10 @@ use collaboration_service::{CollaborationApplication, ServiceIdentity};
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc};
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod fake_api_support;
 #[path = "provider_conversation_cli/scripted_provider_backend.rs"]
 mod scripted_provider_backend;
@@ -355,7 +358,7 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
         .expect("owned service directory");
     std::fs::create_dir_all(&service_directory).expect("service directory");
 
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
             board_session: None,
             directory: service_directory.clone(),
@@ -373,7 +376,7 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
             ExternalProviderLaunchBinding::cursor(executable, arguments)
                 .expect("Cursor provider binding"),
         )],
-    )
+    ))
     .await
     .expect("collaboration runtime");
 
@@ -523,6 +526,10 @@ async fn run_wait(root: &std::path::Path, operation_id: &str) -> std::process::O
     .await
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn fixture_directory(label: &str) -> std::path::PathBuf {
     let root = std::path::PathBuf::from("/tmp").join(format!(
         "pc-{label}-{}",
@@ -548,6 +555,10 @@ impl ProviderFixture {
         Self::start_with(label, steps, 7).await
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     /// `binding_generation` is the backend's current binding; the published endpoint always
     /// advertises generation 7, as the CLI reads it.
     async fn start_with(label: &str, steps: Vec<ScriptedStep>, binding_generation: u64) -> Self {
@@ -596,6 +607,10 @@ impl ProviderFixture {
         &self.root
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     /// Stops the API, requires every scripted provider operation to have run, and removes
     /// the directory.
     async fn finish(self) {
@@ -678,6 +693,14 @@ fn load_steps(check: impl FnOnce(&Value) + Send + 'static) -> Vec<ScriptedStep> 
     ]
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn common_result(stdout: &[u8]) -> Value {
     let lines: Vec<Value> = String::from_utf8_lossy(stdout)
         .lines()
@@ -697,6 +720,10 @@ fn common_result(stdout: &[u8]) -> Value {
     lines.last().expect("result line").clone()
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 fn operation_snapshot(
     operation_id: &str,
     operation: &str,
@@ -792,6 +819,10 @@ fn prompt_arguments(operation_id: &str) -> Vec<String> {
     .collect()
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_cli(root: &std::path::Path, arguments: Vec<String>) -> std::process::Output {
     tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args(arguments)
@@ -802,6 +833,10 @@ async fn run_cli(root: &std::path::Path, arguments: Vec<String>) -> std::process
         .expect("CLI")
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn cleanup_unpublished_fixture(root: &std::path::Path) {
     std::fs::remove_dir(root).expect("directory cleanup");
 }

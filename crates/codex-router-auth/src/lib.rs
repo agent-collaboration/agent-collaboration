@@ -1,5 +1,4 @@
 //! OpenAI account authentication boundaries for codex-router.
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 pub mod claude_oauth;
 pub mod credential_activation;
@@ -753,6 +752,10 @@ mod tests {
     struct FakeAuthenticatedQuotaClient;
 
     impl AuthenticatedQuotaClient for FakeAuthenticatedQuotaClient {
+        #[expect(
+            clippy::panic_in_result_fn,
+            reason = "Assertions must fail this test while fixture errors propagate through Result."
+        )]
         fn fetch_quota(
             &self,
             request: QuotaFetchRequest,
@@ -802,6 +805,10 @@ mod tests {
     }
 
     impl CredentialRefreshClient for RecordingRefreshClient {
+        #[expect(
+            clippy::panic_in_result_fn,
+            reason = "Assertions must fail this test while fixture errors propagate through Result."
+        )]
         fn refresh_credentials(
             &self,
             account_id: &AccountId,

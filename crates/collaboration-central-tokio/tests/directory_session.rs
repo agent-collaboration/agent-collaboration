@@ -1,13 +1,20 @@
 //! Directory reads preserve native summaries and Registry-verified service identities.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "directory_session/claim_routes.rs"]
 mod claim_routes;
 #[path = "native_http/support.rs"]
 mod configuration;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
-#[allow(dead_code)]
 mod native_fleet;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[path = "directory_session/support.rs"]
@@ -32,6 +39,10 @@ use std::{path::Path, time::Duration};
 const SERVICE: &str = "550e8400-e29b-41d4-a716-446655440d83";
 const PEER: &str = "019f0000-0000-7000-8000-000000001d83";
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn directory_reads_real_copy_annotations_and_the_verified_holder_after_reopen()
 -> ConformanceResult<()> {

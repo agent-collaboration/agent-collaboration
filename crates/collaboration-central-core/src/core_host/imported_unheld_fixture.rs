@@ -1,12 +1,17 @@
 //! Conformance setup only: public import and seed on the actual composed objects.
-use super::*;
+use super::{CoreHost, DatabaseId, IdSource, PlatformIo};
 use crate::{
     CallerContext, CopyKind, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity, RegistryKind,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
 use durable_steps::{AtomicStore, OperationState, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    CommitSequence, Epoch, Import, ImportAnswer, ImportDigest, PageDigest, ReplicationAnswer,
+    ReplicationPosition, RequestId, SchemaEntry, SchemaIdentity, SchemaObjectKind, SeedAnswer,
+    SeedAttemptId, SeedComplete, SeedPage, SeedPageAnswer, SnapshotPage, SqlValue,
+    TableDigestBuilder, TableName, schema_fingerprint,
+};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

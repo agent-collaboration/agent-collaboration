@@ -3,7 +3,11 @@ use crate::ProjectStorageError;
 use crate::project_record_codec::{
     stored_bool, stored_counter, stored_json, stored_project_row, stored_text,
 };
-use message_board::*;
+use message_board::{
+    Description, FeedCursor, ProjectId, ProjectState, Record, RecordKind, RecordRef, ResourceName,
+    Subtask, SubtaskId, SubtaskPlace, Task, TaskId, TaskLink, TaskLinkEvent, TaskLinkEventId,
+    TaskLinkEventKind, TaskLinkKind, TaskTitle, TrailText, Workstream, WorkstreamId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

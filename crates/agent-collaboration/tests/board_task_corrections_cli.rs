@@ -1,6 +1,11 @@
 //! CLI drop and removal flags reach real MCP admission and captured project records.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
+#[expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+)]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli};
@@ -9,7 +14,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn drop_reason_and_removed_list_flags_reach_the_real_board() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;

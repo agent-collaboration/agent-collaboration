@@ -1,23 +1,33 @@
 //! OB4 rows 5/6/7/13 through compiled Hosts, real Copy ACKs and recipient sockets.
-#![allow(clippy::panic_in_result_fn)]
+
 #![deny(clippy::too_many_lines)]
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/central_pair.rs"]
-#[allow(dead_code)]
 mod central_pair;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture.rs"]
-#[allow(dead_code)]
 mod fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture_inputs.rs"]
-#[allow(dead_code)]
 mod fixture_inputs;
 #[path = "board_e2e/follow_fixture.rs"]
-#[allow(dead_code)]
 mod follow_fixture;
 #[path = "board_e2e/owned_host.rs"]
-#[allow(dead_code)]
 mod owned_host;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/records_reopen.rs"]
-#[allow(dead_code)]
 mod records_reopen;
 #[path = "board_e2e/takeover_cancels.rs"]
 mod takeover_cancels;

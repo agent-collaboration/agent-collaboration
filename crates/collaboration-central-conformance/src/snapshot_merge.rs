@@ -7,7 +7,10 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardReadCursor, BoardReadPage, BoardReadScope,
 };
 use fleet_admission::{FleetOperation, FleetRequest};
-use message_board::*;
+use message_board::{
+    BoardId, BoardKind, Description, HumanId, Identity, ProjectId, ProtocolVersion, Record,
+    RecordedActor, RequestDecision, RequestId, ResourceName, WorkspaceId,
+};
 
 pub async fn run_fleet_snapshot_merge_conformance(
     client: &ConformanceClient,

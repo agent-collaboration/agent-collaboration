@@ -43,6 +43,7 @@ members = [
     "crates/codex-router-state",
     "crates/codex-router-test-support",
     "prototypes/ux_prototype",
+    "crates/workspace-architecture-check",
 ]
 
 [workspace.package]
@@ -146,6 +147,24 @@ zeroize = "1.9.0"
 unsafe_code = "forbid"
 
 [workspace.lints.clippy]
+wildcard_imports = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+large_futures = "deny"
+cast_possible_truncation = "deny"
+cast_sign_loss = "deny"
+cast_possible_wrap = "deny"
+match_wildcard_for_single_variants = "deny"
+unwrap_in_result = "deny"
+unused_async = "deny"
+trivially_copy_pass_by_ref = "deny"
+large_stack_arrays = "deny"
+large_types_passed_by_value = "deny"
+large_stack_frames = "deny"
+enum_glob_use = "deny"
+dbg_macro = "deny"
+implicit_clone = "deny"
+inefficient_to_string = "deny"
 await_holding_invalid_type = "deny"
 await_holding_lock = "deny"
 expect_used = "deny"

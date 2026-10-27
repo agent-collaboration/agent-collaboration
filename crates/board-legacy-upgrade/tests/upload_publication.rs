@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! The actual uploader publishes every copy before recording workflow completion.
 #![allow(clippy::panic_in_result_fn)]
 mod support;

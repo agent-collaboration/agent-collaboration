@@ -71,7 +71,11 @@ mod http_types;
 #[cfg(test)]
 #[path = "http_sse/tests.rs"]
 mod tests;
-use http_affinity::*;
+use http_affinity::{
+    AffinityOwnerRecordingBody, audit_route_kind_for_request, current_unix_seconds,
+    http_credential_rejection_audit_event, http_route_profile_for_kind,
+    http_selection_rejection_audit_event, path_without_query, request_route_kind,
+};
 pub(crate) use http_affinity::{
     allowed_audit_event, extract_response_id_from_body, local_auth_rejection_audit_event,
     redacted_account_hash,
@@ -218,6 +222,11 @@ fn passive_claude_quota_observations(
             continue;
         }
 
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "Finite nonnegative utilization bounds the rounded remaining basis points to 0..=10000."
+        )]
         let remaining_basis_points = ((1.0 - utilization).max(0.0) * 10_000.0).round() as u32;
         let observation = WindowObservation::new(
             WindowObservationProps::new(

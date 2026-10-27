@@ -1,6 +1,11 @@
 //! Restore one Session with or without agent history replay.
 
-use super::*;
+use super::{
+    ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderRuntimeError,
+    InteractionPort, LoadSessionRequest, McpServer, PathBuf, PendingSessionAdmission,
+    RestoredProviderSession, SessionEventSink, acp_load_session_error, acp_operation_error,
+    provider_frame_decode_error, publish_pending_session_admission,
+};
 use agent_client_protocol::schema::v1::{ResumeSessionRequest, SessionNotification, SessionUpdate};
 use agent_client_protocol::{Dispatch, SessionMessage};
 use futures_util::FutureExt as _;

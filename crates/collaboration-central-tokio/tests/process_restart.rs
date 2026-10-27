@@ -1,6 +1,5 @@
 //! Native process death preserves journaled work and replayable answers.
 #![cfg(all(feature = "conformance", unix))]
-#![allow(clippy::panic_in_result_fn)]
 
 #[path = "process_restart/archive_cleanup.rs"]
 mod archive_cleanup;
@@ -8,27 +7,43 @@ mod archive_cleanup;
 mod configuration;
 #[path = "process_restart/copy_staged_parts.rs"]
 mod copy_staged_parts;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
-#[allow(dead_code)]
 mod creation_scenarios;
 #[path = "process_restart/fleet_notice_outbox.rs"]
 mod fleet_notice_outbox;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/imported_board_fixture.rs"]
 mod imported_board_fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/imported_claim_scenarios.rs"]
-#[allow(dead_code)]
 mod imported_claim_scenarios;
 #[path = "process_restart/lease_publication.rs"]
 mod lease_publication;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "fleet_storage/support.rs"]
-#[allow(dead_code)]
 mod native_fleet;
 #[path = "process_restart/registration.rs"]
 mod registration;
 #[path = "process_restart/registry_notices.rs"]
 mod registry_notices;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
-#[allow(dead_code)]
 mod registry_setup;
 #[path = "process_restart/retirement.rs"]
 mod retirement;
@@ -88,6 +103,10 @@ async fn native_central_process() -> ConformanceResult<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatch()
 -> ConformanceResult<()> {

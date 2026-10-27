@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 mod support;
 
 use message_board::{ProjectId, RecordEnvelope, RecordId, RecordTime};

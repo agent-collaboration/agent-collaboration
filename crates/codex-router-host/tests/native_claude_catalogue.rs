@@ -1,3 +1,4 @@
+#![expect(clippy::large_futures, reason = "lint pass follows the crate split")]
 //! Actual Host composition reaches the fixed source-local native command.
 //! Its external executable supplies fixture observations; no vendor or model runs.
 use codex_router_host::{

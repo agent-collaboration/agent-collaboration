@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used)]
 //! Explicit queue mode is shared by both ACP providers.
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};

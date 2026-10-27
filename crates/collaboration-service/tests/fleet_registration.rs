@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Native outbox/port proof; the recording port stands in for A3c's Host runtime.
 #![allow(clippy::panic_in_result_fn)]
 use collaboration_contracts::ProjectRegistration;

@@ -1,4 +1,12 @@
-use super::*;
+#[cfg(test)]
+use super::RuntimeCredentialStore;
+use super::{
+    ACTIVE_SESSION_EVENT_RETENTION_SECONDS, Arc, AtomicU64, JoinError,
+    LoopbackConnectionDiagnostic, LoopbackConnectionErrorReporter, LoopbackRouterRuntimeError,
+    Ordering, UpgradeTaskHandle, loopback_connection_diagnostic,
+};
+#[cfg(test)]
+use super::{LoopbackRouterRuntimeConfig, ProxyRuntimeCredentialResourcesOpenError};
 
 #[cfg(test)]
 pub(super) fn test_credential_store_for_config(

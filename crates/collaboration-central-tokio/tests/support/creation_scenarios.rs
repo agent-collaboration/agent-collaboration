@@ -360,7 +360,7 @@ async fn await_registration_publication(
                 {
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
                 }
-                other => {
+                other @ DirectorySide::Known(_) => {
                     return Err(format!(
                         "normal registration published another holder or lease: {other:?}"
                     )

@@ -1,18 +1,27 @@
 //! Registered sessions retain typed credential rejection and audience boundaries.
 #![cfg(feature = "conformance")]
-#![allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal assertions qualify permanent conformance cases."
-)]
+
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "session_move/fixture.rs"]
 mod fixture;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/owner_registry_scenarios.rs"]
 mod owner_registry_scenarios;
 
@@ -447,6 +456,10 @@ async fn unregistered_token_owner_upgrade_and_machine_admin_are_refused_without_
     closed
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn credential_with_another_access_service_binding_gets_wrong_kind_403()
 -> ConformanceResult<()> {

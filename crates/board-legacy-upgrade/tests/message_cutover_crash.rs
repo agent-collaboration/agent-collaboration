@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! A process can disappear after copy commit without authorizing the source drop.
 #![allow(clippy::panic_in_result_fn)]
 mod message_support;

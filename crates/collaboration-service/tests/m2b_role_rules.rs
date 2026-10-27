@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! U64: authority, distinctness and cardinality through real MCP admission and Turso.
 #[path = "support/board_fixture.rs"]
 pub mod board_fixture;

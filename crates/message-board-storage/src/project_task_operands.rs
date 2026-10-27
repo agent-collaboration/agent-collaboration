@@ -1,6 +1,6 @@
 //! Task writes select endpoint bodies and only the graph edges their rule traverses.
 use crate::{ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{ProjectId, SubtaskId, TaskId, TaskLink, TaskLinkKind};
 
 fn task_link(
     from: String,

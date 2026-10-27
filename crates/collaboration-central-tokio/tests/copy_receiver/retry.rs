@@ -1,6 +1,10 @@
 use super::*;
 use std::sync::atomic::Ordering;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_summary()
 -> TestResult {

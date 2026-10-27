@@ -1,5 +1,4 @@
 //! Test support helpers for codex-router.
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 pub mod global_claude_fixture;
 pub mod installed_codex;

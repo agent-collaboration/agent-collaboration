@@ -61,6 +61,10 @@ control.close()
 assert stdin_closed.wait(timeout=15),'owner did not close fixture stdin'
 "#;
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn collect_until(
     events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>,
     observed: &mut Vec<SessionEvent>,

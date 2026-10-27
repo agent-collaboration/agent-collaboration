@@ -1,6 +1,8 @@
 //! Typed SDK dispatch keeps domain command selection closed.
 use super::board_entity_preparation::{PreparedEntityCommand, ProjectWriteKind};
-use collaboration_client::{BoardClientError, ClientError, CollaborationClient, board::*};
+use collaboration_client::{
+    BoardClientError, ClientError, CollaborationClient, board::ProjectReadKind,
+};
 use serde::Serialize;
 use serde_json::Value;
 fn serialized(value: impl Serialize) -> Result<Value, BoardClientError> {

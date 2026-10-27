@@ -2,6 +2,10 @@
 use super::*;
 use board_sync_protocol::{BoardNotice, NoticeRead, PositionedBoardNotice};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn holder_changes_notify_the_previous_holder_and_regrant_without_renewal_duplicates()
 -> ConformanceResult<()> {

@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! Actual owner import status/body failures preserve retained workflow identity.
 #![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]

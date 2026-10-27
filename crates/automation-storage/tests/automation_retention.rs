@@ -1,5 +1,5 @@
 //! Automation retains its own mailbox deliveries and receipts after the message cutover.
-#![allow(clippy::expect_used)]
+
 use automation_storage::AutomationStore;
 use sqlx::{Connection, sqlite::SqliteConnectOptions};
 use std::path::PathBuf;

@@ -1,3 +1,22 @@
+#![cfg_attr(
+    not(test),
+    expect(clippy::wildcard_imports, reason = "lint pass follows the crate split")
+)]
+#![cfg_attr(
+    test,
+    expect(clippy::unwrap_in_result, reason = "lint pass follows the crate split")
+)]
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_sign_loss,
+    clippy::large_futures,
+    clippy::match_wildcard_for_single_variants,
+    clippy::trivially_copy_pass_by_ref,
+    reason = "lint pass follows the crate split"
+)]
 //! Command-line entry points for codex-router.
 #![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 

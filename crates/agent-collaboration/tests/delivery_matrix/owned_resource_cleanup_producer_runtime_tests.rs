@@ -16,7 +16,7 @@ async fn actual_two_root_producer_uses_distinct_boards_and_preserves_participant
     let mut actors = None;
     let mut produced = None;
     let startup: ProofResult<()> = async {
-        fixture.start().await?;
+        Box::pin(fixture.start()).await?;
         let reader = fixture.peer_target()?;
         // Fixture identity only; this does not allocate or load a native session.
         let mut sender = reader.clone();

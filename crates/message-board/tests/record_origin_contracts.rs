@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use message_board::RecordPlacement;
 use serde_json::json;
 

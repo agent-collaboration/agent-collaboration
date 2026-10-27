@@ -1,8 +1,11 @@
-#![allow(clippy::panic_in_result_fn)]
 use crate::*;
 use message_board::*;
 type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn archive_report_preserves_the_native_position_without_a_legacy_commit_counter() -> TestResult {
     let (report, _) = fixture()?;
@@ -14,6 +17,10 @@ fn archive_report_preserves_the_native_position_without_a_legacy_commit_counter(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn archive_report_rejects_the_legacy_position_shape() -> TestResult {
     let (report, _) = fixture()?;
@@ -23,6 +30,10 @@ fn archive_report_rejects_the_legacy_position_shape() -> TestResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn archive_reports_have_no_legacy_request_or_write_encoding() -> TestResult {
     let (report, _) = fixture()?;
@@ -107,6 +118,10 @@ fn fixture() -> TestResult<(ArchiveReport, FleetSnapshot)> {
     Ok((report, snapshot))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn first_partial_report_records_once_and_successor_resend_is_noop() -> TestResult {
     let (mut report, mut snapshot) = fixture()?;
@@ -132,6 +147,10 @@ fn first_partial_report_records_once_and_successor_resend_is_noop() -> TestResul
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn final_report_finishes_last_board_and_workspace_but_not_other_open_board() -> TestResult {
     let (report, mut snapshot) = fixture()?;
@@ -170,6 +189,10 @@ fn final_report_finishes_last_board_and_workspace_but_not_other_open_board() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn unheld_project_needs_no_report_and_completed_repeat_has_no_finalization() -> TestResult {
     let (report, mut snapshot) = fixture()?;
@@ -210,6 +233,10 @@ fn unheld_project_needs_no_report_and_completed_repeat_has_no_finalization() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn archive_parent_exemption_keeps_board_project_and_state_checks() -> TestResult {
     let (mut report, mut snapshot) = fixture()?;

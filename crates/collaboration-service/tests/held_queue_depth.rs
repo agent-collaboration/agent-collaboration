@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! P1 diagnostic: actual per-target owner and SQLite, with no concurrent admissions.
 #[path = "support/board_fixture.rs"]
 #[allow(dead_code)] // This scenario uses only the shared fixture's replay and shutdown paths.

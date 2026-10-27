@@ -5,6 +5,10 @@ use message_board::{FeedPosition, ProjectId};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn fresh_native_project_files_are_ready_with_independent_empty_feeds() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -58,6 +62,10 @@ async fn fresh_native_project_files_are_ready_with_independent_empty_feeds() -> 
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn committed_records_allocate_dense_positions_per_project_and_rollback_leaves_no_gap()
 -> TestResult {
@@ -150,7 +158,6 @@ async fn committed_records_allocate_dense_positions_per_project_and_rollback_lea
     Ok(())
 }
 
-#[allow(clippy::unwrap_used)]
 pub(crate) fn project_record(project_id: ProjectId) -> message_board::Record {
     use message_board::*;
     Record::Project(ProjectState {
@@ -181,6 +188,10 @@ pub(crate) fn project_record(project_id: ProjectId) -> message_board::Record {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn snapshot_keeps_its_records_and_high_water_when_a_writer_commits() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -232,6 +243,10 @@ async fn snapshot_keeps_its_records_and_high_water_when_a_writer_commits() -> Te
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn capture_is_enabled_again_when_the_authoritative_connection_is_replaced() -> TestResult {
     use sqlx::ConnectOptions;
@@ -280,6 +295,10 @@ async fn capture_is_enabled_again_when_the_authoritative_connection_is_replaced(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn unsupported_schema_refuses_too_new_without_changes_and_keeps_mismatch_reads() -> TestResult
 {
@@ -355,6 +374,10 @@ async fn unsupported_schema_refuses_too_new_without_changes_and_keeps_mismatch_r
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_record_body_cannot_claim_another_project_inside_a_project_file() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -382,6 +405,10 @@ async fn a_record_body_cannot_claim_another_project_inside_a_project_file() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_held_writer_in_one_project_does_not_block_another_project() -> TestResult {
     let directory = tempfile::tempdir()?;

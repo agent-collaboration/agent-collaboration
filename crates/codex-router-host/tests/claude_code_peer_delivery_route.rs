@@ -1,3 +1,7 @@
+#![expect(
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 #![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Real registry/socket fixtures at the peer route boundary.
 

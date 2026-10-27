@@ -1,7 +1,7 @@
 //! Typed board calls over the collaboration API; uncertain writes are never replayed.
 use crate::{ClientError, CollaborationClient};
 use collaboration_protocol::ThreadSubscriptionWaitFilter;
-use message_board::*;
+use message_board::{BoardError, BoardNextAction, Identity, ResourceIdentity, SubscriptionTarget};
 #[derive(Debug, thiserror::Error)]
 pub enum BoardClientError {
     #[error("{0}")]

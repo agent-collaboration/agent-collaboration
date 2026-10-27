@@ -1,6 +1,9 @@
 //! Read the real socket and alarm capabilities of a normally admitted session.
 
-use super::*;
+use super::{
+    AdmissionOrigin, BindingAttachment, CloudflareStorageHost, ConnectionId,
+    ConnectionRegistration, Host, SocketFailure,
+};
 use fleet_sync_protocol::{AttachSequence, PeerId, SchemaSupport, SessionId};
 use runtime_primitives::SyncTime;
 use serde::Serialize;

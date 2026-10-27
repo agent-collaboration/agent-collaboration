@@ -1,6 +1,10 @@
 use crate::ProjectStore;
 use message_board::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cause_and_actor_key_rejects_a_second_identity_even_after_role_revision_changes()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

@@ -2,6 +2,10 @@
 use super::*;
 use serde_json::json;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn registry_public_call_refuses_copy_authority_and_allows_session_peer_read() -> TestResult {
     let directory = tempfile::tempdir()?;

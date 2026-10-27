@@ -7,6 +7,10 @@ pub fn role_required(requirement: Value) -> Value {
     json!({"kind":"role","reason":{"kind":"roleRequired","requirement":requirement}})
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 pub fn rejected(reply: &Value, reasons: Value) -> FixtureResult {
     assert_eq!(
         decision(reply)?,
@@ -146,6 +150,10 @@ fn assignment_by_id<'a>(rows: &'a [Value], assignment: &Value) -> FixtureResult<
         })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_role_transition(
     operation: &Value,
     before: &[Value],

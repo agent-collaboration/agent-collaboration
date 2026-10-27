@@ -139,7 +139,7 @@ where
         }
         #[cfg(feature = "conformance")]
         if invocation.kind == crate::conformance_holder::ObserveRegistryDispatches::KIND {
-            return self.registry_dispatches(invocation).await;
+            return self.registry_dispatches(invocation);
         }
         #[cfg(feature = "conformance")]
         if invocation.kind == crate::conformance_copy::CopyProbe::KIND {
@@ -155,7 +155,7 @@ where
         }
         #[cfg(feature = "conformance")]
         if invocation.kind == crate::conformance_copy::ObserveDriveTokens::KIND {
-            return self.observe_drive_tokens(invocation).await;
+            return self.observe_drive_tokens(invocation);
         }
         if invocation.kind == crate::session_calls::SessionLeaseRegistry::KIND {
             return self.lease_call(invocation).await;
@@ -214,7 +214,6 @@ where
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     use serde_json::json;
@@ -237,6 +236,10 @@ mod tests {
         }))
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn decoder_refuses_the_well_formed_copy_to_registry_edge() -> serde_json::Result<()> {
         let bytes = object_envelope(
@@ -253,6 +256,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn decoder_allows_the_session_to_registry_edge() -> serde_json::Result<()> {
         let bytes = object_envelope(
@@ -267,6 +274,10 @@ mod tests {
         Ok(())
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn decoder_allows_the_copy_to_fleet_edge() -> serde_json::Result<()> {
         let bytes = object_envelope(

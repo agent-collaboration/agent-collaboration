@@ -5,7 +5,10 @@ use serde_json::json;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 fn archive_observation_actor_round_trips_without_becoming_a_declared_identity() -> TestResult {
     // Wrong build: new stored provenance is missing, renamed, or accepted as public identity.
     let installation = ServiceId::try_from("019f0000-0000-7000-8000-000000001200".to_owned())?;

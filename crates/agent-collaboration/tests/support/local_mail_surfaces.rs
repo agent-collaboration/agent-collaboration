@@ -82,7 +82,7 @@ pub(super) struct Surfaces {
     pub(super) carrier: Arc<CarrierStandIn>,
 }
 impl Surfaces {
-    #[allow(dead_code)] // Only the companion compaction target needs the frozen reference.
+    // Only the companion compaction target needs the frozen reference.
     pub(super) async fn delivery_reference(
         &self,
         item: &collaboration_protocol::MailItemId,
@@ -173,7 +173,7 @@ impl Surfaces {
     pub(super) fn session(id: &str) -> Value {
         json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":id})
     }
-    #[allow(dead_code)] // Remote public-surface proofs inspect the actual SDK status owner.
+    // Remote public-surface proofs inspect the actual SDK status owner.
     pub(super) fn mail_runtime(&self) -> Arc<collaboration_service::MailDeliveryRuntime> {
         self.native.runtime_handle()
     }
@@ -186,7 +186,7 @@ impl Surfaces {
         }
         value
     }
-    #[allow(dead_code)] // Only held-custody proof targets use this input.
+    // Only held-custody proof targets use this input.
     pub(super) fn held_input(id: Option<&str>, text: &str) -> Value {
         let mut value = Self::input(id, text);
         if let Some(fields) = value.as_object_mut() {

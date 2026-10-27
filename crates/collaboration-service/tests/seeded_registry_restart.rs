@@ -1,3 +1,8 @@
+#![expect(
+    clippy::allow_attributes,
+    clippy::allow_attributes_without_reason,
+    reason = "lint pass follows the crate split"
+)]
 //! A start-epoch filename supplies identity, while native restore retains every authority gate.
 #![allow(clippy::panic_in_result_fn)]
 #[path = "support/accepted_snapshot.rs"]

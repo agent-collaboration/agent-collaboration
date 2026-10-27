@@ -1,7 +1,7 @@
 //! View operands are current records and small metadata projections, not an event replay.
 use crate::project_record_io::record_kind_tag;
 use crate::{ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{RecordId, RecordKind, RecordRef, TrailSubject};
 use std::collections::BTreeMap;
 impl ProjectSnapshot {
     pub async fn record_counts(

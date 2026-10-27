@@ -1,6 +1,10 @@
 use crate::ProjectStore;
 use message_board::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn participant_intervals_and_watches_survive_native_reopen()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

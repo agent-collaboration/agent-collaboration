@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! The registry lookup carries distinct service and peer identities through real frames.
 use board_sync_protocol::BoardConsumerProtocol;
 use fleet_sync_protocol as wire;

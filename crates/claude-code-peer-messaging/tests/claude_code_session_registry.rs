@@ -1,10 +1,13 @@
-#![allow(clippy::expect_used)]
 //! Fail-fast fixtures for live Claude Code registry admission.
 
 use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, PeerSessionLookup, PeerSessionStatus};
 use collaboration_protocol::SessionId;
 use serde_json::{Value, json};
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn live_record_fixture(process_id: u32, session_id: &str) -> Value {
     let mut record: Value =
         serde_json::from_str(include_str!("fixtures/claude_code_session_record.json"))

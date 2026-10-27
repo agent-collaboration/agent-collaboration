@@ -135,6 +135,10 @@ fn maximum_stand_down_acknowledgement(state: &ProjectState) -> TestResult<Record
     }))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn maximum_work_and_authority_rows_fit_native_storage_without_truncation() -> TestResult {
     // Inputs use the governing finite caller limits and maximum repeated actor

@@ -141,7 +141,10 @@ fn assembled_loopback_router_runtime_redacts_http_and_websocket_audit_events() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket");
     let database_path = temp_dir.path().join("state.sqlite");

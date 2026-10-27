@@ -1,7 +1,10 @@
 //! Participants and immutable anchors are fetched once per returned project page.
 use crate::project_participant_io::{cursor, invalid, validate_participant_entry};
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    FeedCursor, Participant, ParticipantNote, ParticipantProps, ProjectId, RecordId, RecordRef,
+    RecordedParticipantRole, ThreadId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 use std::collections::{BTreeMap, BTreeSet};
