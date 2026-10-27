@@ -240,13 +240,12 @@ async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_fro
         fleet: runtime.fleet.clone(),
         identity: identity()?,
     })?);
-    let application = CollaborationApplication::new(
-        ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     assert!(!root.join("projects").exists());
     let view = timeout(
         BOUND,

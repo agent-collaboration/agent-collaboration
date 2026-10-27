@@ -8,8 +8,7 @@ use super::{
 pub struct SubscriptionStartupRestoration {
     pub records: Vec<ProjectSubscriptionRecord>,
     pub retry_projects: Vec<ProjectId>,
-    pub(in crate::service_identity::subscription_delivery) expiry_readers:
-        Vec<(Identity, ProjectId)>,
+    pub(in crate::subscription_delivery) expiry_readers: Vec<(Identity, ProjectId)>,
     unavailable: HashSet<ProjectId>,
 }
 impl SubscriptionStartupRestoration {
@@ -18,14 +17,14 @@ impl SubscriptionStartupRestoration {
     }
 }
 
-pub(in crate::service_identity::subscription_delivery) enum StartupProjectDiscovery {
+pub(in crate::subscription_delivery) enum StartupProjectDiscovery {
     Readers(Vec<Identity>),
     Retry,
     Unavailable,
 }
 
 impl SubscriptionWindowStore {
-    pub(in crate::service_identity::subscription_delivery) async fn discover_startup_project(
+    pub(in crate::subscription_delivery) async fn discover_startup_project(
         &self,
         project: &ProjectId,
         known_readers: &[Identity],
@@ -86,7 +85,7 @@ impl SubscriptionWindowStore {
             .await?;
         Ok(())
     }
-    pub(in crate::service_identity::subscription_delivery) async fn restore_project_subscription_windows(
+    pub(in crate::subscription_delivery) async fn restore_project_subscription_windows(
         &mut self,
         reader: &Identity,
         now: DateTime<Utc>,
@@ -109,7 +108,7 @@ impl SubscriptionWindowStore {
         self.restore_startup_projects(now, &projects).await
     }
 
-    pub(in crate::service_identity::subscription_delivery) async fn restore_startup_projects(
+    pub(in crate::subscription_delivery) async fn restore_startup_projects(
         &mut self,
         now: DateTime<Utc>,
         projects: &[ProjectId],

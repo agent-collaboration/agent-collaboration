@@ -44,9 +44,9 @@ impl collaboration_contracts::ProjectReplicationPosition for QuotaAcknowledgemen
 
 #[tokio::test]
 async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity_returns() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
         // Arrange an inherited remote original: no sender row reserves its cancel slot.
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.runtime().await;
         let mut batches = Vec::new();
         for _ in 0..3 {
@@ -161,7 +161,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             max_expansion_seq: Some(child_sequence.get()),
             ..Default::default()
         }));
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_project_replication(marks)
             .with_project_admission(fixture.admission.clone())
@@ -175,19 +175,16 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             fixture.interactions.clone(),
             Arc::downgrade(&native.runtime_handle()),
         ));
-        let app = Arc::new(CollaborationApplication::new(
-            identity.with_notification_publisher(publisher.clone()),
-        ));
-        let control: fleet_sync_protocol::DeliveryCancel<
-            collaboration_contracts::RouterDeliveryTypes,
-        > = match serde_json::from_value::<
-            DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>,
-        >(frozen.clone())
-        .unwrap()
-        {
-            DeliveryEnvelope::Cancel(control) => control,
-            _ => panic!("frozen child control"),
-        };
+        let app = Arc::new((identity.with_notification_publisher(publisher.clone())).build());
+        let control: fleet_sync_protocol::DeliveryCancel<collaboration_contracts::RouterDeliveryTypes> =
+            match serde_json::from_value::<DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>>(
+                frozen.clone(),
+            )
+            .unwrap()
+            {
+                DeliveryEnvelope::Cancel(control) => control,
+                DeliveryEnvelope::Item(_) => panic!("frozen child control"),
+            };
         let refusal = native
             .runtime()
             .enqueue_project_cancel(control, epoch)
@@ -363,7 +360,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         runtime.close().await;
         fixture.close_native(native).await;
         query.close().await;
-    })
+    }))
     .await
     .expect("bounded actual outbox quota and frozen-child recovery");
 }

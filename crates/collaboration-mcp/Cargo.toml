@@ -10,7 +10,7 @@ workspace = true
 
 [features]
 # The API served the way a Host serves it, for other crates' tests.
-test-support = []
+test-support = ["collaboration-service/runtime-test-support"]
 
 [dependencies]
 collaboration-runtime = { path = "../collaboration-runtime" }

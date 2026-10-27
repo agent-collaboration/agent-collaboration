@@ -34,7 +34,10 @@ impl collaboration_contracts::ProjectRegistration for RegistrationCalls {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn offline_project_creation_waits_for_the_central_decision_before_registration()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
@@ -147,7 +150,10 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn central_reply_cache_and_original_outbox_input_survive_restart()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;

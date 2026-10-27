@@ -1,11 +1,9 @@
-//! The Router's identity and composed collaboration dependencies.
-use collaboration_protocol::{EndpointAvailability, EndpointDescription, UuidIdentity};
+//! Test-only construction of complete collaboration applications.
 use collaboration_runtime::EndpointDirectory;
-#[path = "subscription_delivery/mod.rs"]
-pub mod subscription_delivery;
+use collaboration_protocol::{EndpointDescription, UuidIdentity};
 
 #[derive(Clone)]
-pub struct ServiceIdentity {
+pub struct ApplicationFixture {
     pub(crate) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
     pub(crate) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
     pub(crate) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
@@ -50,23 +48,18 @@ pub struct ServiceIdentity {
     pub(crate) provider_conversations:
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
-impl ServiceIdentity {
+impl ApplicationFixture {
     pub fn with_mail_delivery_runtime(
         mut self,
         runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
     ) -> Result<Self, String> {
-        if !runtime.matches_identity(&self) {
-            return Err(
-                "mail runtime has a different service, installation peer or physical store owner"
-                    .to_owned(),
-            );
-        }
+        runtime.validate_owner(&self.router_identity(), self.interaction_store.as_ref())?;
         if let Some(store) = &self.automation {
-            runtime.attach_wake_owner(crate::mail_delivery_runtime::LocalWakeOwner {
-                service: self.service_id.clone(),
-                store: store.clone(),
-                permits: self.wake_wait_permits.clone(),
-            })?;
+            runtime.attach_wake_owner(
+                self.service_id.clone(),
+                store.clone(),
+                self.wake_wait_permits.clone(),
+            )?;
         }
         runtime.attach_reader_readiness()?;
         runtime.attach_project_replication(self.project_replication.clone())?;
@@ -211,12 +204,10 @@ impl ServiceIdentity {
             .map(|((store, delivery), interactions)| {
                 collaboration_runtime::WakeTimingWorker::new(
                     std::sync::Arc::clone(store),
-                    collaboration_runtime::WakeDeliverySender::new(
-                        std::sync::Arc::clone(interactions),
-                        std::sync::Arc::clone(delivery),
-                        self.configuration.clone(),
-                        self.machine_identity.clone(),
-                    ),
+                    std::sync::Arc::clone(delivery),
+                    self.configuration.clone(),
+                    self.machine_identity.clone(),
+                    std::sync::Arc::clone(interactions),
                 )
             })
     }
@@ -353,32 +344,9 @@ impl ServiceIdentity {
     }
     /// Registers a bounded inventory without inferring endpoint liveness.
     pub fn with_endpoints(self, endpoints: Vec<EndpointDescription>) -> Result<Self, String> {
-        let mut identities = std::collections::HashSet::new();
-        if endpoints.len() > 64 {
-            return Err("too many endpoints".into());
-        }
-        for endpoint in &endpoints {
-            if endpoint.endpoint.service_id != self.service_id {
-                return Err("endpoint belongs to another service".into());
-            }
-            if !identities.insert(endpoint.endpoint.clone()) {
-                return Err("duplicate endpoint identity".into());
-            }
-            if endpoint.channels.len() > 2
-                || (endpoint.channels.is_empty()
-                    && !matches!(
-                        endpoint.availability,
-                        EndpointAvailability::Unavailable { .. }
-                    ))
-            {
-                return Err("invalid channel count".into());
-            }
-        }
-        for endpoint in endpoints {
-            self.directory
-                .publish(endpoint)
-                .map_err(|error| error.to_string())?;
-        }
+        self.directory
+            .publish_inventory(endpoints)
+            .map_err(|error| error.to_string())?;
         Ok(self)
     }
 
@@ -436,5 +404,133 @@ impl ServiceIdentity {
             subscription_clock: std::sync::Arc::new(crate::SystemSubscriptionClock),
             directory: EndpointDirectory::new(service_id),
         })
+    }
+}
+
+impl ApplicationFixture {
+    #[expect(
+        clippy::expect_used,
+        reason = "This test-only builder validates these values when they are configured."
+    )]
+    pub fn router_identity(&self) -> crate::RouterIdentity {
+        crate::RouterIdentity::new(
+            self.service_id.clone(),
+            self.service_epoch.clone(),
+            self.installation_peer,
+            self.machine_identity.clone(),
+        )
+        .expect("validated fixture identity")
+    }
+    #[must_use]
+    pub fn build(self) -> crate::CollaborationApplication {
+        let native_control = crate::collaboration_application::NativeSessionControl::new(
+            self.router_identity(),
+            self.directory.clone(),
+            self.native_backend.clone(),
+            self.approval_broker.clone(),
+            self.display_names.clone(),
+        );
+        let session_context = crate::collaboration_application::SessionContextReader::new(
+            self.router_identity(),
+            native_control.clone(),
+            self.provider_operations.clone(),
+            self.claude_code_sessions.clone(),
+        );
+        let codex_inventory = crate::CodexSessionInventory::new(
+            self.router_identity(),
+            self.directory.clone(),
+            self.native_backend.clone(),
+            self.display_names.clone(),
+            self.journal.clone(),
+        );
+        let provider_inventory = crate::ProviderSessionInventory::new(
+            self.router_identity(),
+            self.directory.clone(),
+            self.provider_operations.clone(),
+            self.provider_session_hub.clone(),
+            self.display_names.clone(),
+            self.claude_code_sessions.clone(),
+            self.claude_background_jobs.clone(),
+        );
+        let journal_operations = crate::collaboration_application::JournalOperations::new(
+            self.router_identity(),
+            self.directory.clone(),
+            self.journal.clone(),
+        );
+        let sessions = crate::collaboration_application::SessionOperations::new(
+            self.router_identity(),
+            self.directory.clone(),
+            native_control,
+            codex_inventory,
+            provider_inventory,
+            journal_operations,
+        );
+        let board = crate::collaboration_application::BoardOperations::new(
+            self.router_identity(),
+            self.project_admission.clone(),
+            self.project_claim.clone(),
+            self.notification_publisher.clone(),
+            self.subscription_delivery.clone(),
+            self.subscription_presence.clone(),
+            self.subscription_clock.clone(),
+            self.interaction_store.clone(),
+            self.mail_delivery.clone(),
+            self.project_replication.clone(),
+            session_context,
+            self.project_admission
+                .as_ref()
+                .map(|admission| admission.registry.clone()),
+        );
+        let messages = crate::collaboration_application::MessageOperations::new(
+            self.router_identity(),
+            self.interaction_store.clone(),
+            self.mail_delivery.clone(),
+            self.display_names.clone(),
+            self.project_admission
+                .as_ref()
+                .map(|admission| admission.registry.clone()),
+        );
+        let conversations = crate::collaboration_application::ConversationOperations::new(
+            self.router_identity(),
+            self.provider_conversations.clone(),
+            self.provider_operations.clone(),
+            self.codex_conversation_recorder.clone(),
+            self.directory.clone(),
+        );
+        let observation = crate::collaboration_application::ObservationOperations::new(
+            self.router_identity(),
+            self.provider_session_hub.clone(),
+            self.directory.clone(),
+        );
+        let automation = crate::collaboration_application::AutomationOperations::new(
+            self.router_identity(),
+            self.automation.clone(),
+            self.configuration.clone(),
+            self.configuration_backend.clone(),
+            self.session_delivery.clone(),
+            self.interaction_store.clone(),
+            self.scheduled_run_execution.clone(),
+            self.native_backend.clone(),
+        );
+        let interactions = crate::collaboration_application::InteractionOperations::new(
+            self.approval_broker.clone(),
+        );
+        let wakes = crate::collaboration_application::WakeOperations::new(
+            &self.service_id.clone(),
+            self.automation.clone().as_ref(),
+        )
+        .with_wait_capacity(&self.wake_wait_permits.clone())
+        .with_remote(self.mail_delivery.as_ref());
+        crate::CollaborationApplication::new(
+            self.router_identity(),
+            board,
+            conversations,
+            messages,
+            observation,
+            sessions,
+            automation,
+            wakes,
+            interactions,
+        )
     }
 }

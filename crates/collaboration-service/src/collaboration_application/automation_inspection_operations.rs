@@ -19,10 +19,8 @@ use tokio::sync::Mutex;
 
 pub(super) type InspectionResult<TResult> = Result<TResult, AutomationInspectionFailure>;
 
-impl<'service> AutomationOperations<'service> {
-    pub(super) fn inspection_store(
-        &self,
-    ) -> InspectionResult<&'service Arc<Mutex<AutomationStore>>> {
+impl AutomationOperations {
+    pub(super) fn inspection_store(&self) -> InspectionResult<&Arc<Mutex<AutomationStore>>> {
         self.store().ok_or_else(failure::unavailable)
     }
 
@@ -127,7 +125,7 @@ impl<'service> AutomationOperations<'service> {
         budget: ResultByteBudget,
     ) -> InspectionResult<AutomationPage<TRecord>> {
         let store = self.inspection_store()?;
-        let service_id = &self.identity.service_id;
+        let service_id = self.identity.service_id();
         let digest = cursor::filter_digest(&selection.filters)
             .map_err(|()| failure::invalid("filters", "Cannot encode collection filters."))?;
         let position = match &selection.cursor {
@@ -234,12 +232,10 @@ impl<'service> AutomationOperations<'service> {
         let store = self.inspection_store()?;
         let record = read_delivery(store, &request).await?;
         let session_delivery = self
-            .identity
             .session_delivery
             .as_ref()
             .ok_or_else(failure::unavailable)?;
         let interactions = self
-            .identity
             .interaction_store
             .as_ref()
             .ok_or_else(failure::unavailable)?;
@@ -272,8 +268,8 @@ impl<'service> AutomationOperations<'service> {
         let record = read_run(store, &request).await?;
         collaboration_runtime::run_reconciliation::reconcile(
             store,
-            self.identity.scheduled_run_execution.as_ref(),
-            self.identity.native_backend.as_ref(),
+            self.scheduled_run_execution.as_ref(),
+            self.native_backend.as_ref(),
             record,
         )
         .await
@@ -331,7 +327,7 @@ impl<'service> AutomationOperations<'service> {
                     | automation_storage::StoredOperationState::Failed { .. }
             )
         {
-            if let Some(backend) = self.identity.configuration_backend.as_ref() {
+            if let Some(backend) = self.configuration_backend.as_ref() {
                 if let Err(error) = backend.reconcile(request.operation_id.clone()).await {
                     explanation = Some(error.message);
                 }
@@ -346,7 +342,7 @@ impl<'service> AutomationOperations<'service> {
             }
         }
         let mut snapshot =
-            crate::operation_receipt_projection::snapshot(record, &self.identity.service_id)
+            crate::operation_receipt_projection::snapshot(record, self.identity.service_id())
                 .map_err(failure::storage)?;
         if let (
             Some(message),

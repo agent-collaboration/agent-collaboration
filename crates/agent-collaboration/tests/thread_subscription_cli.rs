@@ -12,18 +12,22 @@ use collaboration_service as mail_service;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
 use collaboration_client::CollaborationClient;
 use collaboration_client::board::*;
-use collaboration_contracts::MachineIdentity;
-use collaboration_contracts::SessionMessageDelivery;
-use collaboration_contracts::TargetPresenceProbe;
-use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
-use collaboration_service::ServiceIdentity;
+use collaboration_contracts::MachineIdentity;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
 use serde_json::Value;
 use serde_json::json;
@@ -99,7 +103,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             machine_identity,
             clock: Arc::new(SystemSubscriptionClock),
         });
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .map_err(std::io::Error::other)?
         .with_project_admission(admission.clone())
         .with_automation_store(push_store.clone())
@@ -125,9 +129,8 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
     subscription_delivery.start().await?;
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         service_directory,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await?;
+        (identity).build(),
+    )?;
     let client =
         CollaborationClient::connect(service_directory, "thread-subscription-cli-test", "1")
             .await?;

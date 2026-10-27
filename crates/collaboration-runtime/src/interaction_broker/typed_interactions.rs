@@ -1,11 +1,12 @@
 //! Typed approval and question routing for provider Sessions.
 
 use super::{
-    Arc, InteractionHistoryError, InteractionHistoryRecord, InteractionHistoryState,
-    LegacyApprovalMetadata, NoticeTask, PendingQuestion, QuestionHistoryState, QuestionResponse,
-    RefusedTypedApproval, ServiceInteractionBroker, TypedApprovalLegacyContext,
-    TypedApprovalResolution, TypedApprovalSelection, TypedInteractionDecision,
-    TypedInteractionDecisionOutcome, TypedPendingApproval, oneshot, typed_interaction_notice,
+    APPROVAL_TIMEOUT, Arc, InteractionHistoryError, InteractionHistoryRecord,
+    InteractionHistoryState, LegacyApprovalMetadata, NoticeTask, PendingQuestion,
+    QuestionHistoryState, QuestionResponse, RefusedTypedApproval, ServiceInteractionBroker,
+    TypedApprovalLegacyContext, TypedApprovalResolution, TypedApprovalSelection,
+    TypedInteractionDecision, TypedInteractionDecisionOutcome, TypedPendingApproval, oneshot,
+    typed_interaction_notice,
 };
 
 impl ServiceInteractionBroker {
@@ -30,7 +31,7 @@ impl ServiceInteractionBroker {
                     target: context.target,
                     generation: context.generation,
                     expires_at: (chrono::Utc::now()
-                        + chrono::Duration::seconds(i64::from(super::APPROVAL_TIMEOUT_SECONDS)))
+                        + chrono::Duration::seconds(APPROVAL_TIMEOUT.as_secs().cast_signed()))
                     .to_rfc3339(),
                     requested_by: Some(context.requested_by),
                 })

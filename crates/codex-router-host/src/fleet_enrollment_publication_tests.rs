@@ -1,5 +1,8 @@
 //! Reference integrity and metadata publication use the existing encrypted test-store owner.
-#![allow(clippy::panic_in_result_fn)] // Assertions prove retained bytes and rejected reference shapes.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove retained bytes and rejected reference shapes."
+)]
 #![deny(clippy::too_many_lines)]
 use super::*;
 use codex_router_core::redaction::SecretString;

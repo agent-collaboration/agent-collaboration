@@ -3,7 +3,7 @@ use super::{BoardOperations, admission_error};
 use message_board::{BoardError, Page, PageRequest, Record};
 use message_board_storage::FleetListFilter;
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn fleet_list_page(
         &self,
         selection: FleetListFilter<'_>,

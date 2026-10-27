@@ -1,11 +1,11 @@
 //! Current admission owns replicated membership; InteractionStore owns local delivery progress.
-#![allow(dead_code)] // Shared fixture methods are used by separate behavioral targets.
+// Shared fixture methods are used by separate behavioral targets.
+use crate::ApplicationFixture;
 use crate::CollaborationApplication;
+use collaboration_runtime::FleetClient;
+use collaboration_contracts::MachineIdentity;
 use crate::ProjectAdmission;
 use crate::ProjectAdmissionProps;
-use crate::ServiceIdentity;
-use collaboration_contracts::MachineIdentity;
-use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 use crate::SubscriptionWindowStore;
@@ -31,7 +31,6 @@ pub struct SubscriptionFixture {
     pub windows: SubscriptionWindowStore,
 }
 impl SubscriptionFixture {
-    #[allow(clippy::panic_in_result_fn)]
     pub async fn empty() -> Result<Self, TestError> {
         let directory = tempfile::tempdir()?;
         let registry = crate::test_project_runtime::registry(directory.path())?;
@@ -58,13 +57,12 @@ impl SubscriptionFixture {
                 Some("subscription proof"),
             )?,
         })?);
-        let application = CollaborationApplication::new(
-            ServiceIdentity::new(
-                "00000000-0000-4000-8000-000000000001",
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission.clone()),
-        );
+        let application = (ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission.clone()))
+        .build();
         let workspace = WorkspaceId::generate();
         let board = BoardId::generate();
         let project = ProjectId::generate();
@@ -131,7 +129,7 @@ impl SubscriptionFixture {
             .await?;
         Ok(fixture)
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn joined() -> Result<Self, TestError> {
         let mut fixture = Self::start().await?;
         let reply = fixture
@@ -174,7 +172,7 @@ impl SubscriptionFixture {
             )
             .await?)
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn admit(
         &mut self,
         actor: Identity,
@@ -186,7 +184,7 @@ impl SubscriptionFixture {
         self.rescan(&self.reader.clone(), now).await?;
         Ok(reply)
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn create_root(
         &self,
         root: &ThreadId,
@@ -195,7 +193,7 @@ impl SubscriptionFixture {
     ) -> Result<(), TestError> {
         self.create_root_at(root, actor, text, self.now).await
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn create_root_at(
         &self,
         root: &ThreadId,
@@ -222,7 +220,7 @@ impl SubscriptionFixture {
         );
         Ok(())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn post_at(
         &self,
         actor: Identity,
@@ -231,7 +229,7 @@ impl SubscriptionFixture {
     ) -> Result<Post, TestError> {
         self.post_in_thread_at(&self.root, actor, text, now).await
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn post_in_thread_at(
         &self,
         thread: &ThreadId,
@@ -345,14 +343,13 @@ impl SubscriptionFixture {
         let interactions =
             Arc::new(InteractionStore::open(_directory.path().join("progress.sqlite")).await?);
         let windows = admission.subscription_window_store(interactions.clone());
-        let application = CollaborationApplication::new(
-            ServiceIdentity::new(
-                "00000000-0000-4000-8000-000000000001",
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission.clone())
-            .with_interaction_store(interactions.clone()),
-        );
+        let application = (ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission.clone())
+        .with_interaction_store(interactions.clone()))
+        .build();
         Ok(Self {
             application,
             admission,

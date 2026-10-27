@@ -250,7 +250,7 @@ async fn unconfigured_remote_direct_send_is_unavailable_without_native_admission
     let peer = runtime.fixture.host.config.local.owner;
     let mail = std::sync::Arc::new(runtime.local_mail_runtime());
     let presence = runtime.local_mail_props().presence;
-    let identity = crate::ServiceIdentity::new(
+    let identity = crate::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000001",
     )
@@ -262,7 +262,7 @@ async fn unconfigured_remote_direct_send_is_unavailable_without_native_admission
     .unwrap()
     .with_mail_delivery_runtime(mail.clone())
     .unwrap();
-    let application = crate::CollaborationApplication::new(identity);
+    let application = (identity).build();
     let item = collaboration_protocol::MailItemId::generate();
     let native_item = ItemId::new(uuid::Uuid::parse_str(item.as_str()).unwrap()).unwrap();
     let push_id = item.clone().try_into().unwrap();

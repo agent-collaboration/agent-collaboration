@@ -14,7 +14,7 @@ use interaction_storage::{
 use message_board::EpochNumber;
 
 impl MailDeliveryRuntime {
-    pub(crate) fn attach_project_replication(
+    pub fn attach_project_replication(
         &self,
         replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     ) -> Result<(), String> {

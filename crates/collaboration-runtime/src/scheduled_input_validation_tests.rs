@@ -13,12 +13,12 @@ use serde_json::json;
 #[tokio::test]
 async fn oversized_combined_input_fails_locally_and_releases_admission()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_input_validation(false).await
+    Box::pin(exercise_input_validation(false)).await
 }
 #[tokio::test]
 async fn oversized_input_after_preparation_preserves_target_without_submission()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_input_validation(true).await
+    Box::pin(exercise_input_validation(true)).await
 }
 async fn exercise_input_validation(
     prepared: bool,
@@ -154,7 +154,7 @@ async fn exercise_input_validation(
         configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity,
     };
-    worker.step(run.clone()).await?;
+    Box::pin(worker.step(run.clone())).await?;
     let failed = store
         .lock()
         .await

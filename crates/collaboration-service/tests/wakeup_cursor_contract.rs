@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use collaboration_protocol::{AutomationPageRequest, OperationId, WakeSendRequest};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::sync::Arc;
 #[path = "support/served_api.rs"]
@@ -26,13 +26,13 @@ async fn exercise_cursor(
     let store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&path).await?,
     ));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("cursor-test").await?;
     // MS-10: independent page records occupy independent target slots.
     for index in 0..2 {

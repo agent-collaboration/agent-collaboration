@@ -4,7 +4,7 @@ use collaboration_client::{
     ConversationLoadInput,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, time::Duration};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -20,13 +20,11 @@ async fn create_and_load_return_permission_differences_from_acp_setup() {
         let service_id = "00000000-0000-4000-8000-000000000001";
         let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
         let actor = json!({"endpoint":endpoint,"sessionId":"creator"});
-        let identity = ServiceIdentity::new(service_id, service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({
+        let identity = ApplicationFixture::new(service_id, service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({
             "endpoint":endpoint,"label":"ACP setup fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},
             "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]
         })).unwrap()]).unwrap();
-        let api = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-            .await
-            .unwrap();
+        let api = ServedCollaborationApi::start(&root, (identity).build()).unwrap();
         let listener = tokio::net::UnixListener::bind(root.join("acp.sock")).unwrap();
         let peer = tokio::spawn(async move {
             let (stream, _) = listener.accept().await.unwrap();

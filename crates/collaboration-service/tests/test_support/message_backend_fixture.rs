@@ -10,12 +10,14 @@ use collaboration_protocol::{
     CodexGeneration, DeliveryReceipt, EndpointDescription, MessageDelivery, PushMessageSendResult,
     PushRecord, SessionRef,
 };
+use collaboration_service::ApplicationFixture;
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ServiceInteractionBroker;
+
 use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_service::ServiceIdentity;
+
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
@@ -285,7 +287,7 @@ async fn exercise_message(
     } else {
         None
     };
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_automation_store(Arc::clone(&automation_store))
         .with_endpoints(vec![description])?
         .with_native_backend(native_backend.clone())?;
@@ -344,7 +346,7 @@ async fn exercise_message(
             clock,
         },
     )?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let backend = tokio::spawn(async move {
         let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await??;
         let mut socket = tokio_tungstenite::accept_async(stream).await?;

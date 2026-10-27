@@ -6,17 +6,17 @@ use message_board::{CancelExpansionSeq, SubscriptionScope, ThreadSubscriptionUns
 #[tokio::test]
 async fn a_written_unacknowledged_group_prevents_local_injection_without_calling_the_native_client()
 {
-    assert_local_injection_prevention(false).await;
+    Box::pin(assert_local_injection_prevention(false)).await;
 }
 
 #[tokio::test]
 async fn a_native_forced_tail_keeps_prevention_after_the_group_is_discarded_from_the_successor_file()
  {
-    assert_local_injection_prevention(true).await;
+    Box::pin(assert_local_injection_prevention(true)).await;
 }
 
 async fn assert_local_injection_prevention(discard_group: bool) {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -229,7 +229,7 @@ async fn a_follow_recipient_with_no_sender_project_file_can_still_inject_normall
         EpochNumber, FeedCursor, FeedPosition, Identity, ProjectId, RecordId,
         SubscriptionGeneration, SubscriptionPolicy,
     };
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;

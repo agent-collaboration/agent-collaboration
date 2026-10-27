@@ -5,8 +5,20 @@
 )]
 //! Plain watch choices are replicated reader state, never fake entity activity.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{human_reader, keyed_call, post_at_placement};
@@ -14,7 +26,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn first_thread_opt_out_survives_reopen_and_later_plain_project_watch()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -98,7 +113,10 @@ async fn first_thread_opt_out_survives_reopen_and_later_plain_project_watch()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn watch_ledgers_replay_without_reappending_project_or_thread() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;

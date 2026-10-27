@@ -21,11 +21,11 @@ use tokio::sync::Mutex;
 
 type ScheduleResult<TResult> = Result<TResult, ScheduleOperationFailure>;
 
-impl<'service> AutomationOperations<'service> {
+impl AutomationOperations {
     fn schedule_store(
         &self,
         context: &ScheduleFailureContext,
-    ) -> ScheduleResult<&'service Arc<Mutex<AutomationStore>>> {
+    ) -> ScheduleResult<&Arc<Mutex<AutomationStore>>> {
         self.store().ok_or_else(|| {
             ScheduleOperationFailure::Operation(schedule_failure(
                 context.clone(),
@@ -193,8 +193,8 @@ impl<'service> AutomationOperations<'service> {
                 definition,
                 schedule_id,
                 operation_id,
-                service_id: &self.identity.service_id,
-                execution: self.identity.scheduled_run_execution.as_ref(),
+                service_id: self.identity.service_id(),
+                execution: self.scheduled_run_execution.as_ref(),
             },
         )
         .await
@@ -304,7 +304,14 @@ impl<'service> AutomationOperations<'service> {
         &self,
         request: SchedulePrepareRequest,
     ) -> ScheduleResult<ScheduleSnapshot> {
-        crate::schedule_preparation::prepare_schedule(self.identity, request).await
+        crate::schedule_preparation::prepare_schedule(
+            &self.configuration,
+            self.identity.service_id(),
+            self.scheduled_run_execution.as_ref(),
+            self.automation.as_ref(),
+            request,
+        )
+        .await
     }
 }
 

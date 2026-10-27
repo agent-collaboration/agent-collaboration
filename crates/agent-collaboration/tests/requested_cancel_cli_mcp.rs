@@ -5,6 +5,10 @@ use collaboration_service as mail_service;
     reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/local_mail_surfaces.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod local_mail_surfaces;
 #[expect(
     clippy::allow_attributes,
@@ -12,6 +16,10 @@ mod local_mail_surfaces;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
 use collaboration_protocol::MailItemId;
 use local_mail_surfaces::{Surfaces, TestResult};
@@ -72,7 +80,7 @@ async fn terminal_control(
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn cancel_after_local_delivery_marks_the_original_without_another_native_wake() -> TestResult
 {
@@ -187,7 +195,7 @@ async fn cancel_after_local_delivery_marks_the_original_without_another_native_w
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn held_local_mail_is_prevented_through_public_control_before_native_delivery() -> TestResult
 {
@@ -233,7 +241,7 @@ async fn held_local_mail_is_prevented_through_public_control_before_native_deliv
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn omitted_cancel_identity_is_printed_even_when_connection_fails_without_storage()
 -> TestResult {

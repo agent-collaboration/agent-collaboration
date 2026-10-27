@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
-#![allow(clippy::expect_used)]
 //! Target presence and load-policy behavior through the session delivery routes.
 
 use agent_automation::RouteEffectEvidence;
@@ -197,7 +191,10 @@ async fn serve_thread_read_statuses(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn codex_presence_reads_status_and_never_mutates_the_thread()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;
@@ -238,7 +235,10 @@ async fn codex_presence_reads_status_and_never_mutates_the_thread()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn codex_presence_reports_unreachable_when_the_backend_gate_is_down()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(false)?;
@@ -250,7 +250,10 @@ async fn codex_presence_reports_unreachable_when_the_backend_gate_is_down()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;
@@ -317,7 +320,10 @@ async fn loaded_only_refuses_not_loaded_codex_thread_without_resuming_it()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn may_load_still_resumes_not_loaded_codex_thread_for_message_send()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let fixture = codex_route_fixture(true)?;

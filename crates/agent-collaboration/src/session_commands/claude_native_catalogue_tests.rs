@@ -4,7 +4,7 @@ use super::*;
 #[tokio::test]
 async fn native_background_active_list_and_resume_directory_survive_public_api_projection() {
     use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     for (corroborated, background_available) in [(true, true), (false, true), (true, false)] {
         let root = tempfile::tempdir().unwrap();
         let service_directory = root.path().join("agent-communication");
@@ -23,7 +23,7 @@ async fn native_background_active_list_and_resume_directory_survive_public_api_p
         fs::write(&executable,format!("#!/usr/bin/python3\nimport sys\nassert sys.argv[1:]==['agents','--json','--all']\nprint(open({}).read())\n",serde_json::to_string(&jobs).unwrap())).unwrap();
         fs::set_permissions(&executable, fs::Permissions::from_mode(0o700)).unwrap();
         let description=serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
-        let mut identity = ServiceIdentity::new(
+        let mut identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
@@ -38,9 +38,8 @@ async fn native_background_active_list_and_resume_directory_survive_public_api_p
         }
         let api = collaboration_mcp::test_support::ServedCollaborationApi::start(
             &service_directory,
-            CollaborationApplication::new(identity),
+            (identity).build(),
         )
-        .await
         .unwrap();
         let target = ClaudeLaunchTarget {
             service_directory,

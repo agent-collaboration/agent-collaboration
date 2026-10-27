@@ -5,6 +5,14 @@
 )]
 //! TH-1…TH-3 and the root-entry cutover through real MCP/native admission.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
@@ -33,7 +41,10 @@ fn thread_of(request: &Value) -> Value {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn every_subject_variant_is_required_and_read_titles_follow_current_records()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -138,7 +149,10 @@ async fn every_subject_variant_is_required_and_read_titles_follow_current_record
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn scope_checks_reject_foreign_records_and_cache_not_found_replays_after_arrival()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -235,7 +249,10 @@ async fn scope_checks_reject_foreign_records_and_cache_not_found_replays_after_a
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn row_subject_titles_follow_redaction_without_copying_private_text_into_thread()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -276,7 +293,10 @@ async fn row_subject_titles_follow_redaction_without_copying_private_text_into_t
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn missing_and_invalid_subjects_and_project_target_posts_are_refused() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;
@@ -314,7 +334,10 @@ async fn missing_and_invalid_subjects_and_project_target_posts_are_refused() -> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn project_subject_and_refile_require_any_project_role_and_record_exact_history()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -429,7 +452,10 @@ async fn project_subject_and_refile_require_any_project_role_and_record_exact_hi
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn session_role_witness_and_implicit_trail_use_their_own_scoped_operands()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

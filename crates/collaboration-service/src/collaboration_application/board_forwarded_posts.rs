@@ -5,7 +5,7 @@ use message_board::{
     BoardError, BoardOperation, ProjectRequest, RequestEffectsScope, public_replies as public,
 };
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn forward_non_holder_post(
         &self,
         request: &ProjectRequest,

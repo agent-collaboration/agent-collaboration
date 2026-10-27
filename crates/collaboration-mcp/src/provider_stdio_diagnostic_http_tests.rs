@@ -59,6 +59,10 @@ sys.stdin.read()
 #[derive(Clone, Default)]
 struct DiagnosticCapture(Arc<Mutex<Vec<u8>>>);
 impl Write for DiagnosticCapture {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "A poisoned test capture must fail the test instead of silently losing evidence."
+    )]
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0
             .lock()

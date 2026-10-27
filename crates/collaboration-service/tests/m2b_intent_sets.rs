@@ -6,6 +6,14 @@
 )]
 //! NI-2 actor-by-actor re-resolution through real native claim transactions.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/m2b_intents.rs"]
 mod m2b_intents;
@@ -16,7 +24,10 @@ use serde_json::json;
 use std::collections::BTreeSet;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn role_addressing_emits_exactly_zero_one_or_two_holders() -> Result<(), TestError> {
     for role in ["reviewer", "advisor", "operator"] {
         for holders in 0..=2 {
@@ -44,7 +55,7 @@ async fn role_addressing_emits_exactly_zero_one_or_two_holders() -> Result<(), T
                     .iter()
                     .filter_map(|intent| match intent.recipient() {
                         IntentRecipient::Resolved(recipient) => recipient.actor.declared_identity(),
-                        _ => None,
+                        IntentRecipient::NoHolder { .. } => None,
                     })
                     .collect();
                 assert_eq!(actual, actors.iter().take(holders).cloned().collect());
@@ -56,7 +67,10 @@ async fn role_addressing_emits_exactly_zero_one_or_two_holders() -> Result<(), T
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn retained_holder_keeps_identity_updates_revision_and_adds_new_holder()
 -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
@@ -88,7 +102,10 @@ async fn retained_holder_keeps_identity_updates_revision_and_adds_new_holder()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn shrinking_set_supersedes_only_removed_actor_and_keeps_retained_identity()
 -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
@@ -118,7 +135,10 @@ async fn shrinking_set_supersedes_only_removed_actor_and_keeps_retained_identity
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn returning_actor_reuses_original_intent_before_handoff() -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
     let first = session("first")?;
@@ -160,7 +180,10 @@ async fn returning_actor_reuses_original_intent_before_handoff() -> Result<(), T
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn empty_role_is_terminal_for_this_cause_even_when_holder_returns() -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
     let first = session("first")?;
@@ -191,7 +214,10 @@ async fn empty_role_is_terminal_for_this_cause_even_when_holder_returns() -> Res
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn named_target_wins_role_dedup_and_survives_role_removal() -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
     let first = session("first")?;
@@ -218,7 +244,10 @@ async fn named_target_wins_role_dedup_and_survives_role_removal() -> Result<(), 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn handed_off_recipient_stays_frozen_and_a_return_adds_no_second_handoff()
 -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
@@ -251,7 +280,10 @@ async fn handed_off_recipient_stays_frozen_and_a_return_adds_no_second_handoff()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn deferred_human_commits_re_resolution_and_returns_the_added_local_intent()
 -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;
@@ -291,7 +323,10 @@ async fn deferred_human_commits_re_resolution_and_returns_the_added_local_intent
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn retained_claim_reinstates_removed_co_holder_under_its_original_identity()
 -> Result<(), TestError> {
     let fixture = IntentFixture::start().await?;

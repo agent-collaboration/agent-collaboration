@@ -26,7 +26,17 @@ fn refused(reason: RemoteWakeRefusal, mutation: RemoteWakeMutationState) -> Remo
     RemoteWakeResult::Refused { reason, mutation }
 }
 impl MailDeliveryRuntime {
-    pub(crate) fn attach_wake_owner(&self, owner: LocalWakeOwner) -> Result<(), String> {
+    pub fn attach_wake_owner(
+        &self,
+        service: collaboration_protocol::UuidIdentity,
+        store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
+        permits: Arc<tokio::sync::Semaphore>,
+    ) -> Result<(), String> {
+        let owner = LocalWakeOwner {
+            service,
+            store,
+            permits,
+        };
         if let Some(existing) = self.consumer.wakes.get() {
             return if existing.service == owner.service
                 && Arc::ptr_eq(&existing.store, &owner.store)

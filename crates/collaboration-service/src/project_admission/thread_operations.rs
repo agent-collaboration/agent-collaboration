@@ -543,7 +543,10 @@ fn add_targets(plan: &mut OperationPlan, cause: RecordRef, targets: &[NotifyTarg
 mod cooldown_tests {
     use super::remaining_post_cooldown;
     #[test]
-    #[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions prove the test contract; Result propagates fixture errors."
+    )]
     fn cooldown_rounds_up_and_caps_a_regressed_clock() -> Result<(), Box<dyn std::error::Error>> {
         let previous = chrono::DateTime::from_timestamp_millis(100_000).ok_or("time")?;
         for (elapsed, expected) in [

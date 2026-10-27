@@ -1,5 +1,8 @@
 //! Force the real install runner and bootstrap renew to meet at the drain boundary.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,

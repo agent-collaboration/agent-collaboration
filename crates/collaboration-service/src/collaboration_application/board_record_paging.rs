@@ -37,7 +37,7 @@ pub(super) struct ProjectReadPage<TRecord> {
     pub unavailable: Vec<ProjectId>,
     pub next_cursor: Option<String>,
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn project_feed_page<TRecord: Serialize>(
         &self,
         request: &PostListRequest,

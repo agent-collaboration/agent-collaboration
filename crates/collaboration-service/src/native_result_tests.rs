@@ -2,7 +2,8 @@
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::message_effect_state::{MessageEffects, NativeFailureKind};
+    use collaboration_runtime::message_effect_state::MessageEffects;
+    use collaboration_runtime::message_effect_state::NativeFailureKind;
     use agent_automation::CessationEvidence;
     use serde_json::json;
 
@@ -31,7 +32,7 @@ mod tests {
             failure.response["error"]["data"]["kind"] = json!(explanation);
             let delivery = interpret_native_response(
                 &target(),
-                crate::native_message_dispatch::NativeMessageOutcome::Failed(failure),
+                collaboration_runtime::native_message_dispatch::NativeMessageOutcome::Failed(failure),
                 false,
                 &mut effects(),
             );
@@ -70,7 +71,7 @@ mod tests {
         let failure = emitter.failure(NativeFailureKind::Unavailable, "start");
         let delivery = interpret_native_response(
             &target(),
-            crate::native_message_dispatch::NativeMessageOutcome::Failed(failure),
+            collaboration_runtime::native_message_dispatch::NativeMessageOutcome::Failed(failure),
             false,
             &mut effects(),
         );
@@ -115,7 +116,7 @@ mod tests {
         ] {
             let result = interpret_native_response(
                 &target(),
-                crate::native_message_dispatch::NativeMessageOutcome::Failed(failure),
+                collaboration_runtime::native_message_dispatch::NativeMessageOutcome::Failed(failure),
                 false,
                 &mut effects(),
             );
@@ -171,7 +172,7 @@ mod tests {
             );
             let delivery = interpret_native_response(
                 &target(),
-                crate::native_message_dispatch::NativeMessageOutcome::Failed(failure),
+                collaboration_runtime::native_message_dispatch::NativeMessageOutcome::Failed(failure),
                 false,
                 &mut effects(),
             );
@@ -262,7 +263,7 @@ mod tests {
             // Arrange and act: native emitter -> receipt translator -> canonical SDK result.
             let delivery = interpret_native_response(
                 &target(),
-                crate::native_message_dispatch::NativeMessageOutcome::Failed(
+                collaboration_runtime::native_message_dispatch::NativeMessageOutcome::Failed(
                     emitter.failure(kind, "nativeCall"),
                 ),
                 false,
@@ -290,8 +291,8 @@ mod tests {
     async fn malformed_native_read_keeps_processing_cause_and_publishes_local_rejection() {
         // Arrange and act through the existing socket endpoint, dispatch and real response translator.
         let (target, response) =
-            crate::native_recorded_permission_tests::malformed_thread_read_probe().await;
-        let crate::native_message_dispatch::NativeMessageOutcome::Failed(failure) = &response
+            collaboration_runtime::native_recorded_permission_tests::malformed_thread_read_probe().await;
+        let collaboration_runtime::native_message_dispatch::NativeMessageOutcome::Failed(failure) = &response
         else {
             panic!("malformed native read was accepted");
         };

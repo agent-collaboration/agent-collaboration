@@ -7,10 +7,10 @@ use collaboration_protocol::{
     BoundedObservationRequest, EndpointDescription, ObservationEndReason, ProviderRequestedPolicy,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
+use collaboration_service::ApplicationFixture;
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionEventHub;
 use collaboration_runtime::ProviderSessionRecord;
-use collaboration_service::ServiceIdentity;
 use serde_json::{Value, json};
 use session_event_model::{SessionEvent, SessionItem, SessionItemKind};
 use tokio::sync::Mutex;
@@ -23,7 +23,7 @@ struct ProviderFixture {
     target: SessionRef,
     board_target: message_board::SessionRef,
     hub: Arc<ProviderSessionEventHub>,
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
 }
 
 async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error>> {
@@ -70,7 +70,8 @@ async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error
             "runtime":{"provider":"claudeCode","runtimeName":"fixture"},
             "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]}]
     }))?;
-    let identity = ServiceIdentity::new(service_id, epoch)?.with_provider_session_hub(hub.clone());
+    let identity =
+        ApplicationFixture::new(service_id, epoch)?.with_provider_session_hub(hub.clone());
     identity.endpoint_directory().publish(description)?;
     Ok(ProviderFixture {
         _root: root,
@@ -85,9 +86,7 @@ async fn provider_fixture() -> Result<ProviderFixture, Box<dyn std::error::Error
 async fn the_client_hands_on_each_streamed_event_before_the_call_returns() {
     // Arrange: one retained event; the call is bounded at two events and thirty seconds.
     let fixture = provider_fixture().await.expect("provider fixture");
-    let served = served_api::ServedApi::start(fixture.identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
     let client = served
         .client("streaming-observer")
         .await
@@ -148,9 +147,7 @@ async fn the_client_hands_on_each_streamed_event_before_the_call_returns() {
 async fn a_stale_epoch_streams_its_resync_marker_without_a_cursor() {
     // Arrange: the hub's current epoch, then a call that names an older one.
     let fixture = provider_fixture().await.expect("provider fixture");
-    let served = served_api::ServedApi::start(fixture.identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
     let client = served
         .client("stale-observer")
         .await
@@ -195,9 +192,7 @@ async fn a_stale_epoch_streams_its_resync_marker_without_a_cursor() {
 async fn a_stale_epoch_answers_its_resync_marker_even_when_the_budget_cannot_hold_it() {
     // Arrange: a call naming an older epoch, with the smallest valid event and byte budget.
     let fixture = provider_fixture().await.expect("provider fixture");
-    let served = served_api::ServedApi::start(fixture.identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
     let client = served
         .client("small-budget-observer")
         .await
@@ -245,9 +240,7 @@ async fn a_stale_epoch_answers_its_resync_marker_even_when_the_budget_cannot_hol
 async fn a_reset_during_an_open_call_streams_its_resync_marker_without_a_cursor() {
     // Arrange: an open call that has streamed the retained event.
     let fixture = provider_fixture().await.expect("provider fixture");
-    let served = served_api::ServedApi::start(fixture.identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(fixture.identity).expect("serve the API");
     let client = served
         .client("reset-observer")
         .await
@@ -306,9 +299,7 @@ async fn provider_observers_read_snapshot_and_live_order() {
         identity,
     } = provider_fixture().await.expect("provider fixture");
 
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(identity).expect("serve the API");
     let bounded = served
         .client("provider-observer")
         .await
@@ -470,9 +461,7 @@ async fn metadata_payloads_remain_exact_in_retained_and_live_public_observation(
         .publish(fixture.board_target.clone(), usage.clone())
         .await
         .expect("retain usage");
-    let served = served_api::ServedApi::start(fixture.identity)
-        .await
-        .expect("served API");
+    let served = served_api::ServedApi::start(fixture.identity).expect("served API");
     let client = served.client("metadata-observer").await.expect("client");
     let request = BoundedObservationRequest {
         target: fixture.target.clone(),

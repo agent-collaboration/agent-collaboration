@@ -3,7 +3,10 @@
     reason = "lint pass follows the crate split"
 )]
 //! Resolve dependency kinds so SDK ownership holds across indirect crate paths.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},

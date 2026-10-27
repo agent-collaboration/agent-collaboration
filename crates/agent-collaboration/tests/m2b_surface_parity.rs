@@ -7,6 +7,11 @@ mod board_cli_execution;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_cli_execution::cli;
 use board_fixture::{BoardFixture, TestError};
@@ -95,7 +100,7 @@ async fn six_role_names_and_holder_qualified_releases_match_cli_and_mcp() -> Res
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn every_about_grammar_and_refile_match_cli_mcp_and_current_subject_reads()
 -> Result<(), TestError> {

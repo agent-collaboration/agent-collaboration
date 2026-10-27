@@ -19,6 +19,41 @@ pub struct EndpointSnapshot {
     pub endpoints: Vec<EndpointDescription>,
 }
 impl EndpointDirectory {
+    /// Registers a bounded inventory without inferring endpoint liveness.
+    pub fn publish_inventory(&self, endpoints: Vec<EndpointDescription>) -> io::Result<()> {
+        let service_id = self
+            .state
+            .lock()
+            .map_err(|_| io::Error::other("endpoint directory unavailable"))?
+            .service_id
+            .clone();
+        let mut identities = std::collections::HashSet::new();
+        if endpoints.len() > 64 {
+            return Err(io::Error::other("too many endpoints"));
+        }
+        for endpoint in &endpoints {
+            if endpoint.endpoint.service_id != service_id {
+                return Err(io::Error::other("endpoint belongs to another service"));
+            }
+            if !identities.insert(endpoint.endpoint.clone()) {
+                return Err(io::Error::other("duplicate endpoint identity"));
+            }
+            if endpoint.channels.len() > 2
+                || (endpoint.channels.is_empty()
+                    && !matches!(
+                        endpoint.availability,
+                        collaboration_protocol::EndpointAvailability::Unavailable { .. }
+                    ))
+            {
+                return Err(io::Error::other("invalid channel count"));
+            }
+        }
+        for endpoint in endpoints {
+            self.publish(endpoint)?;
+        }
+        Ok(())
+    }
+
     pub fn read_endpoint(&self, endpoint: &EndpointRef) -> io::Result<Option<EndpointDescription>> {
         let state = self
             .state

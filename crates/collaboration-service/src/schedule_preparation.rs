@@ -5,18 +5,22 @@
     clippy::result_large_err,
     reason = "typed failures are the published payloads, returned once per IO-bound request"
 )]
-use crate::ServiceIdentity;
 use crate::collaboration_application::ScheduleOperationFailure;
-use agent_automation::RouteEffectEvidence;
-use automation_storage::{
-    AutomationStore, ExternalAdmission, ExternalAdmissionResult, PreparationFailureDisposition,
-    PreparationFailureRecord, ScheduleInspection,
-};
 use collaboration_contracts::PreparationEvidenceSink;
 use collaboration_contracts::ScheduleDestination;
 use collaboration_contracts::SchedulePreparationOutcome;
 use collaboration_contracts::SchedulePreparationRequest;
 use collaboration_contracts::ScheduledRunExecution;
+use agent_automation::RouteEffectEvidence;
+use automation_storage::{
+    AutomationStore, ExternalAdmission, ExternalAdmissionResult, PreparationFailureDisposition,
+    PreparationFailureRecord, ScheduleInspection,
+};
+
+
+
+
+
 use collaboration_protocol::{
     CodexGeneration, DestinationPreparation, EndpointRef, ScheduleEffects, ScheduleFailure,
     ScheduleFailureKind, ScheduleFailureStage, ScheduleNextAction, SchedulePrepareRequest,
@@ -30,14 +34,17 @@ type PreparationResult = Result<ScheduleSnapshot, ScheduleOperationFailure>;
 /// Prepares a schedule's reuse-thread destination through the selected route, persisting the
 /// route's effects. A retried operation returns its retained outcome.
 pub(crate) async fn prepare_schedule(
-    identity: &ServiceIdentity,
+    configuration: &collaboration_runtime::AutomationConfigurationHandle,
+    service_id: &collaboration_protocol::UuidIdentity,
+    execution: Option<&Arc<dyn ScheduledRunExecution>>,
+    store: Option<&Arc<Mutex<AutomationStore>>>,
     params: SchedulePrepareRequest,
 ) -> PreparationResult {
     let request = PreparationDependencies {
-        configuration: &identity.configuration,
-        service_id: &identity.service_id,
-        execution: identity.scheduled_run_execution.as_ref(),
-        store: identity.automation.as_ref(),
+        configuration,
+        service_id,
+        execution,
+        store,
     };
     let destination = match &params.destination {
         DestinationPreparation::Existing { target, .. } => ScheduleDestination::Existing {

@@ -3,9 +3,14 @@
 //! (refused by an application with no native route, as it refuses them today).
 //! Each runs the compiled CLI against the served API and checks its JSON against the
 //! published `FiniteCommandRecord` contract.
+#![expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
+)]
 
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 
@@ -68,19 +73,15 @@ impl ServedFixture {
                 "schemaDigest":null,"generation":{"serviceEpoch":SERVICE_EPOCH,"generation":1}}]
         }))
         .expect("Codex endpoint");
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("endpoint inventory")
             .with_automation_store(automation)
             .with_approval_broker(broker)
             .with_journal(Arc::clone(&journal));
-        let served = ServedCollaborationApi::start(
-            directory.path(),
-            CollaborationApplication::new(identity),
-        )
-        .await
-        .expect("served collaboration API");
+        let served = ServedCollaborationApi::start(directory.path(), (identity).build())
+            .expect("served collaboration API");
         Self {
             directory,
             served,

@@ -1,5 +1,14 @@
 //! Endpoint, session, lifecycle-journal and address-book tools.
-use super::*;
+use super::{
+    API_RESULT_BUDGET, AddressListParams, AddressPage, CallToolResult, ClientError,
+    CollaborationMcpServer, EmptyToolInput, EndpointInventory, InstallationIdentity, JournalPage,
+    JournalReadParams, JournalStatus, McpToolOutput, NativeInspectParams, NativeInspectResult,
+    NativeInterruptParams, NativeInterruptResult, NativeRenameParams, NativeRenameResult,
+    NativeSessionListParams, NativeSessionListResult, OperationEffect, Parameters,
+    ProviderInspectFailure, ProviderSessionInspectRequest, ProviderSessionInspectResult,
+    ProviderSessionListParams, ProviderSessionListResult, application_result, caller_cancelled,
+    failure, success_result, tool, tool_router, typed_failure_result,
+};
 
 #[tool_router(router = session_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {

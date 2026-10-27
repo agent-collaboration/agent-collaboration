@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn release_subscription_restores_due_without_advancing_delivered() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     fixture
@@ -46,7 +49,10 @@ async fn release_subscription_restores_due_without_advancing_delivered() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn release_subscription_stale_window_or_through_fence_is_a_noop() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     fixture
@@ -110,7 +116,10 @@ async fn release_subscription_stale_window_or_through_fence_is_a_noop() -> Resul
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn release_subscription_preserves_unallocated_window_across_arrivals() -> Result<(), TestError>
 {
     for repeat_release in [false, true] {

@@ -12,7 +12,7 @@ use super::split_transport::SplitTransport;
 async fn staged_handoff_parts_wait_for_the_final_acknowledgement_and_reopen_keeps_the_mark()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let seed = NotificationSeed {
         project: fixture.project.clone(),
         item: fixture.seed_item,
@@ -108,7 +108,12 @@ async fn staged_handoff_parts_wait_for_the_final_acknowledgement_and_reopen_keep
     let central = fixture.close_keeping_central().await?;
     // Every original local file owner is closed. Reconstruct the port from a
     // newly opened native registry, before new replication or Host Welcome.
-    let mut reopened = ProjectNotificationFixture::resume(directory.path(), central, seed).await?;
+    let mut reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        seed,
+    ))
+    .await?;
     assert!(!*reopened.harness.welcomed.borrow());
     let restored_marks = reopened
         .harness

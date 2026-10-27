@@ -6,10 +6,30 @@
 )]
 //! One feed page must not decode history or visit unrelated project contents.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use board_read_setup::*;
@@ -17,7 +37,6 @@ use message_board::*;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::json;
 
-#[allow(clippy::panic_in_result_fn)]
 async fn page_costs(size: usize) -> Result<(ReadCost, ReadCost, ReadCost), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("bounded feed proof").await?;
@@ -96,7 +115,10 @@ async fn page_costs(size: usize) -> Result<(ReadCost, ReadCost, ReadCost), TestE
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn post_and_inbox_pages_have_size_independent_costs() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = page_costs(8).await?;

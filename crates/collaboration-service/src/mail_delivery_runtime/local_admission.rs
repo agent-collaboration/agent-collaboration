@@ -4,6 +4,8 @@ use super::{
     PushMessageSendResult, PushRecordDraft, RouterDeliveryTypes, StoreError, SyncTime, TursoScope,
     outgoing_mail_message,
 };
+#[cfg(test)]
+use super::{CarrierAcceptance, DeliveryError, DeliveryItemRef, ItemId, RecipientOutcome};
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult};
 use durable_steps::JournalScope;
@@ -304,6 +306,3 @@ fn map_refusal(reason: DeliveryRefusal) -> PushDeliveryFailure {
         _ => PushDeliveryFailure::StoreFailed,
     }
 }
-
-#[cfg(test)]
-use super::{CarrierAcceptance, DeliveryError, DeliveryItemRef, ItemId, RecipientOutcome};

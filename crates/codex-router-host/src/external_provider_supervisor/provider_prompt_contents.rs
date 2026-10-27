@@ -1,6 +1,14 @@
 //! Provider-neutral prompt admission and API task-input projection.
 
-use super::*;
+use super::{
+    ConversationOperationFailure, ConversationOperationFailureKind,
+    ConversationOperationFailureStage, ConversationOperationSettlement,
+    ConversationOperationSubmission, ConversationPromptRequest, ExternalProviderSupervisor,
+    OperationId, PreparedOperation, ProviderConversationFuture, ProviderIdentity,
+    ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind, SessionRef,
+    admitted_submission, existing_submission, failure, optional_message_text,
+    prompt_runtime_failure, retain_operation,
+};
 
 /// Host-internal prompt admission. Public API requests keep their prompt
 /// text as task input before reaching this boundary.

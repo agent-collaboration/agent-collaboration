@@ -94,7 +94,7 @@ impl ThreadSubjectBatch {
         })
     }
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn thread_subject_batch(
         &self,
         snapshot: &mut ProjectSnapshot,

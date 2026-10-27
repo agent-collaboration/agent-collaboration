@@ -9,12 +9,25 @@
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    unused_imports,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_fixture;
 #[expect(
     clippy::allow_attributes_without_reason,
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_read_setup;
 #[path = "support/closed_mail_session.rs"]
 mod closed_mail_session;
@@ -23,6 +36,10 @@ mod closed_mail_session;
     reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "support/local_mail_surfaces.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod local_mail_surfaces;
 use board_fixture::native_mail_owner;
 use board_fixture::{BoardFixture, TestError};
@@ -56,7 +73,7 @@ async fn cli(surface: &Surfaces, path: &std::path::Path) -> Result<(i32, Value),
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn project_notification_cancel_cli_preserves_pending_authority_and_requester_without_recording_a_project_request()
 -> Result<(), TestError> {

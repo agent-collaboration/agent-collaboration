@@ -20,7 +20,10 @@ fn resolve_operation(thread: &ThreadId) -> Result<BoardOperation, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn leave_replacement_and_expiry_end_rows_and_delete_windows() -> Result<(), TestError> {
     let mut left = SubscriptionFixture::joined().await?;
     let scope = SubscriptionScope::thread(left.root.clone());
@@ -151,7 +154,10 @@ async fn leave_replacement_and_expiry_end_rows_and_delete_windows() -> Result<()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn resolve_drains_pending_or_ends_mode_off_subscription() -> Result<(), TestError> {
     for mode_off in [false, true] {
         let mut fixture = SubscriptionFixture::joined().await?;
@@ -218,7 +224,10 @@ async fn resolve_drains_pending_or_ends_mode_off_subscription() -> Result<(), Te
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn leave_resolve_ends_resolver_as_left_and_drains_other_readers() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     let resolver = fixture.reader.clone();

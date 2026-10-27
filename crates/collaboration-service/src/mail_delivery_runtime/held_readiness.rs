@@ -5,7 +5,7 @@ use super::{
 };
 
 impl MailDeliveryRuntime {
-    pub(crate) fn attach_reader_readiness(self: &Arc<Self>) -> Result<(), String> {
+    pub fn attach_reader_readiness(self: &Arc<Self>) -> Result<(), String> {
         self.reader_actors.attach_native_mail(Arc::downgrade(self))
     }
 

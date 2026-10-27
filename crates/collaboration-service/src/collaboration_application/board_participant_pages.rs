@@ -32,7 +32,7 @@ fn decode_interval(
     decoded.push((key.clone(), participant.clone()));
     Ok(participant)
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn thread_participant_list(
         &self,
         request: ThreadParticipantListRequest,

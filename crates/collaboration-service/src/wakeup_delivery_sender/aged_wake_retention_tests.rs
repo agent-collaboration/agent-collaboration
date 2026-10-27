@@ -1,13 +1,7 @@
 //! U66 / MS-10: bounded wakes expire; age-only history pruning preserves their evidence.
 use super::{WakeDeliverySender, build_wake_push_draft};
-use crate::ServiceIdentity;
-use crate::collaboration_application::CollaborationApplication;
-use crate::collaboration_application::CollaborationRejection;
-use agent_automation::{
-    CessationEvidence, ExpiryRule, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
-    SubmissionEffect, TimingRule, WakeState,
-};
-use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+use crate::collaboration_application::{CollaborationApplication, CollaborationRejection};
+use crate::ApplicationFixture;
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_contracts::AttemptReconciliation;
 use collaboration_contracts::AttemptReconciliationContext;
@@ -15,6 +9,18 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
+use agent_automation::{
+    CessationEvidence, ExpiryRule, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
+    SubmissionEffect, TimingRule, WakeState,
+};
+use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+
+
+
+
+
+
+
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, DeliveryReceipt, MachineId, OperationId, PushDeliveryState,
     PushHeaderFacts, PushKind, PushLineInput, PushOrigin, PushRecord, PushRecordShowParams,
@@ -205,7 +211,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         generation: serde_json::from_value(json!({"serviceEpoch":SERVICE_ID,"generation":1}))?,
     });
     let delivery: Arc<dyn SessionMessageDelivery> = route.clone();
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)?
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)?
         .with_machine_identity(machine.clone())?
         .with_automation_store(Arc::clone(&store))
         .with_interaction_store(Arc::clone(&interactions))
@@ -218,7 +224,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
         machine_identity: machine.clone(),
     };
-    let application = CollaborationApplication::new(identity.clone());
+    let application = (identity.clone()).build();
 
     let (old_push, old_occurrence) =
         evaluate_and_dispatch(&store, &sender, &wakeup_id, anchor_ms + interval_ms).await?;

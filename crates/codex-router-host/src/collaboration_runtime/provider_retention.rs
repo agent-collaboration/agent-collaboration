@@ -1,5 +1,5 @@
 //! Host-owned provider operation retention and its shutdown-bound maintenance task.
-use super::*;
+use super::{CollaborationRuntime, io, unix_seconds};
 
 impl CollaborationRuntime {
     pub async fn configure_provider_operation_retention(

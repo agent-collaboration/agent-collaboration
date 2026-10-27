@@ -10,8 +10,16 @@ use message_board::{BoardFailureKind, PageLimit, PageRequest, WorkspaceListReque
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
-#[allow(dead_code)]
 // This Host restart proof uses the shared board setup, not every fixture journey.
+#[expect(
+    unused_imports,
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_fixture;
 #[path = "support/native_project_fixture.rs"]
 mod native_project_fixture;
@@ -128,16 +136,22 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
 }
 
 #[tokio::test]
-#[allow(clippy::indexing_slicing, clippy::panic_in_result_fn)]
+
 async fn pending_corrupt_feed_is_contained_during_subscription_restart()
 -> Result<(), board_fixture::TestError> {
-    subscription_restart_contains_project_failure(RestartFault::PendingFeed).await
+    Box::pin(subscription_restart_contains_project_failure(
+        RestartFault::PendingFeed,
+    ))
+    .await
 }
 
 #[tokio::test]
 async fn same_readers_corrupt_membership_is_contained_during_subscription_restart()
 -> Result<(), board_fixture::TestError> {
-    subscription_restart_contains_project_failure(RestartFault::Membership).await
+    Box::pin(subscription_restart_contains_project_failure(
+        RestartFault::Membership,
+    ))
+    .await
 }
 
 #[derive(Clone, Copy)]
@@ -146,7 +160,10 @@ enum RestartFault {
     Membership,
 }
 
-#[allow(clippy::indexing_slicing, clippy::panic_in_result_fn)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The test keeps its existing explicit assertion and failure contract."
+)]
 async fn subscription_restart_contains_project_failure(
     fault: RestartFault,
 ) -> Result<(), board_fixture::TestError> {

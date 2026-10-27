@@ -9,8 +9,20 @@ pub mod accepted_snapshot;
 #[path = "retained_epoch_public_reads/activity_reads.rs"]
 mod activity_reads;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/timed_board_posts.rs"]
 mod timed_board_posts;
@@ -71,7 +83,10 @@ fn aggregate(project: &ProjectId, cursor: FeedCursor) -> ReadPosition {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn range_predecessor_and_public_next_reuse_preserve_actual_assigning_epochs()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -187,7 +202,10 @@ async fn range_predecessor_and_public_next_reuse_preserve_actual_assigning_epoch
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_discarded_old_suffix_is_refused_even_when_new_epoch_reuses_its_position()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;

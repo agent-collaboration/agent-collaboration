@@ -9,11 +9,14 @@ use collaboration_protocol::{
     PushId, PushKind, PushOrigin, RouterLink, RouterOriginRef, SavedMessage, SessionId, SessionRef,
     UuidIdentity,
 };
+use collaboration_service::ApplicationFixture;
 use collaboration_runtime::CodexAppServerDeliveryRoute;
+
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+
 use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_service::ServiceIdentity;
+
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
 use sqlx::Connection as _;
@@ -156,7 +159,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .await
         .expect("create recurring wake");
 
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("create service identity")
         .with_machine_identity(
             MachineIdentity::new(service_identity.clone(), Some("wake-repeating-fixture"))

@@ -1,13 +1,13 @@
 //! Subscription lifecycle, policy decisions, and durable board settlement.
 use super::super::subscription_windows::WindowWrite;
-#[cfg(test)]
-use super::OwnerObservation;
 use super::{
     BoardError, Duration, EndReason, HashMap, Identity, PushRecord, ReaderDeliveryOwner,
     ReaderScanScope, RootSubscriptionFacts, SubscriptionBatch, SubscriptionBatchSettlement,
     SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, TargetPresence, ThreadId,
     ThreadSubscriptionRecord, target_session,
 };
+#[cfg(test)]
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 #[path = "reader_held_push_settlement.rs"]
 mod reader_held_push_settlement;
 
@@ -69,7 +69,7 @@ impl ReaderDeliveryOwner {
         }
     }
 
-    pub(super) async fn complete_drains(&self, records: &[ThreadSubscriptionRecord]) -> bool {
+    pub(super) fn complete_drains(&self, records: &[ThreadSubscriptionRecord]) -> bool {
         // Drain state is derived from membership and remaining local windows.
         let _ = records;
         false

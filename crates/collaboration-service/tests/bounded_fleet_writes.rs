@@ -5,10 +5,26 @@
 )]
 //! Fleet projection catch-up reads its checkpoint, independent of unrelated cached bodies.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_central_test_support::RouterPayloadInputBodies;
 use board_fixture::{BoardFixture, TestError, accepted};
@@ -18,7 +34,6 @@ use read_cost_counter::{ReadCost, current_cost};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 
-#[allow(clippy::panic_in_result_fn)]
 async fn update_cost(
     size: usize,
 ) -> Result<
@@ -57,7 +72,6 @@ async fn update_cost(
     Ok((cost, payload_inputs, alarms))
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn corruption_isolation() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let unrelated = WorkspaceId::generate();
@@ -99,7 +113,10 @@ async fn corruption_isolation() -> Result<(), TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_cache_record()
 -> Result<(), TestError> {
     read_cost_counter::install();

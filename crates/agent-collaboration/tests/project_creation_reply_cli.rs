@@ -1,5 +1,8 @@
 //! Actual CLI exit codes and stable project identity through accepted-pending and local creation.
-
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
 #[expect(
@@ -8,6 +11,11 @@ mod board_cli_execution;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli};
 use board_fixture::{BoardFixture, TestError};

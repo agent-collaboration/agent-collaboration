@@ -25,15 +25,22 @@ use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service as mail_service;
-use collaboration_service::BoardAvailability;
+use collaboration_service::ApplicationFixture;
 use collaboration_service::CollaborationApplication;
+
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
-use collaboration_service::ServiceIdentity;
+
+use collaboration_service::SubscriptionWindowStore;
+use collaboration_service::BoardAvailability;
+
+
+
 use collaboration_service::SubscriptionClock;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SubscriptionWindowStore;
+
+
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use message_board::{SessionId as BoardSessionId, SessionRef as BoardSessionRef, *};
 use native_mail_owner::NativeMailOwner;
@@ -125,10 +132,10 @@ impl ClaudePeerSubscriptionFixture {
                 Some("claude-peer-resume-fixture"),
             )?,
         })?);
-        let application = CollaborationApplication::new(
-            ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
-                .with_project_admission(admission.clone()),
-        );
+        let application =
+            (ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
+                .with_project_admission(admission.clone()))
+            .build();
         let automation_store = Arc::new(tokio::sync::Mutex::new(
             AutomationStore::open(&automation_path).await?,
         ));
@@ -176,7 +183,7 @@ impl ClaudePeerSubscriptionFixture {
         });
         drop(application);
         let (identity, native) = NativeMailOwner::start(
-            ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
+            ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")?
                 .with_automation_store(automation_store.clone())
                 .with_project_admission(admission.clone())
                 .with_subscription_delivery_service(service.clone(), router.clone()),
@@ -197,8 +204,7 @@ impl ClaudePeerSubscriptionFixture {
             interactions.clone(),
             Arc::downgrade(&native.runtime_handle()),
         ));
-        let application =
-            CollaborationApplication::new(identity.with_notification_publisher(publisher.clone()));
+        let application = (identity.with_notification_publisher(publisher.clone())).build();
         service.start().await?;
 
         Ok(Self {

@@ -292,7 +292,7 @@ async fn actual_mcp_readiness(
     requested: &ProxyAuthority,
 ) -> io::Result<()> {
     use collaboration_mcp::{CollaborationApiConfig, CollaborationApiListener};
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bound listener");
@@ -300,7 +300,7 @@ async fn actual_mcp_readiness(
     let inventory: EndpointInventory =
         serde_json::from_value(endpoint_response()["result"]["structuredContent"].clone())
             .expect("inventory");
-    let identity = ServiceIdentity::new(SERVICE, EPOCH)
+    let identity = ApplicationFixture::new(SERVICE, EPOCH)
         .expect("identity")
         .with_endpoints(inventory.endpoints)
         .expect("endpoint");
@@ -309,7 +309,7 @@ async fn actual_mcp_readiness(
         tokio::sync::watch::channel(collaboration_protocol::RouterExecutableRelation::Match);
     let shutdown = CancellationToken::new();
     let config = CollaborationApiConfig {
-        application: CollaborationApplication::new(identity),
+        application: (identity).build(),
         service_directory: directory.path().to_owned(),
         native_definitions: None,
         router_executable_relation: relation,

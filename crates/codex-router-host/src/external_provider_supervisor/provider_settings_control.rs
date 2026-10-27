@@ -10,7 +10,10 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::ProviderSessionRecord;
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The typed failure retains the full published operation payload."
+)]
 pub(super) async fn set(
     supervisor: &ExternalProviderSupervisor,
     request: ProviderSettingsSetRequest,
@@ -57,7 +60,10 @@ pub(super) async fn set(
     Ok(result(request.target, record, observed))
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The typed failure retains the full published operation payload."
+)]
 pub(super) async fn accept(
     supervisor: &ExternalProviderSupervisor,
     request: ProviderSettingsAcceptRequest,
@@ -79,7 +85,10 @@ pub(super) async fn accept(
     Ok(result(request.target, record, observed))
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The typed failure retains the full published operation payload."
+)]
 async fn authorized_session(
     supervisor: &ExternalProviderSupervisor,
     target: &SessionRef,

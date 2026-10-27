@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod tests {
     use collaboration_client::protocol::EndpointDescription;
-    use collaboration_service::ServiceIdentity;
+    use collaboration_service::ApplicationFixture;
     use futures_util::{SinkExt, StreamExt};
     use serde_json::{Value, json};
     use std::{os::unix::fs::DirBuilderExt, path::PathBuf, time::Duration};
@@ -221,16 +221,15 @@ mod tests {
             .mode(0o700)
             .create(&root)
             .unwrap_or_else(|error| panic!("observation fixture: {error}"));
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .unwrap_or_else(|error| panic!("observation fixture: {error}"))
             .with_endpoints(vec![endpoint_description(1)])
             .unwrap_or_else(|error| panic!("observation fixture: {error}"));
         let directory = identity.endpoint_directory();
         let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
             &root,
-            collaboration_service::CollaborationApplication::new(identity),
+            (identity).build(),
         )
-        .await
         .unwrap_or_else(|e| panic!("serve: {e}"));
         let native = tokio::net::UnixListener::bind(root.join("codex-native.sock"))
             .unwrap_or_else(|error| panic!("observation fixture: {error}"));

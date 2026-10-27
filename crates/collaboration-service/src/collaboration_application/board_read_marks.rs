@@ -1,7 +1,7 @@
 //! Covered content reads report their internal mark result separately from the data.
 use super::{BoardOperations, admission_error};
 use message_board::{BoardError, FeedCursor, Identity, ProjectId, ReadMarkOutcome, ReadScope};
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn finish_project_read(
         &self,
         project: &ProjectId,
@@ -21,7 +21,7 @@ impl BoardOperations<'_> {
             .await
             .map_err(admission_error)?;
         if matches!(outcome, ReadMarkOutcome::Advanced { .. })
-            && let Some(delivery) = &self.identity.subscription_delivery
+            && let Some(delivery) = &self.subscription_delivery
             && let Err(error) = delivery
                 .reconcile_project(reader.clone(), project.clone())
                 .await

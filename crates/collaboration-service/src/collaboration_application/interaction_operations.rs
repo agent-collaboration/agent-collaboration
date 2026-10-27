@@ -1,31 +1,30 @@
 //! Approvals and questions: decisions a person or agent owes a waiting session.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::ServiceIdentity;
+use collaboration_runtime::InteractionHistoryError;
+use collaboration_runtime::InteractionHistoryRecord;
+use collaboration_runtime::QuestionHistoryState;
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams, ApprovalListResponse,
     QuestionAnswerParams, QuestionAnswerResult, QuestionListParams, QuestionListResult,
     QuestionRecord, QuestionResponse, QuestionState,
 };
-use collaboration_runtime::InteractionHistoryError;
-use collaboration_runtime::InteractionHistoryRecord;
-use collaboration_runtime::QuestionHistoryState;
+
+
+
 use serde_json::{Map, Value, json};
 
 /// Approval and question operations over the Router's interaction broker.
-pub struct InteractionOperations<'service> {
-    identity: &'service ServiceIdentity,
+pub struct InteractionOperations {
+    pub(super) approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
 }
 
-impl<'service> InteractionOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl InteractionOperations {
+    pub fn new(approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>) -> Self {
+        Self { approval_broker }
     }
 
-    fn broker(
-        &self,
-    ) -> Result<&'service collaboration_runtime::ServiceInteractionBroker, InteractionFailure> {
-        self.identity
-            .approval_broker
+    fn broker(&self) -> Result<&collaboration_runtime::ServiceInteractionBroker, InteractionFailure> {
+        self.approval_broker
             .as_deref()
             .ok_or(InteractionFailure::BrokerUnavailable)
     }

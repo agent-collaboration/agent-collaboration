@@ -8,7 +8,7 @@ use collaboration_client::protocol::{
     WakeupId,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::{fmt, os::unix::fs::PermissionsExt as _, sync::Arc};
 use tokio::sync::Mutex;
@@ -21,15 +21,13 @@ async fn known_timer_cleanup_reaches_real_service_and_sqlite() -> ProofResult<()
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let database_path = directory.path().join("automation.sqlite");
     let store = Arc::new(Mutex::new(AutomationStore::open(&database_path).await?));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000401",
         "00000000-0000-4000-8000-000000000402",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(Arc::clone(&store));
-    let served =
-        ServedCollaborationApi::start(directory.path(), CollaborationApplication::new(identity))
-            .await?;
+    let served = ServedCollaborationApi::start(directory.path(), (identity).build())?;
 
     let scenario = exercise_real_timer_cleanup(&served, &store).await;
     // These are awaited even when any scenario oracle returned an error.

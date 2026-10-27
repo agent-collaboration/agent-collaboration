@@ -42,7 +42,7 @@ macro_rules! entity_read_operation {
         }
     };
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     entity_read_operation!(show workstream_show, Workstream);
     entity_read_operation!(list workstream_list, Workstream);
     entity_read_operation!(show task_show, Task);

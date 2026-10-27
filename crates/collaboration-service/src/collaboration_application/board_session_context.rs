@@ -1,22 +1,18 @@
 //! Session context reads assignments and scope acknowledgements from associated projects.
 use super::{BoardOperations, presence_for_reader};
 use message_board::{
-    BoardError, FactKind, Identity, ProjectId, Record, RepositoryRef, SessionContext,
-    SessionContextRequest, SessionRef, SessionRunningState, UnavailableReason,
-    normalize_git_origin_url,
+    BoardError, FactKind, Identity, ProjectId, Record, SessionContext, SessionContextRequest,
+    SessionRef, SessionRunningState, UnavailableReason,
 };
 use message_board_storage::StoreSchemaState;
-use std::{
-    collections::BTreeSet,
-    path::{Path, PathBuf},
-};
+use std::collections::BTreeSet;
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn card_session_state(&self, actor: &Identity) -> SessionRunningState {
         if !matches!(actor, Identity::Session { .. }) {
             return SessionRunningState::NotSession {};
         }
-        let Some(probe) = &self.identity.subscription_presence else {
+        let Some(probe) = &self.subscription_presence else {
             return SessionRunningState::Unavailable {
                 reason: "Host presence unavailable".to_owned(),
             };
@@ -59,7 +55,6 @@ impl BoardOperations<'_> {
                 project: project.clone(),
             };
             let admission = self
-                .identity
                 .project_admission
                 .as_ref()
                 .ok_or(UnavailableReason::BoardUnreachable {})?;
@@ -136,11 +131,11 @@ impl BoardOperations<'_> {
             session: session.clone(),
         };
         let repository = self
-            .context_repository(session)
+            .session_context
+            .repository(session)
             .await
             .ok_or_else(unavailable)?;
         let admission = self
-            .identity
             .project_admission
             .as_ref()
             .ok_or(UnavailableReason::BoardUnreachable {})?;
@@ -218,78 +213,9 @@ impl BoardOperations<'_> {
         }
         Ok(selected)
     }
-    async fn context_repository(&self, session: &SessionRef) -> Option<RepositoryRef> {
-        let target = serde_json::to_value(session)
-            .and_then(serde_json::from_value::<collaboration_protocol::SessionRef>)
-            .ok()?;
-        if target.endpoint.service_id != self.identity.service_id {
-            return None;
-        }
-        let path = match session.endpoint.endpoint_id.as_str() {
-            "codex-local" => {
-                let result =
-                    crate::collaboration_application::SessionOperations::new(self.identity)
-                        .codex_session_inspect(
-                            collaboration_protocol::NativeInspectParams { target },
-                            crate::collaboration_application::API_RESULT_BUDGET,
-                        )
-                        .await
-                        .ok()?;
-                PathBuf::from(result.thread.get("cwd")?.as_str()?)
-            }
-            "claude-local" | "cursor-local" => {
-                let mut live_path = None;
-                if session.endpoint.endpoint_id.as_str() == "claude-local"
-                    && let Some(registry) = self.identity.claude_code_sessions.clone()
-                {
-                    let live = tokio::task::spawn_blocking(move || registry.live_sessions())
-                        .await
-                        .ok()?
-                        .ok()?;
-                    live_path = live
-                        .sessions
-                        .into_iter()
-                        .find(|row| row.session_id == target.session_id)
-                        .map(|row| row.cwd);
-                }
-                match live_path {
-                    Some(path) => path,
-                    None => PathBuf::from(String::from(
-                        self.identity
-                            .provider_operations
-                            .as_ref()?
-                            .lock()
-                            .await
-                            .session_record(&target)
-                            .await
-                            .ok()??
-                            .working_directory,
-                    )),
-                }
-            }
-            _ => return None,
-        };
-        let path = tokio::fs::canonicalize(path).await.ok()?;
-        if let Some(origin) = context_git_stdout(&path, &["remote", "get-url", "origin"]).await
-            && let Some(normalized) = normalize_git_origin_url(&origin)
-        {
-            return Some(RepositoryRef::Origin {
-                normalized_origin: normalized.try_into().ok()?,
-            });
-        }
-        let common = context_git_stdout(
-            &path,
-            &["rev-parse", "--path-format=absolute", "--git-common-dir"],
-        )
-        .await?;
-        let common = tokio::fs::canonicalize(common).await.ok()?;
-        Some(RepositoryRef::Local {
-            service_id: session.endpoint.service_id.clone(),
-            common_directory: common.to_str()?.to_owned().try_into().ok()?,
-        })
-    }
+
     async fn context_project_unavailable(&self, project: &ProjectId) -> Option<UnavailableReason> {
-        let Some(admission) = &self.identity.project_admission else {
+        let Some(admission) = &self.project_admission else {
             return Some(UnavailableReason::BoardUnreachable {});
         };
         let schema = match admission.registry.read_project(project).await {
@@ -310,21 +236,4 @@ impl BoardOperations<'_> {
             }),
         }
     }
-}
-
-async fn context_git_stdout(path: &Path, arguments: &[&str]) -> Option<String> {
-    let output = tokio::process::Command::new("git")
-        .arg("-C")
-        .arg(path)
-        .args(arguments)
-        .stdin(std::process::Stdio::null())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let value = String::from_utf8(output.stdout).ok()?.trim().to_owned();
-    (!value.is_empty()).then_some(value)
 }

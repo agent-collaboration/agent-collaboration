@@ -6,8 +6,20 @@
 )]
 //! Read-mark and session-context gates read their rule operands beside unrelated retained history.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -99,7 +111,6 @@ async fn unrelated_operands(
     first.ok_or_else(|| "empty operand fixture".into())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
@@ -167,7 +178,6 @@ async fn gate_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Tes
     Ok(BTreeMap::from([("covered read", mark_cost)]))
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn context_cost(
     size: usize,
 ) -> Result<(ReadCost, read_cost_counter::AlarmRunCosts), TestError> {
@@ -352,15 +362,18 @@ async fn context_cost(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn covered_reads_and_session_context_have_operand_bounded_cost() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = gate_costs(8).await?;
     let large = gate_costs(80).await?;
     eprintln!("gate read costs: small={small:?}; large={large:?}");
     assert_eq!(small, large, "gates decoded unrelated roles or facts");
-    let small = context_cost(8).await?;
-    let large = context_cost(80).await?;
+    let small = Box::pin(context_cost(8)).await?;
+    let large = Box::pin(context_cost(80)).await?;
     assert_eq!(
         small.0, large.0,
         "context decoded unrelated fleet, role or scope-fact bodies"

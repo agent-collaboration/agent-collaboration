@@ -21,7 +21,7 @@ struct ProjectThreadPage {
     decoded_participants: BTreeMap<ThreadId, Vec<Participant>>,
 }
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn thread_list(
         &self,
         request: ThreadListRequest,

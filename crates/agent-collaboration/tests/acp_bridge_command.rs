@@ -2,7 +2,7 @@
 #[cfg(test)]
 mod tests {
     use collaboration_mcp::test_support::ServedCollaborationApi;
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     use serde_json::json;
     use std::{
         cell::Cell,
@@ -32,14 +32,12 @@ mod tests {
             .unwrap();
         let id = "00000000-0000-4000-8000-000000000001";
         let endpoint = serde_json::from_value(json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"label":"ACP bridge fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},"channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]})).unwrap();
-        let identity = ServiceIdentity::new(id, id)
+        let identity = ApplicationFixture::new(id, id)
             .unwrap()
             .with_endpoints(vec![endpoint])
             .unwrap();
         // The bridge discovers the carrier socket through endpoints_list on the served API.
-        let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-            .await
-            .unwrap();
+        let served = ServedCollaborationApi::start(&root, (identity).build()).unwrap();
         let listed = served.call("endpoints_list", json!({})).await.unwrap();
         assert_eq!(
             listed.pointer("/result/endpoints/0/channels/0/path"),

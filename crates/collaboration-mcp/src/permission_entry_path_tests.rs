@@ -8,12 +8,13 @@ use collaboration_protocol::{
     ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, PushLineInput,
     RouterAccess, RouterLink, RouterOriginRef, SessionRef, render_push_line,
 };
+use collaboration_service::ApplicationFixture;
 use collaboration_runtime::EndpointDirectory;
+
 use collaboration_runtime::ManifestPublication;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ServiceInteractionBroker;
-use collaboration_service::ServiceIdentity;
 use futures_util::{SinkExt, StreamExt};
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use serde_json::{Value, json};
@@ -208,7 +209,7 @@ impl ApprovalFixture {
             },
             delivery_tx,
         ));
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("service endpoint")
@@ -226,12 +227,11 @@ impl ApprovalFixture {
         } else {
             "control.sock"
         });
-        let application = collaboration_service::CollaborationApplication::new(identity);
+        let application = (identity).build();
         let service_api = ServedApi::unix(
             &api_config(application.clone(), directory.path()),
             &api_socket,
-        )
-        .await;
+        );
         let forwarded_decisions = drop_decision_reply.then(|| Arc::new(AtomicUsize::new(0)));
         let fault_task = forwarded_decisions.as_ref().map(|forwarded_decisions| {
             let listener = tokio::net::UnixListener::bind(directory.path().join("control.sock"))
@@ -264,17 +264,16 @@ impl ApprovalFixture {
         self.directory.path()
     }
 
-    async fn begin_permission_request(
+    fn begin_permission_request(
         &self,
         suffix: &str,
     ) -> tokio::task::JoinHandle<
         Result<BrokeredApprovalOutcome, codex_acp_adapter::ApprovalBrokerError>,
     > {
         self.begin_permission_request_for_generation(suffix, self.generation.clone())
-            .await
     }
 
-    async fn begin_permission_request_for_generation(
+    fn begin_permission_request_for_generation(
         &self,
         suffix: &str,
         generation: CodexGeneration,

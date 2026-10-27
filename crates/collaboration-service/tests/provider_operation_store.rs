@@ -25,7 +25,10 @@ fn open_future_is_send_for_host_composition() {
     assert_send(ProviderOperationStore::open(&path));
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This compile-time Send proof must type-check without executing real store mutations."
+)]
 fn store_operation_futures_are_send<'a>(
     store: &'a mut ProviderOperationStore,
     operation_id: &'a OperationId,

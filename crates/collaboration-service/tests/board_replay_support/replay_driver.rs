@@ -122,7 +122,7 @@ impl ReplayBoard {
             _ => value.clone(),
         })
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     pub async fn replay(&mut self, event: &ReplayEvent) -> Result<(), TestError> {
         let args = self.resolve(&event.args, "")?;
         let (reply, request) = self

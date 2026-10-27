@@ -10,7 +10,7 @@ use collaboration_client::{
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{EndpointId, MessageText, SessionRef};
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -170,7 +170,7 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
         .unwrap();
     let service_id = "00000000-0000-4000-8000-000000000021";
     let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
-    let identity = ServiceIdentity::new(service_id, service_id)
+    let identity = ApplicationFixture::new(service_id, service_id)
         .unwrap()
         .with_endpoints(vec![serde_json::from_value(json!({
             "endpoint":endpoint.clone(),
@@ -179,8 +179,7 @@ async fn aggregate_long_turn_settles_through_real_adapter_after_many_native_upda
             "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}", collaboration_protocol::ACP_SCHEMA_DIGEST)}]
         })).unwrap()])
         .unwrap();
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|error| panic!("serve: {error}"));
 
     let native_cwd = "/work".to_owned();

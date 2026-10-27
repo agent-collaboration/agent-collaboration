@@ -6,6 +6,14 @@
 )]
 //! Caller-keyed poll renewals use independent native ledgers and expose partial outcomes.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/native_authority.rs"]
 pub mod native_authority;
@@ -15,13 +23,12 @@ use runtime_primitives::{Clock, SystemClock};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+
 async fn wait_renewals_replay_each_project_and_keep_partial_refusals_visible()
 -> Result<(), TestError> {
-    tokio::time::timeout(Duration::from_secs(30), exercise_wait_renewals()).await?
+    tokio::time::timeout(Duration::from_secs(30), Box::pin(exercise_wait_renewals())).await?
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn exercise_wait_renewals() -> Result<(), TestError> {
     let clock = Arc::new(ControlledClock::at(SystemClock.now()));
     let initial = clock.now();

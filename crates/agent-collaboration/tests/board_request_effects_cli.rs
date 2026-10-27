@@ -1,16 +1,17 @@
 //! The executable reads receipts through the SDK and the real served API.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
+// This case uses the Fleet-only portion of the shared fixture.
+#[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    unused_imports,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 #[expect(
     dead_code,
-    reason = "Shared test fixtures expose helpers used by other test targets."
-)] // This case uses the Fleet-only portion of the shared fixture.
-#[expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
 )]
-#[path = "../../collaboration-service/tests/support/board_fixture.rs"]
 mod board_fixture;
 use board_cli_execution::{accepted, cli};
 use board_fixture::{BoardFixture, TestError};
@@ -21,8 +22,8 @@ use std::process::Command;
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
-)] // Assertions prove results; Result propagates fixture failures.
+    reason = "Assertions prove results; Result propagates fixture failures."
+)]
 async fn request_effects_cli_reads_a_decision_and_transmits_an_after_argument()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_replay().await?;
@@ -122,8 +123,8 @@ fn request_effects_cli_requires_exactly_one_explicit_scope() {
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
-)] // The real MAC verifier is the continuation oracle.
+    reason = "The real MAC verifier is the continuation oracle."
+)]
 async fn request_effects_cli_resumes_a_signed_page_without_normalizing_the_token()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

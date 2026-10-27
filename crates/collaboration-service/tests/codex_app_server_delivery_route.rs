@@ -45,6 +45,10 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::Message;
 #[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod native_mail_owner;
 use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
@@ -597,7 +601,7 @@ async fn exercise_held_empty_thread(
         },
     );
     subscription_delivery.start().await?;
-    let identity = collaboration_service::ServiceIdentity::new(
+    let identity = collaboration_service::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000001",
     )
@@ -618,7 +622,7 @@ async fn exercise_held_empty_thread(
             clock: Arc::new(collaboration_service::SystemSubscriptionClock),
         },
     )?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let control = served.client("held-thread-message").await?;
     delivery_prepared
         .send(())

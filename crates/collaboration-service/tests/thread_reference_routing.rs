@@ -5,10 +5,30 @@
 )]
 //! Thread references route directly or probe only initialized local store handles.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{create_registered_project, post_at_placement};
@@ -18,7 +38,10 @@ use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn qualified_routes_and_bare_probes_never_open_another_store() -> Result<(), TestError> {
     read_cost_counter::install();
     let fixture = BoardFixture::start().await?;

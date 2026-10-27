@@ -1,7 +1,6 @@
 //! Provider Session observation: bounded, resumable reads of the same hub attached faces use.
 //! Following a Session is a chain of these reads, each resuming after the last event.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::ServiceIdentity;
 use collaboration_contracts::HubEvent;
 use collaboration_contracts::SessionEventAttachment;
 use collaboration_contracts::SessionEventHubError;
@@ -18,13 +17,23 @@ use tokio::sync::broadcast;
 pub type ObservedEventSink = tokio::sync::mpsc::UnboundedSender<ObservationEventNotification>;
 
 /// Observation operations over the provider Session event hub.
-pub struct ObservationOperations<'service> {
-    identity: &'service ServiceIdentity,
+pub struct ObservationOperations {
+    pub(super) identity: crate::RouterIdentity,
+    pub(super) provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
+    pub(super) directory: collaboration_runtime::EndpointDirectory,
 }
 
-impl<'service> ObservationOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl ObservationOperations {
+    pub fn new(
+        identity: crate::RouterIdentity,
+        provider_session_hub: Option<std::sync::Arc<dyn collaboration_contracts::SessionEventHub>>,
+        directory: collaboration_runtime::EndpointDirectory,
+    ) -> Self {
+        Self {
+            identity,
+            provider_session_hub,
+            directory,
+        }
     }
 
     /// Collects events after `afterSequence` (in `epoch`) until a bound or the deadline,
@@ -34,7 +43,7 @@ impl<'service> ObservationOperations<'service> {
         request: BoundedObservationRequest,
         observed: Option<ObservedEventSink>,
     ) -> Result<BoundedObservationResult, ObservationFailure> {
-        collect(request, self.identity, observed).await
+        collect(request, self, observed).await
     }
 }
 
@@ -46,7 +55,7 @@ const MAX_EVENT_BYTES: usize = MAX_BYTES - 65_536;
 
 async fn collect(
     request: BoundedObservationRequest,
-    identity: &ServiceIdentity,
+    operations: &ObservationOperations,
     observed: Option<ObservedEventSink>,
 ) -> Result<BoundedObservationResult, ObservationFailure> {
     if request.timeout_seconds == 0
@@ -61,7 +70,7 @@ async fn collect(
         .checked_add(std::time::Duration::from_secs(request.timeout_seconds))
         .ok_or(ObservationFailure::InvalidField)?;
     let (attachment, generation) =
-        tokio::time::timeout_at(deadline, attach(&request.target, identity))
+        tokio::time::timeout_at(deadline, attach(&request.target, operations))
             .await
             .map_err(|_| ObservationFailure::Unavailable)??;
     if request.after_sequence.is_some() && request.epoch.is_none() {
@@ -209,12 +218,12 @@ impl CollectedEvents {
 
 async fn attach(
     target: &SessionRef,
-    identity: &ServiceIdentity,
+    operations: &ObservationOperations,
 ) -> Result<(SessionEventAttachment, CodexGeneration), ObservationFailure> {
-    if target.endpoint.service_id != identity.service_id {
+    if target.endpoint.service_id != *operations.identity.service_id() {
         return Err(ObservationFailure::NotFound);
     }
-    let endpoint = identity
+    let endpoint = operations
         .directory
         .read_endpoint(&target.endpoint)
         .map_err(|_| ObservationFailure::Unavailable)?
@@ -232,7 +241,7 @@ async fn attach(
             ChannelDescription::ExternalProvider {
                 binding_generation, ..
             } => Some(CodexGeneration {
-                service_epoch: identity.service_epoch.clone(),
+                service_epoch: operations.identity.service_epoch().clone(),
                 generation: *binding_generation,
             }),
             _ => None,
@@ -242,7 +251,7 @@ async fn attach(
         serde_json::to_value(target).map_err(|_| ObservationFailure::InvalidField)?,
     )
     .map_err(|_| ObservationFailure::InvalidField)?;
-    let hub = identity
+    let hub = operations
         .provider_session_hub
         .as_ref()
         .ok_or(ObservationFailure::Unavailable)?;

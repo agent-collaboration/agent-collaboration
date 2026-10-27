@@ -15,7 +15,7 @@ pub(super) struct CopiedReader {
 }
 
 pub(super) async fn copied_reader() -> CopiedReader {
-    let source = OwnerFixture::new().await;
+    let source = Box::pin(OwnerFixture::new()).await;
     let retained = source.post(&source.root, "retained followed post").await;
     source
         .store
@@ -67,7 +67,7 @@ pub(super) async fn copied_reader() -> CopiedReader {
     let root = source.root.clone();
     let discussion_subject = source.discussion_subject.clone();
     let source_directory = source.into_directory();
-    let mut owner = OwnerFixture::new().await;
+    let mut owner = Box::pin(OwnerFixture::new()).await;
     kept.publish_successor(&owner, &project).await.unwrap();
     owner.project = project;
     owner.root = root;

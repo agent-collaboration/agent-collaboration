@@ -5,12 +5,23 @@
 )]
 //! A broken native project cannot take down a healthy sibling's public operations.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::json;
 
-#[allow(clippy::indexing_slicing)] // Constructing fields in a test-owned JSON object.
+#[expect(
+    clippy::indexing_slicing,
+    reason = "Constructing fields in a test-owned JSON object."
+)]
 async fn corrupt_sibling() -> Result<(BoardFixture, ProjectId, ProjectId, ThreadId), TestError> {
     let fixture = BoardFixture::start().await?;
     let (healthy, _) = fixture.project().await?;
@@ -45,7 +56,10 @@ async fn corrupt_sibling() -> Result<(BoardFixture, ProjectId, ProjectId, Thread
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn creation_recovery_contains_a_corrupt_sibling() -> Result<(), TestError> {
     let (fixture, healthy, broken, _) = corrupt_sibling().await?;
     assert!(fixture._admission.recover_creating_projects().await.is_ok());
@@ -81,7 +95,10 @@ async fn creation_recovery_contains_a_corrupt_sibling() -> Result<(), TestError>
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn healthy_thread_routing_survives_a_corrupt_sibling() -> Result<(), TestError> {
     let (fixture, healthy, broken, thread) = corrupt_sibling().await?;
     let mut request = fixture.header();

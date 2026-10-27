@@ -1,17 +1,17 @@
 //! A registered wait probes FIFO SDK items and hands over one matching frozen root.
-#[cfg(test)]
-use super::OwnerObservation;
 use super::{
     BoardError, Identity, ReaderDeliveryOwner, ReaderScanScope, SubscriptionMode,
     SubscriptionWaitResult, target_session,
 };
+#[cfg(test)]
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_mail_protocol::NotificationSource;
+#[cfg(test)]
+use collaboration_protocol::PushId;
 use collaboration_protocol::{MachineId, PushLineInput, RouterLink, render_push_line};
 use fleet_sync_protocol::DeliveryItem;
 
-pub(in crate::service_identity::subscription_delivery) fn poll_unsent(
-    reason: &str,
-) -> collaboration_contracts::NativeDeliveryResult {
+pub(in crate::subscription_delivery) fn poll_unsent(reason: &str) -> collaboration_contracts::NativeDeliveryResult {
     collaboration_contracts::NativeDeliveryResult::not_submitted(
         reason,
         true,
@@ -230,6 +230,3 @@ impl ReaderDeliveryOwner {
         )
     }
 }
-
-#[cfg(test)]
-use collaboration_protocol::PushId;

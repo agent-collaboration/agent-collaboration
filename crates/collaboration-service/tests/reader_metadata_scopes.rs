@@ -6,6 +6,14 @@
 )]
 //! Thread write metadata reads the thread's activity and still checks the scanned line.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -27,7 +35,10 @@ async fn create(
     ))
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn thread_metadata_skips_bodies_while_content_reads_refuse_corruption()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -126,7 +137,10 @@ async fn thread_metadata_skips_bodies_while_content_reads_refuse_corruption()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn scoped_thread_metadata_keeps_off_subject_epoch_and_dense_position_checks()
 -> Result<(), TestError> {
     for epoch_fault in [true, false] {
@@ -173,7 +187,10 @@ async fn scoped_thread_metadata_keeps_off_subject_epoch_and_dense_position_check
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn scoped_native_selection_retains_every_thread_fact_and_intent_branch()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -301,7 +318,10 @@ async fn scoped_native_selection_retains_every_thread_fact_and_intent_branch()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn write_reader_counts_all_unread_but_returns_newest_fifty_and_pages_the_rest()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -397,7 +417,7 @@ async fn write_reader_counts_all_unread_but_returns_newest_fifty_and_pages_the_r
                         }
                         _ => false,
                     },
-                    _ => false,
+                    FeedContent::Redacted => false,
                 };
             if selected {
                 paged.push(entry.record);
@@ -410,7 +430,10 @@ async fn write_reader_counts_all_unread_but_returns_newest_fifty_and_pages_the_r
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn task_workstream_and_project_metadata_follow_subject_relations_without_decoding_titles()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

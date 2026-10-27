@@ -20,7 +20,6 @@ async fn policy_loaded_generic_preserves_each_mode_without_resume() {
                 stored_run: None,
             },
         )
-        .await
         .unwrap();
         let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
         let weak = Arc::downgrade(&broker);
@@ -85,7 +84,6 @@ async fn policy_loaded_expired_broker_refuses_each_mode_before_resume_or_input()
                 stored_run: None,
             },
         )
-        .await
         .unwrap();
         let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
         let weak = Arc::downgrade(&broker);

@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
 //! Combined native startup states must use normal restoration and acknowledged ownership.
 use super::super::SubscriptionClock;
 use super::super::tests::{owner_fixture::*, startup_fixture::*};
@@ -14,9 +13,9 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
     let _trace = tracing::subscriber::set_default(
         tracing_subscriber::registry().with(StartupTrace(evidence.clone())),
     );
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let (healthy, healthy_thread, _, healthy_owed) =
-        subscribed_project(&fixture, fixture.reader.clone()).await;
+        Box::pin(subscribed_project(&fixture, fixture.reader.clone())).await;
     let owed = fixture
         .post(&fixture.root, "selected before process restart")
         .await;
@@ -128,7 +127,7 @@ async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command(
     let _trace = tracing::subscriber::set_default(
         tracing_subscriber::registry().with(StartupTrace(evidence.clone())),
     );
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let owed = fixture
         .post(&fixture.root, "owed after closing owner's accepted handoff")
         .await;
@@ -190,8 +189,8 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
     let _trace = tracing::subscriber::set_default(
         tracing_subscriber::registry().with(StartupTrace(evidence.clone())),
     );
-    let fixture = OwnerFixture::new().await;
-    let (recovering, thread, reader, owed) = healthy_project(&fixture).await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    let (recovering, thread, reader, owed) = Box::pin(healthy_project(&fixture)).await;
     let broken = fixture
         .registry
         .existing_project(&fixture.project)
@@ -292,7 +291,7 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
 
 #[tokio::test]
 async fn recovering_project_does_not_wait_for_an_owner_without_membership() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     let Identity::Session { mut session } = fixture.reader.clone() else {
         panic!("session reader")

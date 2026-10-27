@@ -45,7 +45,6 @@ async fn send_frame(writer: &mut tokio::net::unix::OwnedWriteHalf, frame: Value)
     Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn connect_actor(
     path: &Path,
     human_id: &str,
@@ -103,7 +102,10 @@ fn approval(request_id: &str) -> Result<ApprovalRequest, Box<dyn std::error::Err
 mod remediation;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn only_the_approver_receives_and_decides_exact_provider_options() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -281,7 +283,10 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;

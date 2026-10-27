@@ -4,8 +4,17 @@
     reason = "lint pass follows the crate split"
 )]
 //! The public work view does not select or decode unrelated fact history.
-#[allow(dead_code)] // This fixture also supplies other board journeys.
+// This fixture also supplies other board journeys.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
@@ -30,7 +39,7 @@ impl Visit for SqlField {
     }
 }
 impl<S: tracing::Subscriber> Layer<S> for Statements {
-    #[allow(
+    #[expect(
         clippy::unwrap_used,
         reason = "a poisoned SQL observer must fail the proof"
     )]
@@ -56,7 +65,10 @@ fn operands(mut response: Value) -> Result<Value, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn public_work_operands_and_native_queries_ignore_growing_unrelated_facts()
 -> Result<(), TestError> {
     let statements = Arc::new(Mutex::new(Vec::new()));

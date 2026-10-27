@@ -5,19 +5,30 @@
 )]
 //! Counterexample: legal project positions can have wall-clock times in reverse order.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::CollaborationApplication;
+use collaboration_service::ApplicationFixture;
+
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
-use collaboration_service::ServiceIdentity;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_backwards()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
@@ -45,15 +56,13 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
-        CollaborationApplication::new(
-            ServiceIdentity::new(
-                installation.as_str(),
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission),
-        ),
-    )
-    .await?;
+        (ApplicationFixture::new(
+            installation.as_str(),
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission))
+        .build(),
+    )?;
     let actor = Identity::Human {
         human_id: HumanId::try_from("reader".to_owned())?,
     };

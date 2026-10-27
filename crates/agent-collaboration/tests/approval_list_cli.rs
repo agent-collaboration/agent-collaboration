@@ -69,7 +69,7 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
             .await
             .expect("automation store"),
     ));
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity")
         .with_automation_store(Arc::clone(&automation_store))
         .with_approval_broker(Arc::clone(&broker));
@@ -116,9 +116,8 @@ async fn provider_pending_approval_uses_legacy_cli_shape_and_safe_decision() {
         .expect("pending provider approval");
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         directory.path(),
-        collaboration_service::CollaborationApplication::new(identity),
+        (identity).build(),
     )
-    .await
     .expect("serve collaboration API");
     let listed = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args([
@@ -184,14 +183,11 @@ async fn approval_list_rejection_preserves_rejected_kind_and_exit_four() {
         .expect("private fixture directory");
     let service_id = "00000000-0000-4000-8000-000000000001";
     let epoch = "00000000-0000-4000-8000-000000000002";
-    let identity =
-        collaboration_service::ServiceIdentity::new(service_id, epoch).expect("service identity");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
+        .expect("service identity");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args(["approval", "list", "--json", "--service-directory"])
         .arg(&root)

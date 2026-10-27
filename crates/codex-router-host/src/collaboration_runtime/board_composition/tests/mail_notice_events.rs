@@ -1,5 +1,8 @@
 //! SDK-generated hints cross the real pump and the Host's existing event owner.
-#![allow(clippy::panic_in_result_fn)] // Assertions are test oracles; Result propagates real I/O failures.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions are test oracles; Result propagates real I/O failures."
+)]
 use super::super::fleet_service::{BOUND, TestFleet};
 use super::*;
 use fleet_sync_protocol::{DeliveryStream, GateAnswer, OperationAnswer, OperationRequest};

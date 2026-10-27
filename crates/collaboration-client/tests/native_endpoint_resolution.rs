@@ -1,6 +1,6 @@
 //! Real owner-local collaboration API proof for source-affine native route resolution.
 use collaboration_client::{protocol::EndpointRef, resolve_public_native_for_endpoint};
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::{
     io::ErrorKind,
@@ -34,15 +34,14 @@ async fn native_resolution_accepts_only_the_selected_service_and_endpoint() {
             "schemaDigest":null,"generation":{"serviceEpoch":EPOCH,"generation":1}}]
     }))
     .unwrap();
-    let identity = ServiceIdentity::new(FIRST_SERVICE, EPOCH)
+    let identity = ApplicationFixture::new(FIRST_SERVICE, EPOCH)
         .unwrap()
         .with_endpoints(vec![descriptor])
         .unwrap();
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         &directory,
-        CollaborationApplication::new(identity),
+        (identity).build(),
     )
-    .await
     .unwrap();
 
     // Act/Assert: the opaque session ID is irrelevant; route identity must match both parts.

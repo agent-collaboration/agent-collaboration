@@ -27,6 +27,10 @@ mod archive_observation;
 mod central_read_copy;
 #[cfg(test)]
 #[path = "board_composition/tests/fleet_service.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod fleet_service;
 #[path = "board_composition/install_attempts.rs"]
 mod install_attempts;
@@ -52,6 +56,11 @@ mod server_calls;
 mod snapshot_installation;
 #[cfg(test)]
 #[path = "board_composition/tests.rs"]
+#[expect(
+    unused_imports,
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod tests;
 
 pub(super) use machine_session::RunningMachineSession;

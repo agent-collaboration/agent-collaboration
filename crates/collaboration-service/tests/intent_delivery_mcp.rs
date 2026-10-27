@@ -5,6 +5,14 @@
 )]
 //! Real board admission, renderer, prepared push and Layer-0 routing; only the agent endpoint stands in.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
@@ -21,7 +29,7 @@ use collaboration_protocol::{
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::{
     BoardAvailability, CollaborationApplication, IntentReply, MailPushDeliveryProps,
-    NotificationPublisher, ProjectAdmission, ProjectAdmissionProps, ServiceIdentity,
+    NotificationPublisher, ProjectAdmission, ProjectAdmissionProps,
     SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
 };
 use message_board::*;
@@ -80,7 +88,10 @@ impl SessionDeliveryRoute for CapturingEndpoint {
     }
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -138,7 +149,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
         )?,
         clock: Arc::new(SystemSubscriptionClock),
     });
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
@@ -168,9 +179,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     ));
     let identity = identity.with_notification_publisher(publisher.clone());
     delivery.start().await?;
-    let api =
-        ServedCollaborationApi::start(directory.path(), CollaborationApplication::new(identity))
-            .await?;
+    let api = ServedCollaborationApi::start(directory.path(), (identity).build())?;
     let actor = json!({"kind":"human","humanId":"owner"});
     let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":actor});
     let workspace = WorkspaceId::generate();

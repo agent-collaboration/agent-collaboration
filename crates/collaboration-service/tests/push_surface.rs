@@ -1,13 +1,19 @@
 #![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
+    clippy::expect_used,
+    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
 )]
-#![allow(clippy::expect_used)]
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 
 use automation_storage::AutomationStore;
@@ -18,7 +24,8 @@ use collaboration_protocol::{
     PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
+
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::Ordering};
 use tokio::sync::Mutex as TokioMutex;

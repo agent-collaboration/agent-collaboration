@@ -5,8 +5,20 @@
 )]
 //! Corruption is refused when its record is read, without poisoning another workspace.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -15,7 +27,10 @@ use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unselected_unwatched_corrupt_post_cannot_break_a_workspace_page() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;
@@ -98,7 +113,10 @@ async fn unselected_unwatched_corrupt_post_cannot_break_a_workspace_page() -> Re
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unread_excludes_only_the_same_session_endpoint() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture

@@ -4,8 +4,20 @@
     reason = "lint pass follows the crate split"
 )]
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -13,7 +25,10 @@ use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Repository and directory metadata retain identity, idempotency and archive gates.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Repository and directory metadata retain identity, idempotency and archive gates."
+)]
 async fn metadata_and_repository_operations_preserve_identity_and_lifecycle()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -107,7 +122,10 @@ async fn metadata_and_repository_operations_preserve_identity_and_lifecycle()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Exact records, cursor signatures and closed-thread gates cross the real API/native store.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Exact records, cursor signatures and closed-thread gates cross the real API/native store."
+)]
 async fn immutable_posts_threads_references_and_signed_pagination_share_one_project_order()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

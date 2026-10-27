@@ -1,5 +1,8 @@
 //! Real admission writes bind intent state and frozen mail under one native guard.
-#![allow(clippy::panic_in_result_fn, clippy::indexing_slicing)] // Literal behavioral assertions in Result-returning native fixtures.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal behavioral assertions in Result-returning native fixtures."
+)]
 use super::subscription_fixture::*;
 use crate::{IntentHandoffInput, IntentRecipientEnrollment, IntentReply, ProjectAdmissionError};
 use fleet_sync_protocol::{DeliveryEnvelope, ItemId, PeerId};
@@ -62,7 +65,7 @@ fn input(recipient: &Identity) -> Result<IntentHandoffInput, TestError> {
 #[tokio::test]
 async fn intent_claim_commits_the_frozen_item_and_equal_reference_and_replays_without_reallocation()
 -> Result<(), TestError> {
-    let (fixture, original) = arrange_intent().await?;
+    let (fixture, original) = Box::pin(arrange_intent()).await?;
     let proposed = input(&fixture.reader)?;
     let expected_id = proposed.item.as_uuid().to_string();
     assert!(matches!(
@@ -101,7 +104,7 @@ async fn intent_claim_commits_the_frozen_item_and_equal_reference_and_replays_wi
         serde_json::to_value(&envelope.recipient().address)?,
         serde_json::to_value(match &fixture.reader {
             Identity::Session { session } => session,
-            _ => return Err("session".into()),
+            Identity::Human { .. } => return Err("session".into()),
         })?
     );
     let DeliveryEnvelope::Item(item) = *envelope else {
@@ -134,7 +137,7 @@ async fn intent_claim_commits_the_frozen_item_and_equal_reference_and_replays_wi
 #[tokio::test]
 async fn a_missing_enrollment_defers_without_writes_and_a_resolved_pair_can_retry()
 -> Result<(), TestError> {
-    let (fixture, intent) = arrange_intent().await?;
+    let (fixture, intent) = Box::pin(arrange_intent()).await?;
     let store = fixture
         .registry
         .existing_project(&fixture.project)
@@ -184,7 +187,7 @@ async fn a_missing_enrollment_defers_without_writes_and_a_resolved_pair_can_retr
 #[tokio::test]
 async fn a_claim_refuses_an_enrollment_pair_for_a_different_service_under_the_lock()
 -> Result<(), TestError> {
-    let (fixture, intent) = arrange_intent().await?;
+    let (fixture, intent) = Box::pin(arrange_intent()).await?;
     let mut proposed = input(&fixture.reader)?;
     proposed.enrollment.service = "00000000-0000-4000-8000-000000000099"
         .to_owned()
@@ -218,7 +221,7 @@ async fn a_claim_refuses_an_enrollment_pair_for_a_different_service_under_the_lo
 #[tokio::test]
 async fn the_admission_writer_refuses_a_handed_off_reference_that_names_another_frozen_item()
 -> Result<(), TestError> {
-    let (fixture, mut intent) = arrange_intent().await?;
+    let (fixture, mut intent) = Box::pin(arrange_intent()).await?;
     let store = fixture
         .registry
         .existing_project(&fixture.project)
@@ -256,7 +259,7 @@ async fn the_admission_writer_refuses_a_handed_off_reference_that_names_another_
 #[tokio::test]
 async fn an_unknown_installation_is_a_terminal_refusal_without_a_frozen_handoff()
 -> Result<(), TestError> {
-    let (fixture, intent) = arrange_intent().await?;
+    let (fixture, intent) = Box::pin(arrange_intent()).await?;
     let proposed = input(&fixture.reader)?;
     fixture
         .admission
@@ -301,7 +304,7 @@ async fn an_unknown_installation_is_a_terminal_refusal_without_a_frozen_handoff(
 #[tokio::test]
 async fn a_ledger_write_failure_rolls_back_the_frozen_handoff_and_intent_transition_together()
 -> Result<(), TestError> {
-    let (fixture, intent) = arrange_intent().await?;
+    let (fixture, intent) = Box::pin(arrange_intent()).await?;
     let store = fixture
         .registry
         .existing_project(&fixture.project)

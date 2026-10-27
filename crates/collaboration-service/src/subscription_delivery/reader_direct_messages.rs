@@ -1,10 +1,10 @@
 //! DM presence, submission and response handling inside the target's single delivery actor.
-#[cfg(test)]
-use super::OwnerObservation;
 use super::{
     BoardError, LoadPolicy, PRESENCE_INTERVAL, PushRecord, ReaderDeliveryOwner, TargetPresence,
     target_session,
 };
+#[cfg(test)]
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_protocol::{MessageDelivery, PushDeliveryState};
 
 impl ReaderDeliveryOwner {

@@ -1,5 +1,9 @@
 //! Registration starts and readiness observers share the existing project-writer owner.
-use super::*;
+use super::{
+    Arc, ProjectId, ProjectLifecycleSignal, ProjectRegistration, ProjectRegistrationError,
+    ProjectRegistrationFuture, ProjectRegistrationState, ProjectWriter, ProjectWriterSlot,
+    ProjectWriters, RegistrationRefusal, WriterRegistrationOutcome, io, stop_writer_slot,
+};
 
 impl ProjectRegistration for ProjectWriters {
     fn start<'runtime>(

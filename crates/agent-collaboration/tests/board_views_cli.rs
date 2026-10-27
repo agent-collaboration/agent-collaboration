@@ -7,6 +7,11 @@ mod board_cli_execution;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli, cli_with_session};
 use board_fixture::{BoardFixture, TestError};
@@ -16,7 +21,7 @@ use serde_json::json;
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn view_commands_reach_the_real_service_and_report_read_marks() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;

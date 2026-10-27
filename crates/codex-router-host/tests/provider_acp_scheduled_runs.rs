@@ -1,8 +1,7 @@
 #![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
 )]
-#![allow(clippy::expect_used, clippy::panic)]
 //! A provider run waits for an idle actor and summarizes its own prompt settlement.
 use agent_automation::{
     CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId, RunPhase, SubmissionEffect,

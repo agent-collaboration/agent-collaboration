@@ -128,7 +128,7 @@ impl ApprovalBroker for ServiceInteractionBroker {
                 )
             );
             let expires_at = (chrono::Utc::now()
-                + chrono::Duration::seconds(i64::from(super::APPROVAL_TIMEOUT_SECONDS)))
+                + chrono::Duration::seconds(APPROVAL_TIMEOUT.as_secs().cast_signed()))
             .to_rfc3339();
             let record = ApprovalRequestRecord {
                 request_id: request_id.clone(),

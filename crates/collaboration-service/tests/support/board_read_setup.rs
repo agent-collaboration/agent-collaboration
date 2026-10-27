@@ -1,5 +1,5 @@
 //! Real typed board read setup shared by retained behavioral scenarios.
-#![allow(dead_code)] // Each integration target uses its own subset of setup operations.
+// Each integration target uses its own subset of setup operations.
 use super::board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};

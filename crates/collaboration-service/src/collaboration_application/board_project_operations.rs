@@ -11,7 +11,7 @@ use message_board::{
     ThreadUnwatchRequest, ThreadWatchRequest,
 };
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn project_claim(
         &self,
         request: board_sync_protocol::ProjectClaimRequest,
@@ -22,8 +22,7 @@ impl BoardOperations<'_> {
                 "must be the supported board protocol version",
             ));
         }
-        self.identity
-            .project_claim
+        self.project_claim
             .as_ref()
             .ok_or_else(BoardError::board_unavailable)?
             .claim(&request)
@@ -63,8 +62,8 @@ impl BoardOperations<'_> {
             .await
             .map_err(admission_error)?;
         crate::after_project_commit_publish_and_reconcile(
-            self.identity.notification_publisher.as_deref(),
-            self.identity.subscription_delivery.as_ref(),
+            self.notification_publisher.as_deref(),
+            self.subscription_delivery.as_ref(),
             request.actor,
             request.project_id,
         )

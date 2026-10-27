@@ -507,7 +507,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             )?,
         };
         for stage in 0..3 {
-            if let Err(error) = worker.step(run_id.clone()).await {
+            if let Err(error) = Box::pin(worker.step(run_id.clone())).await {
                 let current = store
                     .lock()
                     .await
@@ -522,16 +522,15 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             apply_push_handoff(&worker).await?;
         }
         if matches!(kind, FakeRouteKind::Provider) {
-            worker
-                .step(run_id.clone())
+            Box::pin(worker.step(run_id.clone()))
                 .await
                 .map_err(|error| format!("fake provider settle: {error}"))?;
         }
-        let identity = crate::ServiceIdentity::new(service, service)?
+        let identity = crate::ApplicationFixture::new(service, service)?
             .with_automation_store(Arc::clone(&store))
             .with_interaction_store(interactions)
             .with_scheduled_run_execution(fake);
-        let application = crate::CollaborationApplication::new(identity);
+        let application = (identity).build();
         let shown = application
             .automation()
             .run_show(RunShowRequest { run_id })
@@ -631,10 +630,10 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
             .await?;
         schedules.push(schedule.schedule_id);
     }
-    let identity = crate::ServiceIdentity::new(service, service)?
+    let identity = crate::ApplicationFixture::new(service, service)?
         .with_automation_store(Arc::clone(&store))
         .with_scheduled_run_execution(fake);
-    let application = crate::CollaborationApplication::new(identity);
+    let application = (identity).build();
     let fresh = application
         .automation()
         .schedule_create(serde_json::from_value(json!({

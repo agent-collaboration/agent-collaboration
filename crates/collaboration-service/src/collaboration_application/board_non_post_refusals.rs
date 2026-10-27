@@ -5,7 +5,7 @@ use message_board::{
     public_replies as public,
 };
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn cached_non_post_refusal(
         &self,
         request: &ProjectRequest,

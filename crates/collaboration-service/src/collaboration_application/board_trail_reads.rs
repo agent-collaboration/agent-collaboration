@@ -8,7 +8,7 @@ use message_board::{
     WorkTrailShowRequest,
 };
 use message_board_storage::{FeedPageBounds, FeedPageDirection, TrailPageFilter};
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn feed_read(
         &self,
         request: FeedReadRequest,

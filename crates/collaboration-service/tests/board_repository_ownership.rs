@@ -6,11 +6,22 @@
 //! Foreign local locators are refused at every public boundary before metadata changes.
 use serde_json::json;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn foreign_local_repositories_are_refused_on_every_request_that_names_one()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -50,7 +61,10 @@ async fn foreign_local_repositories_are_refused_on_every_request_that_names_one(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn workspace_repository_filter_matches_typed_locator_fields() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let repositories = [

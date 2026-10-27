@@ -1,7 +1,7 @@
 //! Real waiter disconnect, physical owner reopen and SDK interruption preserve per-item custody.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
 use super::*;
-use crate::service_identity::subscription_delivery::subscription_service::PollHandoverStage;
+use crate::subscription_delivery::subscription_service::PollHandoverStage;
 use crate::{SubscriptionWaitFilter, SubscriptionWaitResult};
 use fleet_sync_protocol::RecipientOutcome;
 use message_board::*;
@@ -25,7 +25,7 @@ async fn held_item(
 
 #[tokio::test]
 async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unknown() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -122,7 +122,7 @@ async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unk
 
 #[tokio::test]
 async fn held_poll_policy_and_original_identity_survive_physical_owner_reopen() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -220,7 +220,7 @@ fn includes_root(
 
 #[tokio::test]
 async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_after_reopen() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let roots = super::follow_admission_proofs::project_poll_roots(&fixture).await;
     fixture
         .subscribe(

@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn empty_project_subscription_covers_its_first_later_root_with_a_pending_window()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::empty().await?;
@@ -104,7 +107,10 @@ async fn empty_project_subscription_covers_its_first_later_root_with_a_pending_w
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p2_project_root_notice_settlement_keeps_inbox_fetch_and_ack_valid() -> Result<(), TestError>
 {
     let mut fixture = SubscriptionFixture::start().await?;

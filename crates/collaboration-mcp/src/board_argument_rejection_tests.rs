@@ -1,7 +1,6 @@
 //! Board tools refuse arguments that do not decode with the board's typed rejection, which
 //! names the field and its requirement and repeats nothing the caller supplied.
 use crate::api_test_harness::{ServedApi, api_config, test_identity};
-use collaboration_service::CollaborationApplication;
 use serde_json::{Value, json};
 
 const PRIVATE_VALUE: &str = "PRIVATE_ARGUMENT_VALUE_MUST_NOT_ECHO";
@@ -23,10 +22,7 @@ fn rejection(result: &rmcp::model::CallToolResult) -> Value {
 async fn malformed_board_arguments_are_typed_rejections_without_echo() {
     // Arrange: classification happens before the application, so no board store is needed.
     let directory = private_directory();
-    let config = api_config(
-        CollaborationApplication::new(test_identity()),
-        directory.path(),
-    );
+    let config = api_config((test_identity()).build(), directory.path());
     let api = ServedApi::tcp(&config).await;
     let cases = [
         // The wait tool decodes its own arguments; it classifies them like the others.

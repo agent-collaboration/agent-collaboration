@@ -1,10 +1,11 @@
 //! Real CLI/MCP remote custody; a closed session cannot supply a scripted queued answer.
 use collaboration_service as mail_service;
 #[path = "support/local_mail_surfaces.rs"]
+// The local companion targets use the other fixture operations.
 #[expect(
     dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)] // The local companion targets use the other fixture operations.
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod local_mail_surfaces;
 #[expect(
     clippy::allow_attributes,
@@ -12,12 +13,13 @@ mod local_mail_surfaces;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
-mod native_mail_owner;
-#[path = "support/local_mail_native_sql.rs"]
 #[expect(
     dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)] // Companion targets use the application-row fault helpers.
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
+mod native_mail_owner;
+#[path = "support/local_mail_native_sql.rs"]
+// Companion targets use the application-row fault helpers.
 mod native_sql;
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
@@ -113,7 +115,7 @@ fn input(item: &MailItemId, target: &SessionRef, text: &str) -> Value {
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_push_or_local_injection()
 -> TestResult {
@@ -239,7 +241,7 @@ async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_pu
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_the_real_mcp()
 -> TestResult {
@@ -374,7 +376,7 @@ async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_t
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_and_received_projection()
 -> TestResult {

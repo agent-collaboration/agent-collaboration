@@ -5,13 +5,24 @@
 )]
 //! Recorded task/link/subtask mutations must be visible through the actual view tool.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Observable view assertions; Result propagates fixture IO.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Observable view assertions; Result propagates fixture IO."
+)]
 async fn work_view_orders_dependencies_and_keeps_blockers_progress_and_closed_work_apart()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

@@ -15,7 +15,7 @@ struct InboxReadFilter<'query> {
     reader: &'query Identity,
     read_mode: InboxReadMode,
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn inbox_fetch(
         &self,
         request: InboxFetchRequest,

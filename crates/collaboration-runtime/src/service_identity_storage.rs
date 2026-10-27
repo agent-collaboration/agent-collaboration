@@ -185,7 +185,10 @@ fn read_peer_identity(path: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 mod read_only_identity_tests {
     use super::*;
 

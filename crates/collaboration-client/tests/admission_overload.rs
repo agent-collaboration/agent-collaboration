@@ -8,6 +8,10 @@
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_registry;
 use automation_storage::AutomationStore;
 use collaboration_client::{
@@ -25,9 +29,10 @@ use collaboration_protocol::{
     RunFailureKind, RunNextAction, ScheduleFailureKind, ScheduleNextAction, WakeFailureReason,
     WakeNextAction, WakeShowRequest,
 };
+use collaboration_service::ApplicationFixture;
+
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
 use message_board::{BoardFailureKind, BoardNextAction};
 use serde_json::{Value, json};
 use std::{sync::Arc, time::Duration};
@@ -74,21 +79,18 @@ impl SaturatedApi {
             )?,
         })?);
         let automation = AutomationStore::open(&directory.path().join("automation.sqlite")).await?;
-        let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+        let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
             .map_err(std::io::Error::other)?
             .with_project_admission(admission)
             .with_automation_store(Arc::new(Mutex::new(automation)));
-        let served = Arc::new(
-            ServedCollaborationApi::start_with(
-                directory.path(),
-                CollaborationApplication::new(identity),
-                TestServeOptions {
-                    concurrent_requests: Some(1),
-                    ..TestServeOptions::default()
-                },
-            )
-            .await?,
-        );
+        let served = Arc::new(ServedCollaborationApi::start_with(
+            directory.path(),
+            (identity).build(),
+            TestServeOptions {
+                concurrent_requests: Some(1),
+                ..TestServeOptions::default()
+            },
+        )?);
         let client = served.client("overload-proof").await?;
         let wake = served.call("wake_send", wake_send_arguments()).await?;
         let wakeup_id = wake

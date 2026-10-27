@@ -88,9 +88,9 @@ pub(super) async fn frozen_item(
 
 #[tokio::test]
 async fn a_frozen_local_intent_uses_native_custody_and_replay_does_not_recreate_its_pruned_push() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime_without_board().await;
-    let (app, native) = native_application(&fixture, &runtime, installation_peer()).await;
+    let (app, native) = native_application(&fixture, &runtime, installation_peer());
     let publisher = crate::NotificationPublisher::new(
         fixture.admission.clone(),
         fixture.interactions.clone(),
@@ -178,10 +178,10 @@ async fn a_frozen_local_intent_uses_native_custody_and_replay_does_not_recreate_
 
 #[tokio::test]
 async fn a_held_local_intent_keeps_its_frozen_item_and_link_until_the_reader_runs() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
-    let (app, native) = native_application(&fixture, &runtime, installation_peer()).await;
+    let (app, native) = native_application(&fixture, &runtime, installation_peer());
     let publisher = crate::NotificationPublisher::new(
         fixture.admission.clone(),
         fixture.interactions.clone(),

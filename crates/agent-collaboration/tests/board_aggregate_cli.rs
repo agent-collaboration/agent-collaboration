@@ -10,10 +10,10 @@ mod native_authority;
 mod native_registry;
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::CollaborationApplication;
+use collaboration_service::ApplicationFixture;
+
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
-use collaboration_service::ServiceIdentity;
 use message_board::*;
 use runtime_primitives::{Clock, SyncTime, SystemClock};
 use serde_json::{Value, json};
@@ -25,8 +25,8 @@ type TestError = Box<dyn std::error::Error + Send + Sync>;
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
-)] // Assertions prove the test contract; Result propagates fixture errors.
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> Result<(), TestError>
 {
     let directory = tempfile::tempdir()?;
@@ -57,15 +57,13 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
-        CollaborationApplication::new(
-            ServiceIdentity::new(
-                "00000000-0000-4000-8000-000000000001",
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission.clone()),
-        ),
-    )
-    .await?;
+        (ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission.clone()))
+        .build(),
+    )?;
     let workspace = WorkspaceId::generate();
     let board = BoardId::generate();
     let projects = [ProjectId::generate(), ProjectId::generate()];

@@ -5,6 +5,14 @@
 )]
 //! C5 leaves foreign recipients for P3 without a claim, ledger entry or feed write.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use collaboration_service::IntentReply;
@@ -12,7 +20,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)] // Test-owned JSON fields and literal contract assertions.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test-owned JSON fields and literal contract assertions."
+)]
 async fn explicit_and_role_resolved_foreign_sessions_are_deferred_without_writes()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

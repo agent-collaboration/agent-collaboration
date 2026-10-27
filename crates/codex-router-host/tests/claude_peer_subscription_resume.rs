@@ -1,13 +1,10 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! A held subscription Batch reaches its real Claude peer once the peer returns.
 
 #[path = "support/claude_peer_subscription_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod fixture;
 
 use collaboration_contracts::TargetPresence;
@@ -24,7 +21,7 @@ use tokio::net::UnixListener;
 
 #[tokio::test]
 async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_reappears() {
-    let proof: ProofResult = async {
+    let proof: ProofResult = Box::pin(async {
         // Central's grant is fixture-arranged; this case proves peer delivery, not enrollment.
         let fixture = ClaudePeerSubscriptionFixture::start().await?;
         std::fs::set_permissions(
@@ -207,7 +204,7 @@ async fn claude_peer_subscription_notice_is_held_then_delivered_once_after_peer_
 
         fixture.shutdown().await?;
         Ok(())
-    }
+    })
     .await;
 
     proof.expect("Claude peer subscription resume proof");

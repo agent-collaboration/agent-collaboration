@@ -113,10 +113,16 @@ pub(super) struct PolicyServerCase {
 
 /// Native replies and synthetic schema/endpoint metadata stand in for upstream; storage and sockets are real.
 /// CapturingRunSink below is a separate stand-in; stored-run cases use the real sink.
-pub(super) async fn policy_server(
+type PolicyServerTask = tokio::task::JoinHandle<Result<Vec<Vec<Value>>, TestError>>;
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The spawned fixture asserts the recorded admission order before replying."
+)]
+pub(super) fn policy_server(
     fixture: &RecordedPolicyFixture,
     scenario: PolicyServerCase,
-) -> Result<tokio::task::JoinHandle<Result<Vec<Vec<Value>>, TestError>>, TestError> {
+) -> Result<PolicyServerTask, TestError> {
     let listener = tokio::net::UnixListener::bind(fixture.directory.path().join("native.sock"))?;
     let cwd = fixture.directory.path().to_string_lossy().into_owned();
     let roots = fixture

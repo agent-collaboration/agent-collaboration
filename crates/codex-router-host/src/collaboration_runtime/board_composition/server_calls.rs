@@ -164,7 +164,10 @@ mod tests {
     };
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)] // Assertions compare authority answers; Result propagates fixture errors.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions compare authority answers; Result propagates fixture errors."
+    )]
     fn superseded_release_requires_the_actual_successor_and_never_guesses_one()
     -> Result<(), Box<dyn std::error::Error>> {
         let current = fleet_sync_protocol::Epoch::new(7)?;
@@ -204,7 +207,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn forwarded_decoder_preserves_the_declared_actor_and_supplied_origin()
     -> Result<(), Box<dyn std::error::Error>> {
         let fixture = forwarded_fixture()?;
@@ -223,7 +229,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn forwarded_decoder_refuses_mismatched_project_family_and_malformed_body()
     -> Result<(), Box<dyn std::error::Error>> {
         // The outer route and family are independent of the opaque body. Dropping

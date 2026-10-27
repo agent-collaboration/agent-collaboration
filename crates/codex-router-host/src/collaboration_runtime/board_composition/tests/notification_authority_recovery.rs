@@ -134,7 +134,7 @@ async fn assert_recovery() -> Result<(), TestError> {
         })
         .try_init()?;
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let writer = fixture.harness.projects.ensure(&fixture.project).await?;
     // Real replication makes the frozen item eligible. Discard only its returned
     // prompt while the actual Welcome is still held before the Host event loop.

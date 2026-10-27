@@ -11,7 +11,7 @@ use message_board::{
     WorkspaceListResult, WorkspaceShowRequest, WorkspaceShowResult,
 };
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn project_show(
         &self,
         request: ProjectShowRequest,

@@ -1,6 +1,6 @@
 use super::owner_fixture::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
-use crate::service_identity::subscription_delivery::{
+use crate::subscription_delivery::subscription_service::OwnerObservation;
+use crate::subscription_delivery::{
     SubscriptionClock, SubscriptionWaitFilter, SubscriptionWaitResult,
 };
 use message_board::{SubscriptionMode, SubscriptionScope, WhenIdle};
@@ -12,8 +12,8 @@ use std::time::Duration;
 
 #[tokio::test]
 async fn mode_change_during_flight_settles_original_push_and_polls_released_backlog() {
-    tokio::time::timeout(Duration::from_secs(30), async {
-        let fixture = OwnerFixture::new().await;
+    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.native_runtime().await;
         let original_post = fixture
             .post(&fixture.root, "Original in-flight activity")
@@ -176,7 +176,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
         assert!(final_subscription.roots().is_empty());
         assert!(runtime.requests.lock().await.try_recv().is_err());
         runtime.close().await;
-    })
+    }))
     .await
     .expect("bounded native flight and Poll handover journey");
 }
@@ -184,7 +184,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
 #[tokio::test]
 async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
     tokio::time::timeout(Duration::from_secs(30), async {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let poll_root = fixture.add_root().await;
         fixture
             .policy(&poll_root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
@@ -253,7 +253,7 @@ async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
 
 #[tokio::test(start_paused = true)]
 async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -285,7 +285,7 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
 
 #[tokio::test(start_paused = true)]
 async fn cancel_during_flight_settles_the_passed_range_and_prevents_later_pushes() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "In flight").await;
     runtime.requests.lock().await.recv().await.unwrap();
@@ -319,7 +319,7 @@ async fn cancel_during_flight_settles_the_passed_range_and_prevents_later_pushes
 
 #[tokio::test(start_paused = true)]
 async fn restart_mid_quiet_preserves_the_original_arrival_deadline() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -348,7 +348,7 @@ async fn restart_mid_quiet_preserves_the_original_arrival_deadline() {
 
 #[tokio::test(start_paused = true)]
 async fn restart_after_cap_delivers_immediately_with_downtime_arrivals_included() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,

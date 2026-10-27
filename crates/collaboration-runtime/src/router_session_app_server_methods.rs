@@ -538,7 +538,10 @@ mod input_tests {
     use super::*;
 
     #[tokio::test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+    )]
     async fn local_image_is_read_into_one_typed_image_block()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
@@ -558,7 +561,10 @@ mod input_tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+    )]
     async fn image_input_reports_unreadable_and_oversized_files()
     -> Result<(), Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;

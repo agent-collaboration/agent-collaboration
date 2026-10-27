@@ -12,12 +12,19 @@ use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, SessionReachability, SessionRef,
 };
+use collaboration_service::ApplicationFixture;
+
+
+
 use collaboration_service::BoardAvailability;
-use collaboration_service::CollaborationApplication;
-use collaboration_service::ServiceIdentity;
+
+
+
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
+
+
 use serde_json::{Value, json};
 use std::{
     os::unix::fs::PermissionsExt,
@@ -135,7 +142,7 @@ impl Surfaces {
             clock: Arc::new(SystemSubscriptionClock),
         });
         delivery.start().await?;
-        let mut identity = ServiceIdentity::new(SERVICE, SERVICE)?
+        let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?
             .with_session_delivery(carrier.clone())
             .with_subscription_delivery_service(delivery.clone(), carrier.clone());
         if let Some(admission) = admission {
@@ -157,9 +164,7 @@ impl Surfaces {
             },
             session,
         )?;
-        let api =
-            ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-                .await?;
+        let api = ServedCollaborationApi::start(root.path(), (identity).build())?;
         Ok(Self {
             root,
             api,

@@ -1,5 +1,10 @@
+#![expect(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "A broken proof recorder must fail its test."
+)]
 //! Count complete native alarm runs separately from the overlapping foreground request.
-#![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)] // A broken proof recorder must fail.
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Mutex, OnceLock},

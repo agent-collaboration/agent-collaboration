@@ -171,10 +171,7 @@ async fn message_server(
     )
     .expect("native mail owner");
     (
-        CollaborationMcpServer::for_application(
-            collaboration_service::CollaborationApplication::new(identity),
-            directory.to_owned(),
-        ),
+        CollaborationMcpServer::for_application((identity).build(), directory.to_owned()),
         owner,
         native,
     )

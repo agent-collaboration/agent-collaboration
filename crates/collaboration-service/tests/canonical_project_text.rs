@@ -5,6 +5,14 @@
 )]
 //! Incoming normalization stays useful; persisted current/feed values must already be canonical.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -56,7 +64,10 @@ async fn setup() -> Result<
         ],
     ))
 }
-#[allow(clippy::panic_in_result_fn)] // Literal native diagnostic assertions are the regression oracle.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal native diagnostic assertions are the regression oracle."
+)]
 fn assert_invalid<TValue>(
     result: Result<TValue, ProjectStorageError>,
     reference: &RecordRef,
@@ -75,7 +86,10 @@ fn assert_invalid<TValue>(
     }
     Ok(())
 }
-#[allow(clippy::panic_in_result_fn)] // Verify the independent fixture's original canonical literal.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Verify the independent fixture's original canonical literal."
+)]
 fn corrupt_text(
     value: &mut Value,
     prefix: &str,
@@ -98,7 +112,7 @@ fn corrupt_text(
     Ok(())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+
 async fn native_current_and_kind_reads_reject_padded_names_titles_and_tags() -> Result<(), TestError>
 {
     let (fixture, project, cases) = setup().await?;
@@ -142,7 +156,10 @@ async fn native_current_and_kind_reads_reject_padded_names_titles_and_tags() -> 
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn native_immutable_feed_rejects_padded_names_titles_and_tags() -> Result<(), TestError> {
     let (fixture, project, cases) = setup().await?;
     let store = fixture
@@ -203,7 +220,10 @@ async fn native_immutable_feed_rejects_padded_names_titles_and_tags() -> Result<
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn participant_reads_reject_noncanonical_notes_and_joining_feed_metadata()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

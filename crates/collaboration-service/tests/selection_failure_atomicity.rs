@@ -5,6 +5,14 @@
 )]
 //! A later native local-store failure cannot strand an earlier known-unsent selection.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -14,7 +22,10 @@ use std::sync::Arc;
 mod native_worker_faults;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)] // Test-owned request objects and literal assertions.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test-owned request objects and literal assertions."
+)]
 async fn failing_second_membership_save_rolls_back_the_first_and_retries_without_restart()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

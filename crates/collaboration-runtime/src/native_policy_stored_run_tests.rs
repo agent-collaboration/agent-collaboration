@@ -108,8 +108,7 @@ async fn stored_two_attempts(
             retire_loaded: None,
             stored_run: Some((stored.store.clone(), stored.run_id.clone())),
         },
-    )
-    .await?;
+    )?;
     let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
     let route = crate::CodexAppServerDeliveryRoute::new(

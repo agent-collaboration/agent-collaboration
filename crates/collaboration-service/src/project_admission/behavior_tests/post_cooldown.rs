@@ -14,7 +14,10 @@ fn root_operation(post: PostId, about: ThreadSubject) -> Result<BoardOperation, 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Corrupt stored Router time is refused before any new admission decision.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Corrupt stored Router time is refused before any new admission decision."
+)]
 async fn malformed_cooldown_post_timestamps_are_rejected_as_attributed_invalid_records()
 -> Result<(), TestError> {
     for timestamp in [-1_i64, i64::MIN, i64::MAX] {
@@ -69,7 +72,10 @@ async fn malformed_cooldown_post_timestamps_are_rejected_as_attributed_invalid_r
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Exact times enter the unchanged real admission seam.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Exact times enter the unchanged real admission seam."
+)]
 async fn cooldown_allows_a_top_level_post_at_the_sixty_second_boundary() -> Result<(), TestError> {
     let fixture = SubscriptionFixture::start().await?;
     let post = PostId::generate();
@@ -90,7 +96,10 @@ async fn cooldown_allows_a_top_level_post_at_the_sixty_second_boundary() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Per-project cooldown preserves the original 60-second window and exact remaining time.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Per-project cooldown preserves the original 60-second window and exact remaining time."
+)]
 async fn thirty_seconds_is_still_inside_the_project_cooldown() -> Result<(), TestError> {
     let fixture = SubscriptionFixture::start().await?;
     let reply = fixture
@@ -110,7 +119,10 @@ async fn thirty_seconds_is_still_inside_the_project_cooldown() -> Result<(), Tes
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Concurrent requests race at the actual per-project writer gate.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Concurrent requests race at the actual per-project writer gate."
+)]
 async fn competing_top_level_posts_for_one_actor_commit_only_once() -> Result<(), TestError> {
     let fixture = SubscriptionFixture::empty().await?;
     let first = PostId::generate();

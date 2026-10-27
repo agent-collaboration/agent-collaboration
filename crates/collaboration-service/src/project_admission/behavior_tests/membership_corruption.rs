@@ -19,7 +19,10 @@ async fn corrupt(fixture: &SubscriptionFixture, statement: &'static str) -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn corrupted_subscription_enum_fails_closed_with_field_name() -> Result<(), TestError> {
     let fixture = SubscriptionFixture::joined().await?;
     corrupt(
@@ -40,7 +43,10 @@ async fn corrupted_subscription_enum_fails_closed_with_field_name() -> Result<()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn expiration_does_not_normalize_a_corrupt_subscription_row() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();
@@ -72,7 +78,10 @@ async fn expiration_does_not_normalize_a_corrupt_subscription_row() -> Result<()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn m2_corrupt_ended_row_reports_the_missing_ended_at_field() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let scope = SubscriptionScope::thread(fixture.root.clone());

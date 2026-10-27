@@ -7,6 +7,11 @@ mod board_cli_execution;
     reason = "This fixture source belongs to the split lane, which fixes its allowances at integration."
 )]
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 
 use board_cli_execution::cli;
@@ -173,7 +178,7 @@ async fn assert_list_parity(
 }
 
 #[tokio::test]
-// Literal contract assertions; Result propagates fixture failures.
+
 async fn repository_and_default_lists_follow_subject_rename_and_refile() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     attach_repository(&fixture).await?;
@@ -241,7 +246,7 @@ async fn repository_and_default_lists_keep_redacted_subjects_private() -> Result
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Test assertions must fail the test while fixture errors propagate."
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn repository_and_default_lists_keep_unavailable_subjects_and_imported_marker()
 -> Result<(), TestError> {

@@ -3,8 +3,8 @@ use super::super::SubscriptionClock;
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
 use crate as mail_service;
+use crate::ApplicationFixture;
 use crate::CollaborationApplication;
-use crate::ServiceIdentity;
 use collaboration_contracts::TargetPresence;
 #[path = "follow_admission_proofs.rs"]
 mod follow_admission_proofs;
@@ -70,14 +70,14 @@ use native_mail_owner::NativeMailOwner;
 use std::sync::Arc;
 use std::time::Duration;
 
-async fn native_application(
+fn native_application(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
     peer: PeerId,
 ) -> (Arc<CollaborationApplication>, NativeMailOwner) {
     let interactions = fixture.interactions.clone();
     let (identity, owner) = NativeMailOwner::start(
-        ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_automation_store(fixture.automation.clone())
             .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone()),
@@ -95,7 +95,7 @@ async fn native_application(
         },
     )
     .unwrap();
-    (Arc::new(CollaborationApplication::new(identity)), owner)
+    (Arc::new((identity).build()), owner)
 }
 
 fn reference_for_request(
@@ -108,7 +108,9 @@ fn reference_for_request(
             (PushOrigin::Session(sender.clone()), text.as_str())
         }
         MessageContent::HumanUser { text } => (PushOrigin::OwnerUnverified, text.as_str()),
-        _ => panic!("local lifecycle proof requires caller-authored content"),
+        MessageContent::Router { .. } => {
+            panic!("local lifecycle proof requires caller-authored content")
+        }
     };
     let draft = PushRecordDraft {
         push_id: push.clone(),
@@ -183,11 +185,11 @@ async fn await_compaction(owner: &NativeMailOwner, reference: DeliveryItemRef) {
 
 #[tokio::test]
 async fn concurrent_same_item_reports_pending_then_replays_the_exact_settled_outcome() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    let (app, native) = native_application(&fixture, &runtime, peer).await;
+    let (app, native) = native_application(&fixture, &runtime, peer);
     let id = MailItemId::generate();
     let target = target_session(&fixture.reader).unwrap();
     let input = SessionMessageSendParams {
@@ -254,7 +256,7 @@ async fn concurrent_same_item_reports_pending_then_replays_the_exact_settled_out
 
 #[tokio::test]
 async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_the_same_owner() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let target = target_session(&fixture.reader).unwrap();
     let id = MailItemId::generate();
     let body = "A complete long message that requires show beyond the preview. ".repeat(40);
@@ -288,7 +290,7 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
     };
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let initial = fixture.runtime_without_board().await;
-    let (app, native) = native_application(&fixture, &initial, peer).await;
+    let (app, native) = native_application(&fixture, &initial, peer);
     let held = tokio::time::timeout(
         Duration::from_secs(10),
         native.runtime().send_local(draft, "fixture reader".into()),
@@ -311,7 +313,7 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
     let fixture = fixture.reopen_native(native).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     let restarted = fixture.runtime_without_board().await;
-    let (app, native) = native_application(&fixture, &restarted, peer).await;
+    let (app, native) = native_application(&fixture, &restarted, peer);
     let reopened = native
         .interactions
         .get_push_record(&push_id)
@@ -374,11 +376,11 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
 #[tokio::test]
 async fn disconnected_sender_waiter_keeps_custody_and_only_an_omitted_id_creates_new_work() {
     for supplied in [true, false] {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
         let runtime = fixture.runtime_without_board().await;
         let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-        let (app, native) = native_application(&fixture, &runtime, peer).await;
+        let (app, native) = native_application(&fixture, &runtime, peer);
         let target = target_session(&fixture.reader).unwrap();
         let input = SessionMessageSendParams {
             item_id: supplied.then(MailItemId::generate),
@@ -451,10 +453,10 @@ async fn disconnected_sender_waiter_keeps_custody_and_only_an_omitted_id_creates
 #[tokio::test]
 async fn local_native_attempt_is_drained_when_runtime_shutdown_starts() {
     // Arrange: keep the actual native client blocked after its stored attempt.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    let (app, native) = native_application(&fixture, &runtime, peer).await;
+    let (app, native) = native_application(&fixture, &runtime, peer);
     let target = target_session(&fixture.reader).unwrap();
     let input = SessionMessageSendParams {
         item_id: Some(MailItemId::generate()),

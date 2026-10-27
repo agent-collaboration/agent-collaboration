@@ -6,16 +6,19 @@
 //! Fleet metadata uses the public MCP/client path and a real central/session/cache.
 use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::CollaborationApplication;
+use collaboration_service::ApplicationFixture;
+
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
-use collaboration_service::ServiceIdentity;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn adr_lifecycle_is_replayable_through_mcp() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -42,15 +45,13 @@ async fn adr_lifecycle_is_replayable_through_mcp() -> TestResult {
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
-        CollaborationApplication::new(
-            ServiceIdentity::new(
-                "00000000-0000-4000-8000-000000000001",
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission),
-        ),
-    )
-    .await?;
+        (ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission))
+        .build(),
+    )?;
     let workspace = WorkspaceId::generate();
     let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"workspaceId":workspace,"actor":{"kind":"human","humanId":"owner"},"actingFor":null});
     let mut create = header();
@@ -116,7 +117,10 @@ fn assert_accepted(value: &Value) {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn a_thread_can_discuss_an_immutable_adr_in_its_workspace() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -144,15 +148,13 @@ async fn a_thread_can_discuss_an_immutable_adr_in_its_workspace() -> TestResult 
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
-        CollaborationApplication::new(
-            ServiceIdentity::new(
-                "00000000-0000-4000-8000-000000000001",
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission),
-        ),
-    )
-    .await?;
+        (ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission))
+        .build(),
+    )?;
     let workspace = WorkspaceId::generate();
     let board = BoardId::generate();
     let project = ProjectId::generate();
@@ -219,7 +221,10 @@ async fn a_thread_can_discuss_an_immutable_adr_in_its_workspace() -> TestResult 
     Ok(())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn project_show_reads_the_existing_fleet_directory_record() -> TestResult {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
@@ -241,5 +246,13 @@ async fn project_show_reads_the_existing_fleet_directory_record() -> TestResult 
     Ok(())
 }
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::BoardFixture;

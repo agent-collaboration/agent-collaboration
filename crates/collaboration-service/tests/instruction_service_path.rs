@@ -2,7 +2,7 @@ use automation_storage::AutomationStore;
 use collaboration_protocol::{
     InstructionCreateParams, InstructionShowParams, InstructionText, OperationId,
 };
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use std::sync::Arc;
 #[path = "support/served_api.rs"]
 mod served_api;
@@ -16,13 +16,13 @@ async fn real_control_client_creates_and_reads_durable_instruction()
         OperationId::generate().as_str()
     ));
     let store = Arc::new(tokio::sync::Mutex::new(AutomationStore::open(&path).await?));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("instruction-test").await?;
     let request = InstructionCreateParams {
         operation_id: OperationId::generate(),

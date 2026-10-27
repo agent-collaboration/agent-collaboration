@@ -4,7 +4,10 @@
     reason = "lint pass follows the crate split"
 )]
 #![cfg(unix)]
-#![allow(clippy::expect_used, clippy::panic)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! Common Host startup must select the global native CLI, never the bridge SDK bundle.
 
 #[path = "support/global_claude_fixture.rs"]

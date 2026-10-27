@@ -72,7 +72,7 @@ async fn allocation_count(fixture: &OwnerFixture) -> usize {
 
 #[tokio::test]
 async fn follow_admission_rechecks_generation_and_activation_before_allocating() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let position = fixture
         .post(&fixture.root, "owed before the membership changes")
         .await;
@@ -115,7 +115,7 @@ async fn follow_admission_rechecks_generation_and_activation_before_allocating()
 
 #[tokio::test]
 async fn follow_admission_does_not_allocate_a_missing_membership() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let position = fixture
         .post(&fixture.root, "owed activity is not a membership grant")
         .await;
@@ -135,7 +135,7 @@ async fn follow_admission_does_not_allocate_a_missing_membership() {
 
 #[tokio::test]
 async fn follow_admission_refuses_overlapping_ranges_within_and_across_handoffs() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let position = fixture
         .post(&fixture.root, "one range is owed exactly once")
         .await;
@@ -179,7 +179,7 @@ async fn follow_admission_refuses_overlapping_ranges_within_and_across_handoffs(
 async fn poll_project_membership_freezes_one_handoff_per_root_and_rechecks_shape() {
     // A single project membership owns three roots. Independent waiter handovers
     // require independent SDK identities, rather than three roots in one item.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let roots = project_poll_roots(&fixture).await;
     for root in &roots {
         fixture.post(root, "independently handed over").await;

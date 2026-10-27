@@ -1,10 +1,10 @@
 //! The shared native mail, publication and reader composition for board fixtures.
 use super::{TestError, fixture_machine_identity, fixture_peer, fixture_subscription_service};
-use collaboration_service::{ProjectAdmission, ServiceIdentity};
+use collaboration_service::{ApplicationFixture, ProjectAdmission};
 use std::{path::Path, sync::Arc};
 
 pub struct FixturePollServices {
-    pub identity: ServiceIdentity,
+    pub identity: ApplicationFixture,
     pub delivery: collaboration_service::SubscriptionDeliveryService,
     pub native: super::native_mail_owner::NativeMailOwner,
     pub publisher: Arc<collaboration_service::NotificationPublisher>,
@@ -14,7 +14,7 @@ pub struct FixturePollServices {
 pub async fn fixture_poll_services(
     directory: &Path,
     admission: &Arc<ProjectAdmission>,
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
 ) -> Result<FixturePollServices, TestError> {
     let interactions = Arc::new(
         interaction_storage::InteractionStore::open(directory.join("interaction.sqlite")).await?,

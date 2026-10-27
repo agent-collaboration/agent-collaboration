@@ -28,7 +28,10 @@ fn snapshot(
 }
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions pin projection output; Result propagates fixture construction errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions pin projection output; Result propagates fixture construction errors."
+)]
 fn an_acknowledged_unheld_copy_keeps_its_position_when_a_grant_is_projected() -> TestResult {
     // Arrange C19's labelled generation and actual authority as explicit inputs.
     // Acquiring that generation from a real import belongs to A9/C33.

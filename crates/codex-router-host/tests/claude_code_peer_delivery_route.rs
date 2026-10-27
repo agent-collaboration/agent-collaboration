@@ -1,8 +1,8 @@
 #![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "A malformed fixed fixture must fail its test."
 )]
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Real registry/socket fixtures at the peer route boundary.
 
 use agent_automation::{

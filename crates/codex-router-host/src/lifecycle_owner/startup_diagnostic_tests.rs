@@ -1,12 +1,20 @@
 //! Real child-startup failures must remain diagnosable and joined on cleanup.
 use super::*;
-use std::{io::Write, sync::Mutex, time::Duration};
+use std::{
+    io::Write,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tracing::instrument::WithSubscriber;
 
 #[derive(Clone, Default)]
 struct StartupTrace(Arc<Mutex<Vec<u8>>>);
 
 impl Write for StartupTrace {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "A poisoned test capture must fail the test instead of silently losing evidence."
+    )]
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0.lock().expect("trace lock").extend_from_slice(bytes);
         Ok(bytes.len())

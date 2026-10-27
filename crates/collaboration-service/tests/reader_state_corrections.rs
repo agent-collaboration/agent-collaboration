@@ -5,13 +5,24 @@
 )]
 //! Reader state has no activity position, and summaries never acknowledge content.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn consecutive_content_reads_and_keyed_acknowledgements_never_feed_a_read_mark()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -82,7 +93,10 @@ async fn consecutive_content_reads_and_keyed_acknowledgements_never_feed_a_read_
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_continuation_card_does_not_mark_its_subject_actor() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
@@ -148,7 +162,10 @@ async fn a_continuation_card_does_not_mark_its_subject_actor() -> Result<(), Tes
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_persisted_not_writer_refusal_hides_reads_without_inventing_a_successor()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -205,7 +222,10 @@ async fn a_persisted_not_writer_refusal_hides_reads_without_inventing_a_successo
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn anonymous_content_reads_have_no_mark_outcome_and_empty_threads_mark_nothing()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -252,7 +272,10 @@ async fn anonymous_content_reads_have_no_mark_outcome_and_empty_threads_mark_not
 }
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Boundary assertions reject retired wire variants.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Boundary assertions reject retired wire variants."
+)]
 fn read_mark_failures_are_the_closed_write_gate_family() -> Result<(), TestError> {
     for reason in [
         json!({"kind":"overloaded"}),

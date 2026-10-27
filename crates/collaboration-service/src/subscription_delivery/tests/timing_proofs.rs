@@ -1,11 +1,11 @@
 use super::super::SubscriptionClock;
 use super::owner_fixture::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use message_board::{SubscriptionMode, WhenIdle};
 
 #[tokio::test(start_paused = true)]
 async fn quiet_period_restarts_from_the_second_arrival() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -34,7 +34,7 @@ async fn quiet_period_restarts_from_the_second_arrival() {
 
 #[tokio::test(start_paused = true)]
 async fn repeated_ninety_second_arrivals_are_passed_at_the_ten_minute_cap() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -64,7 +64,7 @@ async fn repeated_ninety_second_arrivals_are_passed_at_the_ten_minute_cap() {
 
 #[tokio::test(start_paused = true)]
 async fn activity_in_one_root_never_delays_another_root() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let other = fixture.add_root().await;
     for root in [&fixture.root, &other] {
         fixture
@@ -98,7 +98,7 @@ async fn activity_in_one_root_never_delays_another_root() {
 
 #[tokio::test]
 async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Pending").await;
     let mut request = tokio::time::timeout(std::time::Duration::from_secs(10), async {

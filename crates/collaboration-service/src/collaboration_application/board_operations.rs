@@ -2,7 +2,6 @@
 use super::{
     CollaborationRejection, CollaborationRejectionReason, PublishedRejection, ResultByteBudget,
 };
-use crate::ServiceIdentity;
 use collaboration_protocol::{
     SubscriptionWaitBatch, ThreadSubscriptionPresence, ThreadSubscriptionState,
     ThreadSubscriptionView,
@@ -67,16 +66,56 @@ mod board_trail_reads;
 #[path = "board_view_operations.rs"]
 mod board_view_operations;
 
-pub struct BoardOperations<'service> {
-    pub(super) identity: &'service ServiceIdentity,
+pub struct BoardOperations {
+    pub(super) identity: crate::RouterIdentity,
+    pub(super) project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
+    pub(super) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
+    pub(super) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
+    pub(super) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
+    pub(super) subscription_presence: Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
+    pub(super) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+    pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
+    pub(super) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
+    pub(super) project_replication: std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
+    pub(super) session_context: crate::collaboration_application::SessionContextReader,
+    pub(super) registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
 }
-impl<'service> BoardOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl BoardOperations {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Constructor injection keeps each independently owned capability explicit instead of recreating a service locator."
+    )]
+    pub fn new(
+        identity: crate::RouterIdentity,
+        project_admission: Option<std::sync::Arc<crate::ProjectAdmission>>,
+        project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
+        notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
+        subscription_delivery: Option<crate::SubscriptionDeliveryService>,
+        subscription_presence: Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
+        subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+        interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
+        mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
+        project_replication: std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
+        session_context: crate::collaboration_application::SessionContextReader,
+        registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
+    ) -> Self {
+        Self {
+            identity,
+            project_admission,
+            project_claim,
+            notification_publisher,
+            subscription_delivery,
+            subscription_presence,
+            subscription_clock,
+            interaction_store,
+            mail_delivery,
+            project_replication,
+            session_context,
+            registry,
+        }
     }
-    pub(super) fn admission(&self) -> Result<&'service Arc<crate::ProjectAdmission>, BoardError> {
-        self.identity
-            .project_admission
+    pub(super) fn admission(&self) -> Result<&Arc<crate::ProjectAdmission>, BoardError> {
+        self.project_admission
             .as_ref()
             .ok_or_else(board_storage_unavailable)
     }
@@ -298,7 +337,7 @@ fn subscription_wait_result(
 }
 
 fn subscription_view(
-    row: crate::service_identity::subscription_delivery::ProjectSubscriptionRecord,
+    row: crate::subscription_delivery::ProjectSubscriptionRecord,
     presence: ThreadSubscriptionPresence,
 ) -> ThreadSubscriptionView {
     let record = row.record;

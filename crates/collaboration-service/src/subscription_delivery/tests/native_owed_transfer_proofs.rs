@@ -8,15 +8,15 @@ use collaboration_mail_protocol::NotificationSource;
 
 #[tokio::test]
 async fn completed_move_seed_delivers_the_inherited_owed_range_once() {
-    prove_owed_transfer(false).await;
+    Box::pin(prove_owed_transfer(false)).await;
 }
 #[tokio::test]
 async fn completed_takeover_seed_delivers_only_the_confirmed_owed_range_once() {
-    prove_owed_transfer(true).await;
+    Box::pin(prove_owed_transfer(true)).await;
 }
 
 async fn prove_owed_transfer(discard_tail: bool) {
-    let source = OwnerFixture::new().await;
+    let source = Box::pin(OwnerFixture::new()).await;
     let first = source.post(&source.root, "first inherited owed post").await;
     let last = source
         .post(&source.root, "second inherited owed post")
@@ -31,7 +31,7 @@ async fn prove_owed_transfer(discard_tail: bool) {
     let root = source.root.clone();
     let subject = source.discussion_subject.clone();
     let source_directory = source.into_directory();
-    let mut successor = OwnerFixture::new().await;
+    let mut successor = Box::pin(OwnerFixture::new()).await;
     let installed = prefix
         .publish_successor(&successor, &project)
         .await

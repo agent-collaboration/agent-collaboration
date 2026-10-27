@@ -1,4 +1,7 @@
-#![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
+#![expect(
+    clippy::indexing_slicing,
+    reason = "Test-only JSON fixture construction; behavior assertions remain strict."
+)]
 //! Real Control proofs for off-board DMs and retained conversation views.
 use super::*;
 use chrono::{DateTime, Duration, Utc};
@@ -83,7 +86,7 @@ impl BoardControlFixture {
             clock: Arc::new(SystemSubscriptionClock),
         });
         owner.start().await.expect("real reader owner starts");
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .expect("service identity")
             .with_project_admission(admission)
             .with_automation_store(automation.clone())
@@ -104,7 +107,7 @@ impl BoardControlFixture {
         let retention = identity
             .automation_retention_worker()
             .expect("real retention worker");
-        let mut control = ControlHarness::start(identity).await;
+        let mut control = ControlHarness::start(identity);
         control.lifetime = PushFixtureLifetime::NativeDelivery {
             actors: owner,
             mail,

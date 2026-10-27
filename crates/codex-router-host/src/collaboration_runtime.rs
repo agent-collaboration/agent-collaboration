@@ -9,7 +9,6 @@ use collaboration_runtime::NativeRelayListener;
 use collaboration_runtime::load_installation_peer;
 use collaboration_runtime::load_service_identity;
 use collaboration_runtime::new_service_uuid;
-use collaboration_service::ServiceIdentity;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;

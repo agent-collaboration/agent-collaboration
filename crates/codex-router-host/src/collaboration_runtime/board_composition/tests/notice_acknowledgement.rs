@@ -60,7 +60,7 @@ async fn wait_notice_completion(
 #[tokio::test]
 async fn received_grant_record_failure_defers_later_notices_then_reconnect_recovers_the_prefix()
 -> TestResult {
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (_, expected) = project_claim::imported_snapshot(
         &fixture.central,
@@ -203,23 +203,23 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         println!("NOTICE_ACK_CASE failed_session_stopped_and_reopening");
         second_stopped?;
         second_closed?;
-        let first = recovered_prefix(
+        let first = Box::pin(recovered_prefix(
             &second_root,
             &second_origin,
             second_machine.session_inputs()?,
             &project,
             through,
             &expected,
-        )
+        ))
         .await?;
-        let repeated = recovered_prefix(
+        let repeated = Box::pin(recovered_prefix(
             &second_root,
             &second_origin,
             second_machine.session_inputs()?,
             &project,
             through,
             &expected,
-        )
+        ))
         .await?;
         assert_eq!(
             repeated, first,

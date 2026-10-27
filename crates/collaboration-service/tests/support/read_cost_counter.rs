@@ -1,5 +1,9 @@
 //! Observe real SQLx statements and storage decodes without replacing either path.
-#![allow(clippy::unwrap_used, clippy::panic)] // A broken test counter must fail the proof.
+#![expect(
+    clippy::unwrap_used,
+    clippy::panic,
+    reason = "A broken test counter must fail the proof."
+)]
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, OnceLock},
@@ -9,13 +13,12 @@ use tracing::instrument::WithSubscriber;
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 #[path = "sql_cost_classification.rs"]
 mod sql_cost_classification;
-#[allow(unused_imports)] // Only the two data-budget proofs use per-kind equality.
+// Only the two data-budget proofs use per-kind equality.
 pub use sql_cost_classification::DataStatementCounts;
 use sql_cost_classification::StatementTables;
 #[path = "alarm_read_costs.rs"]
 mod alarm_read_costs;
-#[allow(unused_imports)] // Only operation-cost proof targets consume observations.
-pub use alarm_read_costs::{AlarmRunCosts, observe_alarm_costs};
+// Only operation-cost proof targets consume observations.
 
 const CORE_CANONICAL_INPUT: &str =
     include_str!("../../../collaboration-central-core/sql/fleet/read_canonical_fleet_record.sql");
@@ -36,7 +39,7 @@ pub struct ReadCost {
     pub core_feed_input_bodies: u64,
 }
 impl ReadCost {
-    #[allow(dead_code)] // Scoped observations read their complete cost rather than a global delta.
+    // Scoped observations read their complete cost rather than a global delta.
     pub fn since(self, before: Self) -> Self {
         Self {
             statements: self.statements - before.statements,
@@ -55,7 +58,7 @@ fn counter() -> &'static Mutex<ReadCostState> {
     static COUNTER: OnceLock<Mutex<ReadCostState>> = OnceLock::new();
     COUNTER.get_or_init(|| Mutex::new(ReadCostState::default()))
 }
-#[allow(dead_code)] // Legacy process-wide proof targets still use a before/after delta.
+// Legacy process-wide proof targets still use a before/after delta.
 pub fn current_cost() -> ReadCost {
     counter().lock().unwrap().cost
 }
@@ -93,7 +96,7 @@ fn only_library_bookkeeping(statement: &str) -> bool {
                 .is_some_and(|tables| tables.only_library_bookkeeping())
         })
 }
-#[allow(dead_code)] // Only query-plan proof targets consume the captured SQL.
+// Only query-plan proof targets consume the captured SQL.
 pub fn observed_statements() -> Vec<String> {
     counter().lock().unwrap().statements.clone()
 }
@@ -106,7 +109,7 @@ impl Visit for DecodeKind {
     }
     fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
 }
-#[allow(dead_code)]
+
 pub fn project_open_attempts(project: &str) -> u64 {
     counter()
         .lock()
@@ -116,7 +119,7 @@ pub fn project_open_attempts(project: &str) -> u64 {
         .copied()
         .unwrap_or(0)
 }
-#[allow(dead_code)]
+
 pub fn project_statements(project: &str) -> u64 {
     counter()
         .lock()
@@ -148,10 +151,9 @@ struct ReadCostState {
 }
 
 #[derive(Clone, Default)]
-#[allow(dead_code)] // Only scoped cost proofs use the per-operation recorder.
+// Only scoped cost proofs use the per-operation recorder.
 pub struct ReadCostObservation(Arc<Mutex<ReadCostState>>);
 
-#[allow(dead_code)]
 impl ReadCostObservation {
     pub fn cost(&self) -> ReadCost {
         self.0.lock().unwrap().cost
@@ -325,3 +327,5 @@ pub fn install() {
         .try_init()
         .unwrap();
 }
+
+pub use alarm_read_costs::{AlarmRunCosts, observe_alarm_costs};

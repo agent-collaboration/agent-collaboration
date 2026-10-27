@@ -11,7 +11,7 @@ use tokio::sync::Notify;
 use tracing_subscriber::Layer;
 
 #[derive(Default)]
-pub(in crate::service_identity::subscription_delivery) struct StartupEvidence {
+pub(in crate::subscription_delivery) struct StartupEvidence {
     pub timeout: AtomicBool,
     pub states: Mutex<Vec<String>>,
     changed: Notify,
@@ -42,9 +42,7 @@ impl StartupEvidence {
         });
     }
 }
-pub(in crate::service_identity::subscription_delivery) struct StartupTrace(
-    pub Arc<StartupEvidence>,
-);
+pub(in crate::subscription_delivery) struct StartupTrace(pub Arc<StartupEvidence>);
 impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for StartupTrace {
     fn on_event(
         &self,
@@ -70,12 +68,10 @@ impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for StartupTrace {
         event.record(&mut Fields(&self.0));
     }
 }
-pub(in crate::service_identity::subscription_delivery) fn clock(
-    fixture: &OwnerFixture,
-) -> Arc<RuntimeTimerClock> {
+pub(in crate::subscription_delivery) fn clock(fixture: &OwnerFixture) -> Arc<RuntimeTimerClock> {
     Arc::new(RuntimeTimerClock::new(fixture.clock.clone()))
 }
-pub(in crate::service_identity::subscription_delivery) async fn activity(
+pub(in crate::subscription_delivery) async fn activity(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
 ) -> collaboration_protocol::PushActivitySnapshot {
@@ -93,7 +89,7 @@ pub(in crate::service_identity::subscription_delivery) async fn activity(
         .activity
         .unwrap()
 }
-pub(in crate::service_identity::subscription_delivery) fn expected_range(
+pub(in crate::subscription_delivery) fn expected_range(
     project: ProjectId,
     thread: ThreadId,
     cursor: FeedCursor,
@@ -108,7 +104,7 @@ pub(in crate::service_identity::subscription_delivery) fn expected_range(
 
 // Retain each real native reader until another acquisition actually times out.
 // The caller resets timeout evidence afterward so only its own operation can satisfy it.
-pub(in crate::service_identity::subscription_delivery) async fn exhaust_project_readers(
+pub(in crate::subscription_delivery) async fn exhaust_project_readers(
     project: &collaboration_runtime::NativeProjectStore,
 ) -> Vec<message_board_storage::ProjectSnapshot> {
     let mut snapshots = Vec::new();
@@ -129,7 +125,7 @@ pub(in crate::service_identity::subscription_delivery) async fn exhaust_project_
     }
 }
 
-pub(in crate::service_identity::subscription_delivery) async fn release_project_readers(
+pub(in crate::subscription_delivery) async fn release_project_readers(
     snapshots: Vec<message_board_storage::ProjectSnapshot>,
 ) {
     for snapshot in snapshots {
@@ -137,7 +133,7 @@ pub(in crate::service_identity::subscription_delivery) async fn release_project_
     }
 }
 
-pub(in crate::service_identity::subscription_delivery) async fn subscribed_project(
+pub(in crate::subscription_delivery) async fn subscribed_project(
     fixture: &OwnerFixture,
     reader: Identity,
 ) -> (ProjectId, ThreadId, Identity, FeedCursor) {
@@ -163,7 +159,7 @@ pub(in crate::service_identity::subscription_delivery) async fn subscribed_proje
         "requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,
         "actor":human("board-owner"),"boardId":board,"projectId":project,"title":"Healthy startup project"
     })).unwrap();
-    fixture.prepare_additional_project(&request).await;
+    Box::pin(fixture.prepare_additional_project(&request)).await;
     let reply = fixture.admission.create_project(&request).await.unwrap();
     assert!(
         matches!(
@@ -270,7 +266,7 @@ pub(in crate::service_identity::subscription_delivery) async fn subscribed_proje
     (project, thread, reader, cursor.cursor)
 }
 
-pub(in crate::service_identity::subscription_delivery) async fn healthy_project(
+pub(in crate::subscription_delivery) async fn healthy_project(
     fixture: &OwnerFixture,
 ) -> (ProjectId, ThreadId, Identity, FeedCursor) {
     let Identity::Session { mut session } = fixture.reader.clone() else {
@@ -278,5 +274,5 @@ pub(in crate::service_identity::subscription_delivery) async fn healthy_project(
     };
     session.session_id = SessionId::try_from("healthy-startup-reader".to_owned()).unwrap();
     let reader = Identity::Session { session };
-    subscribed_project(fixture, reader).await
+    Box::pin(subscribed_project(fixture, reader)).await
 }

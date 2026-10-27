@@ -5,13 +5,24 @@
 )]
 //! Pending and owed views use recorded links, authors and redactions, never prose guesses.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn cards_show_the_current_governing_plan_and_empty_duties_without_inventing_a_role()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -72,7 +83,10 @@ async fn add_trail(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_lead_with_a_pair_assignment_still_sees_lead_duties() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -121,7 +135,10 @@ async fn a_lead_with_a_pair_assignment_still_sees_lead_duties() -> Result<(), Te
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_lead_decision_stays_settled_after_lead_replacement() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -162,7 +179,10 @@ async fn a_lead_decision_stays_settled_after_lead_replacement() -> Result<(), Te
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions inspect real persisted views and admission results.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions inspect real persisted views and admission results."
+)]
 async fn pending_views_settle_linked_rows_and_redaction_changes_the_derived_answer()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

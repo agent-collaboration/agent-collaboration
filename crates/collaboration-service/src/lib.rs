@@ -13,9 +13,14 @@ pub use project_admission::{
     ProjectAdmissionError, ProjectAdmissionProps, ProjectArchiveObservation,
 };
 pub use project_commit_publication::after_project_commit_publish_and_reconcile;
-mod service_identity;
-pub use service_identity::ServiceIdentity;
-pub use service_identity::subscription_delivery::{
+mod router_identity;
+pub use router_identity::{RouterIdentity, RouterIdentityError};
+#[cfg(any(test, feature = "runtime-test-support"))]
+mod application_fixture;
+#[cfg(any(test, feature = "runtime-test-support"))]
+pub use application_fixture::ApplicationFixture;
+mod subscription_delivery;
+pub use subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
     SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
@@ -31,11 +36,13 @@ mod push_record_resolver;
 pub use codex_acp_adapter::BrokeredApprovalOutcome;
 pub use codex_acp_adapter::{ACP_SCHEMA_DIGEST, NativeStoredSessions};
 mod codex_session_inventory;
+pub use codex_session_inventory::CodexSessionInventory;
 mod instruction_projection;
 mod mail_push_delivery;
 mod mail_push_outcome;
 mod native_claude_catalogue;
 mod provider_session_inventory;
+pub use provider_session_inventory::ProviderSessionInventory;
 mod wakeup_projection;
 pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
 mod mail_delivery_runtime;
@@ -70,3 +77,4 @@ mod native_control_failure_tests;
 
 #[cfg(test)]
 mod mail_delivery_projection_tests;
+

@@ -496,7 +496,10 @@ mod forwarding_tests {
     use durable_steps::{CallFailure, CallRetryReason, NotSentReason};
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)] // Assertions compare outcomes; Result propagates fixture encoding failures.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions compare outcomes; Result propagates fixture encoding failures."
+    )]
     fn forwarded_answer_preserves_central_outcomes() -> Result<(), Box<dyn std::error::Error>> {
         let outcomes = [
             ForwardOutcome::SenderHolds,
@@ -551,7 +554,10 @@ mod forwarding_tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)] // The assertion checks refusal; Result propagates fixture encoding failures.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "The assertion checks refusal; Result propagates fixture encoding failures."
+    )]
     fn forwarded_answer_refuses_another_consumer_family() -> Result<(), Box<dyn std::error::Error>>
     {
         assert!(matches!(

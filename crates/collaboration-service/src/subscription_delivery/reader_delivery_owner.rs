@@ -276,7 +276,7 @@ impl ReaderDeliveryOwner {
                 }
                 break;
             }
-            if self.complete_drains(&records).await {
+            if self.complete_drains(&records) {
                 continue;
             }
             let facts = root_facts(&self.prior_records.records);
@@ -328,7 +328,7 @@ impl ReaderDeliveryOwner {
                     continue;
                 }
             }
-            let deadline = self.next_deadline(&records, &facts).await;
+            let deadline = self.next_deadline(&records, &facts);
             let dm_deadline = self
                 .dm_checked_presence
                 .values()
@@ -384,7 +384,7 @@ impl ReaderDeliveryOwner {
         self.pending_waiters = retained;
     }
 
-    async fn next_deadline(
+    fn next_deadline(
         &self,
         records: &[ThreadSubscriptionRecord],
         facts: &HashMap<ThreadId, RootSubscriptionFacts>,

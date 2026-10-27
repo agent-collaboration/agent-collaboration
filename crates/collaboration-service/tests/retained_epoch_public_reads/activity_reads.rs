@@ -10,7 +10,7 @@ use collaboration_protocol::{
     PushId, PushKind, PushOrigin, PushRecordDraft, PushRecordShowParams, RouterOriginRef,
     SessionRef as RouterSessionRef,
 };
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use message_board::*;
 use serde_json::json;
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
@@ -26,17 +26,18 @@ async fn push_api(
     std::fs::set_permissions(directory, std::fs::Permissions::from_mode(0o700))?;
     Ok(ServedCollaborationApi::start(
         directory,
-        CollaborationApplication::new(
-            ServiceIdentity::new(SERVICE, "00000000-0000-4000-8000-000000000002")?
-                .with_project_admission(fixture._admission.clone())
-                .with_interaction_store(pushes),
-        ),
-    )
-    .await?)
+        (ApplicationFixture::new(SERVICE, "00000000-0000-4000-8000-000000000002")?
+            .with_project_admission(fixture._admission.clone())
+            .with_interaction_store(pushes))
+        .build(),
+    )?)
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+)]
 async fn retained_trail_search_inbox_and_stored_push_ranges_survive_a_later_writer_epoch()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;

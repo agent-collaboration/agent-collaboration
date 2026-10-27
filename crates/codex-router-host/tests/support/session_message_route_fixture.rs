@@ -448,7 +448,6 @@ pub(super) async fn send_and_wait_wake(client: &CollaborationClient, target: Ses
 }
 
 #[path = "provider_conversation_submission.rs"]
-#[allow(dead_code)]
 mod provider_conversation_submission;
 use provider_conversation_submission::{
     spawn_provider_prompt, submit_provider_create, submit_provider_load,

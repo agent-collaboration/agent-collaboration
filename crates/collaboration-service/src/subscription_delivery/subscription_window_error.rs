@@ -5,7 +5,7 @@ use message_board::{
 };
 use message_board_storage::ProjectStorageError;
 
-pub(in crate::service_identity::subscription_delivery) enum WindowStoreError {
+pub(in crate::subscription_delivery) enum WindowStoreError {
     Project {
         project: ProjectId,
         error: BoardError,

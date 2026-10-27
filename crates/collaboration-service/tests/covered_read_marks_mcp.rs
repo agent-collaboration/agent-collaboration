@@ -5,6 +5,14 @@
 )]
 //! Identified reads mark coverage without keys, ledgers or activity positions.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -12,7 +20,10 @@ use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readable_data()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -163,7 +174,10 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
 -> Result<(), TestError> {
     use fleet_sync_protocol::{
@@ -242,7 +256,10 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn superseded_project_reads_are_unavailable_and_allocate_no_mark() -> Result<(), TestError> {
     use runtime_primitives::Clock;
     let fixture = BoardFixture::start().await?;
@@ -292,7 +309,10 @@ async fn superseded_project_reads_are_unavailable_and_allocate_no_mark() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn filtered_windows_and_completed_decision_ranges_advance_only_their_covered_positions()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

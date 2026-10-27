@@ -15,8 +15,18 @@ use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryClientReceipt, MailItemId, PushId, SessionReachability, SessionRef as RouterSessionRef,
 };
-use collaboration_service::CollaborationApplication;
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
+
+
+
+
+
+
+
+
+
+
+
 use fleet_sync_protocol::DeliveryStatus;
 use runtime_primitives::SystemClock;
 use serde_json::json;
@@ -222,11 +232,11 @@ impl RecipientRuntime {
 
 async fn serve(
     root: &Path,
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
 ) -> Result<ServedCollaborationApi, TestError> {
     tokio::fs::create_dir_all(root).await?;
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
-    Ok(ServedCollaborationApi::start(root, CollaborationApplication::new(identity)).await?)
+    Ok(ServedCollaborationApi::start(root, (identity).build())?)
 }
 
 #[tokio::test]
@@ -255,7 +265,7 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
     let target: RouterSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":RECIPIENT,"endpointId":"claude-local"},"sessionId":"real-remote-recipient",
     }))?;
-    let identity = ServiceIdentity::new(SOURCE, SOURCE)?
+    let identity = ApplicationFixture::new(SOURCE, SOURCE)?
         .with_interaction_store(source.mail.owner.clone())
         .with_installation_peer(source.peer())
         .map_err(io::Error::other)?
@@ -338,7 +348,7 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
     );
     let receiving = serve(
         &source.root.join("recipient-api"),
-        ServiceIdentity::new(RECIPIENT, RECIPIENT)?
+        ApplicationFixture::new(RECIPIENT, RECIPIENT)?
             .with_interaction_store(recipient.mail.owner.clone()),
     )
     .await?;

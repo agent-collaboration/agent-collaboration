@@ -29,7 +29,6 @@ fn inbox_request(
     })?)
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn assert_workspace_unread(
     fixture: &SubscriptionFixture,
     reader: &Identity,
@@ -58,7 +57,10 @@ async fn assert_workspace_unread(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn plain_project_watch_never_covers_replies_state_changes_or_thread_reads()
 -> Result<(), TestError> {
     // Arrange: the main bookmark predates new activity; no thread watch exists.
@@ -165,7 +167,10 @@ async fn plain_project_watch_never_covers_replies_state_changes_or_thread_reads(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn only_active_unexpired_project_subscribers_materialize_new_thread_watches()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -252,7 +257,10 @@ async fn only_active_unexpired_project_subscribers_materialize_new_thread_watche
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn project_subscription_reactivates_disabled_rows_except_a_retained_thread_override()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

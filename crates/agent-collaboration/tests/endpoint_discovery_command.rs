@@ -40,7 +40,7 @@ fn missing_service_is_a_machine_readable_unavailable_result() {
 
 #[tokio::test]
 async fn executable_discovers_an_isolated_published_service() {
-    use collaboration_service::ServiceIdentity;
+    use collaboration_service::ApplicationFixture;
     use std::os::unix::fs::DirBuilderExt;
     let root = std::path::PathBuf::from(format!("/tmp/endpoint-cli-{}", std::process::id()));
     std::fs::DirBuilder::new()
@@ -58,19 +58,16 @@ async fn executable_discovers_an_isolated_published_service() {
     .await
     .unwrap_or_else(|error| panic!("journal: {error}"));
     let store = std::sync::Arc::new(lifecycle_observation::LifecycleStore::new(journal));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|e| panic!("identity: {e}"))
     .with_journal(std::sync::Arc::clone(&store));
     let endpoints = identity.endpoint_directory();
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .unwrap_or_else(|e| panic!("serve: {e}"));
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .unwrap_or_else(|e| panic!("serve: {e}"));
     let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
         .args(["endpoints", "list", "--json", "--service-directory"])
         .arg(&root)

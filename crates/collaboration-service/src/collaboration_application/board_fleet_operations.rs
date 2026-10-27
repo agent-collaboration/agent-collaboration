@@ -10,7 +10,7 @@ use message_board::{
     WorkspaceId, WorkspaceUpdateRequest,
 };
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn fleet_write(
         &self,
         request: FleetRequest,
@@ -154,7 +154,7 @@ impl BoardOperations<'_> {
         repository: &RepositoryRef,
     ) -> Result<(), BoardError> {
         if let RepositoryRef::Local { service_id, .. } = repository
-            && service_id.as_str() != String::from(self.identity.service_id.clone())
+            && service_id.as_str() != String::from(self.identity.service_id().clone())
         {
             return Err(BoardError::invalid_field(
                 "repository.serviceId",

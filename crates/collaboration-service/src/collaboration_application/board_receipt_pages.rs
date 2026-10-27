@@ -18,7 +18,7 @@ struct ReceiptContinuation {
     cursor: RequestEffectsCursor,
 }
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn request_effects(
         &self,
         request: public::RequestEffectsRequest,

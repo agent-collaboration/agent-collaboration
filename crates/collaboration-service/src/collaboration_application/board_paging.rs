@@ -38,7 +38,7 @@ pub(super) fn invalid_cursor() -> BoardError {
         details: BoardErrorDetails::None,
     }
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     /// SQL has already limited and merged candidates; an extra key proves continuation.
     pub(super) async fn selected_metadata_page<TRecord: Serialize>(
         &self,

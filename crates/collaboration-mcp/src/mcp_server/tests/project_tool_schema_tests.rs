@@ -214,7 +214,6 @@ fn operation_cases() -> Vec<(&'static str, Value)> {
 #[tokio::test]
 async fn all_project_schemas_match_real_handler_classification() {
     use crate::api_test_harness::{ServedApi, api_config, test_identity};
-    use collaboration_service::CollaborationApplication;
     use message_board::{ProjectRequest, ProjectTool};
 
     let cases = operation_cases();
@@ -230,10 +229,7 @@ async fn all_project_schemas_match_real_handler_classification() {
         );
     }
     let directory = tempfile::tempdir().unwrap();
-    let config = api_config(
-        CollaborationApplication::new(test_identity()),
-        directory.path(),
-    );
+    let config = api_config((test_identity()).build(), directory.path());
     let api = ServedApi::tcp(&config).await;
     let (_, catalog) = api
         .post(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))
@@ -298,14 +294,10 @@ async fn all_project_schemas_match_real_handler_classification() {
 #[tokio::test]
 async fn real_tools_list_reports_input_and_output_bytes_separately() {
     use crate::api_test_harness::{ServedApi, api_config, test_identity};
-    use collaboration_service::CollaborationApplication;
     use message_board::ProjectTool;
 
     let directory = tempfile::tempdir().unwrap();
-    let config = api_config(
-        CollaborationApplication::new(test_identity()),
-        directory.path(),
-    );
+    let config = api_config((test_identity()).build(), directory.path());
     let api = ServedApi::tcp(&config).await;
     let (status, response) = api
         .post(&json!({"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}))

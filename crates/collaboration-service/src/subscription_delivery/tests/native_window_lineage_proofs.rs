@@ -8,7 +8,7 @@ use message_board_storage::CursorValidity;
 
 #[tokio::test]
 async fn a_mixed_epoch_window_freezes_round_trips_and_passes_actual_admission() {
-    let copied = copied_reader().await;
+    let copied = Box::pin(copied_reader()).await;
     let owner = copied.owner;
     let current = owner.post(&owner.root, "new-line followed post").await;
     assert!(copied.retained.epoch < current.epoch);
@@ -70,7 +70,7 @@ async fn a_mixed_epoch_window_freezes_round_trips_and_passes_actual_admission() 
 
 #[tokio::test]
 async fn discarded_window_and_selection_resume_without_losing_or_duplicating_current_activity() {
-    let copied = copied_reader().await;
+    let copied = Box::pin(copied_reader()).await;
     let owner = copied.owner;
     owner
         .interactions
@@ -189,7 +189,7 @@ async fn discarded_window_and_selection_resume_without_losing_or_duplicating_cur
 
 #[tokio::test]
 async fn unknown_epoch_and_future_position_cursors_are_refused_without_rewriting_progress() {
-    let owner = OwnerFixture::new().await;
+    let owner = Box::pin(OwnerFixture::new()).await;
     let post = owner
         .post(&owner.root, "real post before invalid cursor")
         .await;

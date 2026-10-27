@@ -1,7 +1,7 @@
 //! Real SDK outcomes and native actors feed the public view; only the carrier answers stand in.
 use super::super::owner_fixture::*;
+use crate::ApplicationFixture;
 use crate::CollaborationApplication;
-use crate::ServiceIdentity;
 use crate::SubscriptionClock;
 use collaboration_contracts::TargetPresence;
 use collaboration_protocol::{DeliveryOutcome, PushId, ThreadSubscriptionsRequest};
@@ -31,12 +31,11 @@ async fn set_observation_time(fixture: &OwnerFixture, push: &PushId, value: &str
 }
 
 fn application(fixture: &OwnerFixture, runtime: &OwnerRuntime) -> CollaborationApplication {
-    CollaborationApplication::new(
-        ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
-            .unwrap()
-            .with_project_admission(fixture.admission.clone())
-            .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone()),
-    )
+    (ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
+        .unwrap()
+        .with_project_admission(fixture.admission.clone())
+        .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone()))
+    .build()
 }
 
 async fn observed_reason(
@@ -83,7 +82,7 @@ async fn view(
 
 #[tokio::test]
 async fn native_retry_observations_reach_the_public_view_and_clear_after_readiness() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);
     fixture
@@ -190,7 +189,7 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
 
 #[tokio::test]
 async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held_items() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);
     fixture.post(&fixture.root, "older allocated item").await;
@@ -279,7 +278,7 @@ async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held
 
 #[tokio::test]
 async fn failed_delivery_retries_at_its_scheduled_time_then_clears_the_public_fields() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);
     fixture
@@ -336,7 +335,7 @@ async fn failed_delivery_retries_at_its_scheduled_time_then_clears_the_public_fi
 
 #[tokio::test]
 async fn a_resolved_membership_stays_visible_while_its_allocated_item_is_held() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);

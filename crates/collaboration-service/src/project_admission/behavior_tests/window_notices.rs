@@ -25,7 +25,10 @@ fn cursor(post: &Post) -> Result<FeedCursor, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn subscription_notice_returns_only_ranges_and_counts_and_keeps_posts_unread()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -126,7 +129,10 @@ async fn subscription_notice_returns_only_ranges_and_counts_and_keeps_posts_unre
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn subscription_notice_caps_roots_without_settling_omitted_due_windows()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -169,7 +175,10 @@ async fn subscription_notice_caps_roots_without_settling_omitted_due_windows()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn subscription_notice_byte_budget_selects_a_prefix_before_in_flight_commit()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

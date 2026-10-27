@@ -8,7 +8,7 @@ use message_board_storage::{MailCancelGroupCause, MailHandoffItem};
 
 #[tokio::test]
 async fn startup_expires_an_allocated_follow_even_without_local_custody_or_live_public_rows() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let position = fixture
         .post(
@@ -103,17 +103,17 @@ async fn startup_expires_an_allocated_follow_even_without_local_custody_or_live_
 
 #[tokio::test]
 async fn the_existing_reader_expiry_cadence_commits_one_router_end_and_cancel_group() {
-    prove_reader_expiry(false).await;
+    Box::pin(prove_reader_expiry(false)).await;
 }
 
 #[tokio::test]
 async fn crossing_expiry_during_the_membership_read_keeps_the_reader_deadline() {
-    prove_reader_expiry(true).await;
+    Box::pin(prove_reader_expiry(true)).await;
 }
 
 #[tokio::test]
 async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -245,7 +245,7 @@ async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
 }
 
 async fn prove_reader_expiry(cross_read: bool) {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -269,7 +269,7 @@ async fn prove_reader_expiry(cross_read: bool) {
     })
     .await
     .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), runtime.observe(|event| matches!(event, crate::service_identity::subscription_delivery::subscription_service::OwnerObservation::ReconcileRequested))).await.unwrap();
+    tokio::time::timeout(Duration::from_secs(6), runtime.observe(|event| matches!(event, crate::subscription_delivery::subscription_service::OwnerObservation::ReconcileRequested))).await.unwrap();
     runtime.owner_barrier(&fixture.reader).await;
     let frozen = frozen_follow(&fixture).await;
     assert_eq!(frozen.len(), 1);

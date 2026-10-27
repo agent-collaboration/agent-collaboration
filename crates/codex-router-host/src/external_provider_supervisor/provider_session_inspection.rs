@@ -10,7 +10,6 @@ use collaboration_protocol::{
 };
 use session_event_model::SessionState;
 
-#[allow(clippy::result_large_err)]
 pub(super) async fn inspect(
     supervisor: &ExternalProviderSupervisor,
     request: ProviderSessionInspectRequest,

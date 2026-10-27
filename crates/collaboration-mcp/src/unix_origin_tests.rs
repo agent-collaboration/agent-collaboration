@@ -3,7 +3,6 @@
 use std::os::unix::fs::PermissionsExt as _;
 use std::time::Duration;
 
-use collaboration_service::CollaborationApplication;
 use tokio::io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader};
 
 use crate::api_test_harness::{ServedApi, TEST_PROTOCOL_VERSION, api_config, test_identity};
@@ -14,11 +13,8 @@ async fn unix_mcp_refuses_browser_origins_but_accepts_an_origin_free_client() {
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("owner-only socket directory");
     let socket_path = directory.path().join("control.sock");
-    let config = api_config(
-        CollaborationApplication::new(test_identity()),
-        directory.path(),
-    );
-    let api = ServedApi::unix(&config, &socket_path).await;
+    let config = api_config((test_identity()).build(), directory.path());
+    let api = ServedApi::unix(&config, &socket_path);
     let body = r#"{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}"#;
 
     // Even localhost and the prospective private HTTPS origin are browser Origins.

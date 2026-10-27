@@ -5,7 +5,7 @@ use message_board::{
     BoardError, DiscoveryHit, DiscoverySearchRequest, DiscoverySearchResult, Record, RecordRef,
     RepositoryListRequest, RepositoryListResult, WorkspaceShowRequest,
 };
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn repository_list(
         &self,
         request: RepositoryListRequest,

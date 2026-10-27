@@ -9,16 +9,13 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
         FakeSettlementPlan::Pending,
     )
     .await?;
-    worker
-        .step(run_id.clone())
+    Box::pin(worker.step(run_id.clone()))
         .await
         .map_err(|error| format!("initial target preparation failed: {error:?}"))?;
-    worker
-        .step(run_id.clone())
+    Box::pin(worker.step(run_id.clone()))
         .await
         .map_err(|error| format!("initial busy submission failed: {error:?}"))?;
-    worker
-        .step(run_id.clone())
+    Box::pin(worker.step(run_id.clone()))
         .await
         .map_err(|error| format!("known rejection persistence failed: {error:?}"))?;
     apply_push_handoff(&worker).await?;
@@ -47,12 +44,13 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
         return Err("test did not reach a pending rejected schedule push".into());
     }
     let service_id = String::from(old_push.target.endpoint.service_id.clone());
-    let identity = crate::ServiceIdentity::new(&service_id, &service_id)
+    let identity = crate::ApplicationFixture::new(&service_id, &service_id)
         .map_err(std::io::Error::other)?
         .with_automation_store(Arc::clone(&store))
         .with_interaction_store(Arc::clone(&worker.interactions));
-    let old_link = crate::push_record_resolver::link_for(&old_push, &identity);
-    let shown_before_pruning = crate::CollaborationApplication::new(identity.clone())
+    let old_link = crate::push_record_resolver::link_for(&old_push, &identity.router_identity());
+    let shown_before_pruning = (identity.clone())
+        .build()
         .messages()
         .push_show(collaboration_protocol::PushRecordShowParams {
             caller: old_push.target.clone(),
@@ -80,7 +78,8 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
         return Err("31-day retention did not prune the pending schedule push".into());
     }
 
-    let old_link_result = match crate::CollaborationApplication::new(identity.clone())
+    let old_link_result = match (identity.clone())
+        .build()
         .messages()
         .push_show(collaboration_protocol::PushRecordShowParams {
             caller: old_push.target.clone(),
@@ -106,7 +105,7 @@ async fn known_rejected_provider_submission_after_retention_uses_fresh_id_and_ol
     }
     drop(identity);
 
-    if let Err(error) = worker.step(run_id.clone()).await {
+    if let Err(error) = Box::pin(worker.step(run_id.clone())).await {
         let failed_run = store
             .lock()
             .await

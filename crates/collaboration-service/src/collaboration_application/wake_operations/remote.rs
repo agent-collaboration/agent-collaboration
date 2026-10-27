@@ -16,17 +16,14 @@ fn convert<T: DeserializeOwned>(value: impl Serialize) -> Result<T, ()> {
 }
 const REMOTE_CALL_BOUND: Duration = Duration::from_secs(20);
 
-impl<'service> WakeOperations<'service> {
-    pub(crate) fn with_remote(
-        mut self,
-        remote: Option<&'service Arc<crate::MailDeliveryRuntime>>,
-    ) -> Self {
-        self.remote = remote;
+impl WakeOperations {
+    pub fn with_remote(mut self, remote: Option<&Arc<crate::MailDeliveryRuntime>>) -> Self {
+        self.remote = remote.cloned();
         self
     }
 
     pub async fn wake_send(&self, request: WakeSendRequest) -> Result<WakeSnapshot, WakeFailure> {
-        if request.message.target.endpoint.service_id == *self.service_id {
+        if request.message.target.endpoint.service_id == self.service_id {
             return self.wake_send_local(request).await;
         }
         let context = WakeFailureContext::operation(request.operation_id.clone());
@@ -294,7 +291,7 @@ impl<'service> WakeOperations<'service> {
         id: &WakeupId,
         context: &WakeFailureContext,
     ) -> Result<Option<collaboration_protocol::SessionRef>, WakeFailure> {
-        let Some(store) = self.store else {
+        let Some(store) = self.store.as_ref() else {
             return Ok(None);
         };
         store
@@ -387,6 +384,7 @@ impl<'service> WakeOperations<'service> {
             };
             let runtime = self
                 .remote
+                .as_ref()
                 .ok_or_else(|| fail(WakeFailureReason::RemoteUnavailable, mutation))?;
             let result = runtime.send_wake_mail(prepared).await.map_err(|reason| {
                 fail(

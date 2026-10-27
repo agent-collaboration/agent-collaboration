@@ -5,6 +5,14 @@
 )]
 //! Public MCP replies come from actual persisted library authority, without local grants.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, ControlledClock, TestError, accepted, fixture_peer};
 use fleet_sync_protocol::{
@@ -15,7 +23,6 @@ use runtime_primitives::{Clock, SystemClock};
 use serde_json::{Value, json};
 use std::sync::Arc;
 
-#[allow(clippy::panic_in_result_fn)] // These are the gate's unchanged native-state assertions.
 async fn assert_unrecorded(
     fixture: &BoardFixture,
     project: &ProjectId,
@@ -38,7 +45,10 @@ async fn assert_unrecorded(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn actual_expiry_names_the_deadline_keeps_reads_and_same_epoch_renewal_admits_the_same_key()
 -> Result<(), TestError> {
     let clock = Arc::new(ControlledClock::at(SystemClock.now()));
@@ -145,7 +155,10 @@ async fn actual_expiry_names_the_deadline_keeps_reads_and_same_epoch_renewal_adm
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn an_actual_superseding_renewal_keeps_the_write_refusal_and_stops_public_reads()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -204,7 +217,10 @@ async fn an_actual_superseding_renewal_keeps_the_write_refusal_and_stops_public_
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn an_unregistered_native_owner_refuses_the_first_write_and_registration_enables_it()
 -> Result<(), TestError> {
     // Arrange an empty native file as a component input. This does not exercise

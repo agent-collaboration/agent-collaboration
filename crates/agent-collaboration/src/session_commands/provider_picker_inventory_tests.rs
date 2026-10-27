@@ -121,9 +121,9 @@ async fn hosted_refresh_keeps_equal_provider_and_codex_ids_as_two_rows() {
         EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
         SessionRef,
     };
+    use collaboration_service::ApplicationFixture;
     use collaboration_runtime::ProviderOperationStore;
     use collaboration_runtime::ProviderSessionRecord;
-    use collaboration_service::ServiceIdentity;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
@@ -176,16 +176,15 @@ async fn hosted_refresh_keeps_equal_provider_and_codex_ids_as_two_rows() {
         .cloned()
         .map(|entry| serde_json::from_value(entry).expect("description"))
         .collect();
-    let identity = ServiceIdentity::new(SERVICE, EPOCH)
+    let identity = ApplicationFixture::new(SERVICE, EPOCH)
         .expect("identity")
         .with_endpoints(descriptions)
         .expect("endpoints")
         .with_provider_operation_store(store);
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         root.path(),
-        collaboration_service::CollaborationApplication::new(identity),
+        (identity).build(),
     )
-    .await
     .expect("serve collaboration API");
     let codex = runtime_record(
         "shared-id",

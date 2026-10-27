@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used)]
 //! A permanent provider rejection must finish one wake delivery without retry eligibility.
 
 use super::WakeDeliverySender;

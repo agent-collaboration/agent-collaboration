@@ -1,9 +1,7 @@
 #![expect(
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
 )]
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Fail-fast fixture assertions at the Host endpoint boundary.
 
 use codex_router_host::{

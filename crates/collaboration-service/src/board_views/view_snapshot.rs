@@ -1,5 +1,4 @@
 //! One native snapshot supplies only the current-state operands used by each view.
-use crate::ServiceIdentity;
 use message_board::{
     AuthorityRole, BoardError, ContinuationCardRequest, CopySource, CurrentWriter, FeedCursor,
     FeedPosition, Identity, MergeTime, ProjectId, Record, RecordId, RecordKind, RecordRef,
@@ -31,16 +30,13 @@ pub(crate) struct ViewSnapshot {
 }
 impl ViewSnapshot {
     pub async fn load(
-        identity: &ServiceIdentity,
+        registry: Option<&std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
+        replication: &dyn collaboration_contracts::ProjectReplicationPosition,
         project: &ProjectId,
         selection: ViewReadSelection<'_>,
     ) -> Result<Option<Self>, BoardError> {
-        let admission = identity
-            .project_admission
-            .as_ref()
-            .ok_or_else(BoardError::board_unavailable)?;
-        let store = admission
-            .registry
+        let registry = registry.ok_or_else(BoardError::board_unavailable)?;
+        let store = registry
             .read_project(project)
             .await
             .map_err(|error| {
@@ -288,12 +284,7 @@ impl ViewSnapshot {
         // gate first, so a queued terminal transition cannot deadlock this read.
         let acknowledged = match source {
             CopySource::ReadCopy {} => as_of,
-            CopySource::Writer {} => {
-                identity
-                    .project_replication
-                    .replicated_through(project, as_of.epoch)
-                    .await?
-            }
+            CopySource::Writer {} => replication.replicated_through(project, as_of.epoch).await?,
         };
         let replicated_through = if acknowledged.position > as_of.position {
             as_of

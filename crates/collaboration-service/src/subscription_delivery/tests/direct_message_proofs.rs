@@ -12,7 +12,7 @@ use collaboration_protocol::{
 };
 use std::time::Duration;
 
-async fn draft(
+fn draft(
     fixture: &OwnerFixture,
     mode: MessageDelivery,
     guard: Option<CodexGeneration>,
@@ -63,7 +63,7 @@ async fn insert(
     mode: MessageDelivery,
     guard: Option<CodexGeneration>,
 ) -> PushId {
-    let draft = draft(fixture, mode, guard).await;
+    let draft = draft(fixture, mode, guard);
     let push_id = draft.push_id.clone();
     fixture
         .interactions
@@ -80,7 +80,7 @@ fn guard() -> CodexGeneration {
 #[tokio::test]
 async fn queue_and_previously_held_auto_wait_until_loaded_and_recover_their_exact_mode() {
     for mode in [MessageDelivery::Auto, MessageDelivery::Queue] {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
         let push_id = insert(&fixture, mode, None).await;
         if mode == MessageDelivery::Auto {
@@ -136,7 +136,7 @@ async fn queue_and_previously_held_auto_wait_until_loaded_and_recover_their_exac
 
 #[tokio::test]
 async fn new_auto_to_unloaded_target_attempts_once_with_permission_to_load() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let push_id = insert(&fixture, MessageDelivery::Auto, None).await;
@@ -172,7 +172,7 @@ async fn new_auto_to_unloaded_target_attempts_once_with_permission_to_load() {
 
 #[tokio::test]
 async fn unavailable_board_holds_dm_and_rechecks_presence_at_thirty_seconds() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     assert!(
@@ -210,7 +210,7 @@ async fn steer_and_guarded_send_to_nonrunning_reject_without_any_hold() {
         (MessageDelivery::Steer, None),
         (MessageDelivery::Auto, Some(guard())),
     ] {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
         let runtime = fixture.runtime_without_board().await;
         let push_id = insert(&fixture, mode, pinned).await;
@@ -239,7 +239,7 @@ async fn steer_and_guarded_send_to_nonrunning_reject_without_any_hold() {
 
 #[tokio::test]
 async fn restart_gap_preserves_steer_guard_and_race_rejection_never_holds() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let pinned = guard();
     let push_id = insert(&fixture, MessageDelivery::Steer, Some(pinned.clone())).await;
     let runtime = fixture.runtime_without_board().await;
@@ -268,7 +268,7 @@ async fn restart_gap_preserves_steer_guard_and_race_rejection_never_holds() {
 
 #[tokio::test]
 async fn restarted_nonrunning_steer_and_guarded_pending_records_are_rejected() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let steer = insert(&fixture, MessageDelivery::Steer, None).await;
     let guarded = insert(&fixture, MessageDelivery::Queue, Some(guard())).await;
@@ -286,7 +286,7 @@ async fn restarted_nonrunning_steer_and_guarded_pending_records_are_rejected() {
 
 #[tokio::test]
 async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) =
         super::local_mail_proofs::native_follow_mail_proofs::follow_application(&fixture, &runtime)
@@ -338,7 +338,7 @@ async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
 
 #[tokio::test]
 async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     native_worker_faults::execute(fixture.interactions.clone(), "CREATE TRIGGER fail_dm_settle BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='delivered' BEGIN SELECT RAISE(FAIL, 'injected settlement failure'); END", None).await.unwrap();
     let push_id = insert(&fixture, MessageDelivery::Auto, None).await;
     let runtime = fixture.runtime_without_board().await;
@@ -371,7 +371,7 @@ async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
 
 #[tokio::test]
 async fn restored_guarded_generation_mismatch_is_terminal_without_any_broadened_attempt() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let pinned = guard();
     let push_id = insert(&fixture, MessageDelivery::Queue, Some(pinned.clone())).await;
     let runtime = fixture.runtime_without_board().await;
@@ -417,7 +417,7 @@ async fn restored_guarded_generation_mismatch_is_terminal_without_any_broadened_
 
 #[tokio::test]
 async fn attempted_dm_on_restart_becomes_unknown_and_never_reenters_layer_zero() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let push_id = insert(&fixture, MessageDelivery::Auto, None).await;
     fixture
         .interactions
@@ -513,7 +513,7 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
  {
     use std::sync::{Arc, atomic::Ordering};
     for mode in [MessageDelivery::Auto, MessageDelivery::Queue] {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let route = Arc::new(LiveElsewhereRoute {
             claims: Default::default(),
             effects: Default::default(),
@@ -523,7 +523,7 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
         ]));
         let service = live_elsewhere_service(&fixture, router.clone());
         service.start().await.unwrap();
-        let mut pending = draft(&fixture, mode, None).await;
+        let mut pending = draft(&fixture, mode, None);
         pending.target.endpoint.endpoint_id =
             collaboration_protocol::EndpointId::try_from("claude-local".to_owned()).unwrap();
         let target = pending.target.clone();
@@ -569,7 +569,7 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
 
 #[tokio::test]
 async fn board_notification_wakeable_hold_recovers_one_exact_push_when_running() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let intent = message_board::NotifyIntentId::generate();
     let origin = collaboration_protocol::RouterOriginRef::BoardIntent {

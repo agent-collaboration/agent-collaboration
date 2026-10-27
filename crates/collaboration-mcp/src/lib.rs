@@ -55,6 +55,10 @@ mod mcp_remediation_tests;
 mod native_board_test_fixture;
 #[cfg(test)]
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod native_mail_owner;
 #[cfg(test)]
 mod observation_streaming_tests;

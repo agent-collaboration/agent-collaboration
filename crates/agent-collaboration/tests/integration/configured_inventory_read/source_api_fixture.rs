@@ -3,10 +3,9 @@ use super::router_connection_registry::RouterConnectionRegistry;
 use crate::presentation::session_picker::{PickerSourceContext, SourceInventoryRequest};
 use crate::sessions::*;
 use collaboration_client::protocol::{EndpointRef, RouterExecutableRelation};
+use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
-use collaboration_service::CollaborationApplication;
-use collaboration_service::ServiceIdentity;
 use std::{
     io::ErrorKind,
     os::unix::{fs::PermissionsExt, net::UnixListener},
@@ -110,7 +109,7 @@ impl SourceApiFixture {
             "endpoint":endpoint,"label":"Source fixture","availability":{"state":"unprobed"},
             "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]
         })).unwrap();
-        let mut identity = ServiceIdentity::new(service, "00000000-0000-4000-8000-000000000009")
+        let mut identity = ApplicationFixture::new(service, "00000000-0000-4000-8000-000000000009")
             .unwrap()
             .with_endpoints(vec![description])
             .unwrap()
@@ -190,7 +189,7 @@ impl SourceApiFixture {
         let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         let api = collaboration_mcp::collaboration_api_router(
             &collaboration_mcp::CollaborationApiConfig {
-                application: CollaborationApplication::new(identity),
+                application: (identity).build(),
                 service_directory: directory,
                 native_definitions: None,
                 router_executable_relation: relation,

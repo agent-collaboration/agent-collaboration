@@ -8,7 +8,7 @@ use message_board::{
     AdrCreateRequest, AdrTransitionRequest, BoardError, FleetRecordListRequest,
     FleetRecordShowRequest, Record, RecordKind, RecordListResult,
 };
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn adr_create(&self, request: AdrCreateRequest) -> Result<WriteReply, BoardError> {
         let header = FleetHeader {
             request_id: request.request_id,

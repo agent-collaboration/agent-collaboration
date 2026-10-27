@@ -7,7 +7,7 @@ use super::{
 use collaboration_protocol::RequestedCancelResult;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId};
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn project_notification_cancel(
         &self,
         request: ProjectRequest,
@@ -118,7 +118,6 @@ impl BoardOperations<'_> {
             .await
             .map_err(|error| admission_error(error.into()))?;
         let mail = self
-            .identity
             .mail_delivery
             .as_ref()
             .ok_or_else(BoardError::board_unavailable)?;

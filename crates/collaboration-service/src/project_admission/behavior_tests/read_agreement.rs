@@ -1,6 +1,5 @@
 use super::*;
 
-#[allow(clippy::panic_in_result_fn)]
 async fn assert_unread_agreement(
     fixture: &SubscriptionFixture,
     reader: &Identity,
@@ -26,7 +25,7 @@ async fn assert_unread_agreement(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Rewatch resets only its boundary, repeated watch retains pending unread, scoped acknowledgement clears it.
+
 async fn rewatch_boundaries_and_acknowledgements_keep_summary_equal_to_inbox()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

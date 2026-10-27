@@ -285,13 +285,23 @@ impl MailDeliveryRuntime {
         })
     }
 
-    pub(crate) fn matches_identity(&self, identity: &crate::ServiceIdentity) -> bool {
-        self.service.as_str() == String::from(identity.service_id.clone())
-            && identity.installation_peer == Some(self.config.owner)
-            && identity
-                .interaction_store
-                .as_ref()
-                .is_some_and(|owner| Arc::ptr_eq(owner, &self.owner))
+    /// Refuses attaching mail to a different installation or physical interaction owner.
+    pub fn validate_owner(
+        &self,
+        identity: &crate::RouterIdentity,
+        interactions: Option<&Arc<interaction_storage::InteractionStore>>,
+    ) -> Result<(), String> {
+        if self.service.as_str() == String::from(identity.service_id().clone())
+            && identity.installation_peer() == Some(self.config.owner)
+            && interactions.is_some_and(|owner| Arc::ptr_eq(owner, &self.owner))
+        {
+            Ok(())
+        } else {
+            Err(
+                "mail runtime has a different service, installation peer or physical store owner"
+                    .to_owned(),
+            )
+        }
     }
 
     fn close_settlement_admission(&self) -> Result<TaskTracker, StoreError> {
@@ -599,3 +609,7 @@ impl CallRouter for MailCallRouter {
             .map_err(|_| CallFailure::AnswerLost)
     }
 }
+
+#[cfg(test)]
+#[path = "startup_constructor_tests.rs"]
+mod startup_constructor_tests;

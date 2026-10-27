@@ -6,13 +6,24 @@
 //! Authority and terminal replay run against real native stores.
 #![deny(clippy::too_many_lines)]
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn workstream_pair_and_stand_down_acknowledgement_keep_authority_distinct()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -87,7 +98,10 @@ async fn workstream_pair_and_stand_down_acknowledgement_keep_authority_distinct(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn lead_release_then_grant_cannot_bypass_the_owner_grant_or_reuse_it() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;

@@ -98,7 +98,6 @@ async fn policy_captured_recorded_owner_expiry_refuses_before_resume_or_input() 
             stored_run: None,
         },
     )
-    .await
     .unwrap();
     let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
     let weak = Arc::downgrade(&broker);

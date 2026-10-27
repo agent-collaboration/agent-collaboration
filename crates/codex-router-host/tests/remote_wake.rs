@@ -20,7 +20,10 @@ use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[path = "support/registered_route_project.rs"]
-#[allow(clippy::expect_used)] // Existing route fixture asserts fixed inputs and bounded settlement.
+#[expect(
+    clippy::expect_used,
+    reason = "Existing route fixture asserts fixed inputs and bounded settlement."
+)]
 mod registered_route_project;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -71,7 +74,10 @@ fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendR
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Behavior assertions stay distinct from propagated fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Behavior assertions stay distinct from propagated fixture failures."
+)]
 async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestResult {
     let root = tempfile::Builder::new().prefix("rw-").tempdir_in("/tmp")?;
     let a = root.path().join("a");
@@ -360,6 +366,8 @@ async fn peer_record(
             }
             Ok(shown.record)
         }
-        _ => Err("peer push was not owned locally".into()),
+        collaboration_protocol::MessageShowResult::Remote { .. } => {
+            Err("peer push was not owned locally".into())
+        }
     }
 }

@@ -33,7 +33,7 @@ pub use subscription_delivery_view::SubscriptionDeliveryView;
 pub(super) use subscription_window_selection::WindowWrite;
 #[path = "subscription_window_restore.rs"]
 mod subscription_window_restore;
-pub(in crate::service_identity::subscription_delivery) use subscription_window_restore::StartupProjectDiscovery;
+pub(in crate::subscription_delivery) use subscription_window_restore::StartupProjectDiscovery;
 pub use subscription_window_restore::SubscriptionStartupRestoration;
 #[path = "subscription_window_error.rs"]
 mod subscription_window_error;
@@ -299,7 +299,7 @@ impl SubscriptionWindowStore {
             .await
             .map_err(shared_storage_failure)
     }
-    async fn view(
+    fn view(
         &self,
         loaded: MembershipProgress,
         now: DateTime<Utc>,
@@ -395,12 +395,10 @@ impl SubscriptionWindowStore {
                 let mut records = Vec::new();
                 let mut candidates = Vec::new();
                 for membership in self.project_memberships(Some(reader), project).await? {
-                    let record = self
-                        .view(
-                            self.load_with_preventions(membership, preventions).await?,
-                            now,
-                        )
-                        .await?;
+                    let record = self.view(
+                        self.load_with_preventions(membership, preventions).await?,
+                        now,
+                    )?;
                     if record.record.state().is_delivery_eligible() {
                         records.push(record);
                     } else if record.record.state()
@@ -464,7 +462,6 @@ impl SubscriptionWindowStore {
         match member {
             Some(member) => self
                 .view(self.load(member).await?, now)
-                .await
                 .map(|row| Some(row.record)),
             None => Ok(None),
         }

@@ -61,7 +61,8 @@ impl collaboration_contracts::SessionMessageDelivery for CapturingInteractionDel
 
 #[tokio::test]
 async fn typed_approval_and_question_notify_their_session_approver() {
-    let (broker, _, _directory) = fixture_broker().await;
+    let (broker, _, _directory) =
+        fixture_broker_with_requester_name(Some("Startup requester")).await;
     let push_store = broker.interaction_store();
     let requester =
         board_session_ref(&session(&broker.service_id, "provider-session")).expect("requester");
@@ -185,6 +186,21 @@ async fn typed_approval_and_question_notify_their_session_approver() {
                 .expect("presentation UUID")
                 .get_version_num(),
             7
+        );
+        let requester_display_name = match &record.header_facts {
+            collaboration_protocol::PushHeaderFacts::Approval {
+                requester_display_name,
+                ..
+            }
+            | collaboration_protocol::PushHeaderFacts::Question {
+                requester_display_name,
+                ..
+            } => requester_display_name,
+            _ => panic!("typed approval or question header"),
+        };
+        assert_eq!(
+            requester_display_name.as_ref().map(|name| name.as_str()),
+            Some("Startup requester")
         );
         let requester = match (record.kind, &record.header_facts) {
             (
@@ -790,8 +806,13 @@ fn select_typed(
 }
 
 pub(super) async fn fixture_broker() -> (Arc<ServiceInteractionBroker>, CodexGeneration, PathBuf) {
-    let service_id = collaboration_runtime::new_service_uuid()
-        .unwrap_or_else(|error| panic!("service: {error}"));
+    fixture_broker_with_requester_name(None).await
+}
+
+async fn fixture_broker_with_requester_name(
+    requester_name: Option<&str>,
+) -> (Arc<ServiceInteractionBroker>, CodexGeneration, PathBuf) {
+    let service_id = collaboration_runtime::new_service_uuid().unwrap_or_else(|error| panic!("service: {error}"));
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
@@ -837,15 +858,20 @@ pub(super) async fn fixture_broker() -> (Arc<ServiceInteractionBroker>, CodexGen
             .unwrap_or_else(|error| panic!("automation store: {error}")),
     ));
     let service_id_text = String::from(service_id.clone());
-    let identity = crate::ServiceIdentity::new(&service_id_text, &service_id_text)
+    let identity = crate::ApplicationFixture::new(&service_id_text, &service_id_text)
         .unwrap_or_else(|error| panic!("service identity: {error}"))
         .with_automation_store(automation_store)
         .with_machine_identity(
             collaboration_contracts::MachineIdentity::new(service_id, Some("Approval Fixture"))
                 .unwrap_or_else(|error| panic!("machine identity: {error}")),
         )
-        .unwrap_or_else(|error| panic!("machine identity ownership: {error}"))
-        .with_approval_broker(Arc::clone(&broker));
+        .unwrap_or_else(|error| panic!("machine identity ownership: {error}"));
+    if let Some(name) = requester_name {
+        identity
+            .session_display_name_cache()
+            .remember(session(&broker.service_id, "provider-session"), name);
+    }
+    let identity = identity.with_approval_broker(Arc::clone(&broker));
     drop(identity);
     (broker, generation, directory)
 }

@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn m3_unsubscribe_after_expiry_keeps_the_expired_end_reason() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let scope = SubscriptionScope::thread(fixture.root.clone());
@@ -29,7 +32,10 @@ async fn m3_unsubscribe_after_expiry_keeps_the_expired_end_reason() -> Result<()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn m6_draining_thread_subscription_completes_as_resolved_after_settlement()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -88,7 +94,10 @@ async fn m6_draining_thread_subscription_completes_as_resolved_after_settlement(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p7_drop_policy_processes_a_draining_subscription() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();

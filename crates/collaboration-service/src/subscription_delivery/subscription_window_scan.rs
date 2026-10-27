@@ -22,7 +22,7 @@ impl SubscriptionWindowStore {
             .await
             .map_err(Into::into)
     }
-    pub(in crate::service_identity::subscription_delivery) async fn rescan_project_subscription_windows(
+    pub(in crate::subscription_delivery) async fn rescan_project_subscription_windows(
         &mut self,
         reader: &Identity,
         now: DateTime<Utc>,

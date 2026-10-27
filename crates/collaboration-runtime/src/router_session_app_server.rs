@@ -534,37 +534,61 @@ use methods::{
 };
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_blocking_tests.rs"]
 mod blocking_tests;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_cwd_tests.rs"]
 mod cwd_tests;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_model_tests.rs"]
 mod model_tests;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_multichoice_tui_tests.rs"]
 mod multichoice_tui_tests;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_order_tests.rs"]
 mod order_tests;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_reattach_tests.rs"]
 mod reattach_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_tests.rs"]
 mod tests;
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #[path = "router_session_app_server_tui_tests.rs"]
 mod tui_tests;

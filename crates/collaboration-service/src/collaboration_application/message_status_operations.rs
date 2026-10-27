@@ -14,13 +14,13 @@ use fleet_sync_protocol::{
 };
 use interaction_storage::DirectMessageHistoryQuery;
 
-impl MessageOperations<'_> {
+impl MessageOperations {
     /// Lists direct-message history, including outgoing SDK custody, for this caller.
     pub async fn message_history(
         &self,
         request: PushRecordHistoryParams,
     ) -> Result<collaboration_protocol::MessageHistoryResult, MessageFailure> {
-        if !caller_is_local(&request.caller, self.identity) {
+        if !caller_is_local(&request.caller, &self.identity) {
             return Err(MessageFailure::discovery(
                 MessageFailureKind::WrongService,
                 "Caller must belong to this Router",
@@ -93,7 +93,7 @@ impl MessageOperations<'_> {
         let request = request.into();
         let stage = MessageFailureStage::Inspect;
         if let MessageReadCaller::Session(caller) = &request.caller
-            && !caller_is_local(caller, self.identity)
+            && !caller_is_local(caller, &self.identity)
         {
             return Err(MessageFailure::new(
                 MessageFailureKind::WrongService,
@@ -117,7 +117,7 @@ impl MessageOperations<'_> {
         if let Some(context) = context {
             self.authorize_mail_read(&request.caller, &context.context)
                 .await?;
-            let mail = self.identity.mail_delivery.as_ref().ok_or_else(|| {
+            let mail = self.mail_delivery.as_ref().ok_or_else(|| {
                 MessageFailure::new(
                     MessageFailureKind::Unavailable,
                     stage,
@@ -188,7 +188,7 @@ impl MessageOperations<'_> {
                         "The owner caller cannot read this push kind",
                     ));
                 }
-                let activity_ranges = expand_activity_ranges(&record, self.identity)
+                let activity_ranges = expand_activity_ranges(&record, self.registry.as_ref())
                     .await
                     .map_err(|_| {
                         MessageFailure::new(
@@ -198,7 +198,7 @@ impl MessageOperations<'_> {
                         )
                     })?;
                 Ok(MessageShowResult::Local(Box::new(PushRecordShowResult {
-                    link: link_for(&record, self.identity),
+                    link: link_for(&record, &self.identity),
                     record,
                     activity_ranges,
                 })))
@@ -233,15 +233,14 @@ impl MessageOperations<'_> {
                             )
                         })?,
                     };
-                    let admission = self.identity.project_admission.as_ref().ok_or_else(|| {
+                    let registry = self.registry.as_ref().ok_or_else(|| {
                         MessageFailure::new(
                             MessageFailureKind::Unavailable,
                             stage,
                             "Project authority is unavailable",
                         )
                     })?;
-                    let store = admission
-                        .registry
+                    let store = registry
                         .read_project(project)
                         .await
                         .map_err(|_| {

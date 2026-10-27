@@ -8,7 +8,7 @@ use message_board::{
     SearchPostKind,
 };
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn projects_for_post_scope(
         &self,
         scope: &PostListScope,

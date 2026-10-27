@@ -1,13 +1,12 @@
 //! Native sender acknowledgements must prompt publication without another board write.
 use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
 use super::*;
-use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
-use collaboration_service::CollaborationApplication;
 use collaboration_service::IntentHandoffInput;
 use collaboration_service::IntentRecipientEnrollment;
 use collaboration_service::MailPushDeliveryProps;
-use collaboration_service::ServiceIdentity;
+use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
@@ -53,7 +52,11 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     let mut central = TestFleet::start_mail_as(&directory.path().join("central"), None).await?;
     // Seed before composing the publisher. Its earlier real ACK prompts must
     // not race the fixture's explicit claim and select a different item.
-    let seed = project_fixture::seed_unacknowledged_notification(&root, &mut central).await?;
+    let seed = Box::pin(project_fixture::seed_unacknowledged_notification(
+        &root,
+        &mut central,
+    ))
+    .await?;
     let machine = MachineIdentity::new(
         "00000000-0000-4000-8000-000000000001"
             .to_owned()
@@ -90,7 +93,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     });
     actors.start().await?;
 
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         &String::from(machine.service_id().clone()),
         "00000000-0000-4000-8000-000000000002",
     )?
@@ -120,8 +123,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
         Arc::downgrade(&mail_handle),
     ));
     board.attach_publisher(&publisher);
-    let app =
-        CollaborationApplication::new(identity.with_notification_publisher(publisher.clone()));
+    let app = (identity.with_notification_publisher(publisher.clone())).build();
     let (piece_entered, release_piece) = central.notifications.hold_next_piece().await?;
     let running = board.start().ok_or("session start")?;
     wait_welcome(welcomed).await?;

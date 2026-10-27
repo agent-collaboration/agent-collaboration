@@ -1,22 +1,20 @@
 use collaboration_client::CollaborationClient;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 
 #[tokio::test]
 async fn client_discovers_over_the_real_api_socket() {
     // Arrange: no backend process; only the owned public service boundary.
     let root = private_directory().unwrap_or_else(|error| panic!("directory: {error}"));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .unwrap_or_else(|error| panic!("identity: {error}"));
     let directory = identity.endpoint_directory();
-    let served =
-        ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-            .await
-            .unwrap_or_else(|error| panic!("serve: {error}"));
+    let served = ServedCollaborationApi::start(root.path(), (identity).build())
+        .unwrap_or_else(|error| panic!("serve: {error}"));
     // Act
     let client = CollaborationClient::connect(root.path(), "client-proof", "1")
         .await
@@ -61,16 +59,13 @@ async fn real_service_snapshot_folds_prior_publications() {
             "label":label,"availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex",
                 "transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap()
     };
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .unwrap()
         .with_endpoints(vec![endpoint_description("initial")])
         .unwrap();
     let directory = identity.endpoint_directory();
     let root = private_directory().unwrap_or_else(|error| panic!("directory: {error}"));
-    let served =
-        ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-            .await
-            .unwrap();
+    let served = ServedCollaborationApi::start(root.path(), (identity).build()).unwrap();
     let client = CollaborationClient::connect(root.path(), "publication-proof", "1")
         .await
         .unwrap();
