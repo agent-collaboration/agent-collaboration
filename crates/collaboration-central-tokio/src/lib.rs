@@ -11,6 +11,8 @@ mod native_objects;
 mod native_server;
 mod object_keys;
 mod platform;
+mod self_hosted_issuer;
+pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};
 mod socket_host;
 #[cfg(feature = "conformance")]
 mod startup_controls;

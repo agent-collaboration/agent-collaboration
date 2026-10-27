@@ -1,7 +1,11 @@
 //! Generation-specific secret references are activated only by the metadata rename.
-use super::{FleetCommandError, enrollment_prepare::PreparedEnrollment};
+use super::{
+    FleetCommandError,
+    enrollment_prepare::{PreparedAccess, PreparedEnrollment},
+};
 use codex_router_host::{
-    FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentPublishError,
+    FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentPublishError,
+    SelfHostedAccessReference,
 };
 use codex_router_secret_store::{
     SecretStore,
@@ -42,19 +46,18 @@ pub(super) fn publish(
     let store = crate::secret_store_factory::open_cli_secret_store(&secret_root)?;
     let generation = String::from(collaboration_runtime::new_service_uuid()?);
     let installation = prepared.request.installation.as_str();
-    let access_key = FleetSecretKey::new(
-        FleetSecretKind::AccessClientSecret,
-        installation,
-        &generation,
-    )?
-    .secret_key()?;
+    let (access_kind, access_secret) = match &prepared.access {
+        PreparedAccess::Cloudflare(secret) => (FleetSecretKind::AccessClientSecret, secret),
+        PreparedAccess::SelfHosted(secret) => (FleetSecretKind::MachineAssertion, secret),
+    };
+    let access_key = FleetSecretKey::new(access_kind, installation, &generation)?.secret_key()?;
     let credential_key = FleetSecretKey::new(
         FleetSecretKind::MachineCredential,
         installation,
         &generation,
     )?
     .secret_key()?;
-    if let Err(error) = store.write_staged(&access_key, &prepared.access_secret) {
+    if let Err(error) = store.write_staged(&access_key, access_secret) {
         cleanup(&store, &access_key, &credential_key)?;
         return Err(error.into());
     }
@@ -64,9 +67,17 @@ pub(super) fn publish(
     }
     let document = FleetEnrollmentDocument {
         endpoint: prepared.endpoint,
-        access: FleetAccessReference {
-            client_id: prepared.request.access_client_id.as_str().to_owned(),
-            client_secret_key: access_key.as_str().to_owned(),
+        access: match prepared.access {
+            PreparedAccess::Cloudflare(_) => FleetAccessReference {
+                client_id: prepared.request.access_client_id.as_str().to_owned(),
+                client_secret_key: access_key.as_str().to_owned(),
+            }
+            .into(),
+            PreparedAccess::SelfHosted(_) => {
+                FleetAccess::SelfHosted(SelfHostedAccessReference::SelfHosted {
+                    assertion_key: access_key.as_str().to_owned(),
+                })
+            }
         },
         credential_key: credential_key.as_str().to_owned(),
         peer: *peer,

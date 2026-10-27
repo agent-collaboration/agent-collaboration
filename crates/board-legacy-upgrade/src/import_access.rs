@@ -5,8 +5,38 @@ use reqwest::header::{HeaderMap, HeaderValue};
 
 pub async fn publisher(
     endpoint: reqwest::Url,
+    owner_credential_file: Option<std::path::PathBuf>,
 ) -> Result<UpgradePublisher, Box<dyn std::error::Error>> {
     let mut headers = HeaderMap::new();
+    if let Some(path) = owner_credential_file {
+        let credential = tokio::task::spawn_blocking(
+            move || -> Result<_, Box<dyn std::error::Error + Send + Sync>> {
+                use codex_router_secret_store::central_credentials::CentralCredential;
+                Ok(CentralCredential::consume_private_file(&path)?)
+            },
+        )
+        .await?
+        .map_err(|error| -> Box<dyn std::error::Error> { error })?;
+        let codex_router_secret_store::central_credentials::CentralCredential::Owner {
+            endpoint: origin,
+            assertion,
+            expires_at,
+        } = credential
+        else {
+            return Err("expected an owner credential; run central mint --kind owner".into());
+        };
+        if reqwest::Url::parse(&origin)?.origin() != endpoint.origin() {
+            return Err("owner credential belongs to a different central endpoint".into());
+        }
+        if chrono::DateTime::parse_from_rfc3339(&expires_at)? <= chrono::Utc::now() {
+            return Err("owner credential has expired; run central mint --kind owner again".into());
+        }
+        let mut value =
+            HeaderValue::from_str(&assertion).map_err(|_| "invalid owner credential")?;
+        value.set_sensitive(true);
+        headers.insert("Cf-Access-Jwt-Assertion", value);
+        return build(endpoint, headers);
+    }
     #[cfg(debug_assertions)]
     let assertion = std::env::var_os("CODEX_ROUTER_DEBUG_CENTRAL_ACCESS_ASSERTION_FILE")
         .map(std::path::PathBuf::from)

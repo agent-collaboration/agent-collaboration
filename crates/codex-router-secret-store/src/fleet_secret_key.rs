@@ -6,12 +6,14 @@ use uuid::Uuid;
 pub enum FleetSecretKind {
     AccessClientSecret,
     MachineCredential,
+    MachineAssertion,
 }
 impl FleetSecretKind {
     const fn prefix(self) -> &'static str {
         match self {
             Self::AccessClientSecret => "fleet_access_client_secret",
             Self::MachineCredential => "fleet_machine_credential",
+            Self::MachineAssertion => "fleet_machine_assertion",
         }
     }
 }
@@ -43,6 +45,7 @@ impl FleetSecretKey {
         let kind = match parts.next() {
             Some("fleet_access_client_secret") => FleetSecretKind::AccessClientSecret,
             Some("fleet_machine_credential") => FleetSecretKind::MachineCredential,
+            Some("fleet_machine_assertion") => FleetSecretKind::MachineAssertion,
             _ => return Err(SecretStoreError::InvalidFleetSecretKey),
         };
         let installation = parts

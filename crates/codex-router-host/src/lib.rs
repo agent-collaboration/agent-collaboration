@@ -61,9 +61,9 @@ pub use external_provider_supervisor::{
 mod fleet_enrollment_file;
 mod global_claude_executable;
 pub use fleet_enrollment_file::{
-    FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
-    FleetEnrollmentPublishError, load_fleet_enrollment, open_fleet_enrollment_store,
-    persist_fleet_enrollment, read_fleet_enrollment_document,
+    FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
+    FleetEnrollmentPublishError, SelfHostedAccessReference, load_fleet_enrollment,
+    open_fleet_enrollment_store, persist_fleet_enrollment, read_fleet_enrollment_document,
 };
 mod host_configuration;
 mod host_replacement_activation;

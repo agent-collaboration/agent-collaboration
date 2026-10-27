@@ -35,6 +35,9 @@ pub struct ImportCommand {
     dry_run: bool,
     #[arg(long, required_unless_present = "dry_run")]
     central_url: Option<reqwest::Url>,
+    /// Private owner credential handoff; consumed and removed before publication.
+    #[arg(long)]
+    owner_credential_file: Option<PathBuf>,
 }
 
 #[derive(Serialize)]
@@ -154,7 +157,8 @@ impl ImportCommand {
             .central_url
             .clone()
             .ok_or_else(|| io::Error::other("--central-url is required for publication"))?;
-        let publisher = crate::import_access::publisher(endpoint).await?;
+        let publisher =
+            crate::import_access::publisher(endpoint, self.owner_credential_file.clone()).await?;
         Ok(publisher.publish(prepared).await?)
     }
 
@@ -267,4 +271,38 @@ fn resolved_output_path(path: &Path) -> io::Result<PathBuf> {
         .filter(|parent| !parent.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
     Ok(parent.canonicalize()?.join(name))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn owner_credentials_require_a_file_handoff_instead_of_a_central_root() {
+        let arguments = [
+            "codex-router-board-upgrade",
+            "--source",
+            "/fixture/legacy.sqlite",
+            "--router-directory",
+            "/fixture/router",
+            "--report",
+            "/fixture/report.json",
+            "--central-url",
+            "http://127.0.0.1:19843",
+        ];
+
+        let file_arguments = arguments
+            .into_iter()
+            .chain(["--owner-credential-file", "/fixture/owner.json"]);
+        assert!(ImportCommand::try_parse_from(file_arguments).is_ok());
+
+        let root_arguments = arguments
+            .into_iter()
+            .chain(["--self-hosted-root", "/fixture/central"]);
+        let error = ImportCommand::try_parse_from(root_arguments).err();
+        assert_eq!(
+            error.map(|error| error.kind()),
+            Some(clap::error::ErrorKind::UnknownArgument)
+        );
+    }
 }

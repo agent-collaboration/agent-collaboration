@@ -22,7 +22,8 @@ pub fn access_client_id(machine_token: &str) -> ConformanceResult<AccessClientId
 }
 pub fn fixture_policy() -> AccessPolicy {
     AccessPolicy {
-        team_domain: "conformance-test.cloudflareaccess.com".into(),
+        issuer: "https://conformance-test.cloudflareaccess.com".into(),
+        jwks_url: "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs".into(),
         session_audience: "test-session-aud".into(),
         admin_audience: "test-admin-aud".into(),
         owner_identity: "owner@example.test".into(),

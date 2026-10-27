@@ -29,6 +29,9 @@ thiserror.workspace = true
 tracing.workspace = true
 base64 = "0.22.1"
 ring = "=0.17.14"
+aws-lc-rs = { version = "=1.18.2", default-features = false, features = ["alloc", "non-fips"] }
+serde.workspace = true
+chrono.workspace = true
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
 durable-steps = { workspace = true, features = ["turso"] }
 fleet-sync-tokio-runner.workspace = true

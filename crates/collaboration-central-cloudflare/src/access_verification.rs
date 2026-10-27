@@ -12,12 +12,13 @@ static ACCESS_KEYS: LazyLock<Arc<AccessKeyCache>> =
     LazyLock::new(|| Arc::new(AccessKeyCache::default()));
 
 fn policy(env: &Env) -> worker::Result<AccessPolicy> {
-    Ok(AccessPolicy {
-        team_domain: env.var("ACCESS_TEAM_DOMAIN")?.to_string(),
-        session_audience: env.var("ACCESS_SESSION_AUD")?.to_string(),
-        admin_audience: env.var("ACCESS_ADMIN_AUD")?.to_string(),
-        owner_identity: env.var("ACCESS_OWNER_IDENTITY")?.to_string(),
-    })
+    AccessPolicy::cloudflare(
+        env.var("ACCESS_TEAM_DOMAIN")?.to_string(),
+        env.var("ACCESS_SESSION_AUD")?.to_string(),
+        env.var("ACCESS_ADMIN_AUD")?.to_string(),
+        env.var("ACCESS_OWNER_IDENTITY")?.to_string(),
+    )
+    .map_err(|_| worker::Error::RustError("invalid Access policy".into()))
 }
 
 #[derive(Clone, Copy)]

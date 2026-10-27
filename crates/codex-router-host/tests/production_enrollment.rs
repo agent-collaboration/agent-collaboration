@@ -185,7 +185,8 @@ fn write_private_enrollment(root: &Path) -> TestResult<PathBuf> {
         access: codex_router_host::FleetAccessReference {
             client_id: "fixture-access".to_owned(),
             client_secret_key: access.as_str().to_owned(),
-        },
+        }
+        .into(),
         credential_key: credential.as_str().to_owned(),
         peer: uuid::Uuid::now_v7().to_string().parse()?,
         receiver: "0192a1b2-c3d4-7000-8000-000000000002".parse()?,
