@@ -16,11 +16,4 @@ mod quota_reset_pace_projection_test;
 mod quota_route_selection_projection_test;
 #[path = "quota_status_metrics_test.rs"]
 mod quota_status_metrics_test;
-#[expect(
-    dead_code,
-    reason = "This target uses a subset of the shared quota capture fixture."
-)]
-#[path = "quota_test_fixtures_test.rs"]
-mod quota_test_fixtures_test;
-
-use quota_test_fixtures_test::*;
+use crate::test_support::*;

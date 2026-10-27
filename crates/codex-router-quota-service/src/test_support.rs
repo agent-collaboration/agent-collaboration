@@ -1,4 +1,22 @@
-use super::*;
+//! Shared quota capture fixtures for service and CLI tests.
+use std::path::{Path, PathBuf};
+
+use codex_router_core::ids::AccountId;
+use codex_router_selection::burn_down::{
+    AccountAvailability, QuotaEvidenceFreshness, QuotaEvidenceReason, QuotaWindowStatus,
+    RoutingExclusion, RoutingReason, SelectedPool, V1_SHORT_WINDOW_SECONDS,
+    V1_WEEKLY_WINDOW_SECONDS,
+};
+use codex_router_selection::run_rate::{QuotaRunRateConfidence, QuotaRunRateEstimate};
+use codex_router_state::account::{AccountRecord, AccountStatus};
+
+use crate::quota::quota_status_view_model::{
+    CredentialStoreAvailability, CreditUsageStatus, DisplayQuotaWindow, QuotaPaceSnapshot,
+    QuotaStatusReport, QuotaStatusRow, SelectionProjectionSource,
+};
+use crate::quota::{format_routing_reason, format_window_cell};
+
+const NOW: u64 = 1_700_000_000;
 
 pub struct QuotaCaptureRowFixture {
     pub account_id_value: &'static str,
@@ -177,6 +195,10 @@ pub fn quota_capture_report() -> QuotaStatusReport {
     }
 }
 
+#[expect(
+    clippy::panic,
+    reason = "Feature-gated shared test fixture preserves its existing fail-fast setup."
+)]
 pub fn quota_capture_case_report(case: QuotaCaptureDesignCase) -> QuotaStatusReport {
     let mut report = quota_capture_report();
     match case {
@@ -517,6 +539,10 @@ pub fn escape_xml(value: &str) -> String {
         .replace('"', "&quot;")
 }
 
+#[expect(
+    clippy::panic,
+    reason = "Feature-gated shared test fixture preserves its existing fail-fast setup."
+)]
 pub fn must_ok<T, E: std::fmt::Display>(result: Result<T, E>) -> T {
     match result {
         Ok(value) => value,
@@ -538,6 +564,10 @@ pub fn account_id(value: &str) -> AccountId {
     test_account_id(value)
 }
 
+#[expect(
+    clippy::panic,
+    reason = "Feature-gated shared test fixture preserves its existing fail-fast setup."
+)]
 pub fn test_account_id(value: &str) -> AccountId {
     match AccountId::new(value) {
         Ok(account_id) => account_id,

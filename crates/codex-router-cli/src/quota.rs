@@ -44,8 +44,6 @@ mod quota_credential_resources;
 mod quota_refresh_command;
 mod quota_status_command;
 mod quota_status_rendering;
-#[cfg(test)]
-use codex_router_quota_service::quota::QuotaStatusReport;
 use codex_router_quota_service::quota::{
     HttpQuotaRefreshProvider, current_unix_seconds,
     load_quota_status_report_with_availability_async, quota_status_view_model,
