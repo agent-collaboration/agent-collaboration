@@ -47,7 +47,8 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
   def family($key):
     ["Linux-X64-rust-tools-sqlx-", "Linux-X64-rust-tools-",
      "Linux-X64-worker-build-", "v0-rust-static-", "v0-rust-test-",
-     "v0-rust-e2e-", "v0-rust-wasm-", "v0-rust-release-arm64-background-"]
+     "v0-rust-e2e-", "v0-rust-wasm-", "v0-rust-release-arm64-background-",
+     "node-cache-Linux-x64-pnpm-"]
     | map(. as $prefix | select($key | startswith($prefix))) | first;
   ($since | timestamp) as $started
   | if type != "array" or length >= 1000 then
@@ -64,11 +65,19 @@ cache_plan="$(printf '%s\n' "$cache_inventory" | jq -e --arg since "$writers_sta
       . as $entries
       | (map(.key) | unique) as $keys
       | (map(select((.createdAt | timestamp) >= $started) | .key) | unique) as $saved
-      | (if ($keys | length) == 1 then $keys[0]
-         elif ($saved | length) == 1 then $saved[0]
-         else error("Cannot identify the saved key for " + .[0].family) end) as $keep
-      | {family: .[0].family, keepKey: $keep,
-         delete: [$entries[] | select(.key != $keep) | {id, key, sizeInBytes}]})
+      # pnpm caching is disabled in this workflow. Older main stores are
+      # obsolete; a new store signals an unexpected writer and is protected.
+      | if .[0].family == "node-cache-Linux-x64-pnpm-" then
+          if ($saved | length) != 0 then error("Unexpected pnpm cache writer in this run")
+          else {family: .[0].family, keepKey: null, retired: true,
+                delete: [$entries[] | {id, key, sizeInBytes}]} end
+        else
+          (if ($keys | length) == 1 then $keys[0]
+           elif ($saved | length) == 1 then $saved[0]
+           else error("Cannot identify the saved key for " + .[0].family) end) as $keep
+          | {family: .[0].family, keepKey: $keep,
+             delete: [$entries[] | select(.key != $keep) | {id, key, sizeInBytes}]}
+        end)
 ')"
 
 # Selection must succeed for the entire inventory before any delete is issued.

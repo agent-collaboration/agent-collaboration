@@ -60,6 +60,23 @@ expect_plan_failure "$fixture_root/duplicate.json" 'duplicate IDs'
 jq -n '[range(1000) | {id: (1 + .), key: "unrelated", ref: "refs/heads/main"}]' > "$fixture_root/truncated.json"
 expect_plan_failure "$fixture_root/truncated.json" 'a possibly truncated inventory'
 
+# The pnpm writer is disabled: retire old main entries, preserving other refs.
+jq '. + [
+  {id:300,key:"node-cache-Linux-x64-pnpm-old-a",ref:"refs/heads/main",createdAt:"2026-10-26T01:00:00Z",sizeInBytes:10},
+  {id:301,key:"node-cache-Linux-x64-pnpm-old-b",ref:"refs/heads/main",createdAt:"2026-10-26T02:00:00Z",sizeInBytes:20},
+  {id:930,key:"node-cache-Linux-x64-pnpm-pr",ref:"refs/pull/1/merge",createdAt:"2026-10-27T01:00:01Z",sizeInBytes:30},
+  {id:931,key:"node-cache-Linux-x64-pnpm-tag",ref:"refs/tags/v1.0.0",createdAt:"2026-10-27T01:00:01Z",sizeInBytes:40},
+  {id:932,key:"node-cache-Linux-x64-npm-other",ref:"refs/heads/main",createdAt:"2026-10-26T01:00:00Z",sizeInBytes:50}
+]' "$fixture_root/inventory.json" > "$fixture_root/with-pnpm.json"
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/with-pnpm.json" > "$fixture_root/pnpm-plan.json"
+if ! jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,107,300,301]
+  and any(.[]; .family == "node-cache-Linux-x64-pnpm-" and .keepKey == null)' "$fixture_root/pnpm-plan.json" > /dev/null; then
+  echo 'Retired pnpm main entries must be selected; other refs must be protected' >&2
+  exit 1
+fi
+jq 'map(if .id == 300 then .createdAt = "2026-10-27T01:00:01Z" else . end)' "$fixture_root/with-pnpm.json" > "$fixture_root/fresh-pnpm.json"
+expect_plan_failure "$fixture_root/fresh-pnpm.json" 'an unexpected pnpm writer in this run'
+
 # Stub only the remote service; run the actual apply guard, plan and delete loop.
 cat > "$fixture_root/gh" <<'GH'
 #!/usr/bin/env bash
@@ -104,6 +121,12 @@ awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort ==
 [[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 11 ]]
 
 : > "$GH_CALLS"
+GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
+  GH_FIXTURE="$fixture_root/with-pnpm.json" bash "$prune_script" --apply > /dev/null
+awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort == [100,101,102,103,104,105,106,107,300,301]' > /dev/null
+[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 13 ]]
+
+: > "$GH_CALLS"
 if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
   GH_FIXTURE="$fixture_root/ambiguous.json" bash "$prune_script" --apply > /dev/null 2>&1; then
   echo 'Ambiguous apply unexpectedly succeeded' >&2
@@ -138,4 +161,4 @@ if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/r
   exit 1
 fi
 [[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 1 ]]
-printf 'Main cache pruning: 17 checks passed\n'
+printf 'Main cache pruning: 20 checks passed\n'
