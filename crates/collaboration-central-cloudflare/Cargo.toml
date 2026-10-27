@@ -22,12 +22,12 @@ tower-service = "0.3.3"
 base64 = "0.22.1"
 message-board = { version = "0.1.96", path = "../message-board" }
 sqlx-core = { version = "0.9.0", default-features = false }
-fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b" }
-fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b", default-features = false }
-fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b", default-features = false }
-durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b", default-features = false, features = ["durable-object"] }
-runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b", default-features = false, features = ["durable-object"] }
-sqlx-durable-object = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b" }
+fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false }
+durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false, features = ["durable-object"] }
+runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0", default-features = false, features = ["durable-object"] }
+sqlx-durable-object = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", default-features = false, optional = true }
 worker = { version = "0.8.7", git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3", features = ["http", "axum"] }
