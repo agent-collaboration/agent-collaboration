@@ -278,8 +278,6 @@ jobs:
           umask 022
           cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not(binary(=board_records_e2e) | binary(=board_central_e2e) | binary(=local_mail_e2e) | binary(=board_takeover_e2e) | binary(=messaging_rules_e2e) | binary(=installation_directory_e2e) | binary(=mail_reconcile_e2e) | binary(=mail_retirement_e2e) | binary(=upgrade_binary_e2e) | binary(=forwarding_real_timer))'
       - name: Wait for tests
-        # Quota is this job's only background suite; avoid an empty wait when it skips.
-        if: always() && (github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true')
         wait-all:
       - name: Test isolated default Router port cutover
         # Keep the same opt-in case, with a per-test elapsed status as well as
