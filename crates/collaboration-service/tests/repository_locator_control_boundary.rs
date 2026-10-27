@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Locator validation and bounded repository pages through the real native fleet path.
 use message_board::public_replies::{RequestDecision, RequestResult};
 use message_board::*;

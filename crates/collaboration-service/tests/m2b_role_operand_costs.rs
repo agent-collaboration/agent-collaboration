@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Many-role holders unrelated to a rule are not its write operands.
 #[path = "support/board_fixture.rs"]
 #[expect(

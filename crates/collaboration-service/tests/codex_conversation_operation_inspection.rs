@@ -3,8 +3,8 @@ use collaboration_protocol::{
     CodexGeneration, EndpointId, EndpointRef, NonEmptyText, OperationId, SessionId, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_service::ApplicationFixture;
 
 use collaboration_runtime::ProviderOperationStore;
 use serde_json::{Value, json};

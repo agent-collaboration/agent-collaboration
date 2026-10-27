@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! A watched foreign workspace cannot hide this workspace's unread activity.
 #[path = "support/board_fixture.rs"]
 #[expect(

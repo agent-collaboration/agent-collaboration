@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Real board writes and native capture; scripted copy answers isolate mapping from networking.
 #![expect(
     clippy::panic_in_result_fn,

@@ -90,7 +90,7 @@ impl PushHandoffWorker {
                 });
                 continue;
             }
-            #[cfg(test)]
+            #[cfg(any(test, feature = "test-support"))]
             if matches!(&owed.operation, PushOperation::Admit { .. }) {
                 crate::wakeup_delivery_sender::wake_handoff_checkpoint("push-admitted-before-ack");
             }

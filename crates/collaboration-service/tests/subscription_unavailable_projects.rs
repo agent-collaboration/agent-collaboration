@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Containment must preserve healthy subscription rows and report the refused project.
 #[path = "support/board_fixture.rs"]
 #[expect(

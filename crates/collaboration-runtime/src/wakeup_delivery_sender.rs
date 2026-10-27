@@ -20,18 +20,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 #[cfg(test)]
-#[path = "wakeup_delivery_sender/aged_wake_retention_tests.rs"]
-mod aged_wake_retention_tests;
-#[cfg(test)]
-#[path = "native_delivery_crash_tests.rs"]
-mod crash_tests;
-#[cfg(test)]
 #[path = "wakeup_delivery_sender_tests.rs"]
 mod tests;
 
-#[cfg(test)]
+#[cfg(any(test, feature = "test-support"))]
 pub(crate) fn wake_handoff_checkpoint(stage: &str) {
-    crash_tests::checkpoint(stage);
+    if std::env::var("NATIVE_DELIVERY_TEST_CRASH_STAGE").as_deref() == Ok(stage) {
+        std::process::exit(93);
+    }
 }
 
 #[derive(Clone)]
@@ -43,6 +39,12 @@ pub struct WakeDeliverySender {
 }
 
 impl WakeDeliverySender {
+    /// Test-only access to the physical interaction owner used by this sender.
+    #[cfg(feature = "test-support")]
+    pub fn interaction_store(&self) -> Arc<interaction_storage::InteractionStore> {
+        Arc::clone(&self.interactions)
+    }
+
     pub fn new(
         interactions: Arc<interaction_storage::InteractionStore>,
         delivery: Arc<dyn SessionMessageDelivery>,
@@ -194,7 +196,7 @@ impl WakeDeliverySender {
             .await
             .map_err(|_| StorageError::InvalidRecord)?
             .into_receipt();
-        #[cfg(test)]
+        #[cfg(any(test, feature = "test-support"))]
         if matches!(
             receipt.outcome,
             DeliveryOutcome::Started
@@ -203,7 +205,7 @@ impl WakeDeliverySender {
                 | DeliveryOutcome::Queued
                 | DeliveryOutcome::PeerMessageWritten
         ) {
-            crash_tests::checkpoint("receipt-before-commit");
+            wake_handoff_checkpoint("receipt-before-commit");
         }
         if matches!(
             receipt.outcome,
@@ -222,8 +224,8 @@ impl WakeDeliverySender {
                 .await
                 .map_err(crate::map_interaction_storage_error)?;
         }
-        #[cfg(test)]
-        crash_tests::checkpoint("push-settled");
+        #[cfg(any(test, feature = "test-support"))]
+        wake_handoff_checkpoint("push-settled");
         let accepted_effect =
             crate::delivery_acceptance_effect::accepted_delivery_effect(&receipt.outcome);
         let result = match &receipt.outcome {
@@ -332,8 +334,8 @@ impl AttemptEvidenceSink for WakeEvidenceSink {
                 if !prepared {
                     return Err(DeliveryContractError::EvidencePersistence);
                 }
-                #[cfg(test)]
-                crash_tests::checkpoint("intent-persisted");
+                #[cfg(any(test, feature = "test-support"))]
+                wake_handoff_checkpoint("intent-persisted");
             }
             *latest = Some(evidence);
             Ok(())

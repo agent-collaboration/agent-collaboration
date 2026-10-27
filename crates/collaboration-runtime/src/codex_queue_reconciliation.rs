@@ -11,7 +11,7 @@ use collaboration_protocol::{
 };
 use serde_json::{Value, json};
 
-pub(crate) async fn reconcile(
+pub async fn reconcile(
     backend: &NativeControlBackend,
     context: AttemptReconciliationContext,
 ) -> AttemptReconciliation {

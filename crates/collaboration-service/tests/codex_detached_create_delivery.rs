@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! A detached Codex ACP create keeps both its operation evidence and empty native binding.
 #[path = "../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
 mod native_permission_echo;
@@ -15,11 +10,11 @@ use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, NonEmptyText, OperationId, SessionRef, UuidIdentity,
 };
-use collaboration_service::ApplicationFixture;
-use collaboration_service::BoardAvailability;
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::CodexConversationOperationRecorder;
 use collaboration_runtime::EndpointDirectory;
+use collaboration_service::ApplicationFixture;
+use collaboration_service::BoardAvailability;
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;

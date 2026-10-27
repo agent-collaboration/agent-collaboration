@@ -1,7 +1,7 @@
 //! A holder records one internal archive fact under its ordinary native project lock.
-use collaboration_runtime::NativeProjectStore;
 use super::{ProjectAdmission, ProjectAdmissionError};
 use chrono::Utc;
+use collaboration_runtime::NativeProjectStore;
 use message_board::{
     BoardId, BoardState, Fact, FactId, FactKind, FeedCursor, LifecycleFact, ProjectId, Record,
     RecordEnvelope, RecordKind, RecordTime, RecordedActor, RouterComponent, ServiceId,

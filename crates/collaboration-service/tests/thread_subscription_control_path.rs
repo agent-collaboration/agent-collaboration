@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Retained subscription journey through the typed SDK, native membership and local progress.
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{

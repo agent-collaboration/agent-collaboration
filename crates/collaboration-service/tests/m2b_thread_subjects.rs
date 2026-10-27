@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! TH-1…TH-3 and the root-entry cutover through real MCP/native admission.
 #[path = "support/board_fixture.rs"]
 #[expect(

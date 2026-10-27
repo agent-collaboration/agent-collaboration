@@ -1,9 +1,9 @@
 //! The API publishes every listed Codex session with all of its fields; a stored session with no
 //! recorded model or reasoning effort publishes neither, and never invents one. (Control alone
 //! filled the absent two with `null`; the typed result omits them.)
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 #[path = "support/served_api.rs"]

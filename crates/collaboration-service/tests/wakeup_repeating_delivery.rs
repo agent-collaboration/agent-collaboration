@@ -9,8 +9,8 @@ use collaboration_protocol::{
     PushId, PushKind, PushOrigin, RouterLink, RouterOriginRef, SavedMessage, SessionId, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_service::ApplicationFixture;
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;

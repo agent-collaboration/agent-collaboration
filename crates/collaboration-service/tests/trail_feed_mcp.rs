@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! V2's exact native positions are read through the real MCP entry point.
 #[path = "support/board_fixture.rs"]
 #[expect(

@@ -517,5 +517,5 @@ fn preview_has_only_escaped_quotes(preview: &str) -> bool {
 }
 
 #[path = "codex_app_server_delivery_result.rs"]
-mod native_result;
+pub(crate) mod native_result;
 use native_result::{interpret_native_response, not_submitted};

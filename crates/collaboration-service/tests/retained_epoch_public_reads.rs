@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Public readers preserve assigning epochs across a real native snapshot install.
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;

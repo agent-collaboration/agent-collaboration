@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Public MCP replies come from actual persisted library authority, without local grants.
 #[path = "support/board_fixture.rs"]
 #[expect(

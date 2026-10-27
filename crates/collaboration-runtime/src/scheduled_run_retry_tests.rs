@@ -1,14 +1,13 @@
 //! Provider schedule outcomes and retry identity, including push retention expiry.
-use super::route_tests::{
+use crate::scheduled_route_fixture::{
     FakeSettlementPlan, FakeSubmissionPlan, TestResult, apply_push_handoff, provider_worker_fixture,
 };
 use agent_automation::{RouteEffectEvidence, RunPhase};
 use automation_storage::StorageError;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryRejection,
-    DeliveryRejectionReason, EndpointRef, PushDeliveryState, PushHeaderFacts, PushKind, SessionRef,
+    DeliveryRejectionReason, EndpointRef, PushDeliveryState, PushHeaderFacts, SessionRef,
 };
-use serde_json::json;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -436,6 +435,3 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
     std::fs::remove_dir(root)?;
     Ok(())
 }
-
-#[path = "scheduled_push_retention_tests.rs"]
-mod retention_tests;

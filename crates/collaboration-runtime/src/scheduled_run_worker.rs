@@ -33,9 +33,6 @@ mod push_handoff_tests;
 #[path = "scheduled_run_retry_tests.rs"]
 mod retry_tests;
 #[cfg(test)]
-#[path = "scheduled_run_route_tests.rs"]
-mod route_tests;
-#[cfg(test)]
 #[path = "worker_timeout_crash_tests.rs"]
 mod timeout_crash_tests;
 
@@ -66,7 +63,7 @@ enum SchedulePushPreparation {
 }
 
 #[derive(Clone)]
-pub(crate) struct ScheduledRunWorker {
+pub struct ScheduledRunWorker {
     pub store: Arc<Mutex<AutomationStore>>,
     pub interactions: Arc<interaction_storage::InteractionStore>,
     pub execution: Arc<dyn ScheduledRunExecution>,

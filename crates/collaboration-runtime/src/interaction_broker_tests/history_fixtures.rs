@@ -1,10 +1,7 @@
 //! Independent durable typed-history observations for broker integration tests.
 pub(super) async fn stored_interaction_records(
     directory: &std::path::Path,
-) -> std::collections::BTreeMap<
-    String,
-    collaboration_runtime::interaction_broker::InteractionHistoryRecord,
-> {
+) -> std::collections::BTreeMap<String, crate::interaction_broker::InteractionHistoryRecord> {
     let mut observer = <sqlx::SqliteConnection as sqlx::Connection>::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
             .filename(directory.join("interaction.sqlite"))

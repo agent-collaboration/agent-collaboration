@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::match_wildcard_for_single_variants,
-    reason = "lint pass follows the crate split"
-)]
 //! Watched context follows the reader; unreadable siblings remain explicit metadata.
 #[path = "support/board_fixture.rs"]
 #[expect(

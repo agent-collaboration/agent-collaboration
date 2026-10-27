@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! The owning native mapping and public view keep failures and accepted-line epochs.
 #![expect(
     clippy::panic_in_result_fn,

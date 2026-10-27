@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! The public work view does not select or decode unrelated fact history.
 // This fixture also supplies other board journeys.
 #[path = "support/board_fixture.rs"]

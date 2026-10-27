@@ -1,7 +1,3 @@
-#![expect(
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Real registry/library scope proof. The enrolled PeerId is B5's explicit fixture stand-in.
 #![expect(
     clippy::panic_in_result_fn,

@@ -314,14 +314,12 @@ async fn provider_session_approval_legacy_projection_survives_restart_without_du
             typed_approval_request("projected-approval"),
             tokio_util::sync::CancellationToken::new(),
             tokio_util::sync::CancellationToken::new(),
-            Some(
-                collaboration_runtime::interaction_broker::TypedApprovalLegacyContext {
-                    operation_id: collaboration_protocol::OperationId::generate(),
-                    target: target.clone(),
-                    generation: generation.clone(),
-                    requested_by: prompting_requester.clone().into(),
-                },
-            ),
+            Some(crate::interaction_broker::TypedApprovalLegacyContext {
+                operation_id: collaboration_protocol::OperationId::generate(),
+                target: target.clone(),
+                generation: generation.clone(),
+                requested_by: prompting_requester.clone().into(),
+            }),
         )
         .await
         .expect("pending approval");
@@ -343,7 +341,7 @@ async fn provider_session_approval_legacy_projection_survives_restart_without_du
     drop(receiver);
     drop(broker);
     let service_id = target.endpoint.service_id.clone();
-    let gate = collaboration_runtime::NativeGenerationGate::default();
+    let gate = crate::NativeGenerationGate::default();
     let endpoint = target.endpoint.clone();
     let reloaded = ServiceInteractionBroker::load(
         service_id,
@@ -407,14 +405,12 @@ async fn human_and_old_provider_approval_rows_stay_detailed_only() {
                 typed_approval_request(request_id),
                 tokio_util::sync::CancellationToken::new(),
                 tokio_util::sync::CancellationToken::new(),
-                Some(
-                    collaboration_runtime::interaction_broker::TypedApprovalLegacyContext {
-                        operation_id: collaboration_protocol::OperationId::generate(),
-                        target: target.clone(),
-                        generation: generation.clone(),
-                        requested_by,
-                    },
-                ),
+                Some(crate::interaction_broker::TypedApprovalLegacyContext {
+                    operation_id: collaboration_protocol::OperationId::generate(),
+                    target: target.clone(),
+                    generation: generation.clone(),
+                    requested_by,
+                }),
             )
             .await
             .expect("pending approval");
@@ -458,7 +454,7 @@ async fn human_and_old_provider_approval_rows_stay_detailed_only() {
         target.endpoint.service_id.clone(),
         NativeControlBackend {
             endpoint: target.endpoint,
-            gate: collaboration_runtime::NativeGenerationGate::default(),
+            gate: crate::NativeGenerationGate::default(),
             codex_home: directory.clone(),
         },
         directory.join("approval-routes.json"),
@@ -499,14 +495,12 @@ async fn unreachable_approver_cancellation_keeps_its_typed_state_in_both_lists()
             typed_approval_request("unreachable-approver"),
             tokio_util::sync::CancellationToken::new(),
             tokio_util::sync::CancellationToken::new(),
-            Some(
-                collaboration_runtime::interaction_broker::TypedApprovalLegacyContext {
-                    operation_id: collaboration_protocol::OperationId::generate(),
-                    target: session(&broker.service_id, "provider-session"),
-                    generation,
-                    requested_by: session(&broker.service_id, "provider-session").into(),
-                },
-            ),
+            Some(crate::interaction_broker::TypedApprovalLegacyContext {
+                operation_id: collaboration_protocol::OperationId::generate(),
+                target: session(&broker.service_id, "provider-session"),
+                generation,
+                requested_by: session(&broker.service_id, "provider-session").into(),
+            }),
         )
         .await
         .expect("pending approval");
@@ -795,10 +789,8 @@ fn legacy_presentation_maps_only_fields_retained_by_typed_subjects() {
 mod history_fixtures;
 use history_fixtures::stored_interaction_records;
 
-fn select_typed(
-    option_id: &str,
-) -> collaboration_runtime::interaction_broker::TypedInteractionDecision {
-    collaboration_runtime::interaction_broker::TypedInteractionDecision::SelectApproval {
+fn select_typed(option_id: &str) -> crate::interaction_broker::TypedInteractionDecision {
+    crate::interaction_broker::TypedInteractionDecision::SelectApproval {
         option_id: option_id.to_owned(),
         acknowledge_persistent: false,
         note: None,
@@ -812,12 +804,12 @@ pub(super) async fn fixture_broker() -> (Arc<ServiceInteractionBroker>, CodexGen
 async fn fixture_broker_with_requester_name(
     requester_name: Option<&str>,
 ) -> (Arc<ServiceInteractionBroker>, CodexGeneration, PathBuf) {
-    let service_id = collaboration_runtime::new_service_uuid().unwrap_or_else(|error| panic!("service: {error}"));
+    let service_id = crate::new_service_uuid().unwrap_or_else(|error| panic!("service: {error}"));
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
     .unwrap_or_else(|error| panic!("generation: {error}"));
-    let gate = collaboration_runtime::NativeGenerationGate::default();
+    let gate = crate::NativeGenerationGate::default();
     gate.activate(
         generation.clone(),
         PathBuf::from("/tmp/approval-backend.sock"),
@@ -833,10 +825,7 @@ async fn fixture_broker_with_requester_name(
     };
     let directory = std::env::temp_dir().join(format!(
         "approval-broker-{}",
-        String::from(
-            collaboration_runtime::new_service_uuid()
-                .unwrap_or_else(|error| panic!("path: {error}"))
-        )
+        String::from(crate::new_service_uuid().unwrap_or_else(|error| panic!("path: {error}")))
     ));
     tokio::fs::create_dir_all(&directory)
         .await
@@ -852,27 +841,16 @@ async fn fixture_broker_with_requester_name(
     )
     .await
     .unwrap_or_else(|error| panic!("broker: {error}"));
-    let automation_store = Arc::new(tokio::sync::Mutex::new(
-        automation_storage::AutomationStore::open(&directory.join("automation.sqlite"))
-            .await
-            .unwrap_or_else(|error| panic!("automation store: {error}")),
-    ));
-    let service_id_text = String::from(service_id.clone());
-    let identity = crate::ApplicationFixture::new(&service_id_text, &service_id_text)
-        .unwrap_or_else(|error| panic!("service identity: {error}"))
-        .with_automation_store(automation_store)
-        .with_machine_identity(
-            collaboration_contracts::MachineIdentity::new(service_id, Some("Approval Fixture"))
-                .unwrap_or_else(|error| panic!("machine identity: {error}")),
-        )
-        .unwrap_or_else(|error| panic!("machine identity ownership: {error}"));
+    let display_names = crate::SessionDisplayNameCache::default();
     if let Some(name) = requester_name {
-        identity
-            .session_display_name_cache()
-            .remember(session(&broker.service_id, "provider-session"), name);
+        display_names.remember(session(&broker.service_id, "provider-session"), name);
     }
-    let identity = identity.with_approval_broker(Arc::clone(&broker));
-    drop(identity);
+    broker.install_display_names(display_names);
+    broker.install_push_context(
+        broker.interaction_store(),
+        collaboration_contracts::MachineIdentity::new(service_id, Some("Approval Fixture"))
+            .unwrap_or_else(|error| panic!("machine identity: {error}")),
+    );
     (broker, generation, directory)
 }
 

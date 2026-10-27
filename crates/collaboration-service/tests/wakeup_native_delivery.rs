@@ -7,10 +7,10 @@ use collaboration_protocol::{
     CodexGeneration, EndpointDescription, OperationId, PushId, RouterOriginRef, SavedMessage,
     SessionRef,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 
 use collaboration_runtime::SessionDeliveryRouter;
 

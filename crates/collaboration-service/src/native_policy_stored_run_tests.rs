@@ -11,7 +11,7 @@ type NativeRunRecord = agent_automation::RunRecord<
     SessionRef,
     EndpointRef,
     CodexGeneration,
-    crate::stored_run_receipt::StoredRunReceipt,
+    collaboration_runtime::stored_run_receipt::StoredRunReceipt,
 >;
 struct StoredPolicyRun {
     store: Arc<tokio::sync::Mutex<AutomationStore>>,
@@ -57,7 +57,7 @@ impl StoredPolicyRun {
             .admit_waiting_run::<SessionRef, EndpointRef>(&schedule.schedule_id, 60001)
             .await?;
         let initial = fixture.scheduled_run().recorded;
-        store.begin_run_preparation::<SessionRef,EndpointRef,CodexGeneration,crate::stored_run_receipt::StoredRunReceipt>(RunPreparationIntent{run_id:run_id.clone(),effects:initial.clone()}).await?;
+        store.begin_run_preparation::<SessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(RunPreparationIntent{run_id:run_id.clone(),effects:initial.clone()}).await?;
         Ok(Self {
             store: Arc::new(tokio::sync::Mutex::new(store)),
             run_id,
@@ -71,10 +71,11 @@ impl StoredPolicyRun {
     fn sink(
         &self,
         initial: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> crate::scheduled_run_evidence_sink::StoredRunEvidenceSink {
-        crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
+    ) -> collaboration_runtime::test_support::scheduled_run_evidence_sink::StoredRunEvidenceSink
+    {
+        collaboration_runtime::test_support::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             self.store.clone(),
-            crate::AutomationConfigurationHandle::default(),
+            collaboration_runtime::AutomationConfigurationHandle::default(),
             self.run_id.clone(),
             self.schedule_id.clone(),
             Some(initial),
@@ -109,13 +110,14 @@ async fn stored_two_attempts(
             stored_run: Some((stored.store.clone(), stored.run_id.clone())),
         },
     )?;
-    let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
+    let directory =
+        collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
-    let route = crate::CodexAppServerDeliveryRoute::new(
+    let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),
-        Arc::new(crate::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     )
     .with_approval_broker(&fixture.broker);
     let scheduled = route.scheduled_runs().ok_or("scheduled route missing")?;
@@ -167,7 +169,7 @@ async fn stored_two_attempts(
     // Fresh owning store decodes the actual committed transition, not sink.latest().
     let mut reopened =
         AutomationStore::open(&fixture.directory.path().join("automation.sqlite")).await?;
-    let record=reopened.read_run::<SessionRef,EndpointRef,CodexGeneration,crate::stored_run_receipt::StoredRunReceipt>(&stored.run_id).await?;
+    let record=reopened.read_run::<SessionRef,EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&stored.run_id).await?;
     reopened.close().await?;
     Ok((record, second, requests))
 }

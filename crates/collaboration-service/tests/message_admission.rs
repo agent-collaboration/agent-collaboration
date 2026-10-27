@@ -1,12 +1,12 @@
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
-use collaboration_contracts::MachineIdentity;
-use collaboration_runtime::SessionDeliveryRouter;
-use collaboration_contracts::SessionMessageDelivery;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
-use collaboration_contracts::TargetPresenceProbe;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/native_mail_owner.rs"]

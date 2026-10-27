@@ -1,8 +1,14 @@
 //! Reusable real-store worker fixture, with a literal clock for schedule history.
-use super::*;
+use super::{
+    Arc, AtomicUsize, AttemptId, AutomationStore, CodexGeneration, ContinuityInput, EndpointRef,
+    ExecutionDestination, FakeRouteKind, FakeScheduledExecution, FakeSettlementPlan,
+    FakeSubmissionPlan, InstructionText, Mutex, OperationId, PushId, RunId, ScheduleCreate,
+    ScheduleDefinition, ScheduledRunExecution, ScheduledRunWorker, SessionRef, TestResult,
+    TimingRule, json,
+};
 
 #[derive(Clone, Copy)]
-pub(crate) struct FixtureTiming {
+pub struct FixtureTiming {
     pub anchor_ms: i64,
     pub interval_seconds: u32,
 }
@@ -12,17 +18,14 @@ impl FixtureTiming {
     }
 }
 
-pub(crate) async fn apply_push_handoff(worker: &ScheduledRunWorker) -> TestResult<()> {
-    collaboration_runtime::PushHandoffWorker::new(
-        Arc::clone(&worker.store),
-        Arc::clone(&worker.interactions),
-    )
-    .apply_pending()
-    .await?;
+pub async fn apply_push_handoff(worker: &ScheduledRunWorker) -> TestResult<()> {
+    crate::PushHandoffWorker::new(Arc::clone(&worker.store), Arc::clone(&worker.interactions))
+        .apply_pending()
+        .await?;
     Ok(())
 }
 
-pub(crate) async fn provider_worker_fixture(
+pub async fn provider_worker_fixture(
     submission_plan: FakeSubmissionPlan,
     settlement_plan: FakeSettlementPlan,
 ) -> TestResult<(
@@ -43,7 +46,7 @@ pub(crate) async fn provider_worker_fixture(
     .await
 }
 
-pub(crate) async fn provider_worker_fixture_at(
+pub async fn provider_worker_fixture_at(
     submission_plan: FakeSubmissionPlan,
     settlement_plan: FakeSettlementPlan,
     timing: FixtureTiming,
@@ -132,7 +135,7 @@ pub(crate) async fn provider_worker_fixture_at(
         interactions,
         execution: fake,
         backend: None,
-        configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
+        configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity: collaboration_contracts::MachineIdentity::new(
             service.to_owned().try_into()?,
             Some("Schedule Fixture"),

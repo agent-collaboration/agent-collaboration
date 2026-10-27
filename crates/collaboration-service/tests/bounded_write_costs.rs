@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Rule operands and metadata counts must not decode unrelated project contents.
 #[path = "support/board_fixture.rs"]
 #[expect(

@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! A decision continuation reads backward from its cursor, not from feed position zero.
 #[path = "support/board_fixture.rs"]
 #[expect(

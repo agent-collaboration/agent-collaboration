@@ -1,8 +1,8 @@
 use collaboration_protocol::{EndpointRef, QuestionAnswerParams, QuestionResponse, QuestionState};
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ApplicationFixture;
 use message_board::{HumanId, Identity, SessionEndpointRef, SessionId, SessionRef};
 use serde_json::json;
 #[path = "support/served_api.rs"]

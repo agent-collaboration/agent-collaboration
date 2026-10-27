@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Pending and owed views use recorded links, authors and redactions, never prose guesses.
 #[path = "support/board_fixture.rs"]
 #[expect(

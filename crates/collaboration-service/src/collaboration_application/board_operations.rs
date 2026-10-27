@@ -72,11 +72,13 @@ pub struct BoardOperations {
     pub(super) project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
     pub(super) notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
     pub(super) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
-    pub(super) subscription_presence: Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
+    pub(super) subscription_presence:
+        Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
     pub(super) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
     pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(super) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
-    pub(super) project_replication: std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
+    pub(super) project_replication:
+        std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     pub(super) session_context: crate::collaboration_application::SessionContextReader,
     pub(super) registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
 }
@@ -91,11 +93,15 @@ impl BoardOperations {
         project_claim: Option<std::sync::Arc<dyn collaboration_contracts::ProjectClaim>>,
         notification_publisher: Option<std::sync::Arc<crate::NotificationPublisher>>,
         subscription_delivery: Option<crate::SubscriptionDeliveryService>,
-        subscription_presence: Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
+        subscription_presence: Option<
+            std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>,
+        >,
         subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
         interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
         mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
-        project_replication: std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
+        project_replication: std::sync::Arc<
+            dyn collaboration_contracts::ProjectReplicationPosition,
+        >,
         session_context: crate::collaboration_application::SessionContextReader,
         registry: Option<std::sync::Arc<collaboration_runtime::ProjectStoreRegistry>>,
     ) -> Self {

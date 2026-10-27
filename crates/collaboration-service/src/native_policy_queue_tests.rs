@@ -7,6 +7,7 @@ use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, OperationId, RouterOriginRef, SavedMessage,
 };
 use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_runtime::WakeDeliverySender;
 
 struct QueueObservation {
     intent: Option<PreparationEffect>,
@@ -64,7 +65,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         .evaluate_wakeup::<SavedMessage>(
             &wake.definition.wakeup_id,
             anchor_ms + 1000,
-            collaboration_runtime::wakeup_delivery_sender::build_wake_push_draft,
+            collaboration_runtime::test_support::build_wake_push_draft,
         )
         .await?
     else {
@@ -95,15 +96,15 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     );
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
-    let sender = collaboration_runtime::wakeup_delivery_sender::WakeDeliverySender {
+    let sender = WakeDeliverySender::new(
         interactions,
-        delivery: delivery.clone(),
-        configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
-        machine_identity: collaboration_contracts::MachineIdentity::new(
+        delivery.clone(),
+        collaboration_runtime::AutomationConfigurationHandle::default(),
+        collaboration_contracts::MachineIdentity::new(
             fixture.backend.endpoint.service_id.clone(),
             Some("Policy fixture"),
         )?,
-    };
+    );
     let listener = tokio::net::UnixListener::bind(fixture.directory.path().join("native.sock"))?;
     let mutation_broker = fixture.broker.clone();
     let mutation_scratch = fixture
@@ -248,7 +249,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
         }
         collaboration_runtime::delivery_reconciliation::reconcile(
             &store,
-            &sender.interactions,
+            &sender.interaction_store(),
             delivery.as_ref(),
             record,
         )
@@ -508,7 +509,7 @@ async fn policy_queue_invalid_effects_never_inspect_or_accept_a_queue_item() {
         let observed = tokio::select! {
             biased;
             _=listener.accept()=>panic!("invalid evidence reached queue inspection"),
-            result=collaboration_runtime::codex_queue_reconciliation::reconcile(&fixture.backend,context)=>result,
+            result=collaboration_runtime::test_support::codex_queue_reconciliation::reconcile(&fixture.backend,context)=>result,
         };
         assert!(matches!(
             observed,

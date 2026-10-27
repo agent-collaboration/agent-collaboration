@@ -31,7 +31,7 @@ impl NativeMailOwner {
         identity: ApplicationFixture,
         peer: PeerId,
         props: MailPushDeliveryProps,
-        session: Option<super::mail_service::MailDeliverySession>,
+        session: Option<collaboration_runtime::MailDeliverySession>,
     ) -> Result<(ApplicationFixture, Self), FixtureError> {
         let interactions = props.interactions.clone();
         let mail = Arc::new(MailDeliveryRuntime::new(peer, props, session)?);

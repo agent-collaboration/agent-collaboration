@@ -1,8 +1,10 @@
 //! U66: schedules retain the long-lived occurrence property retired from wakes.
-use super::fixture::{FixtureTiming, provider_worker_fixture_at};
 use super::*;
 use crate::collaboration_application::CollaborationRejection;
 use collaboration_protocol::{MachineId, PushRecordDraft, PushRecordShowParams, RouterOriginRef};
+use collaboration_runtime::test_support::scheduled_route_fixture::fixture::{
+    FixtureTiming, provider_worker_fixture_at,
+};
 
 macro_rules! ensure {
     ($condition:expr $(,)?) => { ensure!($condition, "assertion failed: {}", stringify!($condition)); };

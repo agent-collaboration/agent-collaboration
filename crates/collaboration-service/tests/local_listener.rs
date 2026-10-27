@@ -1,6 +1,6 @@
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::OwnerOnlySocket;
+use collaboration_service::ApplicationFixture;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 
 #[tokio::test]

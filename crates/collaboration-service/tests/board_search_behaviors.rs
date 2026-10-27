@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Retained literal search, scope/kind independence and bounded immutable history proof.
 #[path = "support/board_fixture.rs"]
 #[expect(

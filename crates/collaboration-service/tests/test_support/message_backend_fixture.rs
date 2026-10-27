@@ -10,11 +10,11 @@ use collaboration_protocol::{
     CodexGeneration, DeliveryReceipt, EndpointDescription, MessageDelivery, PushMessageSendResult,
     PushRecord, SessionRef,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
 use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ApplicationFixture;
 
 use collaboration_runtime::SessionDeliveryRouter;
 

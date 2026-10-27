@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Narrow views are not a corruption hunt through unrelated current records.
 #[path = "support/board_fixture.rs"]
 #[expect(

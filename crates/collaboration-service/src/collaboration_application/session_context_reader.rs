@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 pub struct SessionContextReader {
     identity: collaboration_contracts::RouterIdentity,
     native: super::session_native_control::NativeSessionControl,
-    provider_operations: Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
+    provider_operations:
+        Option<std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>>,
     claude_code_sessions:
         Option<std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>>,
 }

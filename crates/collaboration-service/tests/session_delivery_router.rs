@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 use agent_automation::RouteEffectEvidence;

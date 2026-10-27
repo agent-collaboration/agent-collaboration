@@ -4,9 +4,9 @@ use collaboration_protocol::{
     CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
     ScheduleCreateRequest, SessionRef,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions as _, Connection as _};

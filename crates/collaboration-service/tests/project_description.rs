@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Exact descriptions use project admission, current/feed decoding and public reads.
 #![expect(
     clippy::panic_in_result_fn,

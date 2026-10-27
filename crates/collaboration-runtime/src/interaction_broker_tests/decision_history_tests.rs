@@ -268,12 +268,12 @@ async fn expired_and_old_generation_decisions_are_refused_with_terminal_history(
 
 #[tokio::test]
 async fn malformed_persisted_routes_fail_closed() {
-    let service_id = collaboration_runtime::new_service_uuid().unwrap();
+    let service_id = crate::new_service_uuid().unwrap();
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
     .unwrap();
-    let gate = collaboration_runtime::NativeGenerationGate::default();
+    let gate = crate::NativeGenerationGate::default();
     gate.activate(
         generation,
         PathBuf::from("/tmp/approval-corrupt.sock"),
@@ -286,7 +286,7 @@ async fn malformed_persisted_routes_fail_closed() {
     };
     let directory = std::env::temp_dir().join(format!(
         "approval-corrupt-{}",
-        String::from(collaboration_runtime::new_service_uuid().unwrap())
+        String::from(crate::new_service_uuid().unwrap())
     ));
     std::fs::create_dir_all(&directory).unwrap();
     let routes = directory.join("approval-routes.json");
@@ -307,12 +307,12 @@ async fn malformed_persisted_routes_fail_closed() {
 #[tokio::test]
 async fn malformed_persisted_history_fails_closed_while_absence_stays_empty() {
     // Arrange: valid routes beside an unreadable decision history.
-    let service_id = collaboration_runtime::new_service_uuid().unwrap();
+    let service_id = crate::new_service_uuid().unwrap();
     let generation: CodexGeneration = serde_json::from_value(json!({
         "serviceEpoch": String::from(service_id.clone()), "generation": 1
     }))
     .unwrap();
-    let gate = collaboration_runtime::NativeGenerationGate::default();
+    let gate = crate::NativeGenerationGate::default();
     gate.activate(
         generation,
         PathBuf::from("/tmp/approval-history-corrupt.sock"),
@@ -325,7 +325,7 @@ async fn malformed_persisted_history_fails_closed_while_absence_stays_empty() {
     };
     let directory = std::env::temp_dir().join(format!(
         "approval-history-corrupt-{}",
-        String::from(collaboration_runtime::new_service_uuid().unwrap())
+        String::from(crate::new_service_uuid().unwrap())
     ));
     std::fs::create_dir_all(&directory).unwrap();
     let routes = directory.join("approval-routes.json");
@@ -394,20 +394,20 @@ async fn populated_old_approval_reader_survives_human_interaction_history() {
         broker
             .decide_typed_interaction("human-approval-1", &wrong_actor, select_typed("allow-once"))
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::WrongActor)
+        Err(crate::interaction_broker::InteractionHistoryError::WrongActor)
     ));
     broker
         .decide_typed_interaction("human-approval-1", &human, select_typed("allow-once"))
         .await
         .expect("human decision");
     assert!(matches!(receiver.await.expect("agent option"),
-        collaboration_runtime::interaction_broker::TypedApprovalResolution::Selected(selected)
+        crate::interaction_broker::TypedApprovalResolution::Selected(selected)
             if selected.option_id.as_str() == "allow-once"));
     assert!(matches!(
         broker
             .decide_typed_interaction("human-approval-1", &human, select_typed("allow-once"))
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::AlreadySettled)
+        Err(crate::interaction_broker::InteractionHistoryError::AlreadySettled)
     ));
 
     let old_bytes = tokio::fs::read(directory.join("approval-history.json"))
@@ -427,7 +427,7 @@ async fn populated_old_approval_reader_survives_human_interaction_history() {
     let new_records = stored_interaction_records(&directory).await;
     assert!(matches!(
         new_records["human-approval-1"].approval_state(),
-        Some(collaboration_runtime::interaction_broker::InteractionHistoryState::Decided { option_id })
+        Some(crate::interaction_broker::InteractionHistoryState::Decided { option_id })
             if option_id.as_str() == "allow-once"
     ));
 }
@@ -453,10 +453,10 @@ async fn typed_interaction_rejects_self_approver_and_corrupt_stored_rows() {
                 None
             )
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::SelfApprover)
+        Err(crate::interaction_broker::InteractionHistoryError::SelfApprover)
     ));
     let fault =
-        collaboration_runtime::interaction_broker::native_history_fault_fixture::NativeHistoryFaults::new(&broker);
+        crate::interaction_broker::native_history_fault_fixture::NativeHistoryFaults::new(&broker);
     fault.execute_all(&["INSERT INTO typed_interaction_history VALUES ('bad', '{\"requestId\":\"other\"}', '2026-10-01T00:00:00.000000000Z')"])
         .await.expect("corrupt actual native record");
     assert_eq!(
@@ -480,7 +480,7 @@ async fn typed_approval_rejects_foreign_service_participants_without_pending_his
     use message_board::Identity;
 
     let (broker, _, _) = fixture_broker().await;
-    let foreign_service = collaboration_runtime::new_service_uuid().expect("foreign service");
+    let foreign_service = crate::new_service_uuid().expect("foreign service");
     let foreign_requester =
         board_session_ref(&session(&foreign_service, "provider-session")).expect("requester");
     let local_approver =
@@ -498,7 +498,7 @@ async fn typed_approval_rejects_foreign_service_participants_without_pending_his
                 None
             )
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::Unavailable)
+        Err(crate::interaction_broker::InteractionHistoryError::Unavailable)
     ));
     let local_requester =
         board_session_ref(&session(&broker.service_id, "provider-session")).expect("requester");
@@ -517,7 +517,7 @@ async fn typed_approval_rejects_foreign_service_participants_without_pending_his
                 None
             )
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::Unavailable)
+        Err(crate::interaction_broker::InteractionHistoryError::Unavailable)
     ));
     assert!(broker.list_interactions().await.is_empty());
 }
@@ -532,18 +532,18 @@ async fn refused_typed_offer_preserves_reviewed_fields_and_order_without_legacy_
     let approver = Identity::Human {
         human_id: HumanId::try_from("owner".to_owned()).expect("human ID"),
     };
-    let refusal = collaboration_runtime::interaction_broker::RefusedTypedApproval {
+    let refusal = crate::interaction_broker::RefusedTypedApproval {
         request_id: "malformed-offer".into(),
         title: "Run command".into(),
         description: Some("Reviewed description".into()),
         subject: None,
         options: vec![
-            collaboration_runtime::interaction_broker::RefusedApprovalOption {
+            crate::interaction_broker::RefusedApprovalOption {
                 option_id: "duplicate".into(),
                 label: "First".into(),
                 provider_kind: "AllowOnce".into(),
             },
-            collaboration_runtime::interaction_broker::RefusedApprovalOption {
+            crate::interaction_broker::RefusedApprovalOption {
                 option_id: "duplicate".into(),
                 label: "Second".into(),
                 provider_kind: "RejectOnce".into(),
@@ -558,7 +558,7 @@ async fn refused_typed_offer_preserves_reviewed_fields_and_order_without_legacy_
     let recorded = broker.list_interactions().await;
     assert!(matches!(
         &recorded[0],
-        collaboration_runtime::interaction_broker::InteractionHistoryRecord::RefusedApproval { refusal: stored, .. }
+        crate::interaction_broker::InteractionHistoryRecord::RefusedApproval { refusal: stored, .. }
             if stored == &refusal && stored.options[0].label == "First" && stored.options[1].label == "Second"
     ));
     assert!(!directory.join("approval-history.json").exists());
@@ -585,7 +585,7 @@ async fn self_approver_refusal_is_recorded_and_listed_with_a_fix() {
     let (broker, _, _) = fixture_broker().await;
     let requester =
         board_session_ref(&session(&broker.service_id, "provider-session")).expect("requester");
-    let refusal = collaboration_runtime::interaction_broker::RefusedTypedApproval {
+    let refusal = crate::interaction_broker::RefusedTypedApproval {
         request_id: "self-offer".into(),
         title: "Run command".into(),
         description: None,

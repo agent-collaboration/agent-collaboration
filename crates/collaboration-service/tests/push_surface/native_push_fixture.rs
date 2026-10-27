@@ -13,11 +13,6 @@ use collaboration_protocol::{
 };
 use collaboration_service::ApplicationFixture;
 
-
-
-
-
-
 use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use std::sync::{

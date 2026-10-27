@@ -8,7 +8,7 @@ use collaboration_protocol::{
 use serde_json::{Value, json};
 
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum NativeFailureKind {
+pub enum NativeFailureKind {
     WrongService,
     EndpointNotFound,
     UnsupportedCapability,
@@ -63,12 +63,12 @@ impl NativeFailureKind {
     }
 }
 #[derive(Clone, Copy, Debug)]
-pub(crate) enum NativeFailureDisposition {
+pub enum NativeFailureDisposition {
     Unsent(UnsentCause),
     Uncertain,
 }
 #[derive(Debug)]
-pub(crate) struct NativeMessageFailure {
+pub struct NativeMessageFailure {
     pub response: Value,
     pub disposition: NativeFailureDisposition,
 }
@@ -76,7 +76,7 @@ pub(crate) struct NativeMessageFailure {
 pub(crate) const HELD_BY_ANOTHER_CLIENT_GUIDANCE: &str =
     "Message it from the Codex client that holds it.";
 
-pub(crate) struct NativeMessageAttemptEvidence<'a> {
+pub struct NativeMessageAttemptEvidence<'a> {
     pub effects: &'a mut agent_automation::NativeEffectEvidence<SessionRef, CodexGeneration>,
     pub sink: &'a dyn collaboration_contracts::AttemptEvidenceSink,
 }
@@ -91,7 +91,7 @@ impl NativeMessageAttemptEvidence<'_> {
     }
 }
 
-pub(crate) struct MessageEffects {
+pub struct MessageEffects {
     pub id: Value,
     pub resume: &'static str,
     pub submission: &'static str,

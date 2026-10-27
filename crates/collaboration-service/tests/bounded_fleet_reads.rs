@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Fleet pages decode the returned records and shared parents, independent of directory size.
 #[path = "support/board_fixture.rs"]
 #[expect(

@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Per-write reconciliation stays local; reader-wide discovery probes other stores once.
 #[path = "support/board_fixture.rs"]
 #[expect(

@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! A card's latest trail must fit the same real response bound as other board reads.
 #[path = "support/board_fixture.rs"]
 #[expect(

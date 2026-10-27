@@ -273,15 +273,15 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
         native,
         correlation: correlation_receiver,
     } = accepting_native_call(&root)?;
-    let sender = WakeDeliverySender {
-        interactions: Arc::clone(&interactions),
-        delivery: identity
+    let sender = WakeDeliverySender::new(
+        Arc::clone(&interactions),
+        identity
             .session_delivery
             .clone()
             .ok_or("session delivery missing")?,
-        configuration: identity.configuration.clone(),
-        machine_identity: identity.machine_identity.clone(),
-    };
+        identity.configuration.clone(),
+        identity.machine_identity.clone(),
+    );
     tokio::time::timeout(
         Duration::from_secs(5),
         sender.dispatch(Arc::clone(&store), delivery_id.clone()),
@@ -497,14 +497,14 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         identity =
             identity.with_session_delivery(Arc::new(SessionDeliveryRouter::new(vec![route])));
     }
-    let sender = WakeDeliverySender {
+    let sender = WakeDeliverySender::new(
         interactions,
-        delivery: identity
+        identity
             .session_delivery
             .ok_or("session delivery missing")?,
-        configuration: identity.configuration,
-        machine_identity: identity.machine_identity,
-    };
+        identity.configuration,
+        identity.machine_identity,
+    );
     sender.dispatch(store, delivery_id).await?;
     Err("sender did not stop at selected checkpoint".into())
 }

@@ -19,7 +19,7 @@ pub(super) fn not_submitted(
     NativeDeliveryResult::not_submitted(reason, retryable, cause)
         .with_reachability(SessionReachability::CodexAppServer)
 }
-pub(super) fn interpret_native_response(
+pub fn interpret_native_response(
     target: &SessionRef,
     response: crate::native_message_dispatch::NativeMessageOutcome,
     held_idle_submission: bool,
@@ -224,7 +224,3 @@ pub(super) fn interpret_native_response(
     };
     result.with_reachability(SessionReachability::CodexAppServer)
 }
-
-#[cfg(test)]
-#[path = "native_result_tests.rs"]
-mod tests;

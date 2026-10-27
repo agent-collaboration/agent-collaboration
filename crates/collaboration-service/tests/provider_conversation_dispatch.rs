@@ -10,12 +10,9 @@ use collaboration_protocol::{
     ProviderBindingIdentity, ProviderSessionInspectRequest, ProviderSessionInspectResult,
     ProviderSettingsAcceptRequest, ProviderSettingsResult, ProviderSettingsSetRequest,
 };
+use collaboration_service::ApplicationFixture;
 use collaboration_service::CollaborationApplication;
 use collaboration_service::collaboration_application::CollaborationRejection;
-use collaboration_service::ApplicationFixture;
-
-
-
 
 use serde::Serialize;
 use serde_json::{Value, json};

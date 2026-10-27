@@ -11,7 +11,9 @@ use collaboration_protocol::PushId;
 use collaboration_protocol::{MachineId, PushLineInput, RouterLink, render_push_line};
 use fleet_sync_protocol::DeliveryItem;
 
-pub(in crate::subscription_delivery) fn poll_unsent(reason: &str) -> collaboration_contracts::NativeDeliveryResult {
+pub(in crate::subscription_delivery) fn poll_unsent(
+    reason: &str,
+) -> collaboration_contracts::NativeDeliveryResult {
     collaboration_contracts::NativeDeliveryResult::not_submitted(
         reason,
         true,

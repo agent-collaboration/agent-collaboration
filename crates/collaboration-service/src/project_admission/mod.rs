@@ -1,6 +1,8 @@
 //! The sole project-domain write path: lease, schema, replay, rules, atomic effects.
-use collaboration_runtime::{FleetClient, FleetClientError, ProjectRegistryError, ProjectStoreRegistry};
 use chrono::Utc;
+use collaboration_runtime::{
+    FleetClient, FleetClientError, ProjectRegistryError, ProjectStoreRegistry,
+};
 use message_board::{
     ActorOrigin, BoardOperation, MachineLabel, MailItemRef, NumericValidationError, ProjectRequest,
     Record, RequestLedgerEntry, RequestResult, ServiceId, StoredDecision, SubscriptionMembership,

@@ -402,7 +402,7 @@ pub(crate) fn classify_native_call_failure(
         }
         NativeConnectionError::Rejected { code } => {
             let (reason, next_action) =
-                collaboration_runtime::message_effect_state::classify_native_rejection(*code, native);
+                collaboration_runtime::classify_native_rejection(*code, native);
             let message = native
                 .and_then(|value| value.get("message"))
                 .and_then(Value::as_str)

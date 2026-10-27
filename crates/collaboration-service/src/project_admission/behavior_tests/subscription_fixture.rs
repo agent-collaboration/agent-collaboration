@@ -2,10 +2,10 @@
 // Shared fixture methods are used by separate behavioral targets.
 use crate::ApplicationFixture;
 use crate::CollaborationApplication;
-use collaboration_runtime::FleetClient;
-use collaboration_contracts::MachineIdentity;
 use crate::ProjectAdmission;
 use crate::ProjectAdmissionProps;
+use collaboration_contracts::MachineIdentity;
+use collaboration_runtime::FleetClient;
 use collaboration_runtime::ProjectStoreRegistry;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 use crate::SubscriptionWindowStore;

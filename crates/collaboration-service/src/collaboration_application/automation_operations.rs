@@ -29,9 +29,11 @@ pub struct AutomationOperations {
     pub(super) configuration: collaboration_runtime::AutomationConfigurationHandle,
     pub(super) configuration_backend:
         Option<std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>>,
-    pub(super) session_delivery: Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>>,
+    pub(super) session_delivery:
+        Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>>,
     pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
-    pub(super) scheduled_run_execution: Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>>,
+    pub(super) scheduled_run_execution:
+        Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>>,
     pub(super) native_backend: Option<collaboration_runtime::NativeControlBackend>,
 }
 
@@ -44,10 +46,16 @@ impl AutomationOperations {
         identity: collaboration_contracts::RouterIdentity,
         automation: Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
         configuration: collaboration_runtime::AutomationConfigurationHandle,
-        configuration_backend: Option<std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>>,
-        session_delivery: Option<std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>>,
+        configuration_backend: Option<
+            std::sync::Arc<dyn collaboration_runtime::AutomationConfigurationBackend>,
+        >,
+        session_delivery: Option<
+            std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery>,
+        >,
         interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
-        scheduled_run_execution: Option<std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>>,
+        scheduled_run_execution: Option<
+            std::sync::Arc<dyn collaboration_contracts::ScheduledRunExecution>,
+        >,
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
     ) -> Self {
         Self {

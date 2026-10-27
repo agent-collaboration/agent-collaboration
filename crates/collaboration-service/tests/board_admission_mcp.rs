@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! V1/V2 enter through the real stateless MCP socket and native project stores.
 #[path = "support/board_fixture.rs"]
 #[expect(
@@ -19,9 +14,9 @@ use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::ApplicationFixture;
 
+use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
-use collaboration_runtime::ProjectStoreRegistry;
 use message_board::*;
 use serde_json::{Value, json};
 use std::sync::Arc;

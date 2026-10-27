@@ -1,6 +1,6 @@
 //! Test-only construction of complete collaboration applications.
-use collaboration_runtime::EndpointDirectory;
 use collaboration_protocol::{EndpointDescription, UuidIdentity};
+use collaboration_runtime::EndpointDirectory;
 
 #[derive(Clone)]
 pub struct ApplicationFixture {

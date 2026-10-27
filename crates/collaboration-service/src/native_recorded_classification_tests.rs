@@ -1,6 +1,6 @@
 //! Request-local route snapshots pin membership without retaining the policy owner.
 use super::*;
-use crate::native_recorded_policy::{
+use collaboration_runtime::test_support::native_recorded_policy::{
     RecordedNativeRouteClassification, classify_recorded_native_route,
     prepare_classified_native_policy,
 };

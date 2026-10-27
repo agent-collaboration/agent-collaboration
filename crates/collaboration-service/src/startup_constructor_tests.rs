@@ -2,16 +2,16 @@
 use super::MailDeliveryRuntime;
 use crate::ApplicationFixture;
 use crate::BoardAvailability;
-use collaboration_contracts::MachineIdentity;
 use crate::MailPushDeliveryProps;
-use collaboration_runtime::SessionDeliveryRouter;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
 use crate::SystemSubscriptionClock;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mail_protocol::{CarrierAcceptance, MailSender, RemoteWakeResult, WakeBody};
 use collaboration_protocol::{
     OperationId, WakeMutationRequest, WakeSendRequest, WakeWaitOutcome, WakeWaitRequest,
 };
+use collaboration_runtime::SessionDeliveryRouter;
 use fleet_sync_delivery::LocalOutcome;
 use fleet_sync_protocol::{DeliveryItem, ItemId, PeerId, Recipient};
 use serde_json::json;

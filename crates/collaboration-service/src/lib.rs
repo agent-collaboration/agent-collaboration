@@ -76,3 +76,24 @@ mod native_control_failure_tests;
 #[cfg(test)]
 mod mail_delivery_projection_tests;
 
+#[cfg(test)]
+mod scheduled_run_route_tests;
+#[cfg(test)]
+mod wakeup_delivery_sender {
+    use agent_automation::DeliveryId;
+    use automation_storage::AutomationStore;
+    use collaboration_protocol::{CodexGeneration, SessionRef};
+    use collaboration_runtime::WakeDeliverySender;
+    use collaboration_runtime::test_support::build_wake_push_draft;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    #[path = "aged_wake_retention_tests.rs"]
+    mod aged_wake_retention_tests;
+    #[path = "../native_delivery_crash_tests.rs"]
+    mod crash_tests;
+}
+
+#[cfg(test)]
+mod native_recorded_permission_tests;
+#[cfg(test)]
+mod native_result_tests;

@@ -1,7 +1,12 @@
 //! U66 / MS-10: bounded wakes expire; age-only history pruning preserves their evidence.
 use super::{WakeDeliverySender, build_wake_push_draft};
-use crate::collaboration_application::{CollaborationApplication, CollaborationRejection};
 use crate::ApplicationFixture;
+use crate::collaboration_application::{CollaborationApplication, CollaborationRejection};
+use agent_automation::{
+    CessationEvidence, ExpiryRule, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
+    SubmissionEffect, TimingRule, WakeState,
+};
+use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_contracts::AttemptReconciliation;
 use collaboration_contracts::AttemptReconciliationContext;
@@ -9,17 +14,6 @@ use collaboration_contracts::DeliveryContractError;
 use collaboration_contracts::DeliveryFuture;
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionMessageDelivery;
-use agent_automation::{
-    CessationEvidence, ExpiryRule, NativeEffectEvidence, PreparationEffect, RouteEffectEvidence,
-    SubmissionEffect, TimingRule, WakeState,
-};
-use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
-
-
-
-
-
-
 
 use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, DeliveryReceipt, MachineId, OperationId, PushDeliveryState,
@@ -146,15 +140,12 @@ async fn evaluate_and_dispatch(
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id.clone(),
     };
-    collaboration_runtime::PushHandoffWorker::new(
-        Arc::clone(store),
-        Arc::clone(&sender.interactions),
-    )
-    .apply_pending()
-    .await?;
+    collaboration_runtime::PushHandoffWorker::new(Arc::clone(store), sender.interaction_store())
+        .apply_pending()
+        .await?;
     sender.dispatch(Arc::clone(store), delivery_id).await?;
     let record = sender
-        .interactions
+        .interaction_store()
         .get_push_record_by_origin_reference(&origin)
         .await?
         .ok_or("actual firing did not store its typed push")?;
@@ -216,14 +207,14 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         .with_automation_store(Arc::clone(&store))
         .with_interaction_store(Arc::clone(&interactions))
         .with_session_delivery(delivery);
-    let sender = WakeDeliverySender {
-        interactions: Arc::clone(&interactions),
-        delivery: identity
+    let sender = WakeDeliverySender::new(
+        Arc::clone(&interactions),
+        identity
             .session_message_delivery()
             .ok_or("composed wake delivery missing")?,
-        configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
-        machine_identity: machine.clone(),
-    };
+        collaboration_runtime::AutomationConfigurationHandle::default(),
+        machine.clone(),
+    );
     let application = (identity.clone()).build();
 
     let (old_push, old_occurrence) =

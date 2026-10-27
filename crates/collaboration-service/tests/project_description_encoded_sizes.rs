@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Measure actual JSON pieces and snapshot pages; count-based paging is unchanged.
 #![expect(
     clippy::panic_in_result_fn,

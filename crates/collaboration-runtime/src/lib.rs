@@ -92,10 +92,9 @@ mod codex_app_server_delivery_route;
 mod codex_app_server_scheduled_runs;
 mod codex_queue_reconciliation;
 mod interaction_broker;
-pub mod message_effect_state;
+mod message_effect_state;
+pub use message_effect_state::classify_native_rejection;
 mod native_message_dispatch;
-#[cfg(test)]
-mod native_recorded_permission_tests;
 mod native_recorded_policy;
 pub use codex_app_server_delivery_route::CodexAppServerDeliveryRoute;
 pub use codex_app_server_scheduled_runs::CodexAppServerScheduledRuns;
@@ -154,3 +153,10 @@ pub use wakeup_delivery_sender::WakeDeliverySender;
 #[cfg(test)]
 #[path = "../tests/support/native_worker_faults.rs"]
 mod native_worker_faults;
+
+/// Test-only schedule execution fixtures shared with application inspection tests.
+#[cfg(any(test, feature = "test-support"))]
+pub mod scheduled_route_fixture;
+/// Test-only hooks for causal runtime steps observed through the application.
+#[cfg(feature = "test-support")]
+pub mod test_support;

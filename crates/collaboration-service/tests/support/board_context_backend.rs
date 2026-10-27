@@ -1,8 +1,8 @@
 //! A native metadata stand-in; project routing and project reads stay real.
 use super::TestError;
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{

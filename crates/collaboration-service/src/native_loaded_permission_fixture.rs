@@ -160,7 +160,7 @@ pub(super) fn policy_server(
                     }
                     "turn/start" => {
                         if let Some((store, run_id)) = &scenario.stored_run {
-                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,crate::stored_run_receipt::StoredRunReceipt>(run_id).await?;
+                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
                             if record.evidence.timing.is_none()
                                 || !matches!(record.evidence.route,Some(RouteEffectEvidence::CodexAppServer(effects)) if effects.submission==agent_automation::SubmissionEffect::Dispatching && effects.resume==agent_automation::PreparationEffect::Accepted)
                             {

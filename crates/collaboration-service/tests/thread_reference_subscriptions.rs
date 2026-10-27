@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Membership commands and poll filters retain each ThreadRef's project qualification.
 #[path = "support/board_fixture.rs"]
 #[expect(

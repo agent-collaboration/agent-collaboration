@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Recorded task/link/subtask mutations must be visible through the actual view tool.
 #[path = "support/board_fixture.rs"]
 #[expect(

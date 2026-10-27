@@ -4,7 +4,7 @@ use collaboration_protocol::SessionRef;
 use std::sync::Weak;
 
 #[derive(Clone)]
-pub(crate) enum RecordedNativeRouteClassification {
+pub enum RecordedNativeRouteClassification {
     GenericRoute,
     RecordedRoute {
         recorded_route: Box<ApprovalRoute>,
@@ -19,7 +19,7 @@ impl RecordedNativeRouteClassification {
     }
 }
 
-pub(crate) async fn classify_recorded_native_route(
+pub async fn classify_recorded_native_route(
     broker: Option<&Weak<dyn ApprovalBroker>>,
     target: &SessionRef,
 ) -> RecordedNativeRouteClassification {
@@ -39,7 +39,7 @@ pub(crate) async fn classify_recorded_native_route(
     }
 }
 
-pub(crate) async fn prepare_classified_native_policy(
+pub async fn prepare_classified_native_policy(
     classification: &RecordedNativeRouteClassification,
     target: &SessionRef,
     working_directory: Option<&str>,

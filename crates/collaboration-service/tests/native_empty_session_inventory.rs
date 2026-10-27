@@ -2,9 +2,9 @@ use collaboration_protocol::{
     CodexGeneration, NativeSessionListParams, NativeSessionObservation, NativeSessionScope,
     NativeSessionSource, NativeSessionView, SessionRef,
 };
-use collaboration_service::ApplicationFixture;
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, sync::Arc};

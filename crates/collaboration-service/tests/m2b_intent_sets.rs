@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::match_wildcard_for_single_variants,
-    reason = "lint pass follows the crate split"
-)]
 //! NI-2 actor-by-actor re-resolution through real native claim transactions.
 #[path = "support/board_fixture.rs"]
 #[expect(

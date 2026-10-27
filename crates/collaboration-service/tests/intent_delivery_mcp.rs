@@ -1,9 +1,5 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Real board admission, renderer, prepared push and Layer-0 routing; only the agent endpoint stands in.
+use collaboration_service::ApplicationFixture;
 #[path = "support/board_fixture.rs"]
 #[expect(
     dead_code,
@@ -28,9 +24,9 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::{
-    BoardAvailability, CollaborationApplication, IntentReply, MailPushDeliveryProps,
-    NotificationPublisher, ProjectAdmission, ProjectAdmissionProps,
-    SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
+    BoardAvailability, IntentReply, MailPushDeliveryProps, NotificationPublisher, ProjectAdmission,
+    ProjectAdmissionProps, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
+    SystemSubscriptionClock,
 };
 use message_board::*;
 use serde_json::{Value, json};

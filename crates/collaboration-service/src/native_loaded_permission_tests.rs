@@ -104,13 +104,15 @@ async fn scheduled_route_reports_narrowing_but_refuses_missing_directory() {
             },
         )
         .unwrap();
-        let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
+        let directory = collaboration_runtime::EndpointDirectory::new(
+            fixture.backend.endpoint.service_id.clone(),
+        );
         directory.publish(fixture.endpoint.clone()).unwrap();
-        let route = crate::CodexAppServerDeliveryRoute::new(
+        let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
             fixture.backend.endpoint.service_id.clone(),
             directory,
             fixture.backend.clone(),
-            Arc::new(crate::UnmaterializedThreadHolder::new()),
+            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
         )
         .with_approval_broker(&fixture.broker);
         let scheduled = route.scheduled_runs().unwrap();
@@ -334,13 +336,14 @@ async fn scheduled_matching_loaded_policy_preserves_idle_admission_and_intent_or
         },
     )
     .unwrap();
-    let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
+    let directory =
+        collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone()).unwrap();
-    let route = crate::CodexAppServerDeliveryRoute::new(
+    let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),
-        Arc::new(crate::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     )
     .with_approval_broker(&fixture.broker);
     let scheduled = route.scheduled_runs().unwrap();
@@ -404,13 +407,14 @@ async fn scheduled_generation_retired_during_loaded_validation_never_submits_inp
         },
     )
     .unwrap();
-    let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
+    let directory =
+        collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone()).unwrap();
-    let route = crate::CodexAppServerDeliveryRoute::new(
+    let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),
-        Arc::new(crate::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     )
     .with_approval_broker(&fixture.broker);
     let scheduled = route.scheduled_runs().unwrap();

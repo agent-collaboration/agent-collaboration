@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 use codex_acp_adapter::{AcpSchemaCatalog, NativeStoredSessions};
 use collaboration_contracts::HubEvent;
 use collaboration_contracts::SessionCommandPort;

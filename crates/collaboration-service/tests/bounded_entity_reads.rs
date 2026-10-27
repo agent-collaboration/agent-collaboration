@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Entity pages select keys before decoding the returned records.
 #[path = "support/board_fixture.rs"]
 #[expect(

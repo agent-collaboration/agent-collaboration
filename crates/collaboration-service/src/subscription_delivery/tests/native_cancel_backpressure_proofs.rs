@@ -176,15 +176,16 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             Arc::downgrade(&native.runtime_handle()),
         ));
         let app = Arc::new((identity.with_notification_publisher(publisher.clone())).build());
-        let control: fleet_sync_protocol::DeliveryCancel<collaboration_contracts::RouterDeliveryTypes> =
-            match serde_json::from_value::<DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>>(
-                frozen.clone(),
-            )
-            .unwrap()
-            {
-                DeliveryEnvelope::Cancel(control) => control,
-                DeliveryEnvelope::Item(_) => panic!("frozen child control"),
-            };
+        let control: fleet_sync_protocol::DeliveryCancel<
+            collaboration_contracts::RouterDeliveryTypes,
+        > = match serde_json::from_value::<
+            DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>,
+        >(frozen.clone())
+        .unwrap()
+        {
+            DeliveryEnvelope::Cancel(control) => control,
+            DeliveryEnvelope::Item(_) => panic!("frozen child control"),
+        };
         let refusal = native
             .runtime()
             .enqueue_project_cancel(control, epoch)

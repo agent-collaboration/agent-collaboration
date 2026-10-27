@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Cold bare-post lookup must not open any of the 8/80 unrelated native files.
 #[path = "support/board_fixture.rs"]
 #[expect(

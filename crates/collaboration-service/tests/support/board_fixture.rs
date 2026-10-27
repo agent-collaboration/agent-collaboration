@@ -6,7 +6,6 @@ use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_service as mail_service;
 use collaboration_service::ApplicationFixture;
 
-
 use collaboration_service::ProjectAdmission;
 use collaboration_service::ProjectAdmissionProps;
 

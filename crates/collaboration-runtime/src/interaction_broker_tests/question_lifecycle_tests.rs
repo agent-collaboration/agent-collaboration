@@ -97,7 +97,7 @@ async fn typed_approval_preserves_cursor_choices_and_returns_exact_option_id() {
         .await
         .expect("persistent choice");
     assert_eq!(receipt.option_id.as_deref(), Some("allow-always"));
-    let collaboration_runtime::interaction_broker::TypedApprovalResolution::Selected(selected) =
+    let crate::interaction_broker::TypedApprovalResolution::Selected(selected) =
         receiver.await.expect("agent option ID")
     else {
         panic!("selection expected");
@@ -195,7 +195,7 @@ async fn claude_choices_resolve_legacy_decisions_without_inventing_an_option() {
         .expect("legacy decline");
     assert_eq!(receipt.decision, Some(ApprovalDecision::Deny));
     assert!(matches!(receiver.await.expect("agent option ID"),
-        collaboration_runtime::interaction_broker::TypedApprovalResolution::Selected(selected)
+        crate::interaction_broker::TypedApprovalResolution::Selected(selected)
             if selected.option_id.as_str() == "no-once"));
 }
 
@@ -203,7 +203,7 @@ async fn claude_choices_resolve_legacy_decisions_without_inventing_an_option() {
 // against the advertised fields before the agent receives an ACP action.
 #[tokio::test]
 async fn typed_question_checks_fields_and_keeps_answer_decline_cancel_distinct() {
-    use collaboration_runtime::interaction_broker::QuestionResponse;
+    use crate::interaction_broker::QuestionResponse;
     use message_board::{HumanId, Identity};
 
     let (broker, _generation, _directory) = fixture_broker().await;
@@ -236,7 +236,7 @@ async fn typed_question_checks_fields_and_keeps_answer_decline_cancel_distinct()
                 None,
             )
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::SelfApprover)
+        Err(crate::interaction_broker::InteractionHistoryError::SelfApprover)
     ));
     let duplicate_fields = serde_json::from_value(json!({
         "requestId":"duplicate-fields","prompt":"Choose settings","fields":[
@@ -249,7 +249,7 @@ async fn typed_question_checks_fields_and_keeps_answer_decline_cancel_distinct()
         broker
             .request_question(requester.clone(), approver.clone(), duplicate_fields, None)
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::InvalidQuestion)
+        Err(crate::interaction_broker::InteractionHistoryError::InvalidQuestion)
     ));
     let receiver = broker
         .request_question(
@@ -291,14 +291,14 @@ async fn typed_question_checks_fields_and_keeps_answer_decline_cancel_distinct()
         broker.respond_question("q-answer", &approver, QuestionResponse::Answered {
             content: serde_json::from_value(json!({"count":3,"dryRun":true,"color":{"selectedOptionIds":["green"]},"features":{"selectedOptionIds":["a","b"]}})).expect("content"),
         }).await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::InvalidAnswer { field_id }) if field_id == "color"
+        Err(crate::interaction_broker::InteractionHistoryError::InvalidAnswer { field_id }) if field_id == "color"
     ));
     assert_eq!(broker.list_questions(true).await.len(), 1);
     assert!(matches!(
         broker.respond_question("q-answer", &approver, QuestionResponse::Answered {
             content: serde_json::from_value(json!({"count":3,"dryRun":true,"color":{"selectedOptionIds":["blue-id"]},"features":{"selectedOptionIds":["a","unknown"]}})).expect("content"),
         }).await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::InvalidAnswer { field_id }) if field_id == "features"
+        Err(crate::interaction_broker::InteractionHistoryError::InvalidAnswer { field_id }) if field_id == "features"
     ));
     broker
         .respond_question("q-answer", &approver, answer.clone())
@@ -337,7 +337,7 @@ async fn typed_question_checks_fields_and_keeps_answer_decline_cancel_distinct()
 // R1: a Turn cancellation answers every pending question before the Turn ends.
 #[tokio::test]
 async fn cancelling_a_session_answers_its_pending_questions_only() {
-    use collaboration_runtime::interaction_broker::QuestionResponse;
+    use crate::interaction_broker::QuestionResponse;
     use message_board::{HumanId, Identity};
 
     let (broker, _generation, _directory) = fixture_broker().await;
@@ -404,8 +404,8 @@ async fn cancelling_a_session_answers_its_pending_questions_only() {
     assert!(
         all.iter()
             .filter(|record| matches!(record,
-                collaboration_runtime::interaction_broker::InteractionHistoryRecord::Question {
-                    state: collaboration_runtime::interaction_broker::QuestionHistoryState::Cancelled { reason }, ..
+                crate::interaction_broker::InteractionHistoryRecord::Question {
+                    state: crate::interaction_broker::QuestionHistoryState::Cancelled { reason }, ..
                 } if reason.as_str() == "turn cancelled"
             ))
             .count()
@@ -416,7 +416,7 @@ async fn cancelling_a_session_answers_its_pending_questions_only() {
 // R2: an agent withdrawal settles only its own request.
 #[tokio::test]
 async fn agent_withdrawal_cancels_one_question_without_touching_the_next() {
-    use collaboration_runtime::interaction_broker::QuestionResponse;
+    use crate::interaction_broker::QuestionResponse;
     use message_board::{HumanId, Identity};
 
     let (broker, _generation, _directory) = fixture_broker().await;
@@ -521,16 +521,16 @@ async fn restart_cancels_populated_pending_interaction_history() {
     assert!(broker_after_restart.list_questions(true).await.is_empty());
     let records = stored_interaction_records(&directory).await;
     assert!(matches!(records["restart-approval"].approval_state(),
-        Some(collaboration_runtime::interaction_broker::InteractionHistoryState::Cancelled { reason }) if reason.as_str() == "hostRestarted"));
+        Some(crate::interaction_broker::InteractionHistoryState::Cancelled { reason }) if reason.as_str() == "hostRestarted"));
     assert!(matches!(&records["restart-question"],
-        collaboration_runtime::interaction_broker::InteractionHistoryRecord::Question {
-            state: collaboration_runtime::interaction_broker::QuestionHistoryState::Cancelled { reason }, ..
+        crate::interaction_broker::InteractionHistoryRecord::Question {
+            state: crate::interaction_broker::QuestionHistoryState::Cancelled { reason }, ..
         } if reason.as_str() == "hostRestarted"));
     assert!(matches!(
         broker_after_restart
             .decide_typed_interaction("restart-approval", &approver, select_typed("allow-once"))
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::AlreadySettled)
+        Err(crate::interaction_broker::InteractionHistoryError::AlreadySettled)
     ));
     assert!(matches!(
         broker_after_restart
@@ -550,10 +550,10 @@ async fn restart_cancels_populated_pending_interaction_history() {
             .respond_question(
                 "restart-question",
                 &approver,
-                collaboration_runtime::interaction_broker::QuestionResponse::Declined
+                crate::interaction_broker::QuestionResponse::Declined
             )
             .await,
-        Err(collaboration_runtime::interaction_broker::InteractionHistoryError::AlreadySettled)
+        Err(crate::interaction_broker::InteractionHistoryError::AlreadySettled)
     ));
     assert!(approval_receiver.await.is_err());
     assert!(question_receiver.await.is_err());

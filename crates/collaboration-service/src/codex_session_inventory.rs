@@ -299,10 +299,11 @@ impl CodexSessionInventory {
         if matches!(params.view, NativeSessionView::Stored)
             && let Some(store) = self.journal.as_deref()
         {
-            let observer = collaboration_runtime::stored_inventory_observation::StoredInventoryObservation {
-                store,
-                observer_id: self.identity.service_epoch(),
-            };
+            let observer =
+                collaboration_runtime::stored_inventory_observation::StoredInventoryObservation {
+                    store,
+                    observer_id: self.identity.service_epoch(),
+                };
             // A storage failure invalidates C10 through LifecycleStore; it does not
             // turn a successful read-only catalog operation into a native failure.
             let _recorded = observer.record_page(&page).await;

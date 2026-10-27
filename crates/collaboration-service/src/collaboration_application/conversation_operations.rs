@@ -65,7 +65,9 @@ macro_rules! submitted_operations {
 impl ConversationOperations {
     pub fn new(
         identity: collaboration_contracts::RouterIdentity,
-        provider_conversations: Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
+        provider_conversations: Option<
+            std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>,
+        >,
         provider_operations: Option<
             std::sync::Arc<tokio::sync::Mutex<collaboration_runtime::ProviderOperationStore>>,
         >,

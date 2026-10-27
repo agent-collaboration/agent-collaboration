@@ -1712,7 +1712,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-contracts"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -1813,7 +1813,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-runtime"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -7647,7 +7647,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-architecture-check"
-version = "0.1.103"
+version = "0.1.104"
 dependencies = [
  "serde",
  "serde_json",

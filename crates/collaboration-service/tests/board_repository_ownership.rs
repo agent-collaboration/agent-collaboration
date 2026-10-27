@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Foreign local locators are refused at every public boundary before metadata changes.
 use serde_json::json;
 #[path = "support/board_fixture.rs"]

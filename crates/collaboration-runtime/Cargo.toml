@@ -6,6 +6,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
+test-support = []
 runtime-test-support = ["interaction-storage/runtime-test-support"]
 
 [lints]

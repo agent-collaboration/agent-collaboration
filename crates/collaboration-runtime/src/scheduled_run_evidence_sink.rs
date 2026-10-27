@@ -15,7 +15,7 @@ use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-pub(crate) struct StoredRunEvidenceSink {
+pub struct StoredRunEvidenceSink {
     store: Arc<Mutex<AutomationStore>>,
     configuration: AutomationConfigurationHandle,
     run_id: RunId,
@@ -24,7 +24,7 @@ pub(crate) struct StoredRunEvidenceSink {
 }
 
 impl StoredRunEvidenceSink {
-    pub(crate) fn new(
+    pub fn new(
         store: Arc<Mutex<AutomationStore>>,
         configuration: AutomationConfigurationHandle,
         run_id: RunId,
@@ -40,7 +40,7 @@ impl StoredRunEvidenceSink {
         }
     }
 
-    pub(crate) async fn latest(&self) -> Option<RouteEffectEvidence<SessionRef, CodexGeneration>> {
+    pub async fn latest(&self) -> Option<RouteEffectEvidence<SessionRef, CodexGeneration>> {
         self.latest.lock().await.clone()
     }
 

@@ -28,23 +28,19 @@ pub(crate) async fn store_first_and_deliver(
 
 #[cfg(test)]
 mod tests {
+    use crate::ApplicationFixture;
     use crate::BoardAvailability;
     use crate::SubscriptionDeliveryService;
     use crate::SubscriptionDeliveryServiceProps;
     use crate::SystemSubscriptionClock;
     use crate::collaboration_application::CollaborationRejection;
-    use crate::ApplicationFixture;
 
     use collaboration_contracts::MachineIdentity;
-    use collaboration_runtime::SessionDeliveryRouter;
     use collaboration_contracts::SessionMessageDelivery;
+    use collaboration_runtime::SessionDeliveryRouter;
 
-
-
-    use collaboration_contracts::TargetPresenceProbe;
     use automation_storage::AutomationStore;
-
-
+    use collaboration_contracts::TargetPresenceProbe;
 
     use collaboration_protocol::{
         EndpointId, EndpointRef, MessageContent, MessageDelivery, PushDeliveryState, RouterLink,

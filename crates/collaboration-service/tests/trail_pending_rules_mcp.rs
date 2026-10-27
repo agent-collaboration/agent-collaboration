@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Reserved pending tags use current workstream authority and explicit blocked-record links.
 #[path = "support/board_fixture.rs"]
 #[expect(

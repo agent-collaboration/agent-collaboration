@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Task corrections are observed through actual MCP admission and native project records.
 #[path = "support/board_fixture.rs"]
 #[expect(

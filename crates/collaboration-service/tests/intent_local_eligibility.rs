@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! C5 leaves foreign recipients for P3 without a claim, ledger entry or feed write.
 #[path = "support/board_fixture.rs"]
 #[expect(

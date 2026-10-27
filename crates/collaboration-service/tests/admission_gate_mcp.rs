@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! V2 gates keep unrecorded authority outcomes distinct from terminal decisions.
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;

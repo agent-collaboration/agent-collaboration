@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! A later native local-store failure cannot strand an earlier known-unsent selection.
 #[path = "support/board_fixture.rs"]
 #[expect(

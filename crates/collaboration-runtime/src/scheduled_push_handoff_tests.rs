@@ -1,5 +1,5 @@
 //! Real worker outcomes remain owed until the native owner commits and automation acknowledges.
-use super::route_tests::{
+use crate::scheduled_route_fixture::{
     FakeSettlementPlan, FakeSubmissionPlan, TestResult, provider_worker_fixture,
 };
 use agent_automation::RunPhase;

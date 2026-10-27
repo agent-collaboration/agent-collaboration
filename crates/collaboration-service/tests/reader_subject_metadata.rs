@@ -1,9 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    clippy::large_futures,
-    reason = "lint pass follows the crate split"
-)]
 //! Saved decisions survive unrelated body corruption while subject metadata stays validated.
 #[path = "support/board_fixture.rs"]
 #[expect(

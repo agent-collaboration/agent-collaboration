@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! M2.5b preserves project_records' metadata, corruption and bounded hierarchy claims.
 #[path = "support/board_fixture.rs"]
 #[expect(

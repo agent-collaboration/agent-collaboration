@@ -116,7 +116,7 @@ pub(crate) async fn read_native_thread_status(
     })
 }
 
-pub(crate) struct NativeMessageRequest<'a> {
+pub struct NativeMessageRequest<'a> {
     pub attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
     pub params: NativeMessageParams,
     pub id: Value,
@@ -131,7 +131,7 @@ pub(crate) struct NativeMessageRequest<'a> {
     pub attempt_deadline: Option<tokio::time::Instant>,
 }
 
-pub(crate) struct NativeMessageParams {
+pub struct NativeMessageParams {
     pub target: SessionRef,
     pub generation: CodexGeneration,
     pub body: NativeMessageBody,
@@ -139,7 +139,7 @@ pub(crate) struct NativeMessageParams {
     pub client_user_message_id: Option<NonEmptyText>,
 }
 
-pub(crate) enum NativeMessageBody {
+pub enum NativeMessageBody {
     PreparedPush(MessageText),
 }
 
@@ -153,14 +153,12 @@ fn render_native_message(body: &NativeMessageBody) -> RenderedMessage {
     }
 }
 
-pub(crate) enum NativeMessageOutcome {
+pub enum NativeMessageOutcome {
     Accepted(NativeSendReceipt),
     Failed(NativeMessageFailure),
 }
 
-pub(crate) async fn dispatch_message(
-    mut request: NativeMessageRequest<'_>,
-) -> NativeMessageOutcome {
+pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMessageOutcome {
     let deadline = request
         .attempt_deadline
         .unwrap_or_else(|| tokio::time::Instant::now() + std::time::Duration::from_secs(30));

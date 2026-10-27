@@ -1,8 +1,3 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 //! Holder-side admission consumes a fixture verified origin; central routing remains G3.
 #![expect(
     clippy::panic_in_result_fn,

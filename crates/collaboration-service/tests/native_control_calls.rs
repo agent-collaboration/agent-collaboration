@@ -1,17 +1,12 @@
-#![expect(
-    clippy::allow_attributes,
-    clippy::allow_attributes_without_reason,
-    reason = "lint pass follows the crate split"
-)]
 use collaboration_client::{ClientError, MessageSendRequest, PublicMessageContent};
 use collaboration_contracts::MachineIdentity;
 use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{CodexGeneration, EndpointDescription, SessionRef};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
 use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
-use collaboration_runtime::CodexAppServerDeliveryRoute;
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
