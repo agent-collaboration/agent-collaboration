@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn only_reader_posts_renew_the_subscription() -> Result<(), TestError> {
     let fixture = SubscriptionFixture::joined().await?;
     let scope = SubscriptionScope::thread(fixture.root.clone());
@@ -40,7 +43,10 @@ async fn only_reader_posts_renew_the_subscription() -> Result<(), TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn explicit_renewal_extends_policy_lifetime_and_off_rows_still_expire()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;

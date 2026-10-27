@@ -1,7 +1,10 @@
 use super::membership_completion::join_operation;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn old_settlement_after_cancel_and_resubscribe_preserves_replacement_window_and_outcome()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -128,7 +131,10 @@ async fn old_settlement_after_cancel_and_resubscribe_preserves_replacement_windo
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p3_late_settlement_after_rejoin_cannot_cross_the_new_watch_boundary()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -206,7 +212,10 @@ async fn p3_late_settlement_after_rejoin_cannot_cross_the_new_watch_boundary()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p8_rejoin_after_unsubscribe_starts_after_activity_while_unsubscribed()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -260,7 +269,10 @@ async fn p8_rejoin_after_unsubscribe_starts_after_activity_while_unsubscribed()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p8_first_join_by_existing_watcher_starts_after_prior_activity() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     let reader = fixture.reader.clone();
@@ -298,7 +310,10 @@ async fn p8_first_join_by_existing_watcher_starts_after_prior_activity() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn q1_rejoin_while_active_keeps_pending_window() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();

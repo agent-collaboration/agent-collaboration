@@ -1,6 +1,5 @@
 //! Direct messages: store-first sends and replies, push inspection, inbox and history.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::ServiceIdentity;
 use crate::push_record_delivery::{PushDeliveryFailure, store_first_and_deliver};
 use crate::push_record_resolver::{
     ActivityReadError, ReferenceError, caller_is_local, can_read, expand_activity_ranges, link_for,
@@ -21,20 +20,36 @@ mod message_cancel_operations;
 mod message_status_operations;
 
 /// Direct-message operations over the push store and the subscription delivery owner.
-pub struct MessageOperations<'service> {
-    identity: &'service ServiceIdentity,
+pub struct MessageOperations {
+    pub(super) identity: crate::RouterIdentity,
+    pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
+    pub(super) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
+    pub(super) display_names: crate::SessionDisplayNameCache,
+    pub(super) registry: Option<std::sync::Arc<crate::ProjectStoreRegistry>>,
 }
 
-impl<'service> MessageOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl MessageOperations {
+    pub fn new(
+        identity: crate::RouterIdentity,
+        interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
+        mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
+        display_names: crate::SessionDisplayNameCache,
+        registry: Option<std::sync::Arc<crate::ProjectStoreRegistry>>,
+    ) -> Self {
+        Self {
+            identity,
+            interaction_store,
+            mail_delivery,
+            display_names,
+            registry,
+        }
     }
 
     fn push_store(
         &self,
         stage: MessageFailureStage,
-    ) -> Result<&'service Arc<InteractionStore>, MessageFailure> {
-        self.identity.interaction_store.as_ref().ok_or_else(|| {
+    ) -> Result<&Arc<InteractionStore>, MessageFailure> {
+        self.interaction_store.as_ref().ok_or_else(|| {
             MessageFailure::new(
                 MessageFailureKind::Unavailable,
                 stage,
@@ -48,10 +63,10 @@ impl<'service> MessageOperations<'service> {
         &self,
         request: SessionMessageSendParams,
     ) -> Result<MessageSendResult, MessageFailure> {
-        let identity = self.identity;
+        let identity = &self.identity;
         let (origin, sender_display_name, text) = match request.message {
             MessageContent::Agent { sender, text } => {
-                if sender.endpoint.service_id != identity.service_id {
+                if sender.endpoint.service_id != *identity.service_id() {
                     return Err(MessageFailure::discovery(
                         MessageFailureKind::WrongService,
                         "Message sender belongs to another Router",
@@ -59,11 +74,7 @@ impl<'service> MessageOperations<'service> {
                 }
                 (
                     PushOrigin::Session(sender.clone()),
-                    identity
-                        .display_names
-                        .display_name_for(&sender)
-                        .ok()
-                        .flatten(),
+                    self.display_names.display_name_for(&sender).ok().flatten(),
                     text.as_str().to_owned(),
                 )
             }
@@ -111,8 +122,8 @@ impl<'service> MessageOperations<'service> {
         &self,
         request: SessionMessageReplyParams,
     ) -> Result<MessageReplyResult, MessageFailure> {
-        let identity = self.identity;
-        if request.caller.endpoint.service_id != identity.service_id {
+        let identity = &self.identity;
+        if request.caller.endpoint.service_id != *identity.service_id() {
             return Err(MessageFailure::discovery(
                 MessageFailureKind::WrongService,
                 "Reply caller belongs to another Router",
@@ -146,7 +157,6 @@ impl<'service> MessageOperations<'service> {
         request: SessionMessageReplyParams,
         source: PushRecord,
     ) -> Result<MessageReplyResult, MessageFailure> {
-        let identity = self.identity;
         if source.kind != PushKind::DirectMessage {
             return Err(MessageFailure::discovery(
                 MessageFailureKind::NotDirectMessage,
@@ -175,7 +185,7 @@ impl<'service> MessageOperations<'service> {
             target: origin.clone(),
             reply_to_push_id: Some(source.push_id.clone()),
             header_facts: PushHeaderFacts::DirectMessage {
-                sender_display_name: identity
+                sender_display_name: self
                     .display_names
                     .display_name_for(&request.caller)
                     .ok()
@@ -210,12 +220,17 @@ impl<'service> MessageOperations<'service> {
         draft: PushRecordDraft,
         target_identity: String,
     ) -> Result<MessageSendResult, MessageFailure> {
-        let result = if draft.target.endpoint.service_id == self.identity.service_id {
-            store_first_and_deliver(draft, target_identity, self.identity)
-                .await
-                .map(MessageSendResult::Local)
+        let result = if draft.target.endpoint.service_id == *self.identity.service_id() {
+            store_first_and_deliver(
+                draft,
+                target_identity,
+                self.interaction_store.as_ref(),
+                self.mail_delivery.as_ref(),
+            )
+            .await
+            .map(MessageSendResult::Local)
         } else {
-            let runtime = self.identity.mail_delivery.as_ref().ok_or_else(|| {
+            let runtime = self.mail_delivery.as_ref().ok_or_else(|| {
                 MessageFailure::discovery(
                     MessageFailureKind::Unavailable,
                     "Remote message delivery is not configured",
@@ -231,7 +246,7 @@ impl<'service> MessageOperations<'service> {
         &self,
         request: PushRecordShowParams,
     ) -> Result<PushRecordShowResult, MessageFailure> {
-        let identity = self.identity;
+        let identity = &self.identity;
         let stage = MessageFailureStage::Inspect;
         if !caller_is_local(&request.caller, identity) {
             return Err(MessageFailure::new(
@@ -282,7 +297,7 @@ impl<'service> MessageOperations<'service> {
                 }
             };
         }
-        let activity_ranges = expand_activity_ranges(&record, identity)
+        let activity_ranges = expand_activity_ranges(&record, self.registry.as_ref())
             .await
             .map_err(|error| {
                 let message = match error {
@@ -303,7 +318,7 @@ impl<'service> MessageOperations<'service> {
         &self,
         request: PushRecordListParams,
     ) -> Result<PushRecordListResult, MessageFailure> {
-        if !caller_is_local(&request.caller, self.identity) {
+        if !caller_is_local(&request.caller, &self.identity) {
             return Err(MessageFailure::discovery(
                 MessageFailureKind::WrongService,
                 "Caller belongs to another Router",
@@ -333,7 +348,7 @@ impl<'service> MessageOperations<'service> {
         &self,
         records: Vec<PushRecord>,
     ) -> Result<PushRecordListResult, MessageFailure> {
-        let records = make_notice_list(records, self.identity).map_err(|_| {
+        let records = make_notice_list(records, &self.identity).map_err(|_| {
             MessageFailure::discovery(
                 MessageFailureKind::Unavailable,
                 "Push notice could not be rendered",
@@ -347,7 +362,7 @@ impl<'service> MessageOperations<'service> {
         reference: &str,
         stage: MessageFailureStage,
     ) -> Result<PushId, MessageFailure> {
-        resolve_reference(reference, self.identity).map_err(|error| match error {
+        resolve_reference(reference, &self.identity).map_err(|error| match error {
             ReferenceError::Invalid => MessageFailure::new(
                 MessageFailureKind::InvalidField,
                 stage,
@@ -362,12 +377,7 @@ impl<'service> MessageOperations<'service> {
     }
 
     fn target_identity(&self, target: &SessionRef) -> String {
-        let display_name = self
-            .identity
-            .display_names
-            .display_name_for(target)
-            .ok()
-            .flatten();
+        let display_name = self.display_names.display_name_for(target).ok().flatten();
         session_identity(target, display_name.as_ref())
     }
 
@@ -412,7 +422,7 @@ impl<'service> MessageOperations<'service> {
             ),
             PushDeliveryFailure::DeliveryUnknown(push_id) => {
                 let link = RouterLink::new(
-                    MachineId::from(self.identity.machine_identity.service_id().clone()),
+                    MachineId::from(self.identity.machine_identity().service_id().clone()),
                     push_id,
                 );
                 MessageFailure::new(

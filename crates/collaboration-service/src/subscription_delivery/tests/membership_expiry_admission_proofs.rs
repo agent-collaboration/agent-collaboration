@@ -53,7 +53,7 @@ async fn expiry_groups(fixture: &OwnerFixture, member: &SubscriptionMembership) 
 
 #[tokio::test]
 async fn expiry_admission_writes_one_router_end_and_is_idempotent() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let original = membership(&fixture).await;
     assert!(
         fixture
@@ -84,7 +84,7 @@ async fn expiry_admission_writes_one_router_end_and_is_idempotent() {
 
 #[tokio::test]
 async fn expiry_admission_rechecks_a_membership_renewed_after_the_proposal_was_read() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let original = membership(&fixture).await;
     let stale = proposal(&original);
     fixture
@@ -114,7 +114,7 @@ async fn expiry_admission_rechecks_a_membership_renewed_after_the_proposal_was_r
 #[tokio::test]
 async fn concurrent_renewal_and_expiry_commit_one_of_the_two_serialized_states() {
     for renew_polled_first in [true, false] {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let original = membership(&fixture).await;
         let renewal = fixture.write_as(
             fixture.reader.clone(),

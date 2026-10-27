@@ -1,5 +1,6 @@
 //! Compose and drain the production mail owner around a fixture's native reader actors.
-use super::mail_service::{MailDeliveryRuntime, MailPushDeliveryProps, ServiceIdentity};
+
+use super::mail_service::{ApplicationFixture, MailDeliveryRuntime, MailPushDeliveryProps};
 use fleet_sync_protocol::PeerId;
 use interaction_storage::InteractionStore;
 use std::{io, sync::Arc, time::Duration};
@@ -16,22 +17,22 @@ pub struct NativeMailOwner {
 }
 
 impl NativeMailOwner {
-    #[allow(dead_code)] // Host proofs supply a prepared session instead.
+    // Host proofs supply a prepared session instead.
     pub fn start(
-        identity: ServiceIdentity,
+        identity: ApplicationFixture,
         peer: PeerId,
         props: MailPushDeliveryProps,
-    ) -> Result<(ServiceIdentity, Self), FixtureError> {
+    ) -> Result<(ApplicationFixture, Self), FixtureError> {
         Self::start_with_session(identity, peer, props, None)
     }
 
-    #[allow(dead_code)] // Host publisher proofs borrow their one actual prepared session.
+    // Host publisher proofs borrow their one actual prepared session.
     pub fn start_with_session(
-        identity: ServiceIdentity,
+        identity: ApplicationFixture,
         peer: PeerId,
         props: MailPushDeliveryProps,
         session: Option<super::mail_service::MailDeliverySession>,
-    ) -> Result<(ServiceIdentity, Self), FixtureError> {
+    ) -> Result<(ApplicationFixture, Self), FixtureError> {
         let interactions = props.interactions.clone();
         let mail = Arc::new(MailDeliveryRuntime::new(peer, props, session)?);
         Self::start_prepared(identity, peer, interactions, mail)
@@ -40,11 +41,11 @@ impl NativeMailOwner {
     // Unit quota proofs prepare the same runtime with smaller SDK limits.
     // This is the only runner, and identity validates the physical owner pair.
     pub fn start_prepared(
-        identity: ServiceIdentity,
+        identity: ApplicationFixture,
         peer: PeerId,
         interactions: Arc<InteractionStore>,
         mail: Arc<MailDeliveryRuntime>,
-    ) -> Result<(ServiceIdentity, Self), FixtureError> {
+    ) -> Result<(ApplicationFixture, Self), FixtureError> {
         let identity = identity
             .with_interaction_store(interactions.clone())
             .with_installation_peer(peer)
@@ -66,22 +67,22 @@ impl NativeMailOwner {
         ))
     }
 
-    #[allow(dead_code)] // Only lifecycle proofs inspect SDK custody through its owning runtime.
+    // Only lifecycle proofs inspect SDK custody through its owning runtime.
     pub fn runtime(&self) -> &MailDeliveryRuntime {
         &self.mail
     }
 
-    #[allow(dead_code)] // Host composition keeps the same owner behind its weak session port.
+    // Host composition keeps the same owner behind its weak session port.
     pub fn runtime_handle(&self) -> Arc<MailDeliveryRuntime> {
         self.mail.clone()
     }
 
-    #[allow(dead_code)] // Only the shutdown lifecycle proof stops the owner before its client returns.
+    // Only the shutdown lifecycle proof stops the owner before its client returns.
     pub fn begin_shutdown(&self) {
         self.shutdown.cancel();
     }
 
-    #[allow(dead_code)] // The lifecycle proof checks the actual tracked runtime task.
+    // The lifecycle proof checks the actual tracked runtime task.
     pub fn is_stopped(&self) -> bool {
         self.running.is_finished()
     }
@@ -101,7 +102,7 @@ impl NativeMailOwner {
         Ok(interactions)
     }
 
-    #[allow(dead_code)] // Only interrupted-handover proofs abandon an active SDK drive.
+    // Only interrupted-handover proofs abandon an active SDK drive.
     pub async fn abort_for_crash(self) -> Result<Arc<InteractionStore>, FixtureError> {
         let Self {
             interactions,
@@ -124,7 +125,7 @@ impl NativeMailOwner {
     }
 
     /// Stop the served application and reader actors before closing their physical owner.
-    #[allow(dead_code)] // Host fixtures stop first, then check and close each store owner separately.
+    // Host fixtures stop first, then check and close each store owner separately.
     pub async fn close(self) -> Result<(), FixtureError> {
         Arc::try_unwrap(self.stop().await?)
             .map_err(|_| io::Error::other("fixture retained the native interaction owner"))?

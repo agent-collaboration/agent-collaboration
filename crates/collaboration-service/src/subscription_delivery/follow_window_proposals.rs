@@ -1,12 +1,20 @@
 //! Membership grouping and replicated coverage bound each local follow proposal.
-use super::*;
+use super::{
+    BoardError, DateTime, EndReason, FeedCursor, HandoffSeq, Identity,
+    MAX_SUBSCRIPTION_NOTICE_ROOTS, ProjectId, RecordId, SubscriptionGeneration,
+    SubscriptionMembership, SubscriptionMode, SubscriptionWindowStore, ThreadId, Utc,
+    WindowStoreError, membership_mode_off_or_expired, project_registry_failure,
+    project_storage_failure, unavailable,
+};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{NotificationSource, RootRange};
 use fleet_sync_protocol::DeliveryEnvelope;
 use message_board_storage::MailHandoffItem;
+#[cfg(test)]
+use std::sync::Arc;
 
 #[cfg(test)]
-pub(in crate::service_identity::subscription_delivery) struct ExpiryReadProbe {
+pub(in crate::subscription_delivery) struct ExpiryReadProbe {
     entered: tokio::sync::Notify,
     released: tokio::sync::Notify,
 }
@@ -20,7 +28,7 @@ impl ExpiryReadProbe {
     }
 }
 
-pub(in crate::service_identity::subscription_delivery) struct FollowWindowProposal {
+pub(in crate::subscription_delivery) struct FollowWindowProposal {
     pub project: ProjectId,
     pub membership: RecordId,
     pub activated_at: FeedCursor,
@@ -43,7 +51,7 @@ impl SubscriptionWindowStore {
     }
 
     #[cfg(test)]
-    pub(in crate::service_identity::subscription_delivery) async fn pause_next_expiry_read_for_test(
+    pub(in crate::subscription_delivery) async fn pause_next_expiry_read_for_test(
         &self,
     ) -> Arc<ExpiryReadProbe> {
         let probe = Arc::new(ExpiryReadProbe {
@@ -53,7 +61,7 @@ impl SubscriptionWindowStore {
         *self.expiry_read_probe.lock().await = Some(probe.clone());
         probe
     }
-    pub(in crate::service_identity::subscription_delivery) async fn membership_expiry_candidates(
+    pub(in crate::subscription_delivery) async fn membership_expiry_candidates(
         &self,
         reader: &Identity,
         projects: &[ProjectId],
@@ -92,7 +100,7 @@ impl SubscriptionWindowStore {
         Ok(proposals)
     }
 
-    pub(in crate::service_identity::subscription_delivery) async fn propose_follow_batches(
+    pub(in crate::subscription_delivery) async fn propose_follow_batches(
         &self,
         reader: &Identity,
         due: &[ThreadId],

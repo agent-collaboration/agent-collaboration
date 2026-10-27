@@ -2,7 +2,10 @@ use super::{
     operation_context::{OperationContext, OperationPlan},
     work_operations::next_revision,
 };
-use message_board::*;
+use message_board::{
+    BoardOperation, Fact, FactKind, FeedCursor, FeedPosition, LifecycleFact, PlanRevision, Record,
+    RecordId, RecordKind, Refusal, ResourceName,
+};
 
 impl OperationContext<'_> {
     pub(super) fn project_lifecycle_plan(&self) -> Result<OperationPlan, Refusal> {

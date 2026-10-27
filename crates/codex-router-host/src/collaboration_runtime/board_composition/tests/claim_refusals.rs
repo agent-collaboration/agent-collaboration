@@ -12,7 +12,7 @@ mod future_schema;
 
 #[tokio::test]
 async fn claim_not_found_and_archived_refusals_create_no_local_writer() -> TestResult {
-    let fixture = ClaimFixture::start().await?;
+    let fixture = Box::pin(ClaimFixture::start()).await?;
     let proof = async {
         let missing = ProjectId::generate();
         assert_eq!(
@@ -53,7 +53,7 @@ async fn claim_not_found_and_archived_refusals_create_no_local_writer() -> TestR
 
 #[tokio::test]
 async fn claim_already_held_preserves_the_native_peer_without_another_seed() -> TestResult {
-    let fixture = ClaimFixture::start().await?;
+    let fixture = Box::pin(ClaimFixture::start()).await?;
     let proof = async {
         let project = ProjectId::generate();
         project_claim::imported_snapshot(
@@ -90,7 +90,7 @@ async fn claim_already_held_preserves_the_native_peer_without_another_seed() -> 
 
 #[tokio::test]
 async fn claim_observes_real_retirement_in_progress_then_retired_without_seeding() -> TestResult {
-    let fixture = ClaimFixture::start().await?;
+    let fixture = Box::pin(ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let database = DatabaseId::try_from(project.as_str().to_owned())?;
     let (manifest, pages, _) = project_claim::captured_board_snapshot(

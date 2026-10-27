@@ -1,5 +1,8 @@
 //! Maintenance holds the shipped Host lock while leaving socket publication to HostInstance.
-#![allow(clippy::panic_in_result_fn)] // Contract assertions must fail the proof.
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the proof."
+)]
 use codex_router_host::{
     HostCoordinationPaths, HostInstance, HostInstanceLock, InstanceAcquireError,
 };

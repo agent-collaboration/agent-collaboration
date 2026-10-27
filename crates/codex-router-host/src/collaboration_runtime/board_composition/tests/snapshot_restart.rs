@@ -8,10 +8,10 @@ use message_board::*;
 use std::{io, sync::Arc};
 
 // The shared harness also contains unrelated journey helpers.
-#[allow(dead_code)]
+
 #[path = "../../../../../collaboration-service/tests/support/accepted_snapshot.rs"]
 mod accepted_snapshot;
-#[allow(dead_code)]
+
 #[path = "../../../../../collaboration-service/tests/support/board_fixture.rs"]
 pub(super) mod board_fixture;
 

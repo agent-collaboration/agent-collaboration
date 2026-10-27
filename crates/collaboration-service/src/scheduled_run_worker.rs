@@ -105,7 +105,7 @@ impl ScheduledRunWorker {
             return self.step_summary(record).await;
         }
         match record.phase {
-            RunPhase::Preparing => self.step_preparation(record).await,
+            RunPhase::Preparing => Box::pin(self.step_preparation(record)).await,
             RunPhase::Executing | RunPhase::Stopping | RunPhase::Uncertain => {
                 self.step_observation(record).await
             }

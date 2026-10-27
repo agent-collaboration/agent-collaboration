@@ -99,11 +99,11 @@ pub(crate) fn local_follow_outcome(
             retryable: true, ..
         } => LocalOutcome::Held { until: None },
         DeliveryOutcome::NotSubmitted { .. } | DeliveryOutcome::Rejected(_) => LocalOutcome::Held {
-            until: Some(now.after(
-                crate::service_identity::subscription_delivery::delivery_retry_delay(
+            until: Some(
+                now.after(crate::subscription_delivery::delivery_retry_delay(
                     retry_attempts,
-                ),
-            )),
+                )),
+            ),
         },
     };
     let scheduled_retry_at = match &outcome {

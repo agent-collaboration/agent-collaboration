@@ -1,9 +1,26 @@
 //! Cold bare-post lookup must not open any of the 8/80 unrelated native files.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    unused_imports,
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use board_read_setup::post_at_placement;
@@ -12,7 +29,6 @@ use read_cost_counter::{ReadCost, current_cost};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 
-#[allow(clippy::panic_in_result_fn)]
 async fn selected_bodies_and_duplicate_ids_remain_strict() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("post lookup validation").await?;
@@ -65,7 +81,6 @@ async fn selected_bodies_and_duplicate_ids_remain_strict() -> Result<(), TestErr
     fixture.stop().await
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn lookup_costs(size: usize) -> Result<(ReadCost, ReadCost), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("cold post lookup").await?;
@@ -148,11 +163,14 @@ async fn lookup_costs(size: usize) -> Result<(ReadCost, ReadCost), TestError> {
     Ok((found, absent))
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn post_lookup_costs_ignore_unopened_project_files() -> Result<(), TestError> {
     read_cost_counter::install();
-    let small = lookup_costs(8).await?;
-    let large = lookup_costs(80).await?;
+    let small = Box::pin(lookup_costs(8)).await?;
+    let large = Box::pin(lookup_costs(80)).await?;
     eprintln!("cold post lookup: small={small:?}; large={large:?}");
     assert_eq!(small, large, "post lookup grew with unopened files");
     assert_eq!(large.0.project_opens, 0);

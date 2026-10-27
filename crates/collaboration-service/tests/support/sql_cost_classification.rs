@@ -1,5 +1,5 @@
 //! Classify parsed table identities, retaining ambiguous and mixed SQL in the cost.
-#![allow(dead_code)] // Shared by integration binaries with different observation needs.
+// Shared by integration binaries with different observation needs.
 
 use std::collections::BTreeSet;
 use turso_parser::{ast::Cmd, parser::Parser};

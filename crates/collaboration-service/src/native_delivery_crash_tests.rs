@@ -132,7 +132,7 @@ async fn native_delivery_process_loss_preserves_uncertainty_without_resend() -> 
                 .ok_or("wake worker missing")?
                 .run(stop.clone()),
         );
-        let application = crate::CollaborationApplication::new(identity);
+        let application = (identity).build();
         let observed = tokio::time::timeout(Duration::from_secs(3), async {
             let mut interval = tokio::time::interval(Duration::from_millis(10));
             loop {
@@ -512,7 +512,7 @@ async fn identity(
     root: &Path,
     store: Arc<Mutex<AutomationStore>>,
     epoch: &str,
-) -> TestResult<crate::ServiceIdentity> {
+) -> TestResult<crate::ApplicationFixture> {
     let mut definitions = serde_json::Map::new();
     for name in [
         "ThreadRead",
@@ -555,7 +555,7 @@ async fn identity(
         root.join("approval-routes.json"),
     )
     .await?;
-    let identity = crate::ServiceIdentity::new(SERVICE, epoch)
+    let identity = crate::ApplicationFixture::new(SERVICE, epoch)
         .map_err(std::io::Error::other)?
         .with_automation_store(store)
         .with_approval_broker(broker)

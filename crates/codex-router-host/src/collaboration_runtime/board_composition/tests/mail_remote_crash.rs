@@ -366,10 +366,10 @@ async fn remote_mail_crash_child_entry() -> Result<(), TestError> {
     };
     let kind: CrashKind = serde_json::from_str(&std::env::var(CHILD_KIND)?)?;
     if matches!(kind, CrashKind::FrontierRetirement) {
-        return retirement::retirement_checkpoint_child(&base).await;
+        return Box::pin(retirement::retirement_checkpoint_child(&base)).await;
     }
     if matches!(kind, CrashKind::StatusBatch) {
-        return status_atomicity::status_batch_child(&base).await;
+        return Box::pin(status_atomicity::status_batch_child(&base)).await;
     }
     let mut harness = MailHarness::open_manual(&base, None).await?;
     let mut state = CrashState {

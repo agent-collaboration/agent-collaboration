@@ -1,4 +1,8 @@
 #[path = "test_support/message_backend_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod message_backend_fixture;
 use collaboration_protocol::{
     DeliveryClientReceipt, MessageDelivery, NativeSendAcceptance, PushDeliveryState,

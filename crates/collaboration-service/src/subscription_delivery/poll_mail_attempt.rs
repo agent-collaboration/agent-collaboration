@@ -1,6 +1,8 @@
 //! Submit exactly one SDK Poll callback to its session's existing reader owner.
 use super::super::reader_delivery_owner::poll_unsent;
-use super::*;
+use super::{
+    ReaderDeliveryCommand, SessionRef, SubscriptionDeliveryService, oneshot, reader_for_target,
+};
 
 impl SubscriptionDeliveryService {
     pub(crate) async fn attempt_poll_mail_once(

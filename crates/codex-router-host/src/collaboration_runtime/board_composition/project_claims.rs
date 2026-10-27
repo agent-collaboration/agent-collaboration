@@ -114,7 +114,10 @@ fn claim_refusal(reason: HolderChangeRefusal) -> io::Result<ProjectClaimRefusal>
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 mod refusal_tests {
     use super::*;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;

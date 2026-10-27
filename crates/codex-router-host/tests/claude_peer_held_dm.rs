@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used, clippy::unwrap_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! Closed Claude peers hold Auto DMs until their owner publishes a writer.
 
 use claude_code_peer_messaging::{ClaudeCodePeerSocket, ClaudeCodeSessionRegistry};

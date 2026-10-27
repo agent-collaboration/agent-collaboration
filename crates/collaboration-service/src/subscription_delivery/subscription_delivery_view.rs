@@ -1,5 +1,9 @@
 //! Join frozen membership allocations to native observations for public views only.
-use super::*;
+use super::{
+    BoardError, DateTime, HandoffSeq, ReaderSubscriptionSnapshot, SubscriptionDeliveryOutcome,
+    SubscriptionMembership, SubscriptionMode, SubscriptionState, SubscriptionWindowStore,
+    ThreadSubscriptionRecord, ThreadSubscriptionRecordProps, Utc, unavailable,
+};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
 use collaboration_protocol::{DeliveryOutcome, PushDeliveryState};

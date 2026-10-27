@@ -1,12 +1,23 @@
 //! Task corrections are observed through actual MCP admission and native project records.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn initial_task_links_record_each_change_once_with_the_created_task() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;
@@ -59,7 +70,10 @@ async fn initial_task_links_record_each_change_once_with_the_created_task() -> R
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn another_action_on_a_dropped_task_changes_no_domain_record() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -106,7 +120,10 @@ async fn another_action_on_a_dropped_task_changes_no_domain_record() -> Result<(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn dropping_requires_and_preserves_the_callers_reason() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -141,7 +158,10 @@ async fn dropping_requires_and_preserves_the_callers_reason() -> Result<(), Test
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn actual_link_changes_have_events_but_noops_and_replays_do_not() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -218,7 +238,10 @@ async fn actual_link_changes_have_events_but_noops_and_replays_do_not() -> Resul
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn removed_subtask_is_visible_in_history_and_only_explicit_removed_lists()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

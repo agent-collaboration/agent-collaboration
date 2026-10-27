@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used, clippy::panic)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! A peer scheduled run is a write-only acceptance through the real socket client.
 use agent_automation::{
     CapturedRunInputs, ClaudeCodePeerEffectEvidence, PeerWriteEffect, RouteEffectEvidence, RunId,

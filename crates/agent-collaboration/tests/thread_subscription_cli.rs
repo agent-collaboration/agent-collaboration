@@ -1,13 +1,16 @@
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
 use collaboration_service as mail_service;
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
 use collaboration_client::CollaborationClient;
 use collaboration_client::board::*;
 use collaboration_service::{
-    BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
+    ApplicationFixture, BoardAvailability, MachineIdentity, SessionDeliveryRouter,
     SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
     SystemSubscriptionClock, TargetPresenceProbe,
 };
@@ -82,7 +85,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             machine_identity,
             clock: Arc::new(SystemSubscriptionClock),
         });
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .map_err(std::io::Error::other)?
         .with_project_admission(admission.clone())
         .with_automation_store(push_store.clone())
@@ -108,9 +111,8 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
     subscription_delivery.start().await?;
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         service_directory,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await?;
+        (identity).build(),
+    )?;
     let client =
         CollaborationClient::connect(service_directory, "thread-subscription-cli-test", "1")
             .await?;

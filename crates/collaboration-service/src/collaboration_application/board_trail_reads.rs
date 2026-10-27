@@ -2,9 +2,13 @@
 use super::board_paging::invalid_cursor;
 use super::board_trail_pages::trail_read_prefix;
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, BoardReadReply, DecisionPage, FeedCursor, FeedPosition, FeedRead, FeedReadRequest,
+    ReadMarkOutcome, ReadScope, TrailPage, WorkTrailReadResult, WorkTrailSelection,
+    WorkTrailShowRequest,
+};
 use message_board_storage::{FeedPageBounds, FeedPageDirection, TrailPageFilter};
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn feed_read(
         &self,
         request: FeedReadRequest,

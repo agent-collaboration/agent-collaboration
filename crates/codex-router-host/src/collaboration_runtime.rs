@@ -6,8 +6,7 @@ use collaboration_protocol::{
     ObservationTimestamp, ProviderKind, RouterExecutableRelation, SchemaDigest, UuidIdentity,
 };
 use collaboration_service::{
-    NativeRelayListener, ServiceIdentity, load_installation_peer, load_service_identity,
-    new_service_uuid,
+    NativeRelayListener, load_installation_peer, load_service_identity, new_service_uuid,
 };
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;

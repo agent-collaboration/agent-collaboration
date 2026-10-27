@@ -1,7 +1,7 @@
 //! Provider conversations: Host-owned operations on external provider sessions, plus the
 //! inspection and recovery of recorded Codex ACP operations.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::{ProviderConversationBackend, ServiceIdentity};
+use crate::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationBindingIdentity,
     ConversationCancelRequest, ConversationCloseRequest, ConversationCreateRequest,
@@ -19,8 +19,15 @@ use collaboration_protocol::{
 };
 
 /// Conversation operations over the Host's provider backend and Codex operation records.
-pub struct ConversationOperations<'service> {
-    identity: &'service ServiceIdentity,
+pub struct ConversationOperations {
+    pub(super) identity: crate::RouterIdentity,
+    pub(super) provider_conversations:
+        Option<std::sync::Arc<dyn crate::ProviderConversationBackend>>,
+    pub(super) provider_operations:
+        Option<std::sync::Arc<tokio::sync::Mutex<crate::ProviderOperationStore>>>,
+    pub(super) codex_conversation_recorder:
+        Option<std::sync::Arc<crate::CodexConversationOperationRecorder>>,
+    pub(super) directory: crate::EndpointDirectory,
 }
 
 /// Submits one admitted operation to the backend with the binding's current generation.
@@ -55,13 +62,29 @@ macro_rules! submitted_operations {
     };
 }
 
-impl<'service> ConversationOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl ConversationOperations {
+    pub fn new(
+        identity: crate::RouterIdentity,
+        provider_conversations: Option<std::sync::Arc<dyn crate::ProviderConversationBackend>>,
+        provider_operations: Option<
+            std::sync::Arc<tokio::sync::Mutex<crate::ProviderOperationStore>>,
+        >,
+        codex_conversation_recorder: Option<
+            std::sync::Arc<crate::CodexConversationOperationRecorder>,
+        >,
+        directory: crate::EndpointDirectory,
+    ) -> Self {
+        Self {
+            identity,
+            provider_conversations,
+            provider_operations,
+            codex_conversation_recorder,
+            directory,
+        }
     }
 
-    fn backend(&self) -> Option<&'service dyn ProviderConversationBackend> {
-        self.identity.provider_conversations.as_deref()
+    fn backend(&self) -> Option<&dyn ProviderConversationBackend> {
+        self.provider_conversations.as_deref()
     }
 
     /// Creates a provider session on the endpoint's active binding.
@@ -191,7 +214,7 @@ impl<'service> ConversationOperations<'service> {
     fn read_backend(
         &self,
         operation_id: &OperationId,
-    ) -> Result<&'service dyn ProviderConversationBackend, ConversationFailure> {
+    ) -> Result<&dyn ProviderConversationBackend, ConversationFailure> {
         self.backend()
             .ok_or_else(|| local_failure(LocalFailure::Unavailable, operation_id.clone(), None))
     }
@@ -199,13 +222,13 @@ impl<'service> ConversationOperations<'service> {
     async fn admit_submission(
         &self,
         check: SubmissionCheck<'_>,
-    ) -> Result<SubmissionAdmission<'service>, ConversationFailure> {
+    ) -> Result<SubmissionAdmission<'_>, ConversationFailure> {
         let operation_id = check.operation_id;
         let target = check.target.cloned();
         let Some(backend) = self.backend() else {
             return Err(self.unavailable_provider(operation_id.clone(), target, check.endpoint));
         };
-        if check.endpoint.service_id != self.identity.service_id
+        if check.endpoint.service_id != *self.identity.service_id()
             || !check.actors.iter().all(|actor| self.actor_is_local(actor))
         {
             return Err(local_failure(
@@ -262,14 +285,14 @@ impl<'service> ConversationOperations<'service> {
     fn actor_is_local(&self, actor: &ProviderIdentity) -> bool {
         actor
             .session()
-            .is_none_or(|session| session.endpoint.service_id == self.identity.service_id)
+            .is_none_or(|session| session.endpoint.service_id == *self.identity.service_id())
     }
 
     fn provider_unavailability(
         &self,
         endpoint: &EndpointRef,
     ) -> Result<Option<EndpointAvailability>, std::io::Error> {
-        let description = self.identity.endpoint_directory().read_endpoint(endpoint)?;
+        let description = self.directory.read_endpoint(endpoint)?;
         Ok(
             description.and_then(|description| match description.availability {
                 unavailable @ EndpointAvailability::Unavailable { .. } => Some(unavailable),
@@ -320,7 +343,7 @@ impl<'service> ConversationOperations<'service> {
         &self,
         operation_id: &OperationId,
     ) -> Result<Option<crate::ProviderOperationRecord>, ConversationFailure> {
-        let Some(store) = self.identity.provider_operations.as_ref() else {
+        let Some(store) = self.provider_operations.as_ref() else {
             return Ok(None);
         };
         let record = store
@@ -342,7 +365,7 @@ impl<'service> ConversationOperations<'service> {
         request: &ConversationOperationWaitRequest,
     ) -> Result<ConversationOperationWaitResult, ConversationFailure> {
         let operation_id = &request.operation_id;
-        let Some(recorder) = self.identity.codex_conversation_recorder.as_ref() else {
+        let Some(recorder) = self.codex_conversation_recorder.as_ref() else {
             return Err(local_failure(
                 LocalFailure::Unavailable,
                 operation_id.clone(),
@@ -385,11 +408,10 @@ impl<'service> ConversationOperations<'service> {
         operation_id: &OperationId,
     ) -> Result<ConversationOperationSnapshot, ConversationFailure> {
         let unavailable = || local_failure(LocalFailure::Unavailable, operation_id.clone(), None);
-        let Some(store) = self.identity.provider_operations.as_ref() else {
+        let Some(store) = self.provider_operations.as_ref() else {
             return Err(unavailable());
         };
         let active = self
-            .identity
             .codex_conversation_recorder
             .as_ref()
             .is_some_and(|recorder| recorder.is_active(operation_id));

@@ -1,5 +1,13 @@
 //! Retained activity belongs to its subject even when its live relation is removed.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
@@ -47,7 +55,6 @@ async fn boundary(fixture: &BoardFixture, project: &ProjectId) -> Result<FeedCur
     Ok(high)
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn fixed_read_mark(
     fixture: &BoardFixture,
     project: &ProjectId,
@@ -96,7 +103,10 @@ async fn fixed_read_mark(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn removed_child_keeps_every_unread_entry_on_task_and_workstream() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -164,7 +174,10 @@ async fn removed_child_keeps_every_unread_entry_on_task_and_workstream() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn link_events_count_once_for_the_source_task_and_its_workstream() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -245,7 +258,7 @@ async fn link_events_count_once_for_the_source_task_and_its_workstream() -> Resu
                     }
                     _ => false,
                 },
-                _ => false,
+                FeedContent::Redacted => false,
             })
             .map(|entry| entry.record.clone())
             .collect();
@@ -287,7 +300,10 @@ async fn link_events_count_once_for_the_source_task_and_its_workstream() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_refused_foreign_project_subject_never_receives_this_projects_feed()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

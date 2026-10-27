@@ -352,11 +352,11 @@ impl ServiceInteractionBroker {
             .map_err(|_| ApprovalBrokerError::Unavailable)
     }
 
-    pub(crate) fn install_display_names(&self, display_names: crate::SessionDisplayNameCache) {
+    pub fn install_display_names(&self, display_names: crate::SessionDisplayNameCache) {
         let _already_installed = self.display_names.set(display_names);
     }
 
-    pub(crate) fn install_push_context(
+    pub fn install_push_context(
         &self,
         store: Arc<interaction_storage::InteractionStore>,
         machine_identity: crate::MachineIdentity,

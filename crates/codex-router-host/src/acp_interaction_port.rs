@@ -498,6 +498,10 @@ mod provider_actor_tests {
             Box::pin(async { Ok(()) })
         }
 
+        #[expect(
+            clippy::unwrap_in_result,
+            reason = "A poisoned fixture event capture must fail its test."
+        )]
         fn publish(
             &self,
             _: &str,
@@ -544,7 +548,7 @@ mod provider_actor_tests {
                 .expect("machine identity");
         let service_id_text = String::from(service_id.clone());
         let broker_context =
-            collaboration_service::ServiceIdentity::new(&service_id_text, &service_id_text)
+            collaboration_service::ApplicationFixture::new(&service_id_text, &service_id_text)
                 .expect("service identity")
                 .with_machine_identity(machine_identity)
                 .expect("machine identity belongs to service")

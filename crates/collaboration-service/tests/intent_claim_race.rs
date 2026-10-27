@@ -1,5 +1,13 @@
 //! NI-2 integrates native role/intent records with an in-flight claim under the writer guard.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use collaboration_service::IntentReply;
@@ -22,7 +30,10 @@ fn session(name: String) -> Result<Identity, TestError> {
         },
     })
 }
-#[allow(clippy::panic_in_result_fn)] // Contract assertion; Result reports other fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertion; Result reports other fixture failures."
+)]
 fn claimed(reply: IntentReply) -> Result<ResolvedRecipient, TestError> {
     match reply {
         IntentReply::Recorded {
@@ -44,7 +55,10 @@ fn claimed(reply: IntentReply) -> Result<ResolvedRecipient, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn generated_role_replacements_and_claim_repeats_never_hand_one_cause_to_both_holders()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

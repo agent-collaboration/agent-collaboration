@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! Host content admission preserves actor authority and ACP block order.
 
 use codex_router_host::{
@@ -14,7 +17,10 @@ use session_event_model::{InputId, PromptContent};
 use std::{path::PathBuf, sync::Arc};
 
 #[path = "support/provider_acp_message_fifo_support.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod support;
 use support::{NoLivePeer, available_directory, provider_binding, target};
 

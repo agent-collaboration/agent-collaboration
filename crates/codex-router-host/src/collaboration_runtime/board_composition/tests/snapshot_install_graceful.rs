@@ -72,7 +72,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
     if before_ready {
         stop_held_install(&inputs, projects, runtime).await
     } else {
-        resume_and_post(&inputs, projects, runtime).await
+        Box::pin(resume_and_post(&inputs, projects, runtime)).await
     }
 }
 

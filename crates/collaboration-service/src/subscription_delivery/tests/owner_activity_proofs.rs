@@ -7,16 +7,16 @@ use sqlx::Connection;
 
 #[tokio::test]
 async fn activity_waiter_does_not_complete_at_a_barrier_before_the_post_is_selected() {
-    tokio::time::timeout(
+    Box::pin(tokio::time::timeout(
         std::time::Duration::from_secs(30),
         activity_selection_journey(),
-    )
+    ))
     .await
     .expect("bounded human Poll selection journey");
 }
 
 async fn activity_selection_journey() {
-    let fixture = OwnerFixture::with_reader(human("activity-reader")).await;
+    let fixture = Box::pin(OwnerFixture::with_reader(human("activity-reader"))).await;
     *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     runtime.owner_barrier(&fixture.reader).await;

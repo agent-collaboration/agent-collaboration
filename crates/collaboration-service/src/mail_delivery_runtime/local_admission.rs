@@ -1,5 +1,11 @@
 //! Prepare application projections before local custody can record an outcome.
-use super::*;
+use super::{
+    AtomicStore, Clock, Inbox, LocalMailTask, MailDeliveryRuntime, MailHost, OperationState,
+    PushMessageSendResult, PushRecordDraft, RouterDeliveryTypes, StoreError, SyncTime, TursoScope,
+    outgoing_mail_message,
+};
+#[cfg(test)]
+use super::{CarrierAcceptance, DeliveryError, DeliveryItemRef, ItemId, RecipientOutcome};
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult};
 use durable_steps::JournalScope;

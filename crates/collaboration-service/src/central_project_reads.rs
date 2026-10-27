@@ -175,7 +175,7 @@ fn select_lease(
         {
             Err(CentralReadError::Corrupt)
         }
-        _ => Ok(incoming),
+        DirectorySide::Known(_) => Ok(incoming),
     }
 }
 

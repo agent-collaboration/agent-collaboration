@@ -1,7 +1,19 @@
 //! Newly eligible projects join beyond the browse's merge position in either direction.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{human_reader, inbox_post_ids, inbox_request, initialized_request};
@@ -12,7 +24,10 @@ mod timed_board_posts;
 use timed_board_posts::{TimedPostInput, append_post_at};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unread_continuation_admits_a_new_watch_only_beyond_the_merge_sweep()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -103,7 +118,10 @@ async fn unread_continuation_admits_a_new_watch_only_beyond_the_merge_sweep()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn post_list_continuation_admits_a_project_created_mid_browse_beyond_the_sweep()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

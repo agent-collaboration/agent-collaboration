@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn receipts_require_exact_window_generation_and_frozen_through_before_and_after_arrivals()
 -> Result<(), TestError> {
     for extended in [false, true] {

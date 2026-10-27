@@ -1,6 +1,9 @@
 //! Mutable caller state is read after every decision, including ledger replay.
 use super::{ProjectAdmission, ProjectAdmissionError};
-use message_board::*;
+use message_board::{
+    BoardOperation, FeedCursor, FeedPosition, Identity, ProjectId, ProjectRequest, ReadScope,
+    ReaderState, RecordKind, RecordRef, RequestResult, RoleSubject, ThreadId, TrailSubject,
+};
 use message_board_storage::{ProjectSnapshot, StoreSchemaState};
 
 impl ProjectAdmission {

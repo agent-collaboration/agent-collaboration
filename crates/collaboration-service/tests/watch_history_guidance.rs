@@ -1,6 +1,18 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -25,7 +37,10 @@ async fn watch(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn history_guidance_exists_only_for_queryable_scoped_posts() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("history guidance proof").await?;
@@ -172,7 +187,10 @@ async fn history_guidance_exists_only_for_queryable_scoped_posts() -> Result<(),
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn inactive_watch_hides_subscription_start_without_rewriting_history() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;
@@ -251,7 +269,10 @@ async fn inactive_watch_hides_subscription_start_without_rewriting_history() -> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Retained archive/reader-state claim; Result propagates setup errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Retained archive/reader-state claim; Result propagates setup errors."
+)]
 async fn watch_messages_explain_history_guidance_and_board_lifecycle() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("archive watch proof").await?;

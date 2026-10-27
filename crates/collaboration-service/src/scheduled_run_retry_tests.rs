@@ -54,9 +54,9 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
     for (submission, settlement, expected_phase, expected_error) in cases {
         let (root, store, worker, run_id, observed_push_ids) =
             provider_worker_fixture(submission, settlement).await?;
-        worker.step(run_id.clone()).await?;
+        Box::pin(worker.step(run_id.clone())).await?;
         apply_push_handoff(&worker).await?;
-        worker.step(run_id.clone()).await?;
+        Box::pin(worker.step(run_id.clone())).await?;
         apply_push_handoff(&worker).await?;
         let busy = store
             .lock()
@@ -66,10 +66,10 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
         if busy.phase != RunPhase::Preparing || busy.evidence.timing.is_some() {
             return Err("not-started-busy consumed a dispatch budget".into());
         }
-        worker.step(run_id.clone()).await?;
+        Box::pin(worker.step(run_id.clone())).await?;
         apply_push_handoff(&worker).await?;
         if matches!(submission, FakeSubmissionPlan::Accept) {
-            let observed = worker.step(run_id.clone()).await;
+            let observed = Box::pin(worker.step(run_id.clone())).await;
             if expected_error {
                 if !matches!(observed, Err(StorageError::InvalidRecord)) {
                     return Err("provider write-only settlement was not rejected".into());
@@ -138,7 +138,7 @@ async fn fake_provider_submission_and_settlement_variants_preserve_run_state() -
             return Err("scheduled push outcome did not match the run submission".into());
         }
         if matches!(submission, FakeSubmissionPlan::Unknown) {
-            worker.step(run_id.clone()).await?;
+            Box::pin(worker.step(run_id.clone())).await?;
             apply_push_handoff(&worker).await?;
             let observed_push_ids_after_observation = observed_push_ids
                 .lock()
@@ -234,12 +234,12 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         FakeSettlementPlan::Pending,
     )
     .await?;
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     apply_push_handoff(&worker).await?;
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     apply_push_handoff(&worker).await?;
     if !matches!(
-        worker.step(run_id.clone()).await,
+        Box::pin(worker.step(run_id.clone())).await,
         Err(StorageError::InvalidRecord)
     ) {
         return Err("fixture did not stop after persisting schedule dispatch intent".into());
@@ -290,7 +290,7 @@ async fn shared_restore_preserves_attempted_schedule_push_for_worker_settlement(
         return Err("shared restore removed the attempt from schedule recovery".into());
     }
 
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
 
     apply_push_handoff(&worker).await?;
     let recovered_run = store
@@ -352,11 +352,11 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
         FakeSettlementPlan::Pending,
     )
     .await?;
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     apply_push_handoff(&worker).await?;
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     apply_push_handoff(&worker).await?;
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     apply_push_handoff(&worker).await?;
 
     let first_attempt_ids = observed_push_ids
@@ -384,7 +384,7 @@ async fn known_rejected_provider_submission_retries_on_the_same_schedule_push_id
         return Err("known rejection was not retained on a retryable pending push".into());
     }
 
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
 
     apply_push_handoff(&worker).await?;
     let accepted_run = store

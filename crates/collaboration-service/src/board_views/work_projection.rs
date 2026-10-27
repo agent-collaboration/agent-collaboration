@@ -1,6 +1,10 @@
 //! Dependency order, live checklist progress, and blockers are distinct derived answers.
 use super::ViewSnapshot;
-use message_board::*;
+use message_board::{
+    AuthorityRole, BlockedTask, BoardError, FeedPosition, MergeTime, Record, RecordRef,
+    RoleSubject, Task, TaskLinkKind, TaskStatus, WorkTask, WorkView, WorkstreamLane,
+    WorkstreamState,
+};
 use petgraph::{Direction, graph::DiGraph};
 use std::collections::{BTreeMap, BTreeSet};
 

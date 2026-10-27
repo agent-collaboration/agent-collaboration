@@ -10,7 +10,7 @@ pub struct AutomationRetentionWorker {
     native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
 }
 impl AutomationRetentionWorker {
-    pub(crate) fn new(store: Arc<Mutex<AutomationStore>>) -> Self {
+    pub fn new(store: Arc<Mutex<AutomationStore>>) -> Self {
         Self {
             store,
             interaction_broker: None,
@@ -18,7 +18,7 @@ impl AutomationRetentionWorker {
         }
     }
 
-    pub(crate) fn with_native_push_store(
+    pub fn with_native_push_store(
         mut self,
         store: Arc<interaction_storage::InteractionStore>,
     ) -> Self {
@@ -26,10 +26,7 @@ impl AutomationRetentionWorker {
         self
     }
 
-    pub(crate) fn with_interaction_broker(
-        mut self,
-        broker: Arc<crate::ServiceInteractionBroker>,
-    ) -> Self {
+    pub fn with_interaction_broker(mut self, broker: Arc<crate::ServiceInteractionBroker>) -> Self {
         self.interaction_broker = Some(broker);
         self
     }

@@ -1,4 +1,8 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
+#![expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! Real registry/socket fixtures at the peer route boundary.
 
 use agent_automation::{

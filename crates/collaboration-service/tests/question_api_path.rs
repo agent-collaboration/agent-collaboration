@@ -1,6 +1,6 @@
 use collaboration_protocol::{EndpointRef, QuestionAnswerParams, QuestionResponse, QuestionState};
 use collaboration_service::{
-    NativeControlBackend, NativeGenerationGate, ServiceIdentity, ServiceInteractionBroker,
+    ApplicationFixture, NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker,
 };
 use message_board::{HumanId, Identity, SessionEndpointRef, SessionId, SessionRef};
 use serde_json::json;
@@ -33,7 +33,7 @@ async fn question_list_and_answer_cross_the_real_api() {
     )
     .await
     .expect("broker");
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_approval_broker(broker.clone());
     let requester = SessionRef {
@@ -57,9 +57,7 @@ async fn question_list_and_answer_cross_the_real_api() {
         .request_question(requester, approver.clone(), request, None)
         .await
         .expect("pending question");
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("serve the API");
+    let served = served_api::ServedApi::start(identity).expect("serve the API");
     let client = served.client("question-test").await.expect("initialize");
     let list = client.list_questions(true).await.expect("list");
     assert_eq!(list.questions.len(), 1);

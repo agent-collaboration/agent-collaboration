@@ -99,12 +99,11 @@ impl OwnerFixture {
         &self,
         runtime: &OwnerRuntime,
     ) -> collaboration_protocol::ThreadSubscriptionView {
-        let application = crate::CollaborationApplication::new(
-            crate::ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
-                .unwrap()
-                .with_project_admission(self.admission.clone())
-                .with_subscription_delivery_service(runtime.service.clone(), self.presence.clone()),
-        );
+        let application = (crate::ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
+            .unwrap()
+            .with_project_admission(self.admission.clone())
+            .with_subscription_delivery_service(runtime.service.clone(), self.presence.clone()))
+        .build();
         let mut rows = application
             .board()
             .thread_subscriptions(collaboration_protocol::ThreadSubscriptionsRequest {

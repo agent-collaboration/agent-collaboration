@@ -2,7 +2,11 @@
 use super::board_thread_subjects::ThreadSubjectBatch;
 use super::{BoardOperations, admission_error, board_paging::fingerprint};
 use crate::ProjectReadSnapshot;
-use message_board::*;
+use message_board::{
+    BoardError, ImplementerHolder, OrchestratorHolder, Participant, ParticipantRole, Record,
+    RecordRef, RecordedParticipantRole, ThreadId, ThreadListRequest, ThreadListResult,
+    ThreadReadRecord,
+};
 use message_board_storage::{ParticipantBatch, StoredProjectRecord};
 use std::{
     cmp::Reverse,
@@ -17,7 +21,7 @@ struct ProjectThreadPage {
     decoded_participants: BTreeMap<ThreadId, Vec<Participant>>,
 }
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn thread_list(
         &self,
         request: ThreadListRequest,

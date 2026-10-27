@@ -1,5 +1,8 @@
 //! Real ACP decoding/projection retains metadata without making it Codex prose.
-#![allow(clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 

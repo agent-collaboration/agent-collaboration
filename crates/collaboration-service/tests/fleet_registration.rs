@@ -1,5 +1,8 @@
 //! Native outbox/port proof; the recording port stands in for A3c's Host runtime.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 use collaboration_service::{
     ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
     ProjectRegistrationState,

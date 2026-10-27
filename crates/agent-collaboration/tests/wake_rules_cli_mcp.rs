@@ -2,7 +2,7 @@
 use automation_storage::AutomationStore;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::OperationId;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -39,10 +39,8 @@ impl Surfaces {
         let store = Arc::new(Mutex::new(
             AutomationStore::open(&root.path().join("automation.sqlite")).await?,
         ));
-        let identity = ServiceIdentity::new(SERVICE, SERVICE)?.with_automation_store(store);
-        let api =
-            ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-                .await?;
+        let identity = ApplicationFixture::new(SERVICE, SERVICE)?.with_automation_store(store);
+        let api = ServedCollaborationApi::start(root.path(), (identity).build())?;
         Ok(Self { root, api })
     }
     fn session(id: &str) -> Value {

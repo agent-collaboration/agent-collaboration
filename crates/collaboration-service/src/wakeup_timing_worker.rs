@@ -10,10 +10,19 @@ pub struct WakeTimingWorker {
     native: crate::wakeup_delivery_sender::WakeDeliverySender,
 }
 impl WakeTimingWorker {
-    pub(crate) fn new(
+    pub fn new(
         store: Arc<Mutex<AutomationStore>>,
-        native: crate::wakeup_delivery_sender::WakeDeliverySender,
+        delivery: Arc<dyn crate::SessionMessageDelivery>,
+        configuration: crate::AutomationConfigurationHandle,
+        machine_identity: crate::MachineIdentity,
+        interactions: Arc<interaction_storage::InteractionStore>,
     ) -> Self {
+        let native = crate::wakeup_delivery_sender::WakeDeliverySender {
+            delivery,
+            configuration,
+            machine_identity,
+            interactions,
+        };
         Self { store, native }
     }
     /// Start only after the Host owns its listeners and previous workers have retired.

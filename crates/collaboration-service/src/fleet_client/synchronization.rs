@@ -109,7 +109,10 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     async fn a_later_success_does_not_replace_an_earlier_waiters_error()
     -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let requests = SynchronizationRequests::default();

@@ -1,7 +1,7 @@
 //! Compose one actual Host project, publisher, native mail owner and saved session.
 use super::*;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::{seed_unacknowledged_notification, seed_unacknowledged_local_notification, NotificationSeed};
-use collaboration_service::{CollaborationApplication, MachineIdentity, NotificationPublisher, ProjectAdmissionProps, ServiceIdentity, SessionDeliveryRouter};
+use collaboration_service::{CollaborationApplication, MachineIdentity, NotificationPublisher, ProjectAdmissionProps, ApplicationFixture, SessionDeliveryRouter};
 use message_board::*;
 #[path = "notification_authority_recovery.rs"]
 mod authority_recovery;
@@ -22,14 +22,21 @@ pub(super) struct ProjectNotificationFixture {
 impl ProjectNotificationFixture {
     pub(super) async fn open_local(base: &Path) -> Result<Self, TestError> {
         let mut central = TestFleet::start_mail_as(&base.join("central"), None).await?;
-        let seed =
-            seed_unacknowledged_local_notification(&base.join("router"), &mut central).await?;
-        Self::resume(base, central, seed).await
+        let seed = Box::pin(seed_unacknowledged_local_notification(
+            &base.join("router"),
+            &mut central,
+        ))
+        .await?;
+        Box::pin(Self::resume(base, central, seed)).await
     }
     pub(super) async fn open(base: &Path) -> Result<Self, TestError> {
         let mut central = TestFleet::start_mail_as(&base.join("central"), None).await?;
-        let seed = seed_unacknowledged_notification(&base.join("router"), &mut central).await?;
-        Self::resume(base, central, seed).await
+        let seed = Box::pin(seed_unacknowledged_notification(
+            &base.join("router"),
+            &mut central,
+        ))
+        .await?;
+        Box::pin(Self::resume(base, central, seed)).await
     }
     pub(super) async fn resume(
         base: &Path,
@@ -57,7 +64,7 @@ impl ProjectNotificationFixture {
             fleet: fleet.clone(),
             identity: machine,
         })?);
-        let identity = ServiceIdentity::new(
+        let identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
@@ -81,8 +88,7 @@ impl ProjectNotificationFixture {
         harness.admission = Arc::downgrade(&admission);
         harness.fleet = Arc::downgrade(&fleet);
         harness.publisher = Arc::downgrade(&publisher);
-        let application =
-            CollaborationApplication::new(identity.with_notification_publisher(publisher.clone()));
+        let application = (identity.with_notification_publisher(publisher.clone())).build();
         let store = harness
             .registry
             .existing_project(&seed.project)

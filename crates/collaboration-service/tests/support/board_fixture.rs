@@ -1,10 +1,9 @@
-#![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
 //! Shared real MCP/native composition, without replacing admission rules.
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service as mail_service;
 use collaboration_service::{
-    CollaborationApplication, FleetClient, MachineIdentity, ProjectAdmission,
-    ProjectAdmissionProps, ProjectStoreRegistry, ServiceIdentity,
+    ApplicationFixture, FleetClient, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
+    ProjectStoreRegistry,
 };
 use message_board::*;
 use serde_json::{Value, json};
@@ -13,7 +12,7 @@ use std::{os::unix::fs::PermissionsExt, sync::Arc};
 mod board_context_backend;
 #[path = "board_poll_services.rs"]
 mod board_poll_services;
-#[allow(unused_imports)] // Only the membership cost proof names the composed-owner type.
+// Only the membership cost proof names the composed-owner type.
 pub use board_poll_services::{FixturePollServices, fixture_poll_services};
 #[path = "native_mail_owner.rs"]
 pub mod native_mail_owner;
@@ -24,18 +23,17 @@ pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 mod controlled_clock;
 #[path = "registered_project.rs"]
 mod registered_project;
-#[allow(unused_imports)] // Shared fixture exports are consumed by different test binaries.
+// Shared fixture exports are consumed by different test binaries.
 pub use registered_project::{prepare_registered_creation, settle_accepted_creation};
 #[path = "native_registry.rs"]
 mod native_registry;
-#[allow(unused_imports)] // Shared fixture exports are consumed by different test binaries.
-pub use controlled_clock::ControlledClock;
-#[allow(unused_imports)] // Shared fixture exports are consumed by different test binaries.
+// Shared fixture exports are consumed by different test binaries.
+// Shared fixture exports are consumed by different test binaries.
 pub use native_registry::{PendingRegistration, new_registry};
 pub fn fixture_peer() -> Result<fleet_sync_protocol::PeerId, TestError> {
     native_registry::fixture_peer()
 }
-#[allow(dead_code)] // The shared claim fixtures supply a trusted enrollment, not a directory implementation.
+// The shared claim fixtures supply a trusted enrollment, not a directory implementation.
 pub fn intent_handoff_input() -> Result<Option<collaboration_service::IntentHandoffInput>, TestError>
 {
     Ok(Some(collaboration_service::IntentHandoffInput {
@@ -168,7 +166,7 @@ impl BoardFixture {
             fleet: fleet.clone(),
             identity: fixture_machine_identity()?,
         })?);
-        let mut identity = ServiceIdentity::new(
+        let mut identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
@@ -195,11 +193,7 @@ impl BoardFixture {
         } else {
             None
         };
-        let api = ServedCollaborationApi::start(
-            directory.path(),
-            CollaborationApplication::new(identity),
-        )
-        .await?;
+        let api = ServedCollaborationApi::start(directory.path(), (identity).build())?;
         Ok(Self {
             api,
             _delivery: delivery,
@@ -257,7 +251,7 @@ impl BoardFixture {
         Ok(())
     }
     /// Keep publication runners quiet while a cost proof drives real reader reconciliation.
-    #[allow(dead_code)] // Only operation-cost proofs need an exclusive SQL window.
+    // Only operation-cost proofs need an exclusive SQL window.
     pub async fn quiesce_mail_publication(&self) -> Result<(), TestError> {
         if let Some(publisher) = &self.publisher {
             tokio::time::timeout(std::time::Duration::from_secs(10), publisher.shutdown())
@@ -314,7 +308,6 @@ impl BoardFixture {
         Ok(_directory)
     }
     /// Reopen the same isolated read fixture through the actual store/API startup path.
-    #[allow(clippy::panic_in_result_fn)] // This seam is deliberately limited to fixtures without delivery workers.
     pub async fn restart_read_fixture(self) -> Result<Self, TestError> {
         self.restart_read_fixture_after_close(|_| Ok(())).await
     }
@@ -323,14 +316,13 @@ impl BoardFixture {
         self.reopen_with_transport(|_| Ok(()), true).await
     }
     /// Faults are injected only after the real stores and listeners have closed.
-    #[allow(clippy::panic_in_result_fn)]
     pub async fn restart_read_fixture_after_close(
         self,
         after_close: impl FnOnce(&std::path::Path) -> Result<(), TestError>,
     ) -> Result<Self, TestError> {
         self.reopen_with_transport(after_close, false).await
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn reopen_with_transport(
         self,
         after_close: impl FnOnce(&std::path::Path) -> Result<(), TestError>,
@@ -399,7 +391,7 @@ impl BoardFixture {
             fleet: fleet.clone(),
             identity: fixture_machine_identity()?,
         })?);
-        let identity = ServiceIdentity::new(
+        let identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
@@ -411,11 +403,7 @@ impl BoardFixture {
         } else {
             (identity, None)
         };
-        let api = ServedCollaborationApi::start(
-            _directory.path(),
-            CollaborationApplication::new(identity),
-        )
-        .await?;
+        let api = ServedCollaborationApi::start(_directory.path(), (identity).build())?;
         Ok(Self {
             api,
             _registry: registry,
@@ -604,3 +592,5 @@ fn fixture_subscription_service(
         },
     ))
 }
+
+pub use controlled_clock::ControlledClock;

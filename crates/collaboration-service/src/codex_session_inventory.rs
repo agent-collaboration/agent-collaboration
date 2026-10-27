@@ -1,5 +1,4 @@
 //! Stored catalog and live native inventory keep separate, endpoint-bound pagination.
-use crate::ServiceIdentity;
 use crate::collaboration_application::{
     INVALID_INVENTORY_PARAMETERS, NativeSessionFailure, NativeSessionFailureKind,
     NativeSessionStage, ResultByteBudget,
@@ -173,119 +172,143 @@ fn active_turn_id(status: &Value) -> Option<&str> {
 /// Pages one Codex endpoint's stored catalog, or its loaded or active threads.
 ///
 /// A stored page is recorded in the lifecycle journal only once it fits `budget`.
-pub(crate) async fn list_codex_sessions(
-    identity: &ServiceIdentity,
-    params: NativeSessionListParams,
-    budget: ResultByteBudget,
-) -> Result<NativeSessionListResult, NativeSessionFailure> {
-    let display_names = &identity.display_names;
-    if !(1..=100).contains(&params.page_size) {
-        return Err(NativeSessionFailure::InvalidRequest(
-            INVALID_INVENTORY_PARAMETERS,
-        ));
+pub struct CodexSessionInventory {
+    identity: crate::RouterIdentity,
+    directory: crate::EndpointDirectory,
+    native_backend: Option<crate::NativeControlBackend>,
+    display_names: crate::SessionDisplayNameCache,
+    journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
+}
+impl CodexSessionInventory {
+    pub fn new(
+        identity: crate::RouterIdentity,
+        directory: crate::EndpointDirectory,
+        native_backend: Option<crate::NativeControlBackend>,
+        display_names: crate::SessionDisplayNameCache,
+        journal: Option<std::sync::Arc<lifecycle_observation::LifecycleStore>>,
+    ) -> Self {
+        Self {
+            identity,
+            directory,
+            native_backend,
+            display_names,
+            journal,
+        }
     }
-    if params.endpoint.service_id != identity.service_id {
-        return Err(failed(NativeSessionFailureKind::WrongService));
-    }
-    match identity.directory.read_endpoint(&params.endpoint) {
-        Ok(Some(_)) => {}
-        Ok(None) => return Err(failed(NativeSessionFailureKind::EndpointNotFound)),
-        Err(_) => return Err(failed(NativeSessionFailureKind::Unavailable)),
-    }
-    let Some(backend) = identity
-        .native_backend
-        .as_ref()
-        .filter(|b| b.endpoint == params.endpoint)
-    else {
-        return Err(failed(NativeSessionFailureKind::UnsupportedCapability));
-    };
-    let view = match params.view {
-        NativeSessionView::Stored => "stored",
-        NativeSessionView::Loaded => "loaded",
-        NativeSessionView::Active => "active",
-    };
-    let cursor = match &params.cursor {
-        None => None,
-        Some(text) => {
-            if text.is_empty() || text.len() > 1024 {
+    pub(crate) async fn list(
+        &self,
+        params: NativeSessionListParams,
+        budget: ResultByteBudget,
+    ) -> Result<NativeSessionListResult, NativeSessionFailure> {
+        let display_names = &self.display_names;
+        if !(1..=100).contains(&params.page_size) {
+            return Err(NativeSessionFailure::InvalidRequest(
+                INVALID_INVENTORY_PARAMETERS,
+            ));
+        }
+        if params.endpoint.service_id != *self.identity.service_id() {
+            return Err(failed(NativeSessionFailureKind::WrongService));
+        }
+        match self.directory.read_endpoint(&params.endpoint) {
+            Ok(Some(_)) => {}
+            Ok(None) => return Err(failed(NativeSessionFailureKind::EndpointNotFound)),
+            Err(_) => return Err(failed(NativeSessionFailureKind::Unavailable)),
+        }
+        let Some(backend) = self
+            .native_backend
+            .as_ref()
+            .filter(|b| b.endpoint == params.endpoint)
+        else {
+            return Err(failed(NativeSessionFailureKind::UnsupportedCapability));
+        };
+        let view = match params.view {
+            NativeSessionView::Stored => "stored",
+            NativeSessionView::Loaded => "loaded",
+            NativeSessionView::Active => "active",
+        };
+        let cursor = match &params.cursor {
+            None => None,
+            Some(text) => {
+                if text.is_empty() || text.len() > 1024 {
+                    return Err(NativeSessionFailure::InvalidRequest(
+                        INVALID_INVENTORY_PARAMETERS,
+                    ));
+                }
+                let decoded = URL_SAFE_NO_PAD
+                    .decode(text)
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<InventoryCursor>(&bytes).ok());
+                let Some(cursor) = decoded.filter(|c| {
+                    c.endpoint == params.endpoint
+                        && c.view == view
+                        && c.scope == params.scope
+                        && c.source == params.source
+                        && c.include_empty_sessions == params.include_empty_sessions
+                        && c.query == params.query
+                }) else {
+                    return Err(NativeSessionFailure::InvalidRequest(
+                        INVALID_INVENTORY_PARAMETERS,
+                    ));
+                };
+                Some(cursor)
+            }
+        };
+        let result = if matches!(params.view, NativeSessionView::Stored) {
+            if cursor.as_ref().is_some_and(|c| {
+                c.generation.is_some()
+                    || c.native_cursor.is_some()
+                    || c.expires_at.is_some()
+                    || c.stored_id.as_ref().is_none_or(String::is_empty)
+            }) {
                 return Err(NativeSessionFailure::InvalidRequest(
                     INVALID_INVENTORY_PARAMETERS,
                 ));
             }
-            let decoded = URL_SAFE_NO_PAD
-                .decode(text)
-                .ok()
-                .and_then(|bytes| serde_json::from_slice::<InventoryCursor>(&bytes).ok());
-            let Some(cursor) = decoded.filter(|c| {
-                c.endpoint == params.endpoint
-                    && c.view == view
-                    && c.scope == params.scope
-                    && c.source == params.source
-                    && c.include_empty_sessions == params.include_empty_sessions
-                    && c.query == params.query
-            }) else {
+            stored_page(&backend.codex_home, &params, cursor, display_names, budget).await
+        } else {
+            let Ok(admission) = backend.gate.acquire() else {
+                return Err(failed(NativeSessionFailureKind::Unavailable));
+            };
+            let Some(schemas) = admission.schemas() else {
+                return Err(failed(NativeSessionFailureKind::UnsupportedCapability));
+            };
+            if cursor.as_ref().is_some_and(|c| {
+                c.generation.as_ref() != Some(admission.generation())
+                    || c.expires_at
+                        .is_none_or(|e| e <= chrono::Utc::now().timestamp())
+                    || c.stored_id.is_some()
+                    || c.stored_time.is_some()
+            }) {
                 return Err(NativeSessionFailure::InvalidRequest(
                     INVALID_INVENTORY_PARAMETERS,
                 ));
-            };
-            Some(cursor)
-        }
-    };
-    let result = if matches!(params.view, NativeSessionView::Stored) {
-        if cursor.as_ref().is_some_and(|c| {
-            c.generation.is_some()
-                || c.native_cursor.is_some()
-                || c.expires_at.is_some()
-                || c.stored_id.as_ref().is_none_or(String::is_empty)
-        }) {
-            return Err(NativeSessionFailure::InvalidRequest(
-                INVALID_INVENTORY_PARAMETERS,
-            ));
-        }
-        stored_page(&backend.codex_home, &params, cursor, display_names, budget).await
-    } else {
-        let Ok(admission) = backend.gate.acquire() else {
+            }
+            let retired = admission.retirement();
+            tokio::select! {
+                _=retired.cancelled()=>Err(()),
+                result=runtime_page(&params,cursor,&admission,&schemas,display_names)=>result,
+            }
+        };
+        let Ok(page) = result else {
             return Err(failed(NativeSessionFailureKind::Unavailable));
         };
-        let Some(schemas) = admission.schemas() else {
-            return Err(failed(NativeSessionFailureKind::UnsupportedCapability));
-        };
-        if cursor.as_ref().is_some_and(|c| {
-            c.generation.as_ref() != Some(admission.generation())
-                || c.expires_at
-                    .is_none_or(|e| e <= chrono::Utc::now().timestamp())
-                || c.stored_id.is_some()
-                || c.stored_time.is_some()
-        }) {
-            return Err(NativeSessionFailure::InvalidRequest(
-                INVALID_INVENTORY_PARAMETERS,
-            ));
+        // Admission/rendering must succeed before catalog observations enter the journal.
+        if !budget.admits(&page) {
+            return Err(failed(NativeSessionFailureKind::ResponseTooLarge));
         }
-        let retired = admission.retirement();
-        tokio::select! {
-            _=retired.cancelled()=>Err(()),
-            result=runtime_page(&params,cursor,&admission,&schemas,display_names)=>result,
+        if matches!(params.view, NativeSessionView::Stored)
+            && let Some(store) = self.journal.as_deref()
+        {
+            let observer = crate::stored_inventory_observation::StoredInventoryObservation {
+                store,
+                observer_id: self.identity.service_epoch(),
+            };
+            // A storage failure invalidates C10 through LifecycleStore; it does not
+            // turn a successful read-only catalog operation into a native failure.
+            let _recorded = observer.record_page(&page).await;
         }
-    };
-    let Ok(page) = result else {
-        return Err(failed(NativeSessionFailureKind::Unavailable));
-    };
-    // Admission/rendering must succeed before catalog observations enter the journal.
-    if !budget.admits(&page) {
-        return Err(failed(NativeSessionFailureKind::ResponseTooLarge));
+        Ok(page)
     }
-    if matches!(params.view, NativeSessionView::Stored)
-        && let Some(store) = identity.journal.as_deref()
-    {
-        let observer = crate::stored_inventory_observation::StoredInventoryObservation {
-            store,
-            observer_id: &identity.service_epoch,
-        };
-        // A storage failure invalidates C10 through LifecycleStore; it does not
-        // turn a successful read-only catalog operation into a native failure.
-        let _recorded = observer.record_page(&page).await;
-    }
-    Ok(page)
 }
 fn encode(cursor: InventoryCursor) -> Result<String, ()> {
     let value = URL_SAFE_NO_PAD.encode(serde_json::to_vec(&cursor).map_err(|_| ())?);

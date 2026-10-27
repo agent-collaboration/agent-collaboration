@@ -54,7 +54,7 @@ impl SessionDeliveryRouter {
             .ok_or(DeliveryContractError::ClientOperation)
     }
 
-    async fn scheduled_for_fresh(
+    fn scheduled_for_fresh(
         &self,
         endpoint: &EndpointRef,
     ) -> Result<Arc<dyn ScheduledRunRoute>, DeliveryContractError> {
@@ -98,7 +98,7 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
                     self.scheduled_for_existing(target).await?
                 }
                 collaboration_protocol::DestinationPreparation::Fresh { endpoint, .. } => {
-                    self.scheduled_for_fresh(endpoint).await?
+                    self.scheduled_for_fresh(endpoint)?
                 }
                 collaboration_protocol::DestinationPreparation::Fork { source, .. } => {
                     self.scheduled_for_existing(source).await?
@@ -119,9 +119,7 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
                 ScheduleDestination::Existing { target } => {
                     self.scheduled_for_existing(target).await?
                 }
-                ScheduleDestination::Fresh { endpoint } => {
-                    self.scheduled_for_fresh(endpoint).await?
-                }
+                ScheduleDestination::Fresh { endpoint } => self.scheduled_for_fresh(endpoint)?,
                 ScheduleDestination::Fork { source, .. } => {
                     self.scheduled_for_existing(source).await?
                 }
@@ -137,9 +135,7 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
                 ScheduleDestination::Existing { target } => {
                     self.scheduled_for_existing(target).await?
                 }
-                ScheduleDestination::Fresh { endpoint } => {
-                    self.scheduled_for_fresh(endpoint).await?
-                }
+                ScheduleDestination::Fresh { endpoint } => self.scheduled_for_fresh(endpoint)?,
                 ScheduleDestination::Fork { source, .. } => {
                     self.scheduled_for_existing(source).await?
                 }
@@ -170,7 +166,7 @@ impl ScheduledRunExecution for SessionDeliveryRouter {
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, PreparedTarget> {
         Box::pin(async move {
-            let route = self.scheduled_for_fresh(&request.endpoint).await?;
+            let route = self.scheduled_for_fresh(&request.endpoint)?;
             route.prepare_fresh_session(request, sink).await
         })
     }

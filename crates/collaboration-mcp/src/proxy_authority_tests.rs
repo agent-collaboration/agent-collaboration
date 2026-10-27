@@ -4,7 +4,6 @@ use crate::{
     ProxyAuthority,
     api_test_harness::{ServedApi, TEST_PROTOCOL_VERSION, api_config, test_identity},
 };
-use collaboration_service::CollaborationApplication;
 use reqwest::{
     StatusCode,
     header::{ACCEPT, CONTENT_TYPE, HOST, ORIGIN},
@@ -14,10 +13,7 @@ use std::num::NonZeroU16;
 
 async fn served_api(port: Option<u16>) -> (tempfile::TempDir, ServedApi) {
     let directory = tempfile::tempdir().expect("service directory");
-    let config = api_config(
-        CollaborationApplication::new(test_identity()),
-        directory.path(),
-    );
+    let config = api_config((test_identity()).build(), directory.path());
     let proxy = port.map(|port| {
         ProxyAuthority::new(
             "node.example.ts.net".to_owned(),

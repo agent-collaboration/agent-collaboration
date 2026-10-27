@@ -1,5 +1,8 @@
 //! Component proofs for the actual Host factory; process-level G2 remains separate.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+)]
 use super::*;
 use collaboration_protocol::UuidIdentity;
 use collaboration_service::ProjectRegistrationState;
@@ -161,13 +164,12 @@ async fn assert_rejected_receipt_read(
     request: &ProjectCreateRequest,
 ) -> TestResult {
     use message_board::public_replies as public;
-    let application = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     let read = application
         .board()
         .request_effects(public::RequestEffectsRequest {
@@ -314,14 +316,13 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
             fleet_sync_writer::WriteRefusal::Provisional | fleet_sync_writer::WriteRefusal::Seeding
         ))
     ));
-    let projection = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone())
-        .with_project_replication(Arc::new(EmptyProjectProgress)),
-    );
+    let projection = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone())
+    .with_project_replication(Arc::new(EmptyProjectProgress)))
+    .build();
     let before_grant = projection
         .board()
         .view_work(ProjectViewRequest {

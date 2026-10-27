@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! A running Claude prompt identifies the operation receiving a steered message.
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{

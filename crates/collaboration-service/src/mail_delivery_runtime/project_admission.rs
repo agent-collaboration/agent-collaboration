@@ -1,5 +1,9 @@
 //! The project's chosen submission epoch commits with its outgoing SDK custody.
-use super::*;
+use super::{
+    Arc, AtomicStore, CarrierAcceptance, Clock, DeliveryError, DeliveryItem, MailDeliveryRuntime,
+    MailHost, MailSender, RouterDeliveryTypes, StoreError, SubmitMailTask, TursoScope,
+    WakeScheduler,
+};
 use fleet_sync_delivery::{
     DeliveryTransactionFailure, Outbox, OutboxAdmission, classify_delivery_store_error,
     delivery_rollback,
@@ -10,7 +14,7 @@ use interaction_storage::{
 use message_board::EpochNumber;
 
 impl MailDeliveryRuntime {
-    pub(crate) fn attach_project_replication(
+    pub fn attach_project_replication(
         &self,
         replication: Arc<dyn crate::ProjectReplicationPosition>,
     ) -> Result<(), String> {

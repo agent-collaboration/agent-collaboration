@@ -1,8 +1,17 @@
 //! The executable reads receipts through the SDK and the real served API.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
-#[allow(dead_code)] // This case uses the Fleet-only portion of the shared fixture.
+// This case uses the Fleet-only portion of the shared fixture.
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    unused_imports,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_fixture;
 use board_cli_execution::{accepted, cli};
 use board_fixture::{BoardFixture, TestError};
@@ -11,7 +20,10 @@ use serde_json::json;
 use std::process::Command;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove results; Result propagates fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove results; Result propagates fixture failures."
+)]
 async fn request_effects_cli_reads_a_decision_and_transmits_an_after_argument()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_replay().await?;
@@ -109,7 +121,10 @@ fn request_effects_cli_requires_exactly_one_explicit_scope() {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // The real MAC verifier is the continuation oracle.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The real MAC verifier is the continuation oracle."
+)]
 async fn request_effects_cli_resumes_a_signed_page_without_normalizing_the_token()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

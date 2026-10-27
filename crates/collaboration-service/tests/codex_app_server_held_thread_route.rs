@@ -22,6 +22,10 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::Message;
 #[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod native_mail_owner;
 use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
@@ -81,55 +85,67 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
 #[tokio::test]
 async fn held_empty_codex_thread_rejects_steer_then_starts_first_message_on_its_connection()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(None).await
+    Box::pin(exercise_held_empty_thread(None)).await
 }
 
 #[tokio::test]
 async fn scheduled_run_uses_held_empty_thread_without_read_or_second_connection()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Started)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Started))).await
 }
 
 #[tokio::test]
 async fn scheduled_run_busy_binding_does_not_dispatch_and_restores_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Busy)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Busy))).await
 }
 
 #[tokio::test]
 async fn scheduled_run_native_rejection_restores_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Rejected)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::Rejected,
+    )))
+    .await
 }
 
 #[tokio::test]
 async fn scheduled_run_admission_refusal_restores_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::AdmissionRefused)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::AdmissionRefused,
+    )))
+    .await
 }
 
 #[tokio::test]
 async fn scheduled_run_stale_generation_rejects_and_finishes_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Stale)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Stale))).await
 }
 
 #[tokio::test]
 async fn scheduled_run_retired_generation_never_inputs_and_finishes_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Retired)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Retired))).await
 }
 
 #[tokio::test]
 async fn codex_presence_reports_held_unmaterialized_thread_as_running()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Presence)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::Presence,
+    )))
+    .await
 }
 
 #[tokio::test]
 async fn codex_presence_reports_busy_held_thread_as_running()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::PresenceBusy)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::PresenceBusy,
+    )))
+    .await
 }
 
 #[derive(Clone, Copy)]
@@ -643,7 +659,7 @@ async fn exercise_held_empty_thread(
         },
     );
     subscription_delivery.start().await?;
-    let identity = collaboration_service::ServiceIdentity::new(
+    let identity = collaboration_service::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000001",
     )
@@ -664,7 +680,7 @@ async fn exercise_held_empty_thread(
             clock: Arc::new(collaboration_service::SystemSubscriptionClock),
         },
     )?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let control = served.client("held-thread-message").await?;
     let started = control
         .send_message(collaboration_client::MessageSendRequest {

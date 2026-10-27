@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! Real-provider races where LoadedOnly must refuse a newly unloaded session.
 
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
@@ -26,7 +29,10 @@ use std::{
 };
 
 #[path = "support/provider_acp_message_fifo_support.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod provider_acp_message_fifo_support;
 use provider_acp_message_fifo_support::{
     NoLivePeer, RecordedEvidence, available_directory, provider_binding, refusing_load_fixture,

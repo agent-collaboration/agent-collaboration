@@ -1,5 +1,11 @@
 //! Select and settle Router-local windows without writing replicated membership.
-use super::*;
+use super::{
+    BatchId, BoardError, DateTime, Identity, MAX_SUBSCRIPTION_NOTICE_ROOTS, PendingRootNotice,
+    ProjectId, ResourceIdentity, SubscriptionBatch, SubscriptionBatchRootSettlement,
+    SubscriptionBatchSettlement, SubscriptionDeliveryOutcome, SubscriptionDeliveryProgress,
+    SubscriptionMode, SubscriptionState, SubscriptionWindowSelection, SubscriptionWindowStore,
+    ThreadId, ThreadRef, Utc, WhenIdle, unavailable,
+};
 
 impl SubscriptionWindowStore {
     pub async fn thread_project(&self, thread: &ThreadRef) -> Result<ProjectId, BoardError> {
@@ -33,7 +39,7 @@ impl SubscriptionWindowStore {
         )
         .await
     }
-    pub(in crate::service_identity::subscription_delivery) async fn select_project_subscription_notice(
+    pub(in crate::subscription_delivery) async fn select_project_subscription_notice(
         &mut self,
         reader: &Identity,
         threads: &[ThreadId],
@@ -162,7 +168,7 @@ impl SubscriptionWindowStore {
         self.write_project_batch(reader, settlement, write, &projects, &[])
             .await
     }
-    pub(in crate::service_identity::subscription_delivery) async fn write_project_batch(
+    pub(in crate::subscription_delivery) async fn write_project_batch(
         &mut self,
         reader: &Identity,
         settlement: &SubscriptionBatchSettlement,
@@ -258,7 +264,7 @@ impl SubscriptionWindowStore {
         self.drop_project_subscription_roots(reader, threads, now, &projects, &[])
             .await
     }
-    pub(in crate::service_identity::subscription_delivery) async fn drop_project_subscription_roots(
+    pub(in crate::subscription_delivery) async fn drop_project_subscription_roots(
         &mut self,
         reader: &Identity,
         threads: &[ThreadId],
@@ -290,7 +296,7 @@ enum WindowSelectionPurpose {
     Notice { maximum_root_notice_bytes: usize },
     IdleDrop,
 }
-pub(in crate::service_identity::subscription_delivery) enum WindowWrite {
+pub(in crate::subscription_delivery) enum WindowWrite {
     Settle(SubscriptionDeliveryOutcome),
     Release,
 }

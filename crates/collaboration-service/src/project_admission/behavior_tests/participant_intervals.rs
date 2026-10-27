@@ -31,7 +31,10 @@ pub(super) async fn create_as(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Claims use actual native admission and public holder reads.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Claims use actual native admission and public holder reads."
+)]
 async fn implementer_seat_is_unique_replaceable_and_visible_on_thread_reads()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::empty().await?;
@@ -108,7 +111,10 @@ async fn implementer_seat_is_unique_replaceable_and_visible_on_thread_reads()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Every join remains historical, with one open interval and explicit watch state.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Every join remains historical, with one open interval and explicit watch state."
+)]
 async fn create_and_repeated_joins_retain_history_and_one_open_participant() -> Result<(), TestError>
 {
     let mut fixture = SubscriptionFixture::empty().await?;
@@ -231,7 +237,10 @@ async fn create_and_repeated_joins_retain_history_and_one_open_participant() -> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // A human root need not join; a session's refused root creation creates no conversation data.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A human root need not join; a session's refused root creation creates no conversation data."
+)]
 async fn human_create_without_role_has_no_participant_and_session_create_changes_only_rejection_ledger()
 -> Result<(), TestError> {
     let fixture = SubscriptionFixture::empty().await?;

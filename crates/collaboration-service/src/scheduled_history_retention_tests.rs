@@ -81,7 +81,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         })
         .await?;
     for _ in 0..4 {
-        worker.step(first_run.clone()).await?;
+        Box::pin(worker.step(first_run.clone())).await?;
         apply_push_handoff(&worker).await?;
     }
     let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
@@ -105,10 +105,10 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     );
     let service_id = target.endpoint.service_id.clone();
     let service = String::from(service_id.clone());
-    let identity = crate::ServiceIdentity::new(&service, &service)?
+    let identity = crate::ApplicationFixture::new(&service, &service)?
         .with_automation_store(Arc::clone(&store))
         .with_interaction_store(Arc::clone(&interactions));
-    let application = crate::CollaborationApplication::new(identity);
+    let application = (identity).build();
     let old_link = RouterLink::new(MachineId::from(service_id.clone()), first_push_id.clone());
     let error = application
         .messages()
@@ -140,7 +140,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         matches!(store.lock().await.admit_waiting_run::<SessionRef, EndpointRef>(&schedule_id, now.timestamp_millis()).await?, automation_storage::RunAdmission::Admitted { run_id, .. } if run_id == second_run)
     );
     for _ in 0..4 {
-        worker.step(second_run.clone()).await?;
+        Box::pin(worker.step(second_run.clone())).await?;
         apply_push_handoff(&worker).await?;
     }
     let second = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&second_run).await?;

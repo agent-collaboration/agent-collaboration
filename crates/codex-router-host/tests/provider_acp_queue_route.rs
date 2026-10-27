@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used)]
 //! Explicit queue mode is shared by both ACP providers.
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{

@@ -1,5 +1,13 @@
 //! Thread pages read their workspace and returned records only.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -41,7 +49,10 @@ async fn call_with_fields(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn thread_page_never_decodes_another_workspaces_corrupt_thread() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
@@ -106,7 +117,10 @@ async fn thread_page_never_decodes_another_workspaces_corrupt_thread() -> Result
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn watched_keyset_honors_thread_opt_out_and_validates_the_start_position()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

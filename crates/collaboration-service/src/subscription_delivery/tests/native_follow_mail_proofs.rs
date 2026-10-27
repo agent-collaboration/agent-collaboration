@@ -5,7 +5,7 @@ use collaboration_mail_protocol::NotificationSource;
 use message_board::HandoffSeq;
 use message_board_storage::MailHandoffItem;
 
-pub(in crate::service_identity::subscription_delivery) async fn follow_application(
+pub(in crate::subscription_delivery) async fn follow_application(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
 ) -> (
@@ -48,7 +48,7 @@ pub(super) async fn follow_application_with_replication(
         .unwrap();
     let interactions = fixture.interactions.clone();
     let (identity, native) = NativeMailOwner::start_with_session(
-        ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_project_replication(replication)
             .with_automation_store(fixture.automation.clone())
@@ -71,13 +71,11 @@ pub(super) async fn follow_application_with_replication(
         fixture.interactions.clone(),
         Arc::downgrade(&native.runtime_handle()),
     ));
-    let app = Arc::new(CollaborationApplication::new(
-        identity.with_notification_publisher(publisher.clone()),
-    ));
+    let app = Arc::new((identity.with_notification_publisher(publisher.clone())).build());
     (app, native, publisher)
 }
 
-pub(in crate::service_identity::subscription_delivery) async fn frozen_follow(
+pub(in crate::subscription_delivery) async fn frozen_follow(
     fixture: &OwnerFixture,
 ) -> Vec<fleet_sync_protocol::DeliveryItem<BoardDeliveryTypes>> {
     let store = fixture
@@ -99,7 +97,7 @@ pub(in crate::service_identity::subscription_delivery) async fn frozen_follow(
 #[tokio::test]
 async fn held_follow_keeps_its_frozen_item_ranges_and_link_until_one_native_acceptance() {
     // Arrange the real reader, project owner and native mail owner before the post.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;

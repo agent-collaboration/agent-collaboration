@@ -1,13 +1,28 @@
 //! The root project CLI reaches requested cancellation over real frozen rows and SDK custody.
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
-#[allow(dead_code)]
+#[expect(
+    unused_imports,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_fixture;
 #[path = "../../collaboration-service/tests/support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_read_setup;
 #[path = "support/closed_mail_session.rs"]
 mod closed_mail_session;
 #[path = "support/local_mail_surfaces.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod local_mail_surfaces;
 use board_fixture::native_mail_owner;
 use board_fixture::{BoardFixture, TestError};
@@ -39,7 +54,10 @@ async fn cli(surface: &Surfaces, path: &std::path::Path) -> Result<(i32, Value),
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn project_notification_cancel_cli_preserves_pending_authority_and_requester_without_recording_a_project_request()
 -> Result<(), TestError> {
     let board = BoardFixture::start().await?;

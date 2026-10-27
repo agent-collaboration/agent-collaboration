@@ -1,4 +1,12 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use collaboration_service::SubscriptionWindowStore;
 use message_board::*;
@@ -7,7 +15,10 @@ use std::sync::Arc;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Native settlement must leave both membership and feed unchanged.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Native settlement must leave both membership and feed unchanged."
+)]
 async fn local_selection_settles_without_changing_replicated_membership_or_feed() -> TestResult {
     let fixture = board_fixture::BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;

@@ -1,9 +1,11 @@
 //! Keep shared failures and retryable project failures distinct from quarantine.
 use crate::ProjectRegistryError;
-use message_board::*;
+use message_board::{
+    BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardNextAction, ProjectId,
+};
 use message_board_storage::ProjectStorageError;
 
-pub(in crate::service_identity::subscription_delivery) enum WindowStoreError {
+pub(in crate::subscription_delivery) enum WindowStoreError {
     Project {
         project: ProjectId,
         error: BoardError,

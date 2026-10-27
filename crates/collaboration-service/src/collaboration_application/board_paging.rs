@@ -1,6 +1,9 @@
 //! Scope-bound signed cursors retain the existing board pagination contract.
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    AggregateCursor, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage,
+    BoardNextAction, Page, PageRequest,
+};
 use message_board_storage::{decode_board_cursor, encode_board_cursor};
 use serde::{Deserialize, Serialize};
 
@@ -35,7 +38,7 @@ pub(super) fn invalid_cursor() -> BoardError {
         details: BoardErrorDetails::None,
     }
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     /// SQL has already limited and merged candidates; an extra key proves continuation.
     pub(super) async fn selected_metadata_page<TRecord: Serialize>(
         &self,

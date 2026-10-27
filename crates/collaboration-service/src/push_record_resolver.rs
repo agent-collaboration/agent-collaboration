@@ -1,5 +1,5 @@
 //! Resolves local push links, applies reported-caller access rules, and expands stored ranges.
-use crate::ServiceIdentity;
+use crate::RouterIdentity;
 use collaboration_protocol::{
     MachineId, PushActivityRangeRead, PushId, PushKind, PushLineInput, PushOrigin, PushRecord,
     PushRecordNotice, RouterLink, SessionRef, render_push_line,
@@ -7,9 +7,9 @@ use collaboration_protocol::{
 use message_board::{FeedContent, FeedPosition, Placement, Record};
 use message_board_storage::{FeedPageBounds, FeedPageDirection};
 
-pub(crate) fn link_for(record: &PushRecord, identity: &ServiceIdentity) -> String {
+pub(crate) fn link_for(record: &PushRecord, identity: &RouterIdentity) -> String {
     RouterLink::new(
-        MachineId::from(identity.machine_identity.service_id().clone()),
+        MachineId::from(identity.machine_identity().service_id().clone()),
         record.push_id.clone(),
     )
     .to_string()
@@ -17,14 +17,14 @@ pub(crate) fn link_for(record: &PushRecord, identity: &ServiceIdentity) -> Strin
 
 pub(crate) fn line_for(
     record: &PushRecord,
-    identity: &ServiceIdentity,
+    identity: &RouterIdentity,
 ) -> Result<String, collaboration_protocol::PushLineError> {
     render_push_line(&PushLineInput {
         link: RouterLink::new(
-            MachineId::from(identity.machine_identity.service_id().clone()),
+            MachineId::from(identity.machine_identity().service_id().clone()),
             record.push_id.clone(),
         ),
-        machine_label: identity.machine_identity.machine_label().clone(),
+        machine_label: identity.machine_identity().machine_label().clone(),
         origin: record.origin.clone(),
         header_facts: record.header_facts.clone(),
         body: record.body.clone(),
@@ -33,13 +33,13 @@ pub(crate) fn line_for(
 
 pub(crate) fn resolve_reference(
     reference: &str,
-    identity: &ServiceIdentity,
+    identity: &RouterIdentity,
 ) -> Result<PushId, ReferenceError> {
     if let Ok(push_id) = PushId::try_from(reference.to_owned()) {
         return Ok(push_id);
     }
     let link = RouterLink::parse(reference).map_err(|_| ReferenceError::Invalid)?;
-    let local_machine_id = String::from(identity.machine_identity.service_id().clone());
+    let local_machine_id = String::from(identity.machine_identity().service_id().clone());
     if link.machine_id().as_str() != local_machine_id {
         return Err(ReferenceError::Foreign(
             link.machine_id().as_str().to_owned(),
@@ -56,13 +56,13 @@ pub(crate) fn can_read(record: &PushRecord, caller: &SessionRef) -> bool {
         && matches!(&record.origin, PushOrigin::Session(origin) if origin == caller)
 }
 
-pub(crate) fn caller_is_local(caller: &SessionRef, identity: &ServiceIdentity) -> bool {
-    caller.endpoint.service_id == identity.service_id
+pub(crate) fn caller_is_local(caller: &SessionRef, identity: &RouterIdentity) -> bool {
+    caller.endpoint.service_id == *identity.service_id()
 }
 
 pub(crate) fn make_notice_list(
     records: Vec<PushRecord>,
-    identity: &ServiceIdentity,
+    identity: &RouterIdentity,
 ) -> Result<Vec<PushRecordNotice>, collaboration_protocol::PushLineError> {
     records
         .into_iter()
@@ -90,18 +90,17 @@ pub(crate) enum ActivityReadError {
 
 pub(crate) async fn expand_activity_ranges(
     record: &PushRecord,
-    identity: &ServiceIdentity,
+    registry: Option<&std::sync::Arc<crate::ProjectStoreRegistry>>,
 ) -> Result<Vec<PushActivityRangeRead>, ActivityReadError> {
     let Some(snapshot) = record.activity.as_ref() else {
         return Ok(Vec::new());
     };
-    let Some(admission) = identity.project_admission.as_ref() else {
+    let Some(registry) = registry else {
         return Err(ActivityReadError::Unavailable);
     };
     let mut ranges = Vec::with_capacity(snapshot.ranges.len());
     for range in &snapshot.ranges {
-        let store = admission
-            .registry
+        let store = registry
             .read_project(&range.project_id)
             .await
             .map_err(|_| ActivityReadError::Failed)?

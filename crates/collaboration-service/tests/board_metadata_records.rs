@@ -1,5 +1,13 @@
 //! M2.5b preserves project_records' metadata, corruption and bounded hierarchy claims.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -7,7 +15,10 @@ use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Corrupt identity must be attributed without echoing stored raw values.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Corrupt identity must be attributed without echoing stored raw values."
+)]
 async fn malformed_stored_primary_id_is_reported_without_echoing_the_raw_value()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -42,7 +53,10 @@ async fn malformed_stored_primary_id_is_reported_without_echoing_the_raw_value()
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn corrupt_metadata_listing_names_the_resource_and_canonical_inspection_action()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -97,7 +111,10 @@ async fn corrupt_metadata_listing_names_the_resource_and_canonical_inspection_ac
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn large_metadata_lists_continue_before_the_control_frame_limit() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let full_description = "x".repeat(MAX_DESCRIPTION_BYTES);

@@ -1,8 +1,19 @@
 //! A measured future excludes concurrent native SQL outside its subscriber.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 #![deny(clippy::too_many_lines)]
-#[allow(dead_code)] // Other cost-proof APIs share this source, but are not exercised here.
+// Other cost-proof APIs share this source, but are not exercised here.
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 
 use read_cost_counter::ReadCostObservation;

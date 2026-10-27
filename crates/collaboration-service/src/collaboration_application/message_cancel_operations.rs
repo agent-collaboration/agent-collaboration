@@ -1,17 +1,20 @@
 //! A sender requests one SDK control using its Router's frozen routing projection.
-use super::*;
+use super::{
+    MessageFailure, MessageFailureKind, MessageFailureStage, MessageOperations, MessageSendResult,
+    PushId, PushKind,
+};
 use collaboration_mail_protocol::{CancelCause, MailSender};
 use collaboration_protocol::{MessageCancelRequest, MessageCancelSender, RequestedCancelResult};
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, ItemId, Recipient};
 
-impl MessageOperations<'_> {
+impl MessageOperations {
     pub async fn message_cancel(
         &self,
         request: MessageCancelRequest,
     ) -> Result<RequestedCancelResult, MessageFailure> {
         let stage = MessageFailureStage::Discovery;
         let store = self.push_store(stage)?;
-        let mail = self.identity.mail_delivery.as_ref().ok_or_else(|| {
+        let mail = self.mail_delivery.as_ref().ok_or_else(|| {
             MessageFailure::discovery(
                 MessageFailureKind::Unavailable,
                 "Message cancellation is unavailable",
@@ -19,7 +22,7 @@ impl MessageOperations<'_> {
         })?;
         let sender = match request.sender {
             MessageCancelSender::Agent { sender } => {
-                if sender.endpoint.service_id != self.identity.service_id {
+                if sender.endpoint.service_id != *self.identity.service_id() {
                     return Err(MessageFailure::discovery(
                         MessageFailureKind::WrongService,
                         "Cancel sender belongs to another Router",
@@ -33,7 +36,7 @@ impl MessageOperations<'_> {
                 })?)
             }
             MessageCancelSender::HumanUser => MailSender::HumanUser {
-                installation: String::from(self.identity.service_id.clone())
+                installation: String::from(self.identity.service_id().clone())
                     .try_into()
                     .map_err(|_| {
                         MessageFailure::discovery(
@@ -98,7 +101,7 @@ impl MessageOperations<'_> {
                 ));
             }
             Recipient {
-                peer: self.identity.installation_peer.ok_or_else(|| {
+                peer: self.identity.installation_peer().ok_or_else(|| {
                     MessageFailure::discovery(
                         MessageFailureKind::Unavailable,
                         "Installation identity is unavailable",

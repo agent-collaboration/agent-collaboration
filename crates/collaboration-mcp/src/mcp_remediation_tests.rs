@@ -143,12 +143,12 @@ impl ConversationFixture {
         root: tempfile::TempDir,
         endpoint: collaboration_protocol::EndpointDescription,
     ) -> Self {
-        let identity = collaboration_service::ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+        let identity = collaboration_service::ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .expect("identity")
             .with_endpoints(vec![endpoint])
             .expect("endpoint directory");
         // The carrier tools discover their sockets from the Router's own endpoint directory.
-        let application = collaboration_service::CollaborationApplication::new(identity);
+        let application = (identity).build();
         let listener = ServedApi::tcp(&api_config(application, root.path())).await;
         Self { root, listener }
     }

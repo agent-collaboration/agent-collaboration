@@ -1,6 +1,18 @@
 //! P1 diagnostic: actual per-target owner and SQLite, with no concurrent admissions.
 #[path = "support/board_fixture.rs"]
-#[allow(dead_code)] // This scenario uses only the shared fixture's replay and shutdown paths.
+// This scenario uses only the shared fixture's replay and shutdown paths.
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod board_fixture;
 #[path = "support/held_queue_counter.rs"]
 mod held_queue_counter;
@@ -14,8 +26,8 @@ use collaboration_protocol::{
     PushDeliveryState, SessionMessageSendParams, SessionRef,
 };
 use collaboration_service::{
-    AttemptEvidenceSink, BoardAvailability, CollaborationApplication, DeliveryFuture,
-    MachineIdentity, ServiceIdentity, SessionMessageDelivery, SubscriptionDeliveryService,
+    ApplicationFixture, AttemptEvidenceSink, BoardAvailability, CollaborationApplication,
+    DeliveryFuture, MachineIdentity, SessionMessageDelivery, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SystemSubscriptionClock, TargetPresence, TargetPresenceProbe,
 };
 use serde_json::json;
@@ -154,7 +166,10 @@ async fn assert_refused_without_custody(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+)]
 async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity_boundary()
 -> Result<(), TestError> {
     let counter = held_queue_counter::SqlCounter::default();
@@ -189,7 +204,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
         clock: Arc::new(SystemSubscriptionClock),
     });
     service.start().await?;
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
@@ -206,7 +221,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
             clock: Arc::new(SystemSubscriptionClock),
         },
     )?;
-    let app = CollaborationApplication::new(identity);
+    let app = (identity).build();
     let target: SessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"held-depth-target"}),
     )?;

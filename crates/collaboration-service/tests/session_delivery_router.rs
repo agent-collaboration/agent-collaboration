@@ -185,7 +185,10 @@ fn fake_with_claim_and_presence(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn presence_aggregation_uses_running_then_live_elsewhere_then_wakeable()
 -> Result<(), Box<dyn std::error::Error>> {
     let (running, _) = fake_with_claim_and_presence(
@@ -314,7 +317,10 @@ async fn presence_aggregation_uses_running_then_live_elsewhere_then_wakeable()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn loaded_only_delegates_loadability_inspection_to_the_route()
 -> Result<(), Box<dyn std::error::Error>> {
     let (loadable, route_calls) = fake_with_outcome(

@@ -1,7 +1,23 @@
 //! Rule operands and metadata counts must not decode unrelated project contents.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -295,12 +311,15 @@ async fn write_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCost>, Te
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn representative_writes_have_operand_bounded_statement_and_decode_counts()
 -> Result<(), TestError> {
     read_cost_counter::install();
-    let small = write_costs(8).await?;
-    let large = write_costs(80).await?;
+    let small = Box::pin(write_costs(8)).await?;
+    let large = Box::pin(write_costs(80)).await?;
     eprintln!("write costs: small={small:?}\nlarge={large:?}");
     assert_eq!(
         small, large,

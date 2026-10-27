@@ -4,7 +4,10 @@ use super::*;
 // in control_view_proofs::native_retry_observations_reach_the_public_view_and_clear_after_readiness.
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn arrivals_after_release_do_not_restart_the_original_window_cap() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();
@@ -61,7 +64,10 @@ async fn arrivals_after_release_do_not_restart_the_original_window_cap() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn drop_storage_primitive_does_not_skip_hold_policy_activity() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();
@@ -100,7 +106,10 @@ async fn drop_storage_primitive_does_not_skip_hold_policy_activity() -> Result<(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn late_lower_settlement_never_moves_delivered_backwards() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();
@@ -164,7 +173,10 @@ async fn late_lower_settlement_never_moves_delivered_backwards() -> Result<(), T
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn drop_advances_delivered_but_keeps_activity_unread() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();

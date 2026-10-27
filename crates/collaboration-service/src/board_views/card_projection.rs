@@ -1,6 +1,9 @@
 //! Cards select actor authority and subject trail without inventing duties or evidence.
 use super::{ViewSnapshot, pending_projection::lead_owed};
-use message_board::*;
+use message_board::{
+    Assignment, AuthorityRole, BoardError, ContinuationCard, ContinuationCardRequest, Record,
+    RecordKind, RecordRef, RoleAssignment, RoleSubject, SessionRunningState, TrailSubject,
+};
 
 const RECENT_TRAIL_LIMIT: usize = 20;
 const SILENCE_RULE: &str = "A claim the board does not contradict is unrecorded, not false.";

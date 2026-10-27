@@ -3,7 +3,11 @@
 use tokio::net::UnixStream;
 use tokio::sync::mpsc;
 
-use super::*;
+use super::{
+    AppServerChild, AppServerCondition, ChildCommandSpec, HostConfig, HostOperation, HostPhase,
+    HostSnapshot, ManagedChildLaunchPlans, ManagedUpdateInputs, OperatorRequest,
+    RemoteControlCondition, RouterChild, RouterCondition, RuntimeState, TerminalClassification,
+};
 use crate::HostTerminalResponse;
 use crate::OperatorFrame;
 
@@ -424,6 +428,7 @@ pub(super) fn send_progress(
 
 #[cfg(test)]
 mod tests {
+    use crate::{ExecutableRelation, HostSnapshotDimensions, RecoveryBudget};
     use tokio::io::AsyncReadExt;
     use tokio::io::AsyncWriteExt;
 

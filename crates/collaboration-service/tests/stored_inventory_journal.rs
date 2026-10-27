@@ -9,9 +9,7 @@ mod tests {
         NativeSessionView, PushHeaderFacts, PushId, PushLineInput, PushOrigin, RouterLink,
         SessionDisplayNameLookup, parse_push_line_header, render_push_line, session_identity,
     };
-    use collaboration_service::{
-        CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-    };
+    use collaboration_service::{ApplicationFixture, NativeControlBackend, NativeGenerationGate};
     use lifecycle_observation::{LifecycleStore, ObservationJournal};
     use serde_json::json;
     use std::{
@@ -65,7 +63,7 @@ mod tests {
             }]
         }))
         .unwrap();
-        let identity = ServiceIdentity::new(id, epoch)
+        let identity = ApplicationFixture::new(id, epoch)
             .unwrap()
             .with_endpoints(vec![description])
             .unwrap()
@@ -76,10 +74,7 @@ mod tests {
             })
             .unwrap();
         let display_names = identity.session_display_name_cache();
-        let served =
-            ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-                .await
-                .unwrap();
+        let served = ServedCollaborationApi::start(root.path(), (identity).build()).unwrap();
         let client = served.client("stored-title-test").await.unwrap();
         let inventory = client
             .list_sessions(NativeSessionListParams {
@@ -171,7 +166,7 @@ mod tests {
         .unwrap();
         let store = Arc::new(LifecycleStore::new(journal));
         let description = serde_json::from_value(json!({"endpoint":endpoint,"label":"Stored fixture","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"absent-native.sock","schemaDigest":null,"generation":null}]})).unwrap();
-        let identity = ServiceIdentity::new(id, epoch)
+        let identity = ApplicationFixture::new(id, epoch)
             .unwrap()
             .with_endpoints(vec![description])
             .unwrap()
@@ -182,9 +177,7 @@ mod tests {
                 codex_home: home.clone(),
             })
             .unwrap();
-        let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-            .await
-            .unwrap();
+        let served = ServedCollaborationApi::start(&root, (identity).build()).unwrap();
         let client = served.client("stored-journal-test").await.unwrap();
         let request = |cursor| NativeSessionListParams {
             endpoint: endpoint.clone(),
@@ -350,7 +343,7 @@ mod tests {
         .unwrap();
         let store = Arc::new(LifecycleStore::new(journal));
         let description = serde_json::from_value(json!({"endpoint":endpoint,"label":"Scoped fixture","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"absent-native.sock","schemaDigest":null,"generation":null}]})).unwrap();
-        let identity = ServiceIdentity::new(id, epoch)
+        let identity = ApplicationFixture::new(id, epoch)
             .unwrap()
             .with_endpoints(vec![description])
             .unwrap()
@@ -361,9 +354,7 @@ mod tests {
                 codex_home: home,
             })
             .unwrap();
-        let served = ServedCollaborationApi::start(root, CollaborationApplication::new(identity))
-            .await
-            .unwrap();
+        let served = ServedCollaborationApi::start(root, (identity).build()).unwrap();
         let client = served.client("scoped-listing-test").await.unwrap();
         let mut pages = Vec::new();
         let mut cursor = None;

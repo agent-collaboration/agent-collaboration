@@ -5,7 +5,6 @@
 //! Each sub-area fails with its existing typed payload (`ConfigurationFailure`, `RunFailure`,
 //! `InstructionFailure`, `ScheduleFailure`, `AutomationInspectionFailure`).
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::ServiceIdentity;
 use automation_storage::{
     AutomationStore, InstructionUpdate, StorageError, SummaryRecoveryAction, SummaryRecoveryRequest,
 };
@@ -23,17 +22,48 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Automation operations over automation storage, the Host's configuration and scheduled runs.
-pub struct AutomationOperations<'service> {
-    pub(super) identity: &'service ServiceIdentity,
+pub struct AutomationOperations {
+    pub(super) identity: crate::RouterIdentity,
+    pub(super) automation:
+        Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
+    pub(super) configuration: crate::AutomationConfigurationHandle,
+    pub(super) configuration_backend:
+        Option<std::sync::Arc<dyn crate::AutomationConfigurationBackend>>,
+    pub(super) session_delivery: Option<std::sync::Arc<dyn crate::SessionMessageDelivery>>,
+    pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
+    pub(super) scheduled_run_execution: Option<std::sync::Arc<dyn crate::ScheduledRunExecution>>,
+    pub(super) native_backend: Option<crate::NativeControlBackend>,
 }
 
-impl<'service> AutomationOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl AutomationOperations {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Constructor injection keeps each independently owned capability explicit instead of recreating a service locator."
+    )]
+    pub fn new(
+        identity: crate::RouterIdentity,
+        automation: Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
+        configuration: crate::AutomationConfigurationHandle,
+        configuration_backend: Option<std::sync::Arc<dyn crate::AutomationConfigurationBackend>>,
+        session_delivery: Option<std::sync::Arc<dyn crate::SessionMessageDelivery>>,
+        interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
+        scheduled_run_execution: Option<std::sync::Arc<dyn crate::ScheduledRunExecution>>,
+        native_backend: Option<crate::NativeControlBackend>,
+    ) -> Self {
+        Self {
+            identity,
+            automation,
+            configuration,
+            configuration_backend,
+            session_delivery,
+            interaction_store,
+            scheduled_run_execution,
+            native_backend,
+        }
     }
 
-    pub(super) fn store(&self) -> Option<&'service Arc<Mutex<AutomationStore>>> {
-        self.identity.automation.as_ref()
+    pub(super) fn store(&self) -> Option<&Arc<Mutex<AutomationStore>>> {
+        self.automation.as_ref()
     }
 
     /// Storage availability, the current configuration and the earliest retained event cursor.
@@ -53,7 +83,7 @@ impl<'service> AutomationOperations<'service> {
         let cursor = floor.and_then(|(sequence, observed)| {
             serde_json::to_string(&(
                 1_u8,
-                &self.identity.service_id,
+                self.identity.service_id(),
                 "automation-events",
                 sequence.saturating_sub(1),
                 observed,
@@ -62,7 +92,7 @@ impl<'service> AutomationOperations<'service> {
         });
         AutomationStatus {
             storage_available: store.is_some(),
-            configuration: self.identity.configuration.current().await,
+            configuration: self.configuration.current().await,
             earliest_retained_event_cursor: cursor,
         }
     }
@@ -72,7 +102,7 @@ impl<'service> AutomationOperations<'service> {
         &self,
         request: AutomationConfigureRequest,
     ) -> Result<AutomationConfiguration, ConfigurationFailure> {
-        let Some(backend) = self.identity.configuration_backend.as_ref() else {
+        let Some(backend) = self.configuration_backend.as_ref() else {
             return Err(ConfigurationFailure {
                 kind: ConfigurationFailureKind::AutomationUnavailable,
                 message: "Host configuration backend unavailable; no file replacement dispatched."
@@ -109,7 +139,7 @@ impl<'service> AutomationOperations<'service> {
             Some(request.run_id.clone()),
         );
         let store = self.run_store(&mut context)?;
-        let lease = self.identity.configuration.admission_lease().await;
+        let lease = self.configuration.admission_lease().await;
         let Some(configuration) = lease.configuration() else {
             context.kind = RunFailureKind::AutomationUnavailable;
             context.message =
@@ -144,7 +174,7 @@ impl<'service> AutomationOperations<'service> {
     fn run_store(
         &self,
         context: &mut RunFailure,
-    ) -> Result<&'service Arc<Mutex<AutomationStore>>, RunFailure> {
+    ) -> Result<&Arc<Mutex<AutomationStore>>, RunFailure> {
         self.store().ok_or_else(|| {
             context.kind = RunFailureKind::AutomationUnavailable;
             context.message = "Automation storage unavailable; no Run mutation dispatched.".into();
@@ -217,7 +247,7 @@ impl<'service> AutomationOperations<'service> {
     fn instruction_store(
         &self,
         context: &InstructionContext,
-    ) -> Result<&'service Arc<Mutex<AutomationStore>>, InstructionFailure> {
+    ) -> Result<&Arc<Mutex<AutomationStore>>, InstructionFailure> {
         self.store().ok_or_else(|| {
             instruction_failure(
                 context.clone(),
@@ -332,10 +362,10 @@ fn project_run(
 /// The identities and mutation flag an instruction failure reports.
 #[derive(Clone)]
 pub(crate) struct InstructionContext {
-    pub(crate) operation_id: Option<OperationId>,
-    pub(crate) instruction_id: Option<InstructionId>,
-    pub(crate) mutation: bool,
-    pub(crate) current_revision_id: Option<collaboration_protocol::RevisionId>,
+    pub(super) operation_id: Option<OperationId>,
+    pub(super) instruction_id: Option<InstructionId>,
+    pub(super) mutation: bool,
+    pub(super) current_revision_id: Option<collaboration_protocol::RevisionId>,
 }
 
 impl InstructionContext {
@@ -350,10 +380,10 @@ impl InstructionContext {
 }
 
 pub(crate) struct InstructionFailureReason<'a> {
-    pub(crate) kind: InstructionFailureKind,
-    pub(crate) stage: InstructionStage,
-    pub(crate) message: &'a str,
-    pub(crate) mutation: LocalMutationState,
+    pub(super) kind: InstructionFailureKind,
+    pub(super) stage: InstructionStage,
+    pub(super) message: &'a str,
+    pub(super) mutation: LocalMutationState,
 }
 
 /// An instruction failure with the next action its kind and context imply.

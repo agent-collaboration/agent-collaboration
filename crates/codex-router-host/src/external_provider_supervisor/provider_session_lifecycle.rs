@@ -1,6 +1,12 @@
 //! Durable provider resume and close operations.
 
-use super::*;
+use super::{
+    Arc, ConversationOperationFailureKind, ConversationOperationFailureStage,
+    ConversationOperationSettlement, ConversationOperationSubmission, ExternalProviderSupervisor,
+    PathBuf, PreparedOperation, ProviderConversationFuture, ProviderOperationCompletion,
+    ProviderOperationEffect, ProviderOperationKind, admitted_submission, effective_settings,
+    existing_submission, failure, provider_session_record, retain_operation, runtime_failure,
+};
 use collaboration_protocol::{
     ConversationCloseRequest, ConversationResumeRequest, ProviderHistoryAvailability,
 };

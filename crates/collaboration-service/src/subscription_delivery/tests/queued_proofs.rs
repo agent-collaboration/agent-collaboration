@@ -10,7 +10,7 @@ use message_board::{SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionS
 
 #[tokio::test(start_paused = true)]
 async fn declared_renewal_before_covering_wait_changes_only_the_covered_membership() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let uncovered_root = fixture.add_root().await;
     for root in [&fixture.root, &uncovered_root] {
         fixture
@@ -144,7 +144,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
 
 #[tokio::test(start_paused = true)]
 async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
     fixture.post(&fixture.root, "Queued activity").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -207,7 +207,7 @@ async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
 
 #[tokio::test(start_paused = true)]
 async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
     fixture.post(&fixture.root, "Not submitted").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -251,7 +251,7 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
 
 #[tokio::test(start_paused = true)]
 async fn acp_queue_still_unknown_settles_unknown_with_route_evidence() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
     fixture.post(&fixture.root, "Unknown queue").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();

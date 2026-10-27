@@ -1,7 +1,7 @@
 //! Export must reserve import-envelope space, not just fit its own response.
 use automation_storage::AutomationStore;
 use collaboration_protocol::{EndpointRef, OperationId, ScheduleShowRequest, SessionRef};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/served_api.rs"]
@@ -54,13 +54,13 @@ async fn export_rejects_package_that_fits_response_but_not_import()
         })
         .await?;
     let store = Arc::new(tokio::sync::Mutex::new(store));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(Arc::clone(&store));
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("roundtrip-boundary").await?;
     let result = client
         .export_schedule(ScheduleShowRequest {

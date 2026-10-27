@@ -109,7 +109,7 @@ struct PreparedSuccessor {
 fn seeded_successor() -> impl std::future::Future<Output = PreparedSuccessor> {
     Box::pin(async {
         // Only directory/grant acceptance, ACK keys and canonical remote answers stand in.
-        let source = OwnerFixture::new().await;
+        let source = Box::pin(OwnerFixture::new()).await;
         let project = source.project.clone();
         let root = source.root.clone();
         let discussion_subject = source.discussion_subject.clone();
@@ -201,7 +201,7 @@ fn seeded_successor() -> impl std::future::Future<Output = PreparedSuccessor> {
         assert_eq!(progress, baseline);
 
         // A distinct verified epoch file receives no old interaction/outbox/progress file.
-        let mut successor = OwnerFixture::new().await;
+        let mut successor = Box::pin(OwnerFixture::new()).await;
         let install = kept.publish_successor(&successor, &project).await.unwrap();
         successor.project = project.clone();
         successor.root = root;
@@ -311,7 +311,7 @@ async fn a_successor_starts_retirement_at_the_seeded_frontier_without_replaying_
 #[tokio::test]
 async fn a_live_frontier_above_the_seed_retires_new_items_and_a_reheld_owner_keeps_saved_progress()
 {
-    tokio::time::timeout(Duration::from_secs(45), async {
+    Box::pin(tokio::time::timeout(Duration::from_secs(45), async {
         let PreparedSuccessor {
             owner: successor,
             baseline,
@@ -418,7 +418,7 @@ async fn a_live_frontier_above_the_seed_retires_new_items_and_a_reheld_owner_kee
             "re-held owner ignored progress greater than the seed: {old_query:?}"
         );
         assert_eq!(reheld_progress, live);
-    })
+    }))
     .await
     .expect("bounded post-seed retirement and re-held saved progress");
 }

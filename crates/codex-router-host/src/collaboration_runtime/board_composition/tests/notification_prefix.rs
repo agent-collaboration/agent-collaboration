@@ -8,7 +8,7 @@ use message_board::*;
 #[tokio::test]
 async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let remote = fixture.seed_item;
     // Freeze the later local handoff before Welcome starts the live publisher.
     // A manual claim after start would race its first-claim-only item selection.

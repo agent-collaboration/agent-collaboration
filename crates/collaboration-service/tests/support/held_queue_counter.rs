@@ -1,5 +1,8 @@
 //! Observe executed native SQL; no repository path is replaced.
-#![allow(clippy::unwrap_used)] // A poisoned or uninstalled test counter must fail the diagnostic.
+#![expect(
+    clippy::unwrap_used,
+    reason = "A poisoned or uninstalled test counter must fail the diagnostic."
+)]
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},

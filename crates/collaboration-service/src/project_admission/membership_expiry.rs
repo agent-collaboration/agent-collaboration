@@ -1,7 +1,11 @@
 //! A stale expiry observation cannot end a renewed membership under the project lock.
 use super::{ProjectAdmission, ProjectAdmissionError};
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    EndReason, FeedCursor, MembershipEnd, ProjectId, Record, RecordId, RecordKind, RecordRef,
+    RecordTime, RecordedActor, RouterComponent, SubscriptionGeneration, SubscriptionMembership,
+    SubscriptionMembershipProps,
+};
 
 #[derive(Clone)]
 pub(crate) struct MembershipExpiryProposal {

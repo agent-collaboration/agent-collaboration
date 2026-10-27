@@ -1,7 +1,7 @@
 //! Map the actual library refusal; writer state is never queried while a write is held.
 use super::ProjectAdmissionError;
 use fleet_sync_writer::{OpenError, SchemaForm, WriteRefusal};
-use message_board::*;
+use message_board::{EpochNumber, RequestResult, SchemaRefusal, TransferId};
 use message_board_storage::ProjectStorageError;
 
 pub(super) fn refusal_result(

@@ -3,6 +3,14 @@ use collaboration_client::board::RequestResult;
 use message_board::*;
 use serde_json::json;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "board_control_support/validation.rs"]
 mod validation;
@@ -15,7 +23,10 @@ use fixture_setup::{
 };
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
 async fn board_control_roundtrip_preserves_root_thread_and_actor() -> Result<(), TestError> {
     let (fixture, client, project) = start().await?;
     let actor: Identity = serde_json::from_value(fixture.actor.clone())?;
@@ -117,7 +128,10 @@ async fn board_control_roundtrip_preserves_root_thread_and_actor() -> Result<(),
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
 async fn control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats()
 -> Result<(), TestError> {
     let (fixture, client, project) = start().await?;
@@ -213,7 +227,10 @@ async fn control_thread_list_pages_escape_heavy_holders_without_skips_or_repeats
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Measure normal UUID identities separately; the permanent maximum-identity frame proof remains unchanged.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Measure normal UUID identities separately; the permanent maximum-identity frame proof remains unchanged."
+)]
 async fn control_uuid_holder_writes_report_scope_growth_latency() -> Result<(), TestError> {
     let (fixture, client, project) = start().await?;
     let owner: Identity = serde_json::from_value(fixture.actor.clone())?;
@@ -270,7 +287,10 @@ async fn control_uuid_holder_writes_report_scope_growth_latency() -> Result<(), 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
 async fn control_board_failures_pagination_and_inbox_use_the_public_path() -> Result<(), TestError>
 {
     let (fixture, client, project) = start().await?;
@@ -464,7 +484,10 @@ async fn control_board_failures_pagination_and_inbox_use_the_public_path() -> Re
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the contract; Result propagates fixture errors."
+)]
 async fn control_participant_operations_preserve_typed_state_and_authorization()
 -> Result<(), TestError> {
     let (fixture, client, project) = start().await?;

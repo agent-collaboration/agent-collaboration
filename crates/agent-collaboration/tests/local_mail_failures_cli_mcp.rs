@@ -1,8 +1,16 @@
 //! Real CLI/MCP Local mail observations, sharing only the isolated surface fixture.
 use collaboration_service as mail_service;
 #[path = "support/local_mail_surfaces.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod local_mail_surfaces;
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
 use collaboration_protocol::MailItemId;
 use local_mail_surfaces::{SERVICE, Surfaces, TestResult};
@@ -27,7 +35,7 @@ macro_rules! ensure_eq {
 #[path = "support/local_mail_capacity.rs"]
 mod local_mail_capacity;
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code)] // Companion replay tests use the shared compaction helpers.
+// Companion replay tests use the shared compaction helpers.
 mod native_sql;
 #[tokio::test]
 async fn full_inbox_refuses_cli_and_mcp_sends_and_replies_without_effect_or_target() -> TestResult {

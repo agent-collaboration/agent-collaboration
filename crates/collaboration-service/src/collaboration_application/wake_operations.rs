@@ -24,12 +24,12 @@ pub use failure::WakeWaitFailure;
 pub(crate) use failure::{WakeFailureContext, wake_failure};
 use failure::{invalid_field, storage_reason};
 
-pub struct WakeOperations<'service> {
-    service_id: &'service UuidIdentity,
-    remote: Option<&'service Arc<crate::MailDeliveryRuntime>>,
-    store: Option<&'service Arc<Mutex<AutomationStore>>>,
+pub struct WakeOperations {
+    service_id: UuidIdentity,
+    remote: Option<Arc<crate::MailDeliveryRuntime>>,
+    store: Option<Arc<Mutex<AutomationStore>>>,
     /// Concurrent first-fire waits share these permits; a handle without them cannot wait.
-    wait_permits: Option<&'service Arc<Semaphore>>,
+    wait_permits: Option<Arc<Semaphore>>,
 }
 
 /// How often a first-fire wait checks for new automation events.
@@ -39,30 +39,27 @@ const DEFAULT_WAKE_WAIT_SECONDS: u32 = 60;
 /// The longest a single first-fire wait may run.
 const MAX_WAKE_WAIT_SECONDS: u32 = 1500;
 
-impl<'service> WakeOperations<'service> {
-    pub(crate) fn new(
-        service_id: &'service UuidIdentity,
-        store: Option<&'service Arc<Mutex<AutomationStore>>>,
-    ) -> Self {
+impl WakeOperations {
+    pub fn new(service_id: &UuidIdentity, store: Option<&Arc<Mutex<AutomationStore>>>) -> Self {
         Self {
-            service_id,
+            service_id: service_id.clone(),
             remote: None,
-            store,
+            store: store.cloned(),
             wait_permits: None,
         }
     }
 
     /// Lets this handle run first-fire waits, sharing `wait_permits` with every other wait.
-    pub(crate) fn with_wait_capacity(mut self, wait_permits: &'service Arc<Semaphore>) -> Self {
-        self.wait_permits = Some(wait_permits);
+    pub fn with_wait_capacity(mut self, wait_permits: &Arc<Semaphore>) -> Self {
+        self.wait_permits = Some(wait_permits.clone());
         self
     }
 
     fn store(
         &self,
         context: &WakeFailureContext,
-    ) -> Result<&'service Arc<Mutex<AutomationStore>>, WakeFailure> {
-        self.store.ok_or_else(|| {
+    ) -> Result<&Arc<Mutex<AutomationStore>>, WakeFailure> {
+        self.store.as_ref().ok_or_else(|| {
             wake_failure(
                 context.clone(),
                 WakeFailureReason::AutomationUnavailable,
@@ -108,7 +105,7 @@ impl<'service> WakeOperations<'service> {
             // Creation and replay return the cursor time of the durable creation receipt.
             Ok(record) => {
                 let observed = record.definition.created_at_ms;
-                crate::wakeup_projection::snapshot(record, self.service_id, observed).map_err(
+                crate::wakeup_projection::snapshot(record, &self.service_id, observed).map_err(
                     |()| {
                         wake_failure(
                             context,
@@ -143,7 +140,7 @@ impl<'service> WakeOperations<'service> {
             .read_wakeup::<SavedMessage>(&request.wakeup_id)
             .await;
         match read {
-            Ok(record) => crate::wakeup_projection::snapshot(record, self.service_id, now_ms)
+            Ok(record) => crate::wakeup_projection::snapshot(record, &self.service_id, now_ms)
                 .map_err(|()| {
                     wake_failure(
                         context,
@@ -175,7 +172,7 @@ impl<'service> WakeOperations<'service> {
             Some(cursor) => {
                 let decoded = crate::automation_collection_cursor::decode(
                     &cursor,
-                    self.service_id,
+                    &self.service_id,
                     "wake/list",
                     &digest,
                 )
@@ -340,7 +337,7 @@ impl<'service> WakeOperations<'service> {
             })
             .await;
         match mutated {
-            Ok(result) => crate::wakeup_projection::project_mutation(result, self.service_id)
+            Ok(result) => crate::wakeup_projection::project_mutation(result, &self.service_id)
                 .map_err(|()| {
                     wake_failure(
                         context,
@@ -512,12 +509,12 @@ impl<'service> WakeOperations<'service> {
     fn wait_admission(
         &self,
         wakeup_id: &WakeupId,
-    ) -> Result<(&'service Arc<Mutex<AutomationStore>>, OwnedSemaphorePermit), WakeWaitFailure>
-    {
+    ) -> Result<(&Arc<Mutex<AutomationStore>>, OwnedSemaphorePermit), WakeWaitFailure> {
         let permit = self
             .wait_permits
+            .as_ref()
             .and_then(|permits| Arc::clone(permits).try_acquire_owned().ok());
-        match (self.store, permit) {
+        match (self.store.as_ref(), permit) {
             (Some(store), Some(permit)) => Ok((store, permit)),
             _ => Err(WakeWaitFailure::unavailable(wakeup_id.clone())),
         }

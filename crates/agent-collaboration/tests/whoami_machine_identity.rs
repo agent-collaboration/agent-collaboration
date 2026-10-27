@@ -1,6 +1,6 @@
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::UuidIdentity;
-use collaboration_service::{CollaborationApplication, MachineIdentity, ServiceIdentity};
+use collaboration_service::{ApplicationFixture, MachineIdentity};
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt;
 
@@ -22,16 +22,14 @@ async fn whoami_displays_service_id_and_machine_label_in_text_and_json() {
     .expect("machine label");
     let peer = collaboration_service::load_installation_peer(root.path())
         .expect("persisted installation peer");
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("service identity")
         .with_installation_peer(peer)
         .expect("installation identity")
         .with_machine_identity(machine_identity)
         .expect("machine identity");
-    let served =
-        ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-            .await
-            .expect("served collaboration API");
+    let served = ServedCollaborationApi::start(root.path(), (identity).build())
+        .expect("served collaboration API");
 
     let text_output = run_whoami(root.path(), false)
         .await
@@ -59,14 +57,12 @@ async fn whoami_refuses_an_installation_rpc_from_a_different_service_identity() 
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private service fixture");
     let peer = collaboration_service::load_installation_peer(root.path()).expect("owned peer");
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("identity")
         .with_installation_peer(peer)
         .expect("peer identity");
-    let served =
-        ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-            .await
-            .expect("served actual collaboration API");
+    let served = ServedCollaborationApi::start(root.path(), (identity).build())
+        .expect("served actual collaboration API");
     let path = root.path().join("service.json");
     let mut manifest: Value =
         serde_json::from_slice(&std::fs::read(&path).expect("manifest")).expect("manifest JSON");

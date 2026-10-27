@@ -10,7 +10,7 @@ fn application(
     runtime: &Runtime,
     mail: Arc<MailDeliveryRuntime>,
 ) -> crate::CollaborationApplication {
-    let identity = crate::ServiceIdentity::new(
+    let identity = crate::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000099",
     )
@@ -20,7 +20,7 @@ fn application(
     .unwrap()
     .with_mail_delivery_runtime(mail)
     .unwrap();
-    crate::CollaborationApplication::new(identity)
+    (identity).build()
 }
 fn request(runtime: &Runtime) -> SessionMessageSendParams {
     let mut target = runtime.fixture.draft().target;

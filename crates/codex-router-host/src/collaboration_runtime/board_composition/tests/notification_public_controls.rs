@@ -27,11 +27,11 @@ fn assert_accepted(reply: &Value) {
 async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_requester_without_project_writes()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let api_root = directory.path().join("public-project-api");
     tokio::fs::create_dir_all(&api_root).await?;
     std::fs::set_permissions(&api_root, std::fs::Permissions::from_mode(0o700))?;
-    let api = ServedCollaborationApi::start(&api_root, fixture.application.clone()).await?;
+    let api = ServedCollaborationApi::start(&api_root, fixture.application.clone())?;
     let writer = fixture.harness.projects.ensure(&fixture.project).await?;
     let mut snapshot = writer.store.snapshot().await?;
     let project_record = snapshot

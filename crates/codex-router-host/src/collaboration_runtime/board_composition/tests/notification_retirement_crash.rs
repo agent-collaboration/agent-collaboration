@@ -36,8 +36,12 @@ async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before
     )
     .await?;
     central.release()?;
-    let mut reopened =
-        ProjectNotificationFixture::resume(directory.path(), central, checkpoint.seed).await?;
+    let mut reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        checkpoint.seed,
+    ))
+    .await?;
     let marks = reopened
         .harness
         .projects
@@ -149,7 +153,7 @@ async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before
 }
 
 pub(super) async fn retirement_checkpoint_child(base: &Path) -> Result<(), TestError> {
-    let mut fixture = ProjectNotificationFixture::open_local(base).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open_local(base)).await?;
     fixture.start().await?;
     let peer = fixture.harness.peer();
     let item = fixture.seed_item;

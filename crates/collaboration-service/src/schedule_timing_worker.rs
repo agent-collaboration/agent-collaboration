@@ -11,7 +11,7 @@ pub struct ScheduleTimingWorker {
     runner: ScheduledRunWorker,
 }
 impl ScheduleTimingWorker {
-    pub(crate) fn new(
+    pub fn new(
         store: Arc<Mutex<AutomationStore>>,
         interactions: Arc<interaction_storage::InteractionStore>,
         execution: Arc<dyn crate::ScheduledRunExecution>,
@@ -92,10 +92,12 @@ impl ScheduleTimingWorker {
                     let runner = self.runner.clone();
                     let run_id = id.clone();
                     let task = tasks.spawn(async move {
-                        let result =
-                            tokio::time::timeout(Duration::from_secs(35), runner.step(id.clone()))
-                                .await
-                                .unwrap_or(Err(StorageError::InvalidRecord));
+                        let result = tokio::time::timeout(
+                            Duration::from_secs(35),
+                            Box::pin(runner.step(id.clone())),
+                        )
+                        .await
+                        .unwrap_or(Err(StorageError::InvalidRecord));
                         (id, result)
                     });
                     active.insert(task.id(), run_id);

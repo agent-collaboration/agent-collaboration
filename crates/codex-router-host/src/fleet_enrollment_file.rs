@@ -282,7 +282,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn production_metadata_refuses_inline_access_and_machine_secrets() -> Result<(), Box<dyn Error>>
     {
         let root = tempfile::tempdir()?;
@@ -324,7 +327,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn private_fixture_preserves_typed_peer_receiver_relay_and_credentials()
     -> Result<(), Box<dyn Error>> {
         let root = tempfile::tempdir()?;
@@ -340,7 +346,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn fixture_requires_an_explicit_canonical_relay_instead_of_deriving_one()
     -> Result<(), Box<dyn Error>> {
         let root = tempfile::tempdir()?;
@@ -364,7 +373,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn fixture_refuses_public_files_external_paths_and_noncanonical_identity()
     -> Result<(), Box<dyn Error>> {
         let root = tempfile::tempdir()?;
@@ -387,7 +399,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn absent_router_enrollment_is_the_only_normal_fallback() -> Result<(), Box<dyn Error>> {
         let root = tempfile::tempdir()?;
         assert!(load_router_fleet_enrollment(root.path())?.is_none());
@@ -402,7 +417,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn enrollment_refuses_a_symlink_even_when_its_target_is_private() -> Result<(), Box<dyn Error>>
     {
         let root = tempfile::tempdir()?;
@@ -414,7 +432,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn enrollment_refuses_relative_paths_and_directories() -> Result<(), Box<dyn Error>> {
         let root = tempfile::tempdir()?;
         assert!(load_fleet_enrollment(Path::new("enrollment.json"), root.path()).is_err());
@@ -423,7 +444,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn enrollment_refuses_a_parent_link_that_escapes_the_router_root() -> Result<(), Box<dyn Error>>
     {
         let root = tempfile::tempdir()?;
@@ -439,7 +463,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     fn enrollment_refuses_missing_unknown_and_malformed_fields_without_echoing_secrets()
     -> Result<(), Box<dyn Error>> {
         let root = tempfile::tempdir()?;

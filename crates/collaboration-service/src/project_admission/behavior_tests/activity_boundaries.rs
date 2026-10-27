@@ -13,7 +13,10 @@ async fn raw_connection(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // A watch on an empty project must not invent a subscription or thread row.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "A watch on an empty project must not invent a subscription or thread row."
+)]
 async fn watch_project_accepts_an_empty_activity_stream() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::empty().await?;
     let reader = fixture.reader.clone();
@@ -72,7 +75,10 @@ async fn watch_project_accepts_an_empty_activity_stream() -> Result<(), TestErro
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test; Result propagates fixture failures."
+)]
 async fn project_watch_boundary_rejects_negative_and_future_stored_values() -> Result<(), TestError>
 {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -107,7 +113,10 @@ async fn project_watch_boundary_rejects_negative_and_future_stored_values() -> R
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions retain the observed contract; Result propagates fixture failures."
+)]
 async fn watch_status_rejects_negative_and_future_start_boundaries() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     fixture
@@ -144,7 +153,7 @@ async fn watch_status_rejects_negative_and_future_start_boundaries() -> Result<(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+
 async fn scoped_bookmarks_reject_negative_and_future_boundaries() -> Result<(), TestError> {
     for thread_scope in [false, true] {
         let mut fixture = SubscriptionFixture::start().await?;
@@ -164,7 +173,7 @@ async fn scoped_bookmarks_reject_negative_and_future_boundaries() -> Result<(), 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+
 async fn project_main_tracking_rejects_negative_and_future_boundaries() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     let scope = ReadScope::Project {
@@ -174,7 +183,6 @@ async fn project_main_tracking_rejects_negative_and_future_boundaries() -> Resul
     fixture.stop().await
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn assert_mark_bounds(
     fixture: &mut SubscriptionFixture,
     scope: ReadScope,
@@ -225,7 +233,10 @@ async fn assert_mark_bounds(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn sqlite_rejects_non_boolean_watch_and_summary_interest_values() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     fixture

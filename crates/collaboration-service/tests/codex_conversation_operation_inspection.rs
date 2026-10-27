@@ -3,8 +3,8 @@ use collaboration_protocol::{
     UuidIdentity,
 };
 use collaboration_service::{
-    CodexConversationOperationRecorder, ConversationOperationRecorder, ProviderOperationStore,
-    ServiceIdentity,
+    ApplicationFixture, CodexConversationOperationRecorder, ConversationOperationRecorder,
+    ProviderOperationStore,
 };
 use serde_json::{Value, json};
 use std::sync::Arc;
@@ -64,13 +64,13 @@ async fn codex_create_operation_is_inspectable_and_reconcilable_through_the_api(
         endpoint.clone(),
         NonEmptyText::try_from("/tmp/codex-acp.sock".to_owned())?,
     ));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         &String::from(service_id),
         "019f0000-0000-7000-8000-000000000002",
     )?
     .with_provider_operation_store(Arc::clone(&store))
     .with_codex_conversation_recorder(Arc::clone(&recorder));
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
 
     let generation: CodexGeneration = serde_json::from_value(
         json!({"serviceEpoch":"019f0000-0000-7000-8000-000000000002","generation":1}),

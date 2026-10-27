@@ -45,7 +45,7 @@ impl collaboration_service::ProjectRegistration for PendingRegistration {
 }
 
 /// MCP component fixtures supply accepted directory policy and a real persisted grant.
-#[allow(dead_code)] // This source module is also shared by integration targets that do not use this arranger.
+// This source module is also shared by integration targets that do not use this arranger.
 pub async fn prepare_registered_creation(
     fleet: &collaboration_service::FleetClient,
     registry: &ProjectStoreRegistry,

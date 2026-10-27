@@ -3,7 +3,7 @@ use super::*;
 #[tokio::test]
 async fn cli_decision_response_loss_after_real_broker_effect_is_unknown_without_replay() {
     let fixture = ApprovalFixture::start_with_dropped_decision_reply(1, true, false).await;
-    let request = fixture.begin_permission_request("cli-response-loss").await;
+    let request = fixture.begin_permission_request("cli-response-loss");
     let pending = fixture.pending_record().await;
     fixture.await_delivery(0).await;
 
@@ -42,7 +42,7 @@ async fn cli_decision_response_loss_after_real_broker_effect_is_unknown_without_
 #[tokio::test]
 async fn cli_command_entry_authorizes_real_broker_permission_by_actor_target_and_generation() {
     let fixture = ApprovalFixture::start(2).await;
-    let request = fixture.begin_permission_request("cli").await;
+    let request = fixture.begin_permission_request("cli");
     let pending = fixture.pending_record().await;
     fixture.await_delivery(0).await;
     assert_eq!(pending.requester, fixture.requester);
@@ -88,9 +88,8 @@ async fn cli_command_entry_authorizes_real_broker_permission_by_actor_target_and
 
     let mut stale_generation = fixture.generation.clone();
     stale_generation.generation = 6_u64.try_into().expect("stale generation");
-    let stale_request = fixture
-        .begin_permission_request_for_generation("cli-stale", stale_generation)
-        .await;
+    let stale_request =
+        fixture.begin_permission_request_for_generation("cli-stale", stale_generation);
     let stale = fixture.pending_record().await;
     fixture.await_delivery(1).await;
     assert_ne!(stale.generation, fixture.generation);
@@ -226,7 +225,7 @@ async fn streamable_http_entry_authorizes_real_broker_permission_by_actor_target
     .await;
     let client = reqwest::Client::new();
 
-    let request = fixture.begin_permission_request("mcp").await;
+    let request = fixture.begin_permission_request("mcp");
     let pending = fixture.pending_record().await;
     fixture.await_delivery(0).await;
     let list = mcp_call(
@@ -397,9 +396,7 @@ async fn stateless_http_create_reports_discovery_failure_without_creation_uncert
     // dispatch.
     let directory = tempfile::tempdir_in("/tmp").expect("private service directory");
     let listener = ServedApi::tcp(&api_config(
-        collaboration_service::CollaborationApplication::new(
-            ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH).expect("service identity"),
-        ),
+        (ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH).expect("service identity")).build(),
         directory.path(),
     ))
     .await;

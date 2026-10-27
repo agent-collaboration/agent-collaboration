@@ -12,7 +12,7 @@ async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_re
 -> Result<(), TestError> {
     // Arrange the actual default Host writer, receiver, mail owner and event loop.
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open_local(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open_local(directory.path())).await?;
     fixture.start().await?;
     let peer = fixture.harness.peer();
     let item = fixture.seed_item;
@@ -137,7 +137,12 @@ async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_re
     };
     drop(store);
     let central = fixture.close_keeping_central().await?;
-    let reopened = ProjectNotificationFixture::resume(directory.path(), central, seed).await?;
+    let reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        seed,
+    ))
+    .await?;
     let restored_marks = reopened
         .harness
         .projects

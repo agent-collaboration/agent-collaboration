@@ -1,4 +1,7 @@
-#![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
+#![expect(
+    clippy::indexing_slicing,
+    reason = "Test-only JSON fixture construction; behavior assertions remain strict."
+)]
 //! Control router/show expands a stored subscription range without acknowledging it.
 use super::*;
 use chrono::Utc;
@@ -61,11 +64,11 @@ impl SubscriptionExpansionFixture {
             .await
             .expect("native messages"),
         );
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .expect("identity")
             .with_project_admission(admission)
             .with_interaction_store(pushes.clone());
-        let control = ControlHarness::start(identity).await;
+        let control = ControlHarness::start(identity);
         let target = session("claude-local", "subscription-range-reader");
         let board_reader = board_session_identity(&target);
         let writer = Identity::Human {

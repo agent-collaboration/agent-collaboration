@@ -2,7 +2,10 @@ use super::membership_completion::join_operation;
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn project_subscription_keeps_off_activity_unread_and_thread_rows_take_precedence()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

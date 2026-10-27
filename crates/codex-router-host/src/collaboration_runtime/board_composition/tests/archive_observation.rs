@@ -89,13 +89,12 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
             },
         )
         .await?;
-    let application = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            origin()?.installation.as_str(),
-            &uuid::Uuid::now_v7().to_string(),
-        )?
-        .with_project_admission(fixture.admission.clone()),
-    );
+    let application = (collaboration_service::ApplicationFixture::new(
+        origin()?.installation.as_str(),
+        &uuid::Uuid::now_v7().to_string(),
+    )?
+    .with_project_admission(fixture.admission.clone()))
+    .build();
     let reply = application
         .board()
         .board_archive(serde_json::from_value(serde_json::json!({
@@ -185,7 +184,7 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
 #[tokio::test]
 async fn archiving_a_held_project_records_its_own_fact_then_finalizes_the_board() -> TestResult {
     // Wrong builds: absent producer, duplicate local fact, or a report before native Copy ACK.
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let proof = AssertUnwindSafe(archive_with_held_copy(&fixture))
         .catch_unwind()
         .await;

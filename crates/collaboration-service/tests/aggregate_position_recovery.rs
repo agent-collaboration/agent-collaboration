@@ -1,5 +1,13 @@
 //! Explicit saved project positions survive an unavailable store and its later return.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/timed_board_posts.rs"]
 mod timed_board_posts;
@@ -44,7 +52,6 @@ enum ResumeSelection {
     InclusiveRange,
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn saved_position_recovery(selection: ResumeSelection) -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (healthy, _) = fixture.project().await?;
@@ -195,14 +202,17 @@ async fn saved_position_recovery(selection: ResumeSelection) -> Result<(), TestE
 }
 #[tokio::test]
 async fn after_position_retains_unavailable_b_behind_the_sweep() -> Result<(), TestError> {
-    saved_position_recovery(ResumeSelection::After).await
+    Box::pin(saved_position_recovery(ResumeSelection::After)).await
 }
 #[tokio::test]
 async fn inclusive_range_retains_the_unavailable_boundary_record() -> Result<(), TestError> {
-    saved_position_recovery(ResumeSelection::InclusiveRange).await
+    Box::pin(saved_position_recovery(ResumeSelection::InclusiveRange)).await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions retain the observed contract; Result propagates fixture failures."
+)]
 async fn an_unavailable_only_page_terminates_without_losing_saved_positions()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -268,7 +278,6 @@ async fn an_unavailable_only_page_terminates_without_losing_saved_positions()
     fixture.stop().await
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn exhausted_range_retries(readable_posts: usize) -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (healthy, _) = fixture.project().await?;

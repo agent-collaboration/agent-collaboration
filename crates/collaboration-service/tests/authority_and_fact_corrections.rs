@@ -1,12 +1,23 @@
 //! Fresh request authority and producer-fact boundaries use real public admission.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unauthorized_same_holder_grants_reject_and_replay_before_authorized_noops()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -49,7 +60,10 @@ async fn unauthorized_same_holder_grants_reject_and_replay_before_authorized_noo
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn most_recent_released_lead_can_return_only_by_self_grant_without_owner_grant()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -116,7 +130,10 @@ async fn submit_fact(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn every_lifecycle_fact_is_operation_owned_and_rejected_from_producers()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -190,7 +207,10 @@ async fn every_lifecycle_fact_is_operation_owned_and_rejected_from_producers()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn producer_facts_need_at_least_one_subject_link() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;

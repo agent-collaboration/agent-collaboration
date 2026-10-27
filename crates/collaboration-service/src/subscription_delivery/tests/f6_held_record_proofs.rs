@@ -1,7 +1,7 @@
 use super::super::SubscriptionClock;
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushActivityRange, PushActivitySnapshot, PushDeliveryState,
     PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft, RouterOriginRef,
@@ -16,7 +16,7 @@ use std::time::Duration;
 // SQLite works on background threads; its acknowledgement bound needs real time.
 #[tokio::test]
 async fn cleanup_write_retry_does_not_block_reader_reconcile() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -104,7 +104,7 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
 
 #[tokio::test(start_paused = true)]
 async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let active_root = fixture.add_root().await;
     for root in [&fixture.root, &active_root] {
         fixture

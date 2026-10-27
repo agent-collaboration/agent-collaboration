@@ -1,7 +1,23 @@
 //! Many-role holders unrelated to a rule are not its write operands.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -154,12 +170,15 @@ async fn role_operand_costs(size: usize) -> Result<BTreeMap<&'static str, ReadCo
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unrelated_advisor_and_operator_holders_do_not_grow_write_operands() -> Result<(), TestError>
 {
     read_cost_counter::install();
-    let small = role_operand_costs(8).await?;
-    let large = role_operand_costs(80).await?;
+    let small = Box::pin(role_operand_costs(8)).await?;
+    let large = Box::pin(role_operand_costs(80)).await?;
     eprintln!("Many-role operand costs: small={small:?} large={large:?}");
     assert_eq!(small, large, "unrelated holder bodies became operands");
     assert!(

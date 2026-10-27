@@ -2,7 +2,7 @@
 //! and a reconciliation receipt must cover the owner's window scan.
 use super::super::SubscriptionClock;
 use super::owner_fixture::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_protocol::ThreadSubscriptionsRequest;
 use sqlx::Connection;
 
@@ -11,7 +11,7 @@ mod native_observations;
 
 #[tokio::test]
 async fn reconcile_receipt_waits_for_the_owner_to_finish_its_native_window_scan() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -82,7 +82,7 @@ async fn reconcile_receipt_waits_for_the_owner_to_finish_its_native_window_scan(
 
 #[tokio::test]
 async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_later_scan() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -148,7 +148,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
 
 #[tokio::test]
 async fn subscriptions_list_reconciles_a_subscriber_whose_scan_has_not_run() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -162,12 +162,13 @@ async fn subscriptions_list_reconciles_a_subscriber_whose_scan_has_not_run() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::Sleeping(_)))
         .await;
-    let identity = crate::ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-        .unwrap()
-        .with_project_admission(fixture.admission.clone())
-        .with_automation_store(fixture.automation.clone())
-        .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone());
-    let application = crate::CollaborationApplication::new(identity);
+    let identity =
+        crate::ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+            .unwrap()
+            .with_project_admission(fixture.admission.clone())
+            .with_automation_store(fixture.automation.clone())
+            .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone());
+    let application = (identity).build();
     // Holding the owner's window-store mutex keeps the subscriber's scan from running.
     let guard = fixture.store.lock().await;
     fixture

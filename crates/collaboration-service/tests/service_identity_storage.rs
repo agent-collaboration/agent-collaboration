@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used)]
+#![expect(
+    clippy::expect_used,
+    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
+)]
 
 use collaboration_service::{load_installation_peer, load_service_identity};
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
@@ -138,7 +141,7 @@ fn configured_service_identity_cannot_replace_its_installation_peer() {
     let first = load_installation_peer(first_root.path()).expect("first installation peer");
     let second = load_installation_peer(second_root.path()).expect("different installation peer");
     assert_ne!(first, second);
-    let identity = collaboration_service::ServiceIdentity::new(
+    let identity = collaboration_service::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )

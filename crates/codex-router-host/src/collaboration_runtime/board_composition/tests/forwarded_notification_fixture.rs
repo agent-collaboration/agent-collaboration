@@ -2,8 +2,8 @@
 use super::snapshot_restart::board_fixture::native_mail_owner::NativeMailOwner;
 use super::*;
 use collaboration_service::{
-    BoardAvailability, CollaborationApplication, MailPushDeliveryProps, NotificationPublisher,
-    ServiceIdentity, SessionDeliveryRouter, SubscriptionDeliveryService,
+    ApplicationFixture, BoardAvailability, CollaborationApplication, MailPushDeliveryProps,
+    NotificationPublisher, SessionDeliveryRouter, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
 };
 use durable_steps::{AtomicStore, CallFailure, StoreError};
@@ -81,7 +81,7 @@ impl HolderNotifications {
             clock: Arc::new(SystemSubscriptionClock),
         });
         actors.start().await?;
-        let identity = ServiceIdentity::new(
+        let identity = ApplicationFixture::new(
             &String::from(machine.service_id().clone()),
             "00000000-0000-4000-8000-000000000002",
         )?
@@ -110,8 +110,7 @@ impl HolderNotifications {
             Arc::downgrade(&runtime),
         ));
         board.attach_publisher(&publisher);
-        let application =
-            CollaborationApplication::new(identity.with_notification_publisher(publisher.clone()));
+        let application = (identity.with_notification_publisher(publisher.clone())).build();
         Ok(Self {
             application,
             publisher,

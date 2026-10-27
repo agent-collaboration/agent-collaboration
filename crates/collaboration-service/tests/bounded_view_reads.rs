@@ -1,9 +1,29 @@
 //! Current-state views must not replay unrelated content history.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -11,7 +31,6 @@ use message_board::*;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::{Value, json};
 
-#[allow(clippy::panic_in_result_fn)]
 async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -44,7 +63,10 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
     Ok(cost)
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn card_reads_current_state_and_a_bounded_recent_prefix() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = card_cost(24).await?;

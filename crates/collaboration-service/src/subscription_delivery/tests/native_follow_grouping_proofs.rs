@@ -34,7 +34,7 @@ async fn wait_held(native: &NativeMailOwner, fixture: &OwnerFixture, expected: u
 
 #[tokio::test]
 async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_checks() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let second_root = fixture.add_root().await;
     let poll_root = fixture.add_root().await;
     fixture
@@ -166,7 +166,7 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
 
 #[tokio::test]
 async fn one_membership_drains_twenty_roots_then_the_remaining_root_without_lost_ranges() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let mut roots = Vec::new();
     for _ in 0..21 {
         let root = ThreadId::generate();

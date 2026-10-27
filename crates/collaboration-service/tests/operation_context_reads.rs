@@ -1,5 +1,13 @@
 //! Post/task rules load their indexed operands, rather than decoding unrelated current rows.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
@@ -25,7 +33,10 @@ async fn reencode_record(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn admitted_post_and_task_update_read_only_their_rule_operands() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -106,7 +117,10 @@ async fn admitted_post_and_task_update_read_only_their_rule_operands() -> Result
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn stale_role_intent_reads_only_the_current_replacement_holder() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -215,7 +229,10 @@ async fn stale_role_intent_reads_only_the_current_replacement_holder() -> Result
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn semantic_identity_matches_survive_json_end_reencoding_and_typed_acknowledgement_readback()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

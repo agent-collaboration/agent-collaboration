@@ -4,7 +4,10 @@ use message_board::{PostId, RequestId};
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove exact field/privacy controls; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove exact field/privacy controls; Result propagates fixture errors."
+)]
 async fn malformed_board_requests_return_safe_specific_failures() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let valid_id = PostId::generate();

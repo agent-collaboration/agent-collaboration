@@ -1,5 +1,5 @@
 //! Resolve immutable readers from the local writer or a completed central generation.
-use super::*;
+use super::{Arc, ProjectId, ProjectRegistryError, ProjectRuntime, ProjectStoreRegistry};
 
 impl ProjectStoreRegistry {
     /// The write refusal path uses retained authority without refreshing a reader.

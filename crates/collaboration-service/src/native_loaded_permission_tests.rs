@@ -34,7 +34,6 @@ async fn cold_and_loaded_messages_both_report_narrowed_permissions() {
             stored_run: None,
         },
     )
-    .await
     .unwrap();
     let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
     let weak = Arc::downgrade(&broker);
@@ -101,7 +100,6 @@ async fn scheduled_route_reports_narrowing_but_refuses_missing_directory() {
                 stored_run: None,
             },
         )
-        .await
         .unwrap();
         let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
         directory.publish(fixture.endpoint.clone()).unwrap();
@@ -214,7 +212,6 @@ async fn matching_loaded_policy_allows_each_message_mode_without_overrides() {
                 stored_run: None,
             },
         )
-        .await
         .unwrap();
         let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
         let weak = Arc::downgrade(&broker);
@@ -274,7 +271,6 @@ async fn narrowed_loaded_policy_reports_differences_for_queue_and_steer() {
                 stored_run: None,
             },
         )
-        .await
         .unwrap();
         let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
         let weak = Arc::downgrade(&broker);
@@ -334,7 +330,6 @@ async fn scheduled_matching_loaded_policy_preserves_idle_admission_and_intent_or
             stored_run: None,
         },
     )
-    .await
     .unwrap();
     let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone()).unwrap();
@@ -405,7 +400,6 @@ async fn scheduled_generation_retired_during_loaded_validation_never_submits_inp
             stored_run: None,
         },
     )
-    .await
     .unwrap();
     let directory = crate::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone()).unwrap();

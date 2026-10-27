@@ -8,7 +8,7 @@
 use crate::collaboration_application::ScheduleOperationFailure;
 use crate::{
     PreparationEvidenceSink, ScheduleDestination, SchedulePreparationOutcome,
-    SchedulePreparationRequest, ScheduledRunExecution, ServiceIdentity,
+    SchedulePreparationRequest, ScheduledRunExecution,
 };
 use agent_automation::RouteEffectEvidence;
 use automation_storage::{
@@ -28,14 +28,17 @@ type PreparationResult = Result<ScheduleSnapshot, ScheduleOperationFailure>;
 /// Prepares a schedule's reuse-thread destination through the selected route, persisting the
 /// route's effects. A retried operation returns its retained outcome.
 pub(crate) async fn prepare_schedule(
-    identity: &ServiceIdentity,
+    configuration: &crate::AutomationConfigurationHandle,
+    service_id: &collaboration_protocol::UuidIdentity,
+    execution: Option<&Arc<dyn ScheduledRunExecution>>,
+    store: Option<&Arc<Mutex<AutomationStore>>>,
     params: SchedulePrepareRequest,
 ) -> PreparationResult {
     let request = PreparationDependencies {
-        configuration: &identity.configuration,
-        service_id: &identity.service_id,
-        execution: identity.scheduled_run_execution.as_ref(),
-        store: identity.automation.as_ref(),
+        configuration,
+        service_id,
+        execution,
+        store,
     };
     let destination = match &params.destination {
         DestinationPreparation::Existing { target, .. } => ScheduleDestination::Existing {

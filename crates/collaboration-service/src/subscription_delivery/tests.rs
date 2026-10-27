@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used, clippy::expect_used)]
 mod activity_scope_proofs;
 mod control_view_proofs;
 mod direct_message_proofs;
@@ -9,12 +8,12 @@ mod local_mail_proofs;
 mod native_mail_attempt_proofs;
 use crate::native_worker_faults;
 mod owner_activity_proofs;
-pub(in crate::service_identity::subscription_delivery) mod owner_fixture;
+pub(in crate::subscription_delivery) mod owner_fixture;
 mod push_store_proofs;
 mod queued_proofs;
 mod restore_corruption_proofs;
 mod stall_diagnosis;
-pub(in crate::service_identity::subscription_delivery) mod startup_fixture;
+pub(in crate::subscription_delivery) mod startup_fixture;
 mod startup_retry_proofs;
 mod timing_proofs;
 mod transient_scan_proofs;
@@ -24,7 +23,7 @@ use owner_fixture::*;
 #[tokio::test(start_paused = true)]
 async fn running_reader_stores_one_neutral_push_before_layer_zero_and_keeps_inbox_unread() {
     let before_setup = tokio::time::Instant::now();
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     assert_eq!(
         tokio::time::Instant::now(),
         before_setup,

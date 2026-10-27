@@ -1,5 +1,9 @@
 //! Inspectable conversation operations: show, bounded wait and reconcile.
-use super::*;
+use super::{
+    CallToolResponse, CallToolResult, CollaborationMcpServer, McpToolOutput, OperationEffect, Tool,
+    ToolCallContext, ToolRoute, ToolRouter, operation_description, structured_tool_error,
+    typed_failure_result, validation_failure,
+};
 
 macro_rules! conversation_operation_tool {
     ($router:expr, $name:literal, $request:ty => $result:ty, $operation:ident) => {
@@ -58,7 +62,11 @@ fn operation_call_cancelled() -> CallToolResult {
 pub(super) fn register_conversation_operation_tools(
     router: &mut ToolRouter<CollaborationMcpServer>,
 ) {
-    use collaboration_protocol::*;
+    use collaboration_protocol::{
+        ConversationOperationReconcileRequest, ConversationOperationShowRequest,
+        ConversationOperationSnapshot, ConversationOperationWaitRequest,
+        ConversationOperationWaitResult, OperationEffect,
+    };
     conversation_operation_tool!(router, "conversation_operation_show", ConversationOperationShowRequest => ConversationOperationSnapshot, operation_show);
     conversation_operation_tool!(router, "conversation_operation_wait", ConversationOperationWaitRequest => ConversationOperationWaitResult, operation_wait);
     conversation_operation_tool!(router, "conversation_operation_reconcile", ConversationOperationReconcileRequest => ConversationOperationSnapshot, operation_reconcile);

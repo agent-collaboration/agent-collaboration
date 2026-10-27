@@ -21,7 +21,10 @@ use acp_provider_backend::ScriptedProviderBackend;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn app_server_approver_decides_exact_option_and_answers_question() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;

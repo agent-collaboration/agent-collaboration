@@ -21,7 +21,7 @@ pub struct FrozenFollowCancels {
 }
 
 impl FrozenFollowCancels {
-    #[allow(dead_code)] // Native capture drivers use the default local recipient.
+    // Native capture drivers use the default local recipient.
     pub async fn arrange(
         write: &mut ProjectWriteTransaction,
         project: &ProjectId,
@@ -115,7 +115,7 @@ impl FrozenFollowCancels {
         })
     }
 
-    #[allow(dead_code)] // Capture drivers also check a concrete frozen deadline.
+    // Capture drivers also check a concrete frozen deadline.
     pub fn child(&self, target: &MailItemRef) -> Result<MailCancelExpansion, TestError> {
         self.child_with_deadline(target, Some(SyncTime::from_unix_millis(900_000)))
     }

@@ -16,7 +16,7 @@ use collaboration_protocol::{
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-impl<'service> AutomationOperations<'service> {
+impl AutomationOperations {
     /// Pages one delivery's attempts as of a pinned observation time.
     pub async fn delivery_attempts(
         &self,
@@ -61,7 +61,7 @@ impl<'service> AutomationOperations<'service> {
         budget: ResultByteBudget,
     ) -> InspectionResult<AttemptHistoryPage<TRecord>> {
         let store = self.inspection_store()?;
-        let service_id = &self.identity.service_id;
+        let service_id = self.identity.service_id();
         let digest = cursor::filter_digest(&selection.filters)
             .map_err(|()| failure::invalid("request", "Cannot encode owner filters."))?;
         let position = selection
@@ -198,7 +198,7 @@ impl<'service> AutomationOperations<'service> {
         budget: ResultByteBudget,
     ) -> InspectionResult<AutomationEventsPage> {
         let store = self.inspection_store()?;
-        let service_id = &self.identity.service_id;
+        let service_id = self.identity.service_id();
         let after = request
             .after
             .as_deref()

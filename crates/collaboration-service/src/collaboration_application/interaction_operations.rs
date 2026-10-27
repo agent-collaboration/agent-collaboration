@@ -1,6 +1,5 @@
 //! Approvals and questions: decisions a person or agent owes a waiting session.
 use super::{CollaborationRejection, CollaborationRejectionReason, PublishedRejection};
-use crate::ServiceIdentity;
 use crate::interaction_broker::{
     InteractionHistoryError, InteractionHistoryRecord, QuestionHistoryState,
 };
@@ -12,18 +11,17 @@ use collaboration_protocol::{
 use serde_json::{Map, Value, json};
 
 /// Approval and question operations over the Router's interaction broker.
-pub struct InteractionOperations<'service> {
-    identity: &'service ServiceIdentity,
+pub struct InteractionOperations {
+    pub(super) approval_broker: Option<std::sync::Arc<crate::ServiceInteractionBroker>>,
 }
 
-impl<'service> InteractionOperations<'service> {
-    pub(crate) fn new(identity: &'service ServiceIdentity) -> Self {
-        Self { identity }
+impl InteractionOperations {
+    pub fn new(approval_broker: Option<std::sync::Arc<crate::ServiceInteractionBroker>>) -> Self {
+        Self { approval_broker }
     }
 
-    fn broker(&self) -> Result<&'service crate::ServiceInteractionBroker, InteractionFailure> {
-        self.identity
-            .approval_broker
+    fn broker(&self) -> Result<&crate::ServiceInteractionBroker, InteractionFailure> {
+        self.approval_broker
             .as_deref()
             .ok_or(InteractionFailure::BrokerUnavailable)
     }

@@ -4,7 +4,12 @@
 //! decoder's own message can name supplied keys and variants, so the tool classifies the
 //! arguments instead: the rejection names the field and its requirement and never repeats a
 //! supplied value, key or variant.
-use message_board::*;
+use message_board::{
+    ActingForIdentity, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage,
+    BoardNextAction, CommonDirectory, Description, EpochNumber, FeedPosition, Identity,
+    NormalizedOrigin, PageLimit, PageRequest, PostId, PostText, ReadActor, RecordKind,
+    RepositoryRef, ResourceName, ThreadRef, ThreadSubject,
+};
 use schemars::{JsonSchema, Schema, SchemaGenerator};
 use serde::{Deserialize, Deserializer, de::DeserializeOwned};
 use serde_json::{Map, Value};

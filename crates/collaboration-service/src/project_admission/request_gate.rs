@@ -1,6 +1,9 @@
 //! Both declared writes and Router intent writes enter the same locked admission gate.
 use super::{ProjectAdmission, ProjectAdmissionError};
-use message_board::*;
+use message_board::{
+    ActorOrigin, CanonicalHash, EpochNumber, FeedCursor, ProjectId, ProjectRejection, Record,
+    RequestId, RequestResult, ScopeRefusal,
+};
 use message_board_storage::ProjectWriteTransaction;
 
 pub(super) enum RequestGate {

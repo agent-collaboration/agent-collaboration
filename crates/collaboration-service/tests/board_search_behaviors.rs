@@ -1,11 +1,23 @@
 //! Retained literal search, scope/kind independence and bounded immutable history proof.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use collaboration_client::CollaborationClient;
 use message_board::*;
 use serde_json::json;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_read_setup::{create_location, post_at_placement};
 
@@ -28,7 +40,10 @@ fn post_ids(result: &PostSearchResult) -> Vec<PostId> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn archive_removes_remaining_search_hits_without_invalidating_the_cursor()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -136,7 +151,10 @@ async fn archive_removes_remaining_search_hits_without_invalidating_the_cursor()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn discovery_pages_bound_full_parent_context_without_losing_projects() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;
@@ -210,7 +228,10 @@ async fn discovery_pages_bound_full_parent_context_without_losing_projects() -> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn searches_keep_text_location_kind_and_reader_state_independent() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client: CollaborationClient = fixture.api.client("search proof").await?;
@@ -372,7 +393,10 @@ async fn searches_keep_text_location_kind_and_reader_state_independent() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn large_post_search_pages_respect_bytes_and_report_scan_cost() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("search byte proof").await?;

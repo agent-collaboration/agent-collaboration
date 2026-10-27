@@ -1,6 +1,11 @@
 //! Legacy native approval broker integration.
 
-use super::*;
+use super::{
+    APPROVAL_TIMEOUT, ApprovalBroker, ApprovalBrokerError, ApprovalRequestRecord, ApprovalRoute,
+    ApprovalState, Arc, BrokeredApprovalOutcome, BrokeredApprovalRequest, CancellationMarker,
+    NativeApprovalRefusalReason, PendingApproval, ServiceInteractionBroker, SessionRef, Value,
+    map_native_options, native_approval_refusal_diagnostic, native_option_records, oneshot,
+};
 
 impl ApprovalBroker for ServiceInteractionBroker {
     fn register_route(
@@ -123,7 +128,7 @@ impl ApprovalBroker for ServiceInteractionBroker {
                 )
             );
             let expires_at = (chrono::Utc::now()
-                + chrono::Duration::seconds(APPROVAL_TIMEOUT.as_secs() as i64))
+                + chrono::Duration::seconds(APPROVAL_TIMEOUT.as_secs().cast_signed()))
             .to_rfc3339();
             let record = ApprovalRequestRecord {
                 request_id: request_id.clone(),

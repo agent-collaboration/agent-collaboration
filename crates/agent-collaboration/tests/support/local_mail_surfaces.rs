@@ -5,10 +5,10 @@ use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, SessionReachability, SessionRef,
 };
 use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, BoardAvailability,
-    CollaborationApplication, DeliveryFuture, MachineIdentity, ServiceIdentity,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresence, TargetPresenceProbe,
+    ApplicationFixture, AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
+    BoardAvailability, DeliveryFuture, MachineIdentity, SessionMessageDelivery,
+    SubscriptionDeliveryService, SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
+    TargetPresence, TargetPresenceProbe,
 };
 use serde_json::{Value, json};
 use std::{
@@ -74,7 +74,7 @@ pub(super) struct Surfaces {
     pub(super) carrier: Arc<CarrierStandIn>,
 }
 impl Surfaces {
-    #[allow(dead_code)] // Only the companion compaction target needs the frozen reference.
+    // Only the companion compaction target needs the frozen reference.
     pub(super) async fn delivery_reference(
         &self,
         item: &collaboration_protocol::MailItemId,
@@ -127,7 +127,7 @@ impl Surfaces {
             clock: Arc::new(SystemSubscriptionClock),
         });
         delivery.start().await?;
-        let mut identity = ServiceIdentity::new(SERVICE, SERVICE)?
+        let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?
             .with_session_delivery(carrier.clone())
             .with_subscription_delivery_service(delivery.clone(), carrier.clone());
         if let Some(admission) = admission {
@@ -149,9 +149,7 @@ impl Surfaces {
             },
             session,
         )?;
-        let api =
-            ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-                .await?;
+        let api = ServedCollaborationApi::start(root.path(), (identity).build())?;
         Ok(Self {
             root,
             api,
@@ -165,7 +163,7 @@ impl Surfaces {
     pub(super) fn session(id: &str) -> Value {
         json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":id})
     }
-    #[allow(dead_code)] // Remote public-surface proofs inspect the actual SDK status owner.
+    // Remote public-surface proofs inspect the actual SDK status owner.
     pub(super) fn mail_runtime(&self) -> Arc<collaboration_service::MailDeliveryRuntime> {
         self.native.runtime_handle()
     }
@@ -178,7 +176,7 @@ impl Surfaces {
         }
         value
     }
-    #[allow(dead_code)] // Only held-custody proof targets use this input.
+    // Only held-custody proof targets use this input.
     pub(super) fn held_input(id: Option<&str>, text: &str) -> Value {
         let mut value = Self::input(id, text);
         if let Some(fields) = value.as_object_mut() {

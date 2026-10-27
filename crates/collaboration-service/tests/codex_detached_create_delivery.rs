@@ -7,9 +7,9 @@ use collaboration_protocol::{
     CodexGeneration, EndpointDescription, NonEmptyText, OperationId, SessionRef, UuidIdentity,
 };
 use collaboration_service::{
-    BoardAvailability, CodexAppServerDeliveryRoute, CodexConversationOperationRecorder,
-    EndpointDirectory, MachineIdentity, NativeControlBackend, NativeGenerationGate,
-    ProviderOperationStore, ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter,
+    ApplicationFixture, BoardAvailability, CodexAppServerDeliveryRoute,
+    CodexConversationOperationRecorder, EndpointDirectory, MachineIdentity, NativeControlBackend,
+    NativeGenerationGate, ProviderOperationStore, SessionDeliveryRoute, SessionDeliveryRouter,
     SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
     SystemSubscriptionClock, TargetPresenceProbe, UnmaterializedThreadHolder,
 };
@@ -23,6 +23,10 @@ use std::{
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio_tungstenite::tungstenite::Message;
 #[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod native_mail_owner;
 use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
@@ -140,7 +144,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
         });
     subscription_delivery.start().await?;
     let identity =
-        ServiceIdentity::new(&String::from(service_id.clone()), &String::from(service_id))?
+        ApplicationFixture::new(&String::from(service_id.clone()), &String::from(service_id))?
             .with_automation_store(Arc::clone(&automation_store))
             .with_endpoints(vec![description])?
             .with_native_backend(backend_config)?
@@ -276,7 +280,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
         .send(())
         .map_err(|_| "native response waiter closed")?;
 
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let waited = api_call(
         &served,
         "conversation_operation_wait",

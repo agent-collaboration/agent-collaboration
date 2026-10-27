@@ -1,6 +1,10 @@
 //! NI-2 compares a role's current holder set against the cause's stable actor intents.
 use super::ProjectAdmissionError;
-use message_board::*;
+use message_board::{
+    Assignment, IntentRecipient, IntentRefusal, IntentState, NotifyIntent, NotifyIntentId,
+    NotifyIntentProps, RecordEnvelope, ResolvedRecipient, RoleRecipient, RoleResolution,
+    TextValidationError,
+};
 use message_board_storage::ProjectWriteTransaction;
 
 pub(super) struct IntentResolution {

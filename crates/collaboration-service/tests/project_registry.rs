@@ -1,5 +1,8 @@
 //! Real registry/library scope proof. The enrolled PeerId is B5's explicit fixture stand-in.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 use board_fleet_sync::BOARD_LEASE_POLICY;
 use collaboration_service::{ProjectRegistryError, ProjectStoreRegistry};
 use fleet_sync_lease::WriterState;

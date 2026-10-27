@@ -234,7 +234,10 @@ impl ExternalProviderSupervisor {
         }
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     fn runtime_binding(
         &self,
         endpoint: &EndpointRef,
@@ -265,7 +268,10 @@ impl ExternalProviderSupervisor {
         Ok((binding.identity.clone(), Arc::clone(&binding.runtime)))
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     async fn prepare_operation(
         &self,
         operation_id: OperationId,
@@ -390,7 +396,10 @@ impl ExternalProviderSupervisor {
         });
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     async fn inspect_record(
         &self,
         operation_id: &OperationId,
@@ -589,7 +598,10 @@ impl SupervisorInner {
     }
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The typed failure retains the full published operation payload."
+)]
 fn retain_operation<T, F>(
     operation_id: OperationId,
     target: Option<SessionRef>,
@@ -677,7 +689,10 @@ fn snapshot_failure(
     )
 }
 
-#[allow(clippy::expect_used)]
+#[expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 fn failure(
     kind: ConversationOperationFailureKind,
     stage: ConversationOperationFailureStage,

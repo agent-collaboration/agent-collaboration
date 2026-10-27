@@ -560,7 +560,7 @@ impl SubscriptionDeliveryService {
             let owner_sender = sender.clone();
             self.inner.tasks.spawn(
                 async move {
-                    owner.run().await;
+                    Box::pin(owner.run()).await;
                     let mut owners = inner.owners.lock().await;
                     if owners
                         .get(&reader)

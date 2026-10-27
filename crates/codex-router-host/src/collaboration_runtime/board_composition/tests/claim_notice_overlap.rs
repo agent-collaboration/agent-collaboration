@@ -1,5 +1,8 @@
 //! The real tool reply and its own grant notice join one held native install.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+)]
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
@@ -143,16 +146,14 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     let api_directory = directory.path().join("api");
     std::fs::create_dir(&api_directory)?;
     std::fs::set_permissions(&api_directory, std::fs::Permissions::from_mode(0o700))?;
-    let app = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone())
-        .with_project_claim(projects.clone()),
-    );
-    let api =
-        collaboration_mcp::test_support::ServedCollaborationApi::start(&api_directory, app).await?;
+    let app = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone())
+    .with_project_claim(projects.clone()))
+    .build();
+    let api = collaboration_mcp::test_support::ServedCollaborationApi::start(&api_directory, app)?;
     let client = Arc::new(api.client("claim-own-notice-overlap").await?);
     let claiming = client.clone();
     let input = request.clone();

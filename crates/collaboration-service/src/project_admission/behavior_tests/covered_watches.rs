@@ -16,7 +16,10 @@ fn project_subscribe(project: &ProjectId) -> BoardOperation {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn subscription_activation_creates_existing_watches_and_post_replay_keeps_their_boundary()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -112,7 +115,10 @@ async fn subscription_activation_creates_existing_watches_and_post_replay_keeps_
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn p6_project_coverage_does_not_reactivate_an_explicitly_unwatched_thread()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -160,7 +166,10 @@ async fn p6_project_coverage_does_not_reactivate_an_explicitly_unwatched_thread(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn p6_join_without_watch_keeps_its_disabled_row_on_later_posts() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     fixture
@@ -213,7 +222,10 @@ async fn p6_join_without_watch_keeps_its_disabled_row_on_later_posts() -> Result
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn q2_project_subscribe_reactivates_a_plain_opt_out_without_a_thread_subscription_override()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

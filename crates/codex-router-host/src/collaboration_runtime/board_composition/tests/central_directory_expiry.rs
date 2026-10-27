@@ -89,13 +89,12 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
     let admission = board.admission.clone();
     let running = board.start().ok_or("reader session not started")?;
     wait_welcome(ready).await?;
-    let application = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            reader_origin.installation.as_str(),
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (collaboration_service::ApplicationFixture::new(
+        reader_origin.installation.as_str(),
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     let proof = async {
         let original = directory_lease(&requests, &project).await?;
         let DirectoryLease::Held {

@@ -1,6 +1,11 @@
 //! Projection between typed provider approvals and the legacy approval API.
 
-use super::*;
+use super::{
+    ApprovalDecision, ApprovalDecisionError, ApprovalOfferedOption, ApprovalOptionEffect,
+    ApprovalOptionScope, ApprovalOptionView, ApprovalOptionViewScope, ApprovalPresentation,
+    ApprovalRequestRecord, ApprovalState, InteractionHistoryRecord, InteractionHistoryState,
+    SessionRef,
+};
 
 pub(super) fn typed_cancel_approval_state(
     reason: &session_event_model::InteractionCancelReason,

@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used, clippy::panic)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! A provider run waits for an idle actor and summarizes its own prompt settlement.
 use agent_automation::{
     CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId, RunPhase, SubmissionEffect,

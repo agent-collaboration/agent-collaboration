@@ -1,7 +1,23 @@
 //! Non-lead cards select their own pending operands before metadata decoding.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -32,8 +48,8 @@ struct CardExpectation {
     count: usize,
     as_of: FeedCursor,
 }
-#[allow(clippy::panic_in_result_fn)]
-fn assert_card(card: &Value, expected: &CardExpectation) -> Result<(), TestError> {
+
+fn assert_card(card: &Value, expected: &CardExpectation) {
     assert_eq!(
         card.get("subject"),
         Some(&json!(RecordRef::from(expected.task.clone())))
@@ -58,10 +74,8 @@ fn assert_card(card: &Value, expected: &CardExpectation) -> Result<(), TestError
         Some(&json!(expected.count))
     );
     assert_eq!(card.get("asOf"), Some(&json!(expected.as_of)));
-    Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -126,7 +140,7 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
             .get("result")
             .ok_or_else(|| format!("card: {answer}"))?,
         &expected,
-    )?;
+    );
     let foreign = foreign.ok_or("foreign candidate")?;
     let mut raw = sqlx_turso::TursoConnectOptions::new()
         .filename(store.path())
@@ -144,7 +158,7 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
     );
     raw.close().await?;
     let answer = fixture.api.call("view_card", request.clone()).await?;
-    assert_card(answer.get("result").ok_or("card")?, &expected)?;
+    assert_card(answer.get("result").ok_or("card")?, &expected);
     let mut relevant = request;
     relevant.as_object_mut().ok_or("card")?.insert(
         "subject".to_owned(),
@@ -166,11 +180,14 @@ async fn card_cost(size: usize) -> Result<ReadCost, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn non_lead_pending_metadata_costs_ignore_foreign_tagged_batches() -> Result<(), TestError> {
     read_cost_counter::install();
-    let small = card_cost(8).await?;
-    let large = card_cost(120).await?;
+    let small = Box::pin(card_cost(8)).await?;
+    let large = Box::pin(card_cost(120)).await?;
     eprintln!("scoped pending card: small={small:?}; large={large:?}");
     assert_eq!(small, large, "foreign tagged batches grew card work");
     assert_eq!(

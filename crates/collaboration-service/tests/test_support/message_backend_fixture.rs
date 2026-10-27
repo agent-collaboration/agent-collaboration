@@ -9,7 +9,7 @@ use collaboration_protocol::{
     PushRecord, SessionRef,
 };
 use collaboration_service::{
-    CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
+    ApplicationFixture, CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate,
     ServiceInteractionBroker, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -281,7 +281,7 @@ async fn exercise_message(
     } else {
         None
     };
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_automation_store(Arc::clone(&automation_store))
         .with_endpoints(vec![description])?
         .with_native_backend(native_backend.clone())?;
@@ -340,7 +340,7 @@ async fn exercise_message(
             clock,
         },
     )?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let backend = tokio::spawn(async move {
         let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await??;
         let mut socket = tokio_tungstenite::accept_async(stream).await?;

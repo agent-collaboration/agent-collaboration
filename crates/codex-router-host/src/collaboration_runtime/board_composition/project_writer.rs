@@ -271,7 +271,10 @@ async fn stop_writer_tasks(
 
 #[cfg(test)]
 mod stop_tests {
-    #![allow(clippy::panic_in_result_fn)]
+    #![expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+    )]
     use super::*;
     use std::task::Poll;
     use tokio::sync::oneshot;

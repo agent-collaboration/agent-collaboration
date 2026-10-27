@@ -3,14 +3,14 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 #[tokio::test]
 async fn native_bridge_preserves_wire_payload_through_public_discovery() {
     use collaboration_mcp::test_support::ServedCollaborationApi;
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     use std::os::unix::fs::DirBuilderExt;
     let root = std::path::PathBuf::from(format!("/tmp/native-cli-{}", std::process::id()));
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&root)
         .unwrap_or_else(|e| panic!("directory: {e}"));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
@@ -45,8 +45,7 @@ async fn native_bridge_preserves_wire_payload_through_public_discovery() {
     let identity = identity
         .with_endpoints(vec![endpoint])
         .unwrap_or_else(|e| panic!("register: {e}"));
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|e| panic!("serve: {e}"));
     // The bridge's only source for the carrier path is the endpoints_list tool on the API.
     let listed = served

@@ -7,8 +7,8 @@ use collaboration_protocol::{
     UuidIdentity,
 };
 use collaboration_service::{
-    CodexAppServerDeliveryRoute, MachineIdentity, NativeControlBackend, NativeGenerationGate,
-    ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
+    ApplicationFixture, CodexAppServerDeliveryRoute, MachineIdentity, NativeControlBackend,
+    NativeGenerationGate, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
 };
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
@@ -152,7 +152,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .await
         .expect("create recurring wake");
 
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("create service identity")
         .with_machine_identity(
             MachineIdentity::new(service_identity.clone(), Some("wake-repeating-fixture"))

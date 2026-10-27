@@ -4,7 +4,7 @@ use super::*;
 use message_board::*;
 
 async fn assert_reactivated_frontier(resolved: bool) {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let marks = Arc::new(FrontierMarks(AtomicU64::new(0)));
@@ -280,9 +280,9 @@ async fn assert_reactivated_frontier(resolved: bool) {
 
 #[tokio::test]
 async fn cancelled_activation_settles_after_reactivation_and_acknowledged_reopen() {
-    assert_reactivated_frontier(false).await;
+    Box::pin(assert_reactivated_frontier(false)).await;
 }
 #[tokio::test]
 async fn resolved_activation_stays_owed_after_reactivation_until_its_frozen_replacement_delivers() {
-    assert_reactivated_frontier(true).await;
+    Box::pin(assert_reactivated_frontier(true)).await;
 }

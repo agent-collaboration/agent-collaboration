@@ -11,7 +11,7 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
         .with_env_filter("collaboration_service=trace")
         .with_test_writer()
         .try_init();
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -157,7 +157,7 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
 #[tokio::test]
 async fn three_poll_roots_keep_filtered_and_fifo_custody_independent() {
     use futures_util::FutureExt;
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let roots = super::follow_admission_proofs::project_poll_roots(&fixture).await;
     for root in &roots {
         fixture.post(root, "one independent Poll handover").await;

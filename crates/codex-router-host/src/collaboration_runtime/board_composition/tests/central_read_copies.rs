@@ -1,8 +1,6 @@
 //! Real session and snapshot installation; directory policy remains a fixture input.
 use super::*;
-use collaboration_service::{
-    CollaborationApplication, ProjectReplicationPosition, ServiceIdentity,
-};
+use collaboration_service::{ApplicationFixture, ProjectReplicationPosition};
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
 use fleet_sync_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use runtime_primitives::{Clock, SystemClock};
@@ -112,13 +110,12 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
         .await?;
     let retained_before = durable_file_hashes(&retained)?;
     let upgrades = runtime.central.auth.upgrades.load(Ordering::SeqCst);
-    let application = CollaborationApplication::new(
-        ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(runtime.admission.clone()),
-    );
+    let application = (ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(runtime.admission.clone()))
+    .build();
     let view_request = ProjectViewRequest {
         project_id: runtime.project.clone(),
         include_removed: false,

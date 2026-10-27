@@ -57,14 +57,11 @@ pub struct ServedCollaborationApi {
 
 impl ServedCollaborationApi {
     /// `directory` must be an owner-only (0700) directory the test owns.
-    pub async fn start(
-        directory: &Path,
-        application: CollaborationApplication,
-    ) -> io::Result<Self> {
-        Self::start_with(directory, application, TestServeOptions::default()).await
+    pub fn start(directory: &Path, application: CollaborationApplication) -> io::Result<Self> {
+        Self::start_with(directory, application, TestServeOptions::default())
     }
 
-    pub async fn start_with(
+    pub fn start_with(
         directory: &Path,
         application: CollaborationApplication,
         options: TestServeOptions,

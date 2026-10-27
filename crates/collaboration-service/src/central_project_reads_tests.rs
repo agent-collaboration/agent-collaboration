@@ -1,5 +1,8 @@
 //! Equal versions identify committed lease facts, independently of display time.
-#![allow(clippy::panic_in_result_fn)]
+#![expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 use super::*;
 use fleet_admission::{DirectoryLease, DirectoryLeaseState};
 

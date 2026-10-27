@@ -1,7 +1,7 @@
 //! Directory acceptance survives a delayed real Host registration without a false error.
 use super::*;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 
@@ -24,14 +24,13 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
     let api_root = directory.path().join("public-api");
     tokio::fs::create_dir_all(&api_root).await?;
     std::fs::set_permissions(&api_root, std::fs::Permissions::from_mode(0o700))?;
-    let application = CollaborationApplication::new(
-        ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
-    let api = ServedCollaborationApi::start(&api_root, application).await?;
+    let application = (ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
+    let api = ServedCollaborationApi::start(&api_root, application)?;
     let input = serde_json::to_value(&creation)?;
     let queued = api.call("project_create", input.clone()).await?;
     assert_eq!(
@@ -125,10 +124,10 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
 #[tokio::test]
 async fn accepted_creation_past_the_ready_bound_returns_pending_then_local_and_replays()
 -> TestResult {
-    assert_creation_reply(false).await
+    Box::pin(assert_creation_reply(false)).await
 }
 
 #[tokio::test]
 async fn accepted_creation_waits_for_real_ready_inside_the_bound_and_replays() -> TestResult {
-    assert_creation_reply(true).await
+    Box::pin(assert_creation_reply(true)).await
 }

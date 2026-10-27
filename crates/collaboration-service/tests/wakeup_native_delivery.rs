@@ -6,7 +6,7 @@ use collaboration_protocol::{
     SessionRef,
 };
 use collaboration_service::{
-    CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
+    ApplicationFixture, CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate,
     SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -181,7 +181,7 @@ async fn exercise_delivery(
     if !recovered_delivery_ids.contains(&delivery_id) {
         return Err("restart did not expose the committed wake for dispatch".into());
     }
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_interaction_store(interactions.clone())
@@ -445,7 +445,7 @@ async fn exercise_delivery(
             | NativeOutcome::ReconcileAbsent
             | NativeOutcome::ReconcileWrongPushId
     ) {
-        let served = served_api::ServedApi::start(identity).await?;
+        let served = served_api::ServedApi::start(identity)?;
         let client = served.client("reconcile-fixture").await?;
         let result = client
             .reconcile_delivery(collaboration_protocol::DeliveryShowRequest {

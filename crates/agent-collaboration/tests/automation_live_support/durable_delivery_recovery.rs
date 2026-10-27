@@ -14,9 +14,7 @@ use collaboration_client::protocol::{
     TimingRequest, WakeMutationRequest, WakeSendRequest, WakeShowRequest,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-};
+use collaboration_service::{ApplicationFixture, NativeControlBackend, NativeGenerationGate};
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -60,7 +58,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
         }],
     };
     let gate = NativeGenerationGate::default();
-    let identity = ServiceIdentity::new(&service_id, &epoch)?
+    let identity = ApplicationFixture::new(&service_id, &epoch)?
         .with_endpoints(vec![description.clone()])?
         .with_automation_store(Arc::clone(&store))
         .with_native_backend(NativeControlBackend {
@@ -69,9 +67,7 @@ pub async fn exercise(proof: &mut ProofContext, portable: PortableRunProof) -> P
             codex_home: std::path::PathBuf::from(std::env::var_os("HOME").ok_or("HOME missing")?)
                 .join(".codex"),
         })?;
-    let served =
-        ServedCollaborationApi::start(&directory, CollaborationApplication::new(identity.clone()))
-            .await?;
+    let served = ServedCollaborationApi::start(&directory, (identity.clone()).build())?;
     let client = served.client("durable-recovery-proof").await?;
     let imported = client
         .import_schedule(ScheduleImportRequest {

@@ -6,8 +6,8 @@ use collaboration_protocol::{
     UuidIdentity,
 };
 use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    DeliveryContractError, DeliveryFuture, ServiceIdentity, SessionMessageDelivery,
+    ApplicationFixture, AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
+    DeliveryContractError, DeliveryFuture, SessionMessageDelivery,
 };
 use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
@@ -94,11 +94,9 @@ pub(super) struct ControlHarness {
     pub(super) lifetime: PushFixtureLifetime,
 }
 impl ControlHarness {
-    pub(super) async fn start(identity: ServiceIdentity) -> Self {
+    pub(super) fn start(identity: ApplicationFixture) -> Self {
         Self {
-            served: served_api::ServedApi::start(identity)
-                .await
-                .expect("serve the API"),
+            served: served_api::ServedApi::start(identity).expect("serve the API"),
             lifetime: PushFixtureLifetime::NoDeliveryOwner,
         }
     }
@@ -200,7 +198,7 @@ pub(super) async fn setup() -> (
         },
     );
     actors.start().await.expect("single owner starts");
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("service identity")
         .with_automation_store(automation.clone())
         .with_session_delivery(delivery.clone())
@@ -217,7 +215,7 @@ pub(super) async fn setup() -> (
         },
     )
     .expect("compose native mail");
-    let mut control = ControlHarness::start(identity).await;
+    let mut control = ControlHarness::start(identity);
     control.lifetime = PushFixtureLifetime::NativeDelivery {
         actors,
         mail,
@@ -239,10 +237,10 @@ pub(super) async fn setup_without_push_store() -> (
             .expect("stand-in native database"),
     );
     let delivery = Arc::new(RecordingDelivery::new(store.clone()));
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("service identity")
         .with_session_delivery(delivery.clone());
-    let control = ControlHarness::start(identity).await;
+    let control = ControlHarness::start(identity);
     (directory, store, delivery, control)
 }
 

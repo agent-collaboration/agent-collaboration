@@ -2,7 +2,7 @@ use collaboration_client::{
     CollaborationAccess, NativeTransportConnection, NativeTransportError, protocol::EndpointId,
 };
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use std::os::unix::fs::DirBuilderExt;
 
@@ -13,7 +13,7 @@ async fn client_opens_advertised_native_websocket_without_protocol_initializatio
         .mode(0o700)
         .create(&root)
         .unwrap_or_else(|error| panic!("directory: {error}"));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
@@ -46,8 +46,7 @@ async fn client_opens_advertised_native_websocket_without_protocol_initializatio
     let identity = identity
         .with_endpoints(vec![endpoint])
         .unwrap_or_else(|error| panic!("register: {error}"));
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|error| panic!("serve: {error}"));
 
     let endpoint_id = EndpointId::try_from("codex-local".to_owned())
@@ -94,7 +93,7 @@ async fn client_rejects_unavailable_and_escaped_native_endpoints_without_connect
             .create(directory)
             .unwrap_or_else(|error| panic!("directory: {error}"));
     }
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000011",
         "00000000-0000-4000-8000-000000000012",
     )
@@ -110,8 +109,7 @@ async fn client_rejects_unavailable_and_escaped_native_endpoints_without_connect
     let identity = identity
         .with_endpoints(vec![unavailable])
         .unwrap_or_else(|error| panic!("register: {error}"));
-    let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-        .await
+    let served = ServedCollaborationApi::start(&root, (identity).build())
         .unwrap_or_else(|error| panic!("serve: {error}"));
     let access = CollaborationAccess::api(&root);
     let endpoint_id = || {

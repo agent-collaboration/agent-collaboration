@@ -1,7 +1,23 @@
 //! Fleet pages decode the returned records and shared parents, independent of directory size.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    unused_imports,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -45,7 +61,6 @@ async fn create_rows(fixture: &BoardFixture, size: usize) -> Result<(), TestErro
     Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn fleet_page_costs(size: usize) -> Result<BTreeMap<String, ReadCost>, TestError> {
     let fixture = BoardFixture::start().await?;
     create_rows(&fixture, size).await?;
@@ -104,7 +119,10 @@ async fn fleet_page_costs(size: usize) -> Result<BTreeMap<String, ReadCost>, Tes
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn fleet_pages_and_discovery_parent_batches_do_not_grow_with_directory_size()
 -> Result<(), TestError> {
     read_cost_counter::install();

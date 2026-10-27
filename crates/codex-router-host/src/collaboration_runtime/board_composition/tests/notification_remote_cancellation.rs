@@ -20,7 +20,7 @@ use super::split_transport;
 async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_frozen_envelope()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let seed = NotificationSeed {
         project: fixture.project.clone(),
         item: fixture.seed_item,
@@ -267,7 +267,12 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
     drop(database);
     drop(writer);
     let central = fixture.close_keeping_central().await?;
-    let mut reopened = ProjectNotificationFixture::resume(directory.path(), central, seed).await?;
+    let mut reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        seed,
+    ))
+    .await?;
     assert_eq!(
         reopened
             .harness

@@ -18,7 +18,7 @@ pub(super) struct ClaimFixture {
 
 impl ClaimFixture {
     pub async fn start() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Self::start_configured(false).await
+        Box::pin(Self::start_configured(false)).await
     }
 
     #[cfg(feature = "runtime-test-support")]
@@ -30,7 +30,10 @@ impl ClaimFixture {
         let directory = tempfile::tempdir()?;
         let central =
             Arc::new(TestCentral::start(&directory.path().join("central"), &origin()?).await?);
-        #[allow(unused_mut)] // Notification tests attach existing mail owners before activation.
+        #[expect(
+            unused_mut,
+            reason = "Notification tests attach existing mail owners before activation."
+        )]
         let mut board = open_board_admission(
             &directory.path().join("router"),
             identity()?,

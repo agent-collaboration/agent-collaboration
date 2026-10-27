@@ -71,7 +71,7 @@ async fn worker_timeout_crash_preserves_occupancy_until_exact_cessation() -> Tes
         if root.join("interrupt-witness.json").exists() != (stage == "interrupt-response") {
             return Err("interrupt witness disagrees with process-loss boundary".into());
         }
-        recover(&root).await?;
+        Box::pin(recover(&root)).await?;
         for entry in std::fs::read_dir(&root)? {
             std::fs::remove_file(entry?.path())?;
         }
@@ -230,7 +230,7 @@ async fn worker_timeout_crash_child() -> TestResult<()> {
         WorkerEndpoint { socket, number: 1 },
     )
     .await?;
-    worker.step(run_id).await?;
+    Box::pin(worker.step(run_id)).await?;
     Err("worker did not reach crash checkpoint".into())
 }
 async fn recover(root: &Path) -> TestResult<()> {
@@ -329,7 +329,7 @@ async fn recover(root: &Path) -> TestResult<()> {
     });
     let worker = fixture_worker(store.clone(), root, WorkerEndpoint { socket, number: 2 }).await?;
     for stopped in [false, true] {
-        worker.step(run_id.clone()).await?;
+        Box::pin(worker.step(run_id.clone())).await?;
         let record = store
             .lock()
             .await

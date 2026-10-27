@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p4_policy_patch_during_flight_releases_the_matching_window() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();
@@ -75,7 +78,10 @@ async fn p4_policy_patch_during_flight_releases_the_matching_window() -> Result<
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn p5_resolve_during_flight_release_clears_selection_and_allows_selection()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;

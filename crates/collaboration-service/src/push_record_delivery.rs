@@ -1,5 +1,4 @@
 //! Native SDK custody precedes direct-message delivery through the reader's actor.
-use crate::ServiceIdentity;
 use collaboration_protocol::{PushId, PushRecordDraft, PushRecordValidationError};
 
 #[derive(Debug)]
@@ -15,12 +14,13 @@ pub(crate) enum PushDeliveryFailure {
 pub(crate) async fn store_first_and_deliver(
     draft: PushRecordDraft,
     target_identity: String,
-    identity: &ServiceIdentity,
+    interaction_store: Option<&std::sync::Arc<interaction_storage::InteractionStore>>,
+    mail_delivery: Option<&std::sync::Arc<crate::MailDeliveryRuntime>>,
 ) -> Result<collaboration_protocol::PushMessageSendResult, PushDeliveryFailure> {
-    if identity.interaction_store.is_none() {
+    if interaction_store.is_none() {
         return Err(PushDeliveryFailure::StoreUnavailable);
     }
-    let Some(runtime) = identity.mail_delivery.as_ref() else {
+    let Some(runtime) = mail_delivery else {
         return Err(PushDeliveryFailure::DeliveryUnavailable);
     };
     runtime.send_local(draft, target_identity).await
@@ -30,7 +30,7 @@ pub(crate) async fn store_first_and_deliver(
 mod tests {
     use crate::collaboration_application::CollaborationRejection;
     use crate::{
-        BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
+        ApplicationFixture, BoardAvailability, MachineIdentity, SessionDeliveryRouter,
         SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
         SystemSubscriptionClock, TargetPresenceProbe,
     };
@@ -67,7 +67,7 @@ mod tests {
         owner: Arc<interaction_storage::InteractionStore>,
         peer: fleet_sync_protocol::PeerId,
         automation: Arc<Mutex<AutomationStore>>,
-    ) -> ServiceIdentity {
+    ) -> ApplicationFixture {
         let router = Arc::new(SessionDeliveryRouter::new(Vec::new()));
         let delivery: Arc<dyn SessionMessageDelivery> = router.clone();
         let presence: Arc<dyn TargetPresenceProbe> = router;
@@ -99,7 +99,7 @@ mod tests {
         )
         .unwrap()
         .without_registered_task_for_test();
-        ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_automation_store(automation)
             .with_subscription_delivery_service(actors, presence)
@@ -126,7 +126,8 @@ mod tests {
         // post-commit error; no synthetic MessageFailure or fake receipt is supplied.
         let identity = identity_without_native_work(owner.clone(), peer, automation.clone()).await;
         let target = session(&identity.service_id);
-        let sent = crate::CollaborationApplication::new(identity.clone())
+        let sent = (identity.clone())
+            .build()
             .messages()
             .message_send(SessionMessageSendParams {
                 item_id: None,
@@ -170,7 +171,8 @@ mod tests {
             .expect("push link names the committed record");
         assert_eq!(record.delivery_state, PushDeliveryState::Pending);
         assert!(record.last_outcome.is_none());
-        let expected_link = crate::push_record_resolver::link_for(&record, &identity);
+        let expected_link =
+            crate::push_record_resolver::link_for(&record, &identity.router_identity());
         assert_eq!(
             response.pointer("/error/data/kind"),
             Some(&json!("outcomeUnknown"))
@@ -242,7 +244,7 @@ mod tests {
             automation.clone(),
         )
         .await;
-        let app = crate::CollaborationApplication::new(identity.clone());
+        let app = (identity.clone()).build();
         let mut input = SessionMessageSendParams {
             item_id: Some(id.clone()),
             target,
@@ -277,7 +279,7 @@ mod tests {
         drop(app);
         let mut no_delivery = identity.clone();
         no_delivery.mail_delivery = None;
-        let app = crate::CollaborationApplication::new(no_delivery);
+        let app = (no_delivery).build();
         assert_eq!(
             app.messages()
                 .message_send(input)

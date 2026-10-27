@@ -46,7 +46,7 @@ async fn committed_schedule_outcome_replays_lost_ack_before_another_native_attem
     )
     .await?;
     for _ in 0..3 {
-        worker.step(run_id.clone()).await?;
+        Box::pin(worker.step(run_id.clone())).await?;
     }
     let owed = automation
         .lock()
@@ -74,7 +74,7 @@ async fn committed_schedule_outcome_replays_lost_ack_before_another_native_attem
     {
         return Err("committed run must precede its separately owed push settlement".into());
     }
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     if attempts
         .lock()
         .map_err(|_| "attempt witness poisoned")?
@@ -120,7 +120,7 @@ async fn committed_schedule_outcome_replays_lost_ack_before_another_native_attem
             "lost acknowledgement must retain both the native result and exact owed input".into(),
         );
     }
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     if attempts
         .lock()
         .map_err(|_| "attempt witness poisoned")?
@@ -159,7 +159,7 @@ async fn committed_schedule_outcome_replays_lost_ack_before_another_native_attem
         .await?;
     native.close().await?;
     observer.close().await?;
-    worker.step(run_id.clone()).await?;
+    Box::pin(worker.step(run_id.clone())).await?;
     if attempts
         .lock()
         .map_err(|_| "attempt witness poisoned")?
@@ -192,7 +192,7 @@ async fn wrong_native_schedule_state_refuses_handoff_and_keeps_the_owed_input() 
     )
     .await?;
     for _ in 0..3 {
-        worker.step(run_id.clone()).await?;
+        Box::pin(worker.step(run_id.clone())).await?;
     }
     let owed = automation
         .lock()
@@ -229,7 +229,7 @@ async fn wrong_native_schedule_state_refuses_handoff_and_keeps_the_owed_input() 
     {
         return Err("refused native apply changed the push or discarded its owed operation".into());
     }
-    worker.step(run_id).await?;
+    Box::pin(worker.step(run_id)).await?;
     if attempts
         .lock()
         .map_err(|_| "attempt witness poisoned")?

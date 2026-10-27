@@ -513,7 +513,11 @@ async fn supervisor(
     )?)
 }
 
-#[allow(clippy::expect_used, clippy::result_large_err)]
+#[expect(
+    clippy::expect_used,
+    clippy::result_large_err,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 async fn wait(
     backend: &dyn ProviderConversationBackend,
     operation_id: OperationId,

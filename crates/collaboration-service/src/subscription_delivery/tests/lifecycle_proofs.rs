@@ -1,11 +1,11 @@
 use super::owner_fixture::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use crate::{LoadPolicy, TargetPresence};
 use message_board::{EndReason, SubscriptionMode, SubscriptionScope, WhenIdle};
 
 #[tokio::test]
 async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_running() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.native_runtime().await;
     let mut positions = Vec::new();
@@ -93,7 +93,7 @@ async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_runnin
 
 #[tokio::test(start_paused = true)]
 async fn wake_uses_may_load_only_for_a_wakeable_target() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -119,7 +119,7 @@ async fn wake_uses_may_load_only_for_a_wakeable_target() {
 
 #[tokio::test]
 async fn unreachable_wake_is_held_with_visible_reason() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -163,7 +163,7 @@ async fn unreachable_wake_is_held_with_visible_reason() {
 
 #[tokio::test(start_paused = true)]
 async fn drop_then_push_leaves_both_messages_unread() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -205,7 +205,7 @@ async fn drop_then_push_leaves_both_messages_unread() {
 
 #[tokio::test(start_paused = true)]
 async fn expiry_without_activity_sends_one_stored_renew_command() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     runtime.owner_barrier(&fixture.reader).await;
     fixture.clock.advance(24 * 60 * 60).await;
@@ -260,7 +260,7 @@ async fn expiry_without_activity_sends_one_stored_renew_command() {
 
 #[tokio::test(start_paused = true)]
 async fn unknown_outcome_advances_delivered_and_preserves_evidence() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Uncertain").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();

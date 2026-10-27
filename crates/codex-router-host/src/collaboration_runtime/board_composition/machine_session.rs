@@ -51,6 +51,10 @@ fn mail_status_interval() -> Duration {
 
 #[cfg(test)]
 #[path = "tests/mail_notice_events.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod mail_notice_events;
 
 type BoardSessionPump =

@@ -1,6 +1,18 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -8,7 +20,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Watch, scoped marks, state changes and unread summaries survive actual store/API reopening.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Watch, scoped marks, state changes and unread summaries survive actual store/API reopening."
+)]
 async fn future_only_watches_scoped_acknowledgements_and_unread_summaries_survive_reopen()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

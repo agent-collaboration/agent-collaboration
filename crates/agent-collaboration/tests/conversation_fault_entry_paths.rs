@@ -1,4 +1,8 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
+#![expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
+)]
 //! CLI subprocess proof for conversation failures before any ACP dispatch.
 
 use serde_json::Value;
@@ -130,16 +134,13 @@ async fn fork_response_loss_after_session_new_reports_unknown_without_replay() {
             "schemaDigest":format!("sha256:{}", collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description])
         .expect("endpoint");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).expect("ACP bind");
     let peer = tokio::spawn(async move {
         let (stream, _) = acp.accept().await.expect("ACP accept");
@@ -262,16 +263,13 @@ async fn acp_initialize_response_loss_reports_no_effect_before_conversation_crea
         "availability":{"state":"available","observedAt":"2026-09-19T00:00:00Z"},
         "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}", collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]
     })).expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description])
         .expect("endpoint");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).expect("ACP bind");
     let peer = tokio::spawn(async move {
         let (stream, _) = acp.accept().await.expect("ACP accept");
@@ -351,16 +349,13 @@ async fn compiled_cli_conversation_records_deserialize_for_success_errors_deadli
             "schemaDigest":format!("sha256:{}", collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description])
         .expect("endpoint");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).expect("ACP bind");
     let (interrupt_prompt_seen, interrupt_prompt_ready) = tokio::sync::oneshot::channel();
     let peer = tokio::spawn(async move {
@@ -697,7 +692,11 @@ async fn resumed_prompt_load_rejection_retains_target_code_and_data_without_prom
     );
 }
 
-#[allow(clippy::expect_used, clippy::indexing_slicing)]
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "Fixed test inputs and bounded fixture setup must fail the test when invalid."
+)]
 async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::process::Output {
     let root = std::path::PathBuf::from(format!("/tmp/clr-{}", uuid::Uuid::now_v7()));
     std::fs::DirBuilder::new()
@@ -712,16 +711,13 @@ async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::proces
         "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}", collaboration_client::protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description])
         .expect("endpoint");
-    let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
-        &root,
-        collaboration_service::CollaborationApplication::new(identity),
-    )
-    .await
-    .expect("serve collaboration API");
+    let served =
+        collaboration_mcp::test_support::ServedCollaborationApi::start(&root, (identity).build())
+            .expect("serve collaboration API");
     let acp = tokio::net::UnixListener::bind(root.join("acp.sock")).expect("ACP bind");
     let peer = tokio::spawn(async move {
         let (stream, _) = acp.accept().await.expect("ACP accept");

@@ -39,7 +39,7 @@ impl crate::ProjectReplicationPosition for IsolationAcknowledgements {
 async fn local_generation_replacement_reaches_native_delivery_while_another_readers_query_is_held()
 {
     // Arrange local L with actual Held custody before adding R in the same project.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let peer = PeerId::try_from("0192a1b2-c3d4-7000-8000-000000000001".to_owned()).unwrap();
@@ -305,7 +305,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
 
 #[tokio::test]
 async fn an_expired_lease_queries_an_eligible_remote_cancel_and_renewal_replays_it_once() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
     let peer = PeerId::try_from("0192a1b2-c3d4-7000-8000-000000000001".to_owned()).unwrap();
     let query = query_fixture::FrozenMailQuery::open(fixture.directory.path(), peer).await;

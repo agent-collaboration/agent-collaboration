@@ -1,8 +1,17 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
+#![expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! The Host's real router selects provider and peer clients through the collaboration API.
 #[path = "support/registered_route_project.rs"]
 mod registered_route_project;
 #[path = "support/session_message_route_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod route_fixture;
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,

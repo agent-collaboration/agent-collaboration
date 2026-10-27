@@ -40,10 +40,15 @@ pub use project_replication_position::{
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
 mod automation_retention_worker;
-mod service_identity;
+mod router_identity;
+pub use router_identity::{RouterIdentity, RouterIdentityError};
+#[cfg(any(test, feature = "runtime-test-support"))]
+mod application_fixture;
+#[cfg(any(test, feature = "runtime-test-support"))]
+pub use application_fixture::ApplicationFixture;
+mod subscription_delivery;
 pub use automation_retention_worker::AutomationRetentionWorker;
-pub use service_identity::ServiceIdentity;
-pub use service_identity::subscription_delivery::{
+pub use subscription_delivery::{
     BoardAvailability, SubscriptionClock, SubscriptionDeliveryService,
     SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
     SubscriptionWaitResult, SubscriptionWindowStore, SystemSubscriptionClock,
@@ -199,9 +204,11 @@ pub use codex_acp_adapter::{ACP_SCHEMA_DIGEST, NativeStoredSessions};
 pub use unmaterialized_thread_holder::UnmaterializedThreadHolder;
 
 mod codex_session_inventory;
+pub use codex_session_inventory::CodexSessionInventory;
 mod instruction_projection;
 mod native_claude_catalogue;
 mod provider_session_inventory;
+pub use provider_session_inventory::ProviderSessionInventory;
 mod stored_inventory_observation;
 
 mod interaction_storage_failure;

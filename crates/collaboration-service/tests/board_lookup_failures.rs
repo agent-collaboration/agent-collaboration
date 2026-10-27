@@ -1,12 +1,23 @@
 //! Preserve canonical missing-resource guidance and multi-workspace summary coverage.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn missing_resource_uses_the_canonical_inspection_action() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let missing = ProjectId::generate();
@@ -35,7 +46,10 @@ async fn missing_resource_uses_the_canonical_inspection_action() -> Result<(), T
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn missing_root_uses_inspect_resource_and_summary_reads_cover_many_workspaces()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

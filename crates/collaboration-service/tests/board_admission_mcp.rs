@@ -1,11 +1,19 @@
 //! V1/V2 enter through the real stateless MCP socket and native project stores.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::fixture_peer;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_service::{
-    CollaborationApplication, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
-    ProjectStoreRegistry, ServiceIdentity,
+    ApplicationFixture, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
+    ProjectStoreRegistry,
 };
 use message_board::*;
 use serde_json::{Value, json};
@@ -13,7 +21,10 @@ use std::sync::Arc;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn native_mcp_admission_replays_decisions_and_isolates_project_authority() -> TestResult {
     let directory = tempfile::tempdir()?;
     use std::os::unix::fs::PermissionsExt;
@@ -44,14 +55,12 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
             Some("MCP proof"),
         )?,
     })?);
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
     .with_project_admission(admission);
-    let api =
-        ServedCollaborationApi::start(directory.path(), CollaborationApplication::new(identity))
-            .await?;
+    let api = ServedCollaborationApi::start(directory.path(), (identity).build())?;
     let actor = json!({"kind":"human","humanId":"owner"});
     let workspace = WorkspaceId::generate();
     let board = BoardId::generate();
@@ -255,7 +264,10 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
     fleet_runtime.shutdown().await?;
     Ok(())
 }
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 fn accepted(value: &Value) -> TestResult {
     assert_eq!(
         value

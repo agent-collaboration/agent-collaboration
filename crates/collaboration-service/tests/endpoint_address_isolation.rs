@@ -6,7 +6,7 @@ mod tests {
     use collaboration_protocol::{
         ArchiveState, EndpointDescription, EndpointRef, LifecycleObservation,
     };
-    use collaboration_service::ServiceIdentity;
+    use collaboration_service::ApplicationFixture;
     use lifecycle_observation::{LifecycleStore, ObservationJournal};
     use serde_json::json;
     use std::sync::Arc;
@@ -43,7 +43,7 @@ mod tests {
             "change":{"kind":"threadArchived"}
         })).unwrap();
         store.append(&archived, 101).await.unwrap();
-        let identity = ServiceIdentity::new(SERVICE, EPOCH)
+        let identity = ApplicationFixture::new(SERVICE, EPOCH)
             .unwrap()
             .with_endpoints(vec![
                 description(&first, "first.sock"),
@@ -51,7 +51,7 @@ mod tests {
             ])
             .unwrap()
             .with_journal(Arc::clone(&store));
-        let served = crate::served_api::ServedApi::start(identity).await.unwrap();
+        let served = crate::served_api::ServedApi::start(identity).unwrap();
         let client = served.client("address-isolation").await.unwrap();
 
         // Act: resolve each explicit endpoint through the actual public Rust client.

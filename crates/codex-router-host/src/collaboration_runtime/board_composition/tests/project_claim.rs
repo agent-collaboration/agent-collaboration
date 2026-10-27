@@ -140,16 +140,14 @@ async fn imported_claim_seeds_verifies_renews_then_publishes_before_first_board_
     let api_directory = directory.path().join("api");
     std::fs::create_dir(&api_directory)?;
     std::fs::set_permissions(&api_directory, std::fs::Permissions::from_mode(0o700))?;
-    let app = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone())
-        .with_project_claim(claim.clone()),
-    );
-    let api =
-        collaboration_mcp::test_support::ServedCollaborationApi::start(&api_directory, app).await?;
+    let app = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone())
+    .with_project_claim(claim.clone()))
+    .build();
+    let api = collaboration_mcp::test_support::ServedCollaborationApi::start(&api_directory, app)?;
     let client = api.client("claim-proof").await?;
     let mut unsupported = request.clone();
     unsupported.protocol_version = ProtocolVersion::try_from(2_u64)?;

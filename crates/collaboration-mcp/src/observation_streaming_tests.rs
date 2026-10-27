@@ -10,8 +10,7 @@ use collaboration_protocol::{
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
 use collaboration_service::{
-    CollaborationApplication, ProviderOperationStore, ProviderSessionEventHub,
-    ProviderSessionRecord, ServiceIdentity,
+    ApplicationFixture, ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord,
 };
 use rmcp::{
     ClientHandler, RoleClient,
@@ -58,7 +57,7 @@ fn provider_target(session_id: &str) -> SessionRef {
 async fn provider_router(
     directory: &Path,
     sessions: &[&SessionRef],
-) -> (ServiceIdentity, Arc<ProviderSessionEventHub>) {
+) -> (ApplicationFixture, Arc<ProviderSessionEventHub>) {
     let owner: SessionRef = serde_json::from_value(json!({
         "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "codex-local"},
         "sessionId": "owner"
@@ -179,9 +178,9 @@ async fn a_bounded_observation_streams_each_event_while_the_call_is_open_on_both
     let over_tcp = provider_target("observed-over-tcp");
     let over_unix = provider_target("observed-over-unix");
     let (identity, hub) = provider_router(directory.path(), &[&over_tcp, &over_unix]).await;
-    let config = api_config(CollaborationApplication::new(identity), directory.path());
+    let config = api_config((identity).build(), directory.path());
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
 
     for (api, target) in [(&tcp, &over_tcp), (&unix, &over_unix)] {
         publish(&hub, target, "retained").await;
@@ -253,10 +252,10 @@ async fn a_reader_that_stops_reading_neither_keeps_the_call_past_its_bound_nor_h
     for index in 0..130 {
         publish_text(&hub, &target, &format!("item-{index}"), &"x".repeat(7_000)).await;
     }
-    let mut config = api_config(CollaborationApplication::new(identity), directory.path());
+    let mut config = api_config((identity).build(), directory.path());
     config.concurrent_requests = 1;
     let socket = directory.path().join("api.sock");
-    let api = ServedApi::unix(&config, &socket).await;
+    let api = ServedApi::unix(&config, &socket);
     let observation = json!({
         "target": target, "timeoutSeconds": 1, "maxEvents": 4096, "maxBytes": 1_048_576
     });

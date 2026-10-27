@@ -9,7 +9,7 @@ use collaboration_protocol::{
     ApiSelector, ApiSocketPath, ApiTransport, McpSelector, McpTransport, NonEmptyText,
     RouterExecutableRelation, SERVICE_MANIFEST_VERSION, ServiceManifest,
 };
-use collaboration_service::{CollaborationApplication, ManifestPublication, ServiceIdentity};
+use collaboration_service::{ApplicationFixture, CollaborationApplication, ManifestPublication};
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use rmcp::{
     ClientHandler, RoleClient, ServiceExt as _,
@@ -39,8 +39,8 @@ pub(crate) const TEST_SERVICE_EPOCH: &str = "00000000-0000-4000-8000-00000000000
 pub(crate) const TEST_PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// A Router identity with no stores; tests add the stores their operations need.
-pub(crate) fn test_identity() -> ServiceIdentity {
-    ServiceIdentity::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH).expect("test service identity")
+pub(crate) fn test_identity() -> ApplicationFixture {
+    ApplicationFixture::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH).expect("test service identity")
 }
 
 /// The configuration a Host would hand every listener, over `application`.
@@ -158,7 +158,7 @@ impl ServedApi {
         }
     }
 
-    pub(crate) async fn unix(config: &CollaborationApiConfig, socket: &Path) -> Self {
+    pub(crate) fn unix(config: &CollaborationApiConfig, socket: &Path) -> Self {
         let listener = UnixListener::bind(socket).expect("bind Unix socket");
         let api = collaboration_api_router(config, CollaborationApiListener::UnixSocket);
         let tool_calls = api.tool_calls();
@@ -178,13 +178,12 @@ impl ServedApi {
 
     /// Serves the API on the service directory's `control.sock` and publishes the manifest
     /// beside it, the way the CLIs find a Host.
-    pub(crate) async fn service_socket(config: &CollaborationApiConfig) -> Self {
+    pub(crate) fn service_socket(config: &CollaborationApiConfig) -> Self {
         let directory = &config.service_directory;
         let mut served = Self::unix(
             config,
             &directory.join(ApiSocketPath::ServiceSocket.file_name()),
-        )
-        .await;
+        );
         served.publication = Some(publish_manifest(directory, &config.application));
         served
     }

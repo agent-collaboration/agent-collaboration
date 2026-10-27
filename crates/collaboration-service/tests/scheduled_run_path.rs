@@ -4,7 +4,7 @@ use collaboration_protocol::{
     CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
     ScheduleCreateRequest, SessionRef,
 };
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
+use collaboration_service::{ApplicationFixture, NativeControlBackend, NativeGenerationGate};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions as _, Connection as _};
@@ -138,7 +138,7 @@ async fn exercise_scheduled_run(
         gate,
         codex_home: root.clone(),
     };
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_interaction_store(interactions.clone())
@@ -153,7 +153,7 @@ async fn exercise_scheduled_run(
     let schedule_worker = identity
         .schedule_timing_worker()
         .ok_or("scheduler missing")?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("scheduled-run-fixture").await?;
     let instruction = client
         .create_instruction(InstructionCreateParams {

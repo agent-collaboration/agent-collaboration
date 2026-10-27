@@ -2,6 +2,11 @@
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 
 use board_cli_execution::cli;
@@ -168,7 +173,7 @@ async fn assert_list_parity(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Literal contract assertions; Result propagates fixture failures.
+
 async fn repository_and_default_lists_follow_subject_rename_and_refile() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     attach_repository(&fixture).await?;
@@ -206,7 +211,7 @@ async fn repository_and_default_lists_follow_subject_rename_and_refile() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+
 async fn repository_and_default_lists_keep_redacted_subjects_private() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     attach_repository(&fixture).await?;
@@ -234,7 +239,10 @@ async fn repository_and_default_lists_keep_redacted_subjects_private() -> Result
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn repository_and_default_lists_keep_unavailable_subjects_and_imported_marker()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

@@ -2,7 +2,10 @@
 use super::board_paging::fingerprint;
 use super::{BoardOperations, admission_error};
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    BoardError, ProjectReadKind, ProjectRecordListRequest, ProjectRecordShowRequest,
+    ProjectRequest, ProjectTool, Record, RecordKind, RecordListResult, SubtaskListRequest,
+};
 
 struct EntityListSelection<'operation> {
     kind: ProjectReadKind,
@@ -39,7 +42,7 @@ macro_rules! entity_read_operation {
         }
     };
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     entity_read_operation!(show workstream_show, Workstream);
     entity_read_operation!(list workstream_list, Workstream);
     entity_read_operation!(show task_show, Task);

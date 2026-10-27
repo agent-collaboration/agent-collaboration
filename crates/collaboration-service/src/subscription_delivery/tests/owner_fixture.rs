@@ -350,11 +350,11 @@ impl OwnerFixture {
         }
     }
     pub async fn unread_count(&self) -> usize {
-        let application = crate::CollaborationApplication::new(
-            crate::ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+        let application =
+            (crate::ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
                 .unwrap()
-                .with_project_admission(self.admission.clone()),
-        );
+                .with_project_admission(self.admission.clone()))
+            .build();
         application
             .board()
             .inbox_fetch(

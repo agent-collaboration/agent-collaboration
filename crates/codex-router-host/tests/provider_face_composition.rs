@@ -6,7 +6,10 @@ use codex_router_host::{
 use collaboration_protocol::{EndpointId, EndpointRef, SessionId, SessionRef};
 use std::os::unix::fs::PermissionsExt as _;
 
-#[allow(clippy::expect_used)]
+#[expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 async fn assert_provider_ready(directory: &std::path::Path) {
     let client = collaboration_client::CollaborationClient::connect(directory, "face-proof", "1")
         .await

@@ -1,4 +1,7 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
+#![expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 //! Fail-fast fixture assertions at the Host endpoint boundary.
 
 use codex_router_host::{

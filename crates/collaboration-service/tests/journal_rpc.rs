@@ -1,4 +1,4 @@
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use lifecycle_observation::{LifecycleStore, ObservationJournal};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
@@ -22,14 +22,12 @@ async fn pending_journal_read_does_not_block_status_and_wakes_after_append() {
     let store = Arc::new(LifecycleStore::new(journal));
     let endpoint = json!({"serviceId":service,"endpointId":"codex-local"});
     let description=serde_json::from_value(json!({"endpoint":endpoint,"label":"Codex","availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap_or_else(|e|panic!("description: {e}"));
-    let identity = ServiceIdentity::new(service, "00000000-0000-4000-8000-000000000002")
+    let identity = ApplicationFixture::new(service, "00000000-0000-4000-8000-000000000002")
         .unwrap_or_else(|e| panic!("identity: {e}"))
         .with_endpoints(vec![description])
         .unwrap_or_else(|e| panic!("endpoints: {e}"))
         .with_journal(Arc::clone(&store));
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .unwrap_or_else(|e| panic!("serve: {e}"));
+    let served = served_api::ServedApi::start(identity).unwrap_or_else(|e| panic!("serve: {e}"));
     let mut waiting = Box::pin(served.call(
         "journal_read",
         json!({"endpoint":endpoint,"after":{"journalId":journal_id,"sequence":0},"pageSize":100,"waitMilliseconds":30000}),

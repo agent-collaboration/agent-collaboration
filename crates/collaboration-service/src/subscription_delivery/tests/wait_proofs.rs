@@ -8,7 +8,7 @@ use sqlx::Connection;
 
 #[tokio::test(start_paused = true)]
 async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -84,7 +84,7 @@ async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
 
 #[tokio::test(start_paused = true)]
 async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Off, WhenIdle::Hold, 0, 0)
         .await;
@@ -168,7 +168,7 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
 
 #[tokio::test(start_paused = true)]
 async fn poll_wait_timeout_is_empty_and_non_poll_wait_is_rejected() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
     assert!(
         runtime
@@ -212,7 +212,7 @@ async fn poll_wait_timeout_is_empty_and_non_poll_wait_is_rejected() {
 
 #[tokio::test(start_paused = true)]
 async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
     runtime.owner_barrier(&fixture.reader).await;
     let mut events = runtime.service.observe_owners();
@@ -242,7 +242,7 @@ async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
 async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root() {
     use std::time::Duration;
 
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let oldest_root = fixture.root.clone();
     let later_root = fixture.add_root().await;
     for root in [&oldest_root, &later_root] {

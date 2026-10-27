@@ -1,8 +1,11 @@
 //! Fleet discovery reads only the metadata projection carried by FleetClient.
 use super::board_paging::fingerprint;
 use super::{BoardOperations, admission_error};
-use message_board::*;
-impl BoardOperations<'_> {
+use message_board::{
+    BoardError, DiscoveryHit, DiscoverySearchRequest, DiscoverySearchResult, Record, RecordRef,
+    RepositoryListRequest, RepositoryListResult, WorkspaceShowRequest,
+};
+impl BoardOperations {
     pub async fn repository_list(
         &self,
         request: RepositoryListRequest,

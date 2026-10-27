@@ -1,12 +1,23 @@
 //! A later unavailable project cannot hide earlier independent initialization writes.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn aggregate_initializations_expose_each_result_when_a_project_file_is_moving()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

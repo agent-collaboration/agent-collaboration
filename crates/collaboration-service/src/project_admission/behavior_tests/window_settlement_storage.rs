@@ -3,7 +3,10 @@ use super::*;
 use interaction_storage::{SubscriptionDeliveryProgress, SubscriptionDeliveryProgressProps};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn settlement_failure_rolls_back_delivered_window_and_outcome_together()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -55,7 +58,10 @@ async fn settlement_failure_rolls_back_delivered_window_and_outcome_together()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn rescan_reopens_a_missing_window_from_pending_activity() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();
@@ -90,7 +96,10 @@ async fn rescan_reopens_a_missing_window_from_pending_activity() -> Result<(), T
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn m7_rescan_prunes_a_window_with_no_pending_posts() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();

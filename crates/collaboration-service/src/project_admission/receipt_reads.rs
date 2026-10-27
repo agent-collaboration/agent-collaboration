@@ -1,7 +1,9 @@
 //! Receipt reads inspect terminal decisions without entering write admission.
 use super::project_rejection::registration_rejection;
 use super::{ProjectAdmission, ProjectAdmissionError};
-use message_board::*;
+use message_board::{
+    RequestEffectsRead, RequestEffectsRefusal, RequestEffectsRequest, RequestEffectsScope,
+};
 
 impl ProjectAdmission {
     pub async fn request_effects(

@@ -3,7 +3,7 @@ use crate::mcp_server::CollaborationMcpServer;
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::UuidIdentity;
 use collaboration_service::{
-    BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
+    ApplicationFixture, BoardAvailability, MachineIdentity, SessionDeliveryRouter,
     SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
     SystemSubscriptionClock, TargetPresenceProbe,
 };
@@ -129,7 +129,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
             .expect("machine identity"),
         clock: Arc::new(SystemSubscriptionClock),
     });
-    let service_identity = ServiceIdentity::new(SERVICE_ID, SERVICE_EPOCH)
+    let service_identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("service identity")
         .with_project_admission(admission.clone())
         .with_automation_store(push_store.clone())
@@ -160,11 +160,9 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         .start()
         .await
         .expect("subscription service start");
-    let application =
-        collaboration_service::CollaborationApplication::new(service_identity.clone());
+    let application = (service_identity.clone()).build();
     // Setup goes through the CLIs' client on the service socket, as an operator would.
-    let setup_api =
-        ServedApi::service_socket(&api_config(application.clone(), temporary.path())).await;
+    let setup_api = ServedApi::service_socket(&api_config(application.clone(), temporary.path()));
 
     let actor: Identity = serde_json::from_value(json!({
         "kind":"session",

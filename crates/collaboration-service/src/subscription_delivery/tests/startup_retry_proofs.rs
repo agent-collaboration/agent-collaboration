@@ -13,7 +13,7 @@ async fn early_startup_timeout_recovers_owed_range_without_reader_action() {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
     let _trace = tracing::subscriber::set_default(subscriber);
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let owed = fixture.post(&fixture.root, "owed before startup").await;
     let project = fixture
         .registry
@@ -55,7 +55,7 @@ async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
     let _trace = tracing::subscriber::set_default(subscriber);
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture.post(&fixture.root, "owed but now corrupt").await;
     let project = fixture
         .registry
@@ -102,7 +102,7 @@ async fn shutdown_drains_a_pending_startup_discovery_retry() {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
     let _trace = tracing::subscriber::set_default(subscriber);
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let project = fixture
         .registry
         .existing_project(&fixture.project)
@@ -140,20 +140,26 @@ enum StartupSetupTiming {
 
 #[tokio::test(start_paused = true)]
 async fn healthy_project_delivers_while_another_startup_probe_is_deferred() {
-    healthy_delivery_during_deferred_startup(StartupSetupTiming::Immediate).await;
+    Box::pin(healthy_delivery_during_deferred_startup(
+        StartupSetupTiming::Immediate,
+    ))
+    .await;
 }
 
 #[tokio::test(start_paused = true)]
 async fn startup_auto_advance_does_not_expire_the_healthy_projects_owed_notice() {
-    healthy_delivery_during_deferred_startup(StartupSetupTiming::LargeAutoAdvance).await;
+    Box::pin(healthy_delivery_during_deferred_startup(
+        StartupSetupTiming::LargeAutoAdvance,
+    ))
+    .await;
 }
 
 async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTiming) {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
     let _trace = tracing::subscriber::set_default(subscriber);
-    let fixture = OwnerFixture::new().await;
-    let (healthy, thread, reader, cursor) = healthy_project(&fixture).await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    let (healthy, thread, reader, cursor) = Box::pin(healthy_project(&fixture)).await;
     let owed = fixture
         .post(&fixture.root, "Deferred project's owed range")
         .await;
@@ -221,7 +227,7 @@ async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_afte
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
     let _trace = tracing::subscriber::set_default(subscriber);
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let owed = fixture
         .post(&fixture.root, "One owed range during discovery handoff")
         .await;

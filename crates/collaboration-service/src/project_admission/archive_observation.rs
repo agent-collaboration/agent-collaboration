@@ -2,7 +2,10 @@
 use super::{ProjectAdmission, ProjectAdmissionError};
 use crate::NativeProjectStore;
 use chrono::Utc;
-use message_board::*;
+use message_board::{
+    BoardId, BoardState, Fact, FactId, FactKind, FeedCursor, LifecycleFact, ProjectId, Record,
+    RecordEnvelope, RecordKind, RecordTime, RecordedActor, RouterComponent, ServiceId,
+};
 use std::sync::Arc;
 
 pub struct ProjectArchiveObservation {

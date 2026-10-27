@@ -1,5 +1,5 @@
 //! Compose independent native observations without taking ownership of their lifecycle.
-use crate::{ServiceIdentity, collaboration_application::ProviderInventoryFailure};
+use crate::collaboration_application::ProviderInventoryFailure;
 use claude_code_peer_messaging::{NativeClaudeJobReadError, PeerSessionSummary};
 use collaboration_protocol::{
     ClaudeCodeBackgroundOrigin, ClaudeCodeInteractiveOrigin, ClaudeCodeInteractiveStatus,
@@ -20,7 +20,12 @@ fn invalid() -> ProviderInventoryFailure {
 }
 
 pub(crate) async fn read_native_catalogue(
-    identity: &ServiceIdentity,
+    claude_code_sessions: Option<
+        &std::sync::Arc<claude_code_peer_messaging::ClaudeCodeSessionRegistry>,
+    >,
+    claude_background_jobs: Option<
+        &std::sync::Arc<claude_code_peer_messaging::NativeClaudeJobReader>,
+    >,
     endpoint: &EndpointRef,
     view: NativeSessionView,
 ) -> Result<NativeCatalogueRead, ProviderInventoryFailure> {
@@ -28,7 +33,7 @@ pub(crate) async fn read_native_catalogue(
         if matches!(view, NativeSessionView::Stored) {
             return None;
         }
-        let Some(registry) = identity.claude_code_sessions.clone() else {
+        let Some(registry) = claude_code_sessions.cloned() else {
             return Some(Err(()));
         };
         Some(
@@ -39,7 +44,7 @@ pub(crate) async fn read_native_catalogue(
         )
     };
     let jobs = async {
-        match &identity.claude_background_jobs {
+        match claude_background_jobs {
             Some(reader) => reader.read_background_jobs().await,
             None => Err(NativeClaudeJobReadError::Unavailable(
                 NativeInventoryUnavailableReason::ReadUnavailable,
