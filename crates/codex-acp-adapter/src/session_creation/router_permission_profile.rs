@@ -122,6 +122,10 @@ async fn has_symlinked_component(home: &Path, location: &str) -> bool {
 
 /// Native resolves macOS system aliases, but preserves nested logical symlinks.
 /// Missing or unreadable recorded scratch paths keep their existing spelling.
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(clippy::unused_async, reason = "awaits only on macOS")
+)]
 async fn scratch_root_for_native(scratch: &Path) -> PathBuf {
     #[cfg(target_os = "macos")]
     if ["/tmp", "/var", "/etc"]
