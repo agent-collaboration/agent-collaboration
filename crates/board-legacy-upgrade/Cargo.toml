@@ -29,7 +29,7 @@ interaction-storage = { version = "0.1.100", path = "../interaction-storage" }
 collaboration-protocol = { version = "0.1.100", path = "../collaboration-protocol" }
 durable-steps = { workspace = true, features = ["turso"] }
 sqlx = { workspace = true, features = ["sqlite", "migrate"] }
-sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false, features = ["macros", "runtime-tokio"] }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "805b5c4b3bbf367ade20923d9d83c1b93646651b", default-features = false, features = ["macros", "runtime-tokio"] }
 fleet-sync-writer.workspace = true
 fleet-sync-lease.workspace = true
 fleet-sync-protocol.workspace = true
