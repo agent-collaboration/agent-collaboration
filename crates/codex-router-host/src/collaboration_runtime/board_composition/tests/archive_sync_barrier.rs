@@ -5,6 +5,7 @@ use futures_util::FutureExt;
 #[tokio::test]
 async fn archive_observer_waits_for_a_fresh_sync_while_admission_is_busy() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
+    let mut archive_reports = runtime.central.archive_reports.subscribe();
     runtime.fleet.synchronize().await?;
     let (entered, release) = runtime.central.hold_next_fleet_read().await;
     let fleet = runtime.fleet.clone();
@@ -36,6 +37,7 @@ async fn archive_observer_waits_for_a_fresh_sync_while_admission_is_busy() -> Te
         observer_sync.as_mut().now_or_never().is_none(),
         "archive observer completed synchronization while the stale reply was held"
     );
+    assert!(archive_reports.borrow().is_empty());
     release.send(()).map_err(|_| "held Fleet read ended")?;
     timeout(BOUND, observer_sync).await??;
     super::super::super::archive_observation::observe_acknowledged_project(
@@ -55,11 +57,55 @@ async fn archive_observer_waits_for_a_fresh_sync_while_admission_is_busy() -> Te
     let mut read = store.snapshot().await?;
     let observed = read.records(RecordKind::Fact).await?;
     read.finish().await?;
+    let archive_facts = observed
+        .into_iter()
+        .filter_map(|record| match record {
+            Record::Fact(fact)
+                if matches!(&fact.kind,
+                    FactKind::Lifecycle(LifecycleFact::ArchiveSeen { board: actual }) if actual == &board) => Some(fact),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
     assert_eq!(
-        observed.iter().filter(|record| matches!(record,
-            Record::Fact(Fact { kind: FactKind::Lifecycle(LifecycleFact::ArchiveSeen { board: actual }), .. }) if actual == &board)).count(),
+        archive_facts.len(),
         1,
         "the archive observer must record its native fact after the fresh synchronization"
+    );
+    let fact_position = archive_facts
+        .first()
+        .and_then(|fact| fact.envelope.position.project_cursor())
+        .ok_or("archive fact cursor is absent")?;
+    let report = {
+        let reports = timeout(
+            BOUND,
+            archive_reports.wait_for(|reports| {
+                reports
+                    .iter()
+                    .any(|report| report.board == board && report.project == runtime.project)
+            }),
+        )
+        .await??;
+        reports
+            .iter()
+            .find(|report| report.board == board && report.project == runtime.project)
+            .cloned()
+            .ok_or("archive report is absent")?
+    };
+    let (_, acknowledged) = runtime
+        .projects
+        .acknowledged_project_copy(&runtime.project)
+        .await?;
+    assert!(acknowledged.is_some_and(|position| position >= report.position));
+    let reported_through = collaboration_service::project_replication_cursor(
+        &store,
+        report.position,
+        fact_position.epoch,
+    )
+    .await?;
+    assert_eq!(reported_through.epoch, fact_position.epoch);
+    assert!(
+        reported_through.position >= fact_position.position,
+        "the reported copy position must cover the native archive fact"
     );
     drop(store);
     runtime.close().await

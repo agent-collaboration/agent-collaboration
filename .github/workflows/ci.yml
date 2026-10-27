@@ -15,15 +15,6 @@ permissions:
   contents: read
   actions: read
 
-env:
-  CARGO_TERM_COLOR: always
-  RUST_TOOLCHAIN: 1.98.1
-  # CI never needs Rust debug info; it makes the test binaries outgrow the
-  # runner disk.
-  CARGO_PROFILE_DEV_DEBUG: "0"
-  CARGO_PROFILE_TEST_DEBUG: "0"
-  CARGO_INCREMENTAL: "0"
-
 # Four independent Linux jobs feed the existing validation gate. Light static
 # checks overlap serial Cargo work; feature-specific E2E binaries keep their
 # own target and runner instead of competing with workspace tests.
@@ -43,6 +34,13 @@ jobs:
   static:
     name: Static validation
     runs-on: ubuntu-latest
+    # Keep Linux test profiles out of the macOS release cache environment.
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -96,8 +94,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'
-          cache: pnpm
-          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+          package-manager-cache: false
       - name: Check Quota and Sessions verification TypeScript
         id: tui_verification
         run: |
@@ -108,6 +105,8 @@ jobs:
           pnpm --dir scripts/verification/tui test
       - name: Test workflow timing parser
         run: bash scripts/tests/test_workflow_timing.sh
+      - name: Test main cache pruning
+        run: bash scripts/tests/test_main_cache_pruning.sh
       - name: Check Rust formatting
         id: format
         background: true
@@ -180,6 +179,13 @@ jobs:
     name: Test Rust workspace
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    # Keep Linux test profiles out of the macOS release cache environment.
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       # The steps below build the workspace under several package selections and
       # feature sets, which together outgrow the runner's free disk. Remove
@@ -203,8 +209,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: '26.12.1'
-          cache: pnpm
-          cache-dependency-path: scripts/verification/tui/pnpm-lock.yaml
+          package-manager-cache: false
       - name: Install native adapter test dependencies
         run: |
           pnpm --dir scripts/verification/tui install --frozen-lockfile
@@ -277,6 +282,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "4"
       TMPDIR: /tmp
       CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/examples/board-debug-runtime
@@ -357,6 +367,13 @@ jobs:
     name: Central Worker build and local workerd conformance
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # Keep Linux test profiles out of the macOS release cache environment.
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_TOOLCHAIN: 1.98.1
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
@@ -441,6 +458,69 @@ jobs:
         with:
           path: ${{ runner.temp }}/central-worker-tools
           key: ${{ steps.worker_tools.outputs.cache-primary-key }}
+
+  release-cache:
+    name: Warm Apple Silicon release dependencies
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 45
+    # No Linux test-profile env: match release.yml's hashed Rust environment.
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          path: release-source
+          persist-credentials: false
+          ref: ${{ github.sha }}
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.1
+      - name: Cache release dependencies
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: release-source -> target
+          shared-key: release-arm64-background
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - name: Prebuild optimized transport test and schema exporter
+        working-directory: release-source
+        run: |
+          set -euo pipefail
+          cargo test --locked --release -p acp-client-runtime --test provider_transport_idle \
+            --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
+          cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
+      - name: Build release binaries
+        working-directory: release-source
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins --timings
+      - name: Measure release cache inputs
+        run: du -sk release-source/target "$HOME/.cargo/registry" "$HOME/.cargo/git"
+      - name: Retain release cache build timings
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-cache-timing-inventory
+          path: |
+            ${{ runner.temp }}/transport-build.jsonl
+            release-source/target/cargo-timings/
+
+  prune-caches:
+    name: Prune superseded main caches
+    if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # needs waits for rust-cache post saves, including successful jobs when
+    # another validation job failed. The workflow serializes main producers.
+    needs: [static, wasm, test, e2e, release-cache]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prune superseded main cache keys
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/tooling/prune-main-caches.sh --apply
 
   validated:
     name: Validate Rust workspace
