@@ -12,8 +12,8 @@ workspace = true
 conformance = []
 
 [dependencies]
-collaboration-runtime = { path = "../collaboration-runtime" }
-collaboration-contracts = { path = "../collaboration-contracts" }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 codex-router-core.workspace = true
 codex-router-secret-store = { version = "0.1.96", path = "../codex-router-secret-store" }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core", features = ["conformance"] }

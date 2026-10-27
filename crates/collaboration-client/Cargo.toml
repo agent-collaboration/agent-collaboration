@@ -26,8 +26,8 @@ thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 [dev-dependencies]
-collaboration-runtime = { path = "../collaboration-runtime" }
-collaboration-contracts = { path = "../collaboration-contracts" }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
 fleet-sync-writer.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }

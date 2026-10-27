@@ -12,8 +12,8 @@ runtime-test-support = ["interaction-storage/runtime-test-support", "collaborati
 [lints]
 workspace = true
 [dependencies]
-collaboration-contracts = { path = "../collaboration-contracts" }
-collaboration-runtime = { path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 fleet-sync-tokio-runner.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
@@ -54,8 +54,8 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
-collaboration-runtime = { path = "../collaboration-runtime", features = ["test-support"] }
-collaboration-contracts = { path = "../collaboration-contracts", features = ["test-support"] }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime", features = ["test-support"] }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
 fleet-sync-session.workspace = true
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support", features = ["conformance"] }

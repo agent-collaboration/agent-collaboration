@@ -38,8 +38,8 @@ fleet-sync-tokio-runner.workspace = true
 sqlx-turso = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.3.0", default-features = false }
 
 [dev-dependencies]
-collaboration-runtime = { path = "../collaboration-runtime" }
-collaboration-contracts = { path = "../collaboration-contracts" }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 chrono.workspace = true
 message-board-storage = { version = "0.1.96", path = "../message-board-storage" }

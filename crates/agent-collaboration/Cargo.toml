@@ -44,8 +44,8 @@ tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 
 [dev-dependencies]
-collaboration-runtime = { path = "../collaboration-runtime" }
-collaboration-contracts = { path = "../collaboration-contracts" }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
 durable-steps.workspace = true
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
