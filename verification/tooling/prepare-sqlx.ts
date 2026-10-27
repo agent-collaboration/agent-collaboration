@@ -28,9 +28,9 @@ export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
     databaseFilename: "account-schema.sqlite",
   },
   {
-    packageName: "collaboration-service",
+    packageName: "collaboration-runtime",
     migrationSources: [
-      "crates/collaboration-service/migrations",
+      "crates/collaboration-runtime/migrations",
       "crates/automation-storage/migrations",
     ],
     databaseFilename: "provider-operation-schema.sqlite",
