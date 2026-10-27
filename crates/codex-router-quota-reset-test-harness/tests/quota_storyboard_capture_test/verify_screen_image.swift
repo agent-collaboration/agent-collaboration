@@ -16,8 +16,11 @@ struct ChoiceFocusMeasurement: Codable {
   let labelHeight: Int
 
   var provesFocus: Bool {
-    ["shown", "hidden"].contains(label) && labelYellowPixels >= 10
-      && glyphYellowPixels >= 4 && glyphColumns >= 2
+    ["shown", "hidden"].contains(label) && hasIndependentFocusPixels
+  }
+
+  var hasIndependentFocusPixels: Bool {
+    labelYellowPixels >= 10 && glyphYellowPixels >= 4 && glyphColumns >= 2
       && labelHeight >= 4 && glyphRows >= max(3, labelHeight / 3)
   }
 }
@@ -50,7 +53,7 @@ struct OriginalChoicePixels {
   func measure(_ region: ScreenTextRegion) -> ChoiceFocusMeasurement? {
     let label = VerifyScreenImage.normalizedMarkerText(region.text)
     let box = region.bounds
-    guard ["shown", "hidden"].contains(label),
+    guard ["shown", "hidden", "allow", "disallow"].contains(label),
       [box.minX, box.minY, box.width, box.height].allSatisfy(\.isFinite),
       box.width > 0, box.height > 0, box.minX >= 0, box.minY >= 0,
       box.maxX <= 1, box.maxY <= 1
@@ -163,9 +166,63 @@ struct VerifyScreenImage {
       FileHandle.standardError.write(Data("\n".utf8))
       exit(2)
     }
-    let regions = (request.results ?? []).compactMap { observation -> ScreenTextRegion? in
+    var regions = (request.results ?? []).compactMap { observation -> ScreenTextRegion? in
       guard let text = observation.topCandidates(1).first?.string else { return nil }
       return ScreenTextRegion(text: text, bounds: observation.boundingBox)
+    }
+    // A misread modal identity tag is re-observed on its own row (see
+    // identityTagRowRecognitionBounds) for the oracles that require the exact
+    // tag; every other box and checkpoint keeps this pass.
+    if exactIdentityTagCheckpoints.contains(checkpoint),
+      let tagRow = identityTagRowRecognitionBounds(regions)
+    {
+      regions = mergingIdentityTagRow(
+        firstPass: regions, row: tagRow.row,
+        rowPass: recognizedRegions(in: tagRow.bounds, languages: ["en-US"], handler: handler))
+    }
+    // C6: Pool details judges its census on a second recognition of the
+    // dialog body (see poolBodyRecognitionBounds); every other marker keeps
+    // the full-screen pass.
+    var censusRegions = regions
+    if !checkpoint.requiredPoolCensus.isEmpty, let bounds = poolBodyRecognitionBounds(regions) {
+      let bodyRequest = VNRecognizeTextRequest()
+      bodyRequest.recognitionLevel = .accurate
+      bodyRequest.usesLanguageCorrection = false
+      bodyRequest.recognitionLanguages = ["en-US"]
+      bodyRequest.regionOfInterest = bounds
+      // Observation boxes are normalized to the region of interest (probe:
+      // raw "Pool details" x0.0203 y0.943 maps to the full-pass x0.1485 y0.6934).
+      let bodyPass: [ScreenTextRegion] =
+        ((try? handler.perform([bodyRequest])) != nil ? bodyRequest.results ?? [] : [])
+        .compactMap { observation in
+          guard let text = observation.topCandidates(1).first?.string else { return nil }
+          let box = observation.boundingBox
+          return ScreenTextRegion(
+            text: text,
+            bounds: CGRect(
+              x: bounds.minX + box.minX * bounds.width, y: bounds.minY + box.minY * bounds.height,
+              width: box.width * bounds.width, height: box.height * bounds.height))
+        }
+      censusRegions = mergingPoolBody(firstPass: regions, bodyPass: bodyPass, bounds: bounds)
+    }
+    // The full-screen pass reads the CJK account prefix as Latin at 120x36
+    // (help identity "*F"); a zh-Hans-first pass over the help body
+    // reads the exact name and tag.
+    if checkpoint == .componentQuotaConfirmHelpIdentity,
+      let bounds = helpBodyRecognitionBounds(regions)
+    {
+      censusRegions = mergingHelpBody(
+        firstPass: regions,
+        bodyPass: recognizedRegions(in: bounds, languages: ["zh-Hans", "en-US"], handler: handler),
+        bounds: bounds)
+      // The zh-Hans body pass can misread the tag brackets (40x24
+      // "lalpha-tagl"); a tag the Help oracle cannot read is re-observed in
+      // en-US on its row, and replaced only by an exact ASCII tag.
+      if let tagRow = helpTagRowRecognitionBounds(censusRegions) {
+        censusRegions = mergingIdentityTagRow(
+          firstPass: censusRegions, row: tagRow.row,
+          rowPass: recognizedRegions(in: tagRow.bounds, languages: ["en-US"], handler: handler))
+      }
     }
     let measurements: [ChoiceFocusMeasurement]
     if checkpoint == .compactQuotaHiddenChoice || checkpoint == .compactQuotaDisabledChoice,
@@ -178,8 +235,28 @@ struct VerifyScreenImage {
     let needsSelectedAccount = [
       .componentQuotaNextAccount, .componentQuotaBrowseCreditWindow,
       .componentQuotaBrowsePaceHeading, .componentQuotaBrowsePaceValue,
+      .componentQuotaHardBetaWindows, .componentQuotaHardPoolClosed,
+      .componentQuotaHardBetaSelected, .componentQuotaHardBetaExtra,
+      .componentQuotaHardPoolClosedTop, .componentQuotaHardBrowseTop,
     ].contains(checkpoint)
-    let accountWords = needsSelectedAccount ? recognizedWordRegions(request.results ?? []) : []
+    // The first pass reads the selected CJK prefix as Latin (hard
+    // 48x12 "FR"; Normal 76x30/40x24 "#R"); a zh-Hans-first
+    // full-frame pass reads it exactly. It supplies only the selected-name words of
+    // the Alpha-selected poses; recognizedLines and every other marker keep the
+    // first pass.
+    let firstPassWords = needsSelectedAccount ? recognizedWordRegions(request.results ?? []) : []
+    let zhHansAccountWordCheckpoints: [ScreenCheckpoint] = [
+        .componentQuotaHardBrowseTop, .componentQuotaBrowseCreditWindow,
+        .componentQuotaBrowsePaceHeading, .componentQuotaBrowsePaceValue,
+      ]
+    let accountWords = zhHansAccountWordCheckpoints.contains(checkpoint)
+      ? recognizedWordRegions(languages: ["zh-Hans", "en-US"], handler: handler)
+      : firstPassWords
+    let windowNameWords: [ScreenTextRegion] =
+      checkpoint.requiredWindowLines.isEmpty || uniqueAccountHeader(censusRegions) == nil
+      ? []
+      : zhHansAccountWordCheckpoints.contains(checkpoint)
+        ? accountWords : recognizedWordRegions(languages: ["zh-Hans", "en-US"], handler: handler)
     let accountPixels =
       needsSelectedAccount
       ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])) : nil
@@ -190,12 +267,34 @@ struct VerifyScreenImage {
         hasSelectedText: { pixels.yellowPixels(in: $0.bounds) >= 8 },
         hasBlankOverlap: { pixels.selectedWordOverlapIsBlank($0, $1) })
     }
-    let compactPace =
+    // C1/C5: the pace value must sit in the selected account's own Weekly pace
+    // region at every grid; a whole-image word match never qualifies.
+    let selectedPace =
       checkpoint == .componentQuotaBrowsePaceValue
-      ? accountPixels.flatMap { pixels in
-        compactPaceFieldMatches(
-          words: accountWords, pixelWidth: pixels.width,
-          pixelHeight: pixels.height, selectedName: selectedName)
+      ? accountPixels.map { pixels in
+        // The pace region keeps the first-pass words; only the selected name
+        // comes from the zh-Hans words.
+        selectedWeeklyPaceMatches(
+          words: firstPassWords, selectedName: selectedName,
+          expectedName: "東京 OpenAI Research Account Alpha Long Name",
+          hasGutter: { pixels.selectedAccountGutter(beside: $0, header: $1) },
+          hasSelectedText: { pixels.yellowPixels(in: $0.bounds) >= 8 })
+      } ?? false : nil
+    let continuation: (name: String, client: String)? =
+      checkpoint == .componentQuotaHardAlphaNameContinued ? ("long name", "openai · 1 client")
+      : checkpoint == .componentQuotaHardBetaNameContinued ? ("name", "claude · 0 clients") : nil
+    let selectedContinuation = continuation.map { expected in
+      OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])).map { pixels in
+        selectedNameContinuationMatches(
+          regions, continuation: expected.name, clientLine: expected.client,
+          hasSelectedText: { pixels.yellowPixels(in: $0.bounds) >= 8 })
+      } ?? false
+    }
+    let creditChoiceWords = checkpoint == .componentQuotaPolicyChoice
+      ? recognizedWordRegions(request.results ?? []) : []
+    let creditChoiceSelection = checkpoint == .componentQuotaPolicyChoice
+      ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])).flatMap {
+        selectedCreditChoice(words: creditChoiceWords, rawRows: regions, pixels: $0)
       } : nil
     let observation = observe(
       checkpoint: checkpoint, recognizedLines: regions.map(\.text),
@@ -210,24 +309,22 @@ struct VerifyScreenImage {
             normalizedMarkerText($0.text).hasPrefix(
               checkpoint == .componentQuotaPolicyChoice ? "credit usage" : "options")
               || normalizedMarkerText($0.text).contains("[alpha-tag]")
-          } + recognizedWordRegions(request.results ?? []) : regions,
+          } + (checkpoint == .componentQuotaPolicyChoice
+            ? creditChoiceWords.map { word in
+              if let selected = creditChoiceSelection,
+                normalizedMarkerText(word.text) == normalizedMarkerText(selected.text) {
+                return selected
+              }
+              return word
+            } : recognizedWordRegions(request.results ?? [])) : censusRegions,
       choiceFocusMeasurements: measurements,
       selectedAccountName: selectedName,
-      compactPaceField: compactPace,
+      selectedPaceField: selectedPace,
       selectedDecision: checkpoint == .componentQuotaConfirmHelpReturned
         || checkpoint == .componentQuotaPolicyChoice
         ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])).flatMap { pixels in
           if checkpoint == .componentQuotaPolicyChoice {
-            let words = recognizedWordRegions(request.results ?? [])
-            let actions = words.filter { normalizedMarkerText($0.text) == "select" }
-            guard actions.count == 1, let action = actions.first,
-              pixels.enabledTextPixels(in: action.bounds) >= 8
-            else { return nil }
-            let focused = words.filter {
-              ["allow", "disallow"].contains(normalizedMarkerText($0.text))
-                && pixels.selectedNameGutter(beside: $0)
-            }
-            return focused.count == 1 ? focused.first.map { normalizedMarkerText($0.text) } : nil
+            return creditChoiceSelection.map { normalizedMarkerText($0.text) }
           }
           let choices = recognizedWordRegions(request.results ?? []).filter {
             ["no", "yes"].contains(normalizedMarkerText($0.text))
@@ -248,11 +345,12 @@ struct VerifyScreenImage {
         } : nil,
       selectedRowVisible: [
         .componentQuotaBrowseCreditWindow, .componentQuotaBrowsePaceHeading,
-        .componentQuotaBrowsePaceValue,
+        .componentQuotaBrowsePaceValue, .componentQuotaHardBetaExtra,
       ].contains(checkpoint)
         ? OriginalChoicePixels(url: URL(fileURLWithPath: arguments[2])).flatMap {
           $0.accountSelectorVisible(in: recognizedWordRegions(request.results ?? []))
-        } : false)
+        } : false,
+      selectedContinuationField: selectedContinuation, windowNameWords: windowNameWords)
     FileHandle.standardOutput.write(try JSONEncoder().encode(observation))
     FileHandle.standardOutput.write(Data("\n".utf8))
     if !observation.missingMarkers.isEmpty || !observation.unexpectedMarkers.isEmpty {
@@ -260,11 +358,49 @@ struct VerifyScreenImage {
     }
   }
 
+  // One region-of-interest recognition, mapped back to full-image coordinates
+  // (observation boxes are normalized to the region of interest).
+  static func recognizedRegions(
+    in bounds: CGRect, languages: [String], handler: VNImageRequestHandler
+  ) -> [ScreenTextRegion] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    request.recognitionLanguages = languages
+    request.automaticallyDetectsLanguage = false
+    request.regionOfInterest = bounds
+    guard (try? handler.perform([request])) != nil else { return [] }
+    return (request.results ?? []).compactMap { observation in
+      guard let text = observation.topCandidates(1).first?.string else { return nil }
+      let box = observation.boundingBox
+      return ScreenTextRegion(
+        text: text,
+        bounds: CGRect(
+          x: bounds.minX + box.minX * bounds.width, y: bounds.minY + box.minY * bounds.height,
+          width: box.width * bounds.width, height: box.height * bounds.height))
+    }
+  }
+
+  // One full-frame recognition in the given language order, enumerated into
+  // native word boxes.
+  static func recognizedWordRegions(
+    languages: [String], handler: VNImageRequestHandler
+  ) -> [ScreenTextRegion] {
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = false
+    request.recognitionLanguages = languages
+    request.automaticallyDetectsLanguage = false
+    guard (try? handler.perform([request])) != nil else { return [] }
+    return recognizedWordRegions(request.results ?? [])
+  }
+
   static func observe(
     checkpoint: ScreenCheckpoint, recognizedLines: [String], regions: [ScreenTextRegion] = [],
     choiceFocusMeasurements: [ChoiceFocusMeasurement] = [], selectedAccountName: String? = nil,
-    compactPaceField: Bool? = nil, selectedDecision: String? = nil,
-    selectedFloorDraft: String? = nil, selectedRowVisible: Bool? = false
+    selectedPaceField: Bool? = nil, selectedDecision: String? = nil,
+    selectedFloorDraft: String? = nil, selectedRowVisible: Bool? = false,
+    selectedContinuationField: Bool? = nil, windowNameWords: [ScreenTextRegion] = []
   )
     -> ScreenImageObservation
   {
@@ -274,6 +410,7 @@ struct VerifyScreenImage {
       ? idleReturnFieldPairs(regions)
       : checkpoint == .compactQuotaChooser || checkpoint == .compactSessionsChooser
         || checkpoint == .componentQuotaFloorSaved || checkpoint == .componentQuotaCreditsIdentity
+        || checkpoint == .componentQuotaCreditsRefreshedFreshness
         || checkpoint.rawValue.hasPrefix("component-quota-policy-")
         ? measuredFieldPairs(regions)
         : []
@@ -290,10 +427,13 @@ struct VerifyScreenImage {
     } else if checkpoint == .compactQuotaProviderNoMatch {
       fieldPairs = sessionsChoiceQueryPairs(
         regions, title: "account filters", field: "account provider")
+    } else if checkpoint == .componentQuotaPolicyNoMatch {
+      fieldPairs = sessionsChoiceQueryPairs(regions, title: "credit usage", field: "use credits")
     }
     let fieldMarkers = [
       "account provider openai", "disabled accounts shown", "use credits allow",
       "use credits disallow", "current 1%", "client codex", "eligibility not checked",
+      "freshness fresh",
     ]
     let focused = choiceFocusMeasurements.filter(\.provesFocus)
     let measuredFocus =
@@ -312,9 +452,15 @@ struct VerifyScreenImage {
         return !recognizedText.contains("credit balance")
           && !fieldPairs.contains("use credits disallow")
       }
+      // Vision may enumerate "Weekly" and "pace" as separate boxes with other
+      // rows between them (40x24); the heading is one terminal row.
+      if checkpoint == .componentQuotaBrowsePaceHeading, marker == "weekly pace" {
+        return !recognizedText.contains(marker)
+          && !(terminalRows(regions)?.contains { terminalRowText($0).contains(marker) } ?? false)
+      }
       if checkpoint == .componentQuotaBrowsePaceValue, marker == "burn unavailable" {
-        if let compactPaceField { return !compactPaceField }
-        // Wider body wrapping may split a word; retain every letter and order.
+        if let selectedPaceField { return !selectedPaceField }
+        // Body wrapping may split a word; retain every letter and order.
         return recognizedText.range(
           of: #"\bburn\s+u\s*n\s*a\s*v\s*a\s*i\s*l\s*a\s*b\s*l\s*e\b"#,
           options: .regularExpression) == nil
@@ -327,8 +473,17 @@ struct VerifyScreenImage {
       {
         return !observationFieldIsZero(regions)
       }
-      if checkpoint == .componentQuotaNextAccount,
+      if [
+        .componentQuotaNextAccount, .componentQuotaHardBetaWindows, .componentQuotaHardPoolClosed,
+      ].contains(checkpoint),
         marker == "claude research account beta full name"
+      {
+        return selectedAccountName.map(normalizedMarkerText) != marker
+      }
+      // Hard 48x12 top pose (one body row): exactly the measured selected
+      // prefix; the continuation and Details tag complete the identity.
+      if [.componentQuotaHardBetaSelected, .componentQuotaHardPoolClosedTop].contains(checkpoint),
+        marker == "claude research account beta full"
       {
         return selectedAccountName.map(normalizedMarkerText) != marker
       }
@@ -389,7 +544,9 @@ struct VerifyScreenImage {
       }
       return !recognizedText.contains(marker)
     }
-    missingMarkers += missingQuotaHeaderCounts(checkpoint: checkpoint, regions: regions)
+    missingMarkers += missingPoolCensus(checkpoint: checkpoint, regions: regions)
+    missingMarkers += missingWindowLines(
+      checkpoint.requiredWindowLines, regions: regions, nameWords: windowNameWords)
     if checkpoint == .componentQuotaPolicyChoice,
       !expandedCreditChoiceMatches(regions, selected: selectedDecision)
     {
@@ -461,8 +618,47 @@ struct VerifyScreenImage {
     {
       missingMarkers.append("visible selected account is missing or ambiguous")
     }
-    let unexpectedMarkers = checkpoint.forbiddenMarkers.filter {
-      recognizedText.contains(normalizedMarkerText($0))
+    // C1: Beta's Extra pose belongs to selected Beta. A wide or tall browse with
+    // Alpha selected also shows Beta's Extra cell, so a readable selection must
+    // be Beta; an unreadable selection passes only when the selector column is
+    // measured empty (a scrolled short pose relying on Beta-only values and
+    // continuity). Visible-but-unreadable or unknown visibility rejects.
+    if checkpoint == .componentQuotaHardBetaExtra {
+      let selected = selectedAccountName.map(normalizedMarkerText)
+      if (selected != nil && selected != "claude research account beta full name")
+        || (selected == nil && selectedRowVisible != false)
+      {
+        missingMarkers.append("captured Beta account; foreign or unreadable selection")
+      }
+    }
+    if checkpoint == .componentQuotaHardBrowseTop,
+      selectedAccountName.map(compactHelpIdentity)
+        != compactHelpIdentity("東京 OpenAI Research Account Alpha")
+    {
+      missingMarkers.append("selected Alpha name prefix")
+    }
+    if [.componentQuotaHardAlphaNameContinued, .componentQuotaHardBetaNameContinued]
+      .contains(checkpoint), selectedContinuationField != true
+    {
+      missingMarkers.append("selected name continuation")
+    }
+    var unexpectedMarkers = checkpoint.forbiddenMarkers.filter {
+      // A background "New" column and the next observation's "Session
+      // filters" heading are different painted rows, not a New session dialog.
+      if $0 == "New session", !regions.isEmpty {
+        guard regionsHaveValidBounds(regions), let rows = terminalRows(regions) else { return true }
+        return rows.contains { terminalRowText($0).contains("new session") }
+      }
+      return recognizedText.contains(normalizedMarkerText($0))
+    }
+    if checkpoint.forbidsBrowseCensus {
+      unexpectedMarkers += browseCensusLeaks(regions).map { "browse census " + $0 }
+    }
+    if [
+      .compactSessionsDetails, .compactSessionsDetailsTitle, .compactSessionsDetailsIdentity,
+      .compactSessionsDetailsState, .compactSessionsDetailsPath,
+    ].contains(checkpoint), labelsEnterAsFixedResume(recognizedText) {
+      unexpectedMarkers.append("fixed enter resume")
     }
     return ScreenImageObservation(
       checkpoint: checkpoint.rawValue,
@@ -472,78 +668,6 @@ struct VerifyScreenImage {
       missingMarkers: missingMarkers,
       unexpectedMarkers: unexpectedMarkers
     )
-  }
-
-  // Bound the census to the actual surface header between its title and table
-  // headings. Incidental words/values in rows or an overlay cannot qualify it.
-  static func missingQuotaHeaderCounts(
-    checkpoint: ScreenCheckpoint, regions: [ScreenTextRegion]
-  ) -> [String] {
-    let expected = checkpoint.requiredQuotaHeaderCounts
-    guard !expected.isEmpty else { return [] }
-    guard
-      regions.allSatisfy({ region in
-        let box = region.bounds
-        return [box.minX, box.minY, box.width, box.height].allSatisfy(\.isFinite)
-          && box.width > 0 && box.height > 0 && box.minX >= 0 && box.minY >= 0
-          && box.maxX <= 1 && box.maxY <= 1
-      })
-    else { return expected.map { "header " + $0 } }
-    let titles = regions.filter { normalizedMarkerText($0.text).hasPrefix("quota status") }
-    guard titles.count == 1, let title = titles.first,
-      let table = regions.filter({ region in
-        let text = normalizedMarkerText(region.text)
-        return (text == "account" || text == "account status quota")
-          && region.bounds.maxY < title.bounds.minY
-      }).max(by: { $0.bounds.maxY < $1.bounds.maxY })
-    else { return expected.map { "header " + $0 } }
-    let header = regions.filter {
-      $0.bounds.minY > table.bounds.maxY && $0.bounds.maxY <= title.bounds.maxY + 0.0000001
-    }.sorted {
-      $0.bounds.midY > $1.bounds.midY
-    }
-    // Native boxes on one terminal row have slightly different vertical
-    // centers. Keep that row together before ordering its fragments by x;
-    // a count on another row must never complete an unfinished label.
-    var headerRows: [[ScreenTextRegion]] = []
-    for region in header {
-      let matchingRows = headerRows.indices.filter { index in
-        headerRows[index].allSatisfy { sibling in
-          let overlap = min(region.bounds.maxY, sibling.bounds.maxY)
-            - max(region.bounds.minY, sibling.bounds.minY)
-          return overlap >= min(region.bounds.height, sibling.bounds.height) / 2
-        }
-      }
-      guard matchingRows.count <= 1 else { return expected.map { "header " + $0 } }
-      if let index = matchingRows.first {
-        headerRows[index].append(region)
-      } else {
-        headerRows.append([region])
-      }
-    }
-    let rowTexts = headerRows.map { row in
-      normalizedMarkerText(
-        row.sorted { $0.bounds.minX < $1.bounds.minX }.map(\.text).joined(separator: " "))
-    }
-    return expected.compactMap { association in
-      let parts = association.split(separator: " ")
-      let label = parts.dropLast().joined(separator: " ")
-      let count = String(parts.last ?? "")
-      let pattern =
-        "(?<![a-z0-9])" + NSRegularExpression.escapedPattern(for: label)
-        + "[ \\t]+([0-9]+)(?![0-9])"
-      guard let expression = try? NSRegularExpression(pattern: pattern) else {
-        return "header " + association
-      }
-      let values = rowTexts.flatMap { text in
-        expression.matches(in: text, range: NSRange(text.startIndex..., in: text))
-          .compactMap { match -> String? in
-            guard let range = Range(match.range(at: 1), in: text) else { return nil }
-            return String(text[range])
-          }
-      }
-      return values == [count] ? nil : "header " + association
-    }
   }
 
   // Vision can enumerate label and value columns separately. Bind only these
@@ -564,17 +688,35 @@ struct VerifyScreenImage {
       ("current", ["disabled (0%)", "0%", "1%"]),
       ("client", ["all providers", "codex", "claude code", "cursor"]),
       ("eligibility", ["not checked"]),
+      ("freshness", ["fresh", "stale", "unknown"]),
     ]
+    // Vision can split a label into adjacent native boxes on the same row.
+    // Reconstruct only an exact known label, with no skipped or distant word.
+    let splitLabels: [ScreenTextRegion] = (terminalRows(regions) ?? []).compactMap { row in
+      let label = terminalRowText(row)
+      guard row.count > 1, fields.contains(where: { $0.0 == label }),
+        let first = row.first, let last = row.last
+      else { return nil }
+      let cell = (last.bounds.maxX - first.bounds.minX) / Double(label.count)
+      guard zip(row, row.dropFirst()).allSatisfy({ left, right in
+        right.bounds.minX - left.bounds.maxX >= -0.1 * cell
+          && right.bounds.minX - left.bounds.maxX <= 1.5 * cell
+      }) else { return nil }
+      return ScreenTextRegion(text: label, bounds: row.dropFirst().reduce(first.bounds) {
+        $0.union($1.bounds)
+      })
+    }
+    let fieldRegions = regions + splitLabels
     return fields.compactMap { label, allowed in
       var values: Set<String> = []
-      for region in regions {
+      for region in fieldRegions {
         let text = normalizedMarkerText(region.text)
         if text.hasPrefix(label + " "),
           let value = fieldValue(String(text.dropFirst(label.count + 1)), allowed: allowed)
         {
           values.insert(value)
         } else if text == label && region.bounds.height > 0 {
-          let right = regions.filter { candidate in
+          let right = fieldRegions.filter { candidate in
             let overlap =
               min(region.bounds.maxY, candidate.bounds.maxY)
               - max(region.bounds.minY, candidate.bounds.minY)
@@ -582,17 +724,21 @@ struct VerifyScreenImage {
               && overlap >= 0.5 * min(region.bounds.height, candidate.bounds.height)
               && candidate.bounds.height > 0
           }.sorted { $0.bounds.minX < $1.bounds.minX }
-          // Narrow Use credits and Client FormFields stack their value directly
+          // Narrow FormFields stack their value below the label, in its column
+          // or indented up to two cells (40x24 Use credits +1.8
+          // cells); a value box may touch the label row, so its centre must lie
           // below the label. Never skip an intervening same-column observation.
+          let cell = region.bounds.width / Double(max(1, label.count))
           let below =
-            ["use credits", "client", "eligibility"].contains(label) && right.isEmpty
-            ? regions.filter { candidate in
-              candidate.bounds.maxY <= region.bounds.minY
+            ["account provider", "disabled accounts", "use credits", "client", "eligibility", "freshness"].contains(label) && right.isEmpty
+            ? fieldRegions.filter { candidate in
+              candidate.bounds.midY < region.bounds.minY
                 && region.bounds.minY - candidate.bounds.maxY
                   <= max(region.bounds.height, candidate.bounds.height)
-                && abs(candidate.bounds.minX - region.bounds.minX)
-                  <= 0.1 * min(region.bounds.width, candidate.bounds.width)
-            }.sorted { $0.bounds.maxY > $1.bounds.maxY }
+                && candidate.bounds.minX - region.bounds.minX
+                  >= -0.1 * min(region.bounds.width, candidate.bounds.width)
+                && candidate.bounds.minX - region.bounds.minX <= 2.5 * cell
+            }.sorted { $0.bounds.midY > $1.bounds.midY }
             : []
           let candidates = right.isEmpty ? below : right
           // Do not skip a wrong nearest value to find a convenient word behind
@@ -600,7 +746,7 @@ struct VerifyScreenImage {
           if let nearest = candidates.first,
             candidates.dropFirst().allSatisfy({ candidate in
               right.isEmpty
-                ? abs(candidate.bounds.maxY - nearest.bounds.maxY) > 0.001
+                ? abs(candidate.bounds.midY - nearest.bounds.midY) > 0.001
                 : abs(candidate.bounds.minX - nearest.bounds.minX) > 0.001
             }
             ),
@@ -619,12 +765,21 @@ struct VerifyScreenImage {
     let words = text.split(separator: " ").map(String.init)
     if allowed.contains(text) { return text }
     // A collapsed choice paints one disclosure glyph. These are the actual
-    // observed Vision readings of it (underlined ▾ read as '=', '•' or ':');
-    // another word/value is never accepted.
+    // observed Vision readings of it (underlined ▾ read as '=', '•' or ':';
+    // 76x30 read the provider's ▾ as '-'); another word/value is
+    // never accepted.
     if words.count == 2 && allowed.contains(words[0])
-      && ["▾", "▼", "⌄", "v", "y", "r", "=", "•", ":"].contains(words[1])
+      && ["▾", "▼", "⌄", "v", "y", "r", "=", "•", ":", "-"].contains(words[1])
     {
       return words[0]
+    }
+    // The underlined disclosure can also attach to the value with no space
+    // (calibration-004 chooser read "Shown:"). Letter readings never attach.
+    if words.count == 1, let glyph = text.last,
+      ["▾", "▼", "⌄", "=", "•", ":"].contains(String(glyph)),
+      allowed.contains(String(text.dropLast()))
+    {
+      return String(text.dropLast())
     }
     return nil
   }
@@ -655,9 +810,8 @@ struct VerifyScreenImage {
       .replacingOccurrences(
         of: "\\bHe[ \\t]+lp\\b", with: "Help", options: [.regularExpression, .caseInsensitive]
       )
-      // Vision may split one painted row into adjacent observations. Keep
-      // every token and its order; apply identical whitespace semantics to
-      // required and forbidden markers so this cannot join isolated words.
+      // Keep every token and its recognition order. Consumers that bind one
+      // painted row must use native region geometry before matching it.
       .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
       .trimmingCharacters(in: .whitespacesAndNewlines)
       .lowercased()

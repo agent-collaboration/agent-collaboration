@@ -60,7 +60,27 @@ impl TokioServer {
             settings.copy_ack_wait,
         )
         .await?;
-        Self::serve_platform(settings, listen, platform).await
+        Self::serve_platform(settings, listen, platform, None).await
+    }
+
+    /// Publishes only public keys, outside the authenticated application routes.
+    pub async fn start_with_jwks(
+        settings: TokioSettings,
+        listen: SocketAddr,
+        keys: collaboration_central_core::AccessJwks,
+    ) -> Result<Self, TokioServerError> {
+        let platform = TokioCentralPlatform::new(
+            &settings.jwks_url,
+            Arc::new(SystemClock),
+            crate::native_logging::observe,
+            &settings.root,
+            settings.registry,
+            settings.delivery,
+            settings.holder_answer_timeout,
+            settings.copy_ack_wait,
+        )
+        .await?;
+        Self::serve_platform(settings, listen, platform, Some(keys)).await
     }
 
     #[cfg(feature = "conformance")]
@@ -80,13 +100,20 @@ impl TokioServer {
             controls,
         )
         .await?;
-        Self::serve_platform(settings, SocketAddr::from(([127, 0, 0, 1], 0)), platform).await
+        Self::serve_platform(
+            settings,
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            platform,
+            None,
+        )
+        .await
     }
 
     async fn serve_platform(
         settings: TokioSettings,
         listen: SocketAddr,
         platform: TokioCentralPlatform,
+        keys: Option<collaboration_central_core::AccessJwks>,
     ) -> Result<Self, TokioServerError> {
         let application = match CentralApplication::new(
             platform.clone(),
@@ -112,6 +139,11 @@ impl TokioServer {
         let stop = CancellationToken::new();
         let stopped = stop.clone();
         let router = central_router(application);
+        let router = if let Some(keys) = keys {
+            collaboration_central_core::central_jwks_router(keys).merge(router)
+        } else {
+            router
+        };
         #[cfg(feature = "conformance")]
         let router =
             crate::conformance_control::mount(router, platform.clone(), conformance_policy)?;

@@ -100,6 +100,7 @@ pub fn DialogBodyViewport<'a>(
         top: Some(viewport_top),
     });
     let maximum_offset = natural_height.get().saturating_sub(viewport_height.get());
+    let layout_offset = offset.get().min(maximum_offset);
     hooks.use_dialog_events(move |event| {
         let maximum = natural_height.get().saturating_sub(viewport_height.get());
         let next = match event {
@@ -163,9 +164,9 @@ pub fn DialogBodyViewport<'a>(
     });
     element! {
         View(padding_right:1,min_height: 0,flex_shrink: 1.0_f32, overflow: Overflow::Hidden, flex_direction: FlexDirection::Column) {
-            ContextProvider(value:Context::owned(crate::dialog_focus_reveal::DialogBodyScroll {top:viewport_top,viewport_height,natural_height,offset})) {
+            ContextProvider(value:Context::owned(crate::dialog_focus_reveal::DialogBodyScroll {top:viewport_top,viewport_height,natural_height,offset,layout_offset})) {
                 View(flex_shrink: 0.0_f32, flex_direction: FlexDirection::Column) {
-                    MeasuredBody(height: natural_height, offset: offset.get().min(maximum_offset), children)
+                    MeasuredBody(height: natural_height, offset: layout_offset, children)
                 }
             }
             #(scrollbar)

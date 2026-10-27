@@ -81,6 +81,7 @@ impl QuotaComponentFixture {
                             | "refused-result"
                             | "refresh-pending"
                             | "save-pending"
+                            | "visual-hard-cases"
                     ),
                     "unknown component fixture scenario",
                 )?;
@@ -94,6 +95,7 @@ impl QuotaComponentFixture {
 }
 
 async fn run_live_cua_fixture(surface: CapturedTuiSurface) -> TestResult<()> {
+    let (_, node_sha256) = verified_node_executable()?;
     if std::env::var_os("QUOTA_STORYBOARD_PUBLIC_SESSIONS_CONFIG").is_some() {
         ensure(
             matches!(surface, CapturedTuiSurface::Sessions),
@@ -165,8 +167,9 @@ async fn run_live_cua_fixture(surface: CapturedTuiSurface) -> TestResult<()> {
             "-t",
             "fontSize=16",
         ])
-        .arg("/usr/bin/python3")
-        .arg(output.join("fixed_quota_child.py"))
+        .arg(verified_node_executable()?.0)
+        .arg(permanent_adapter_source("fixture-child.ts")?)
+        .arg(output.join("fixture-command.json"))
         .current_dir(&output)
         .env_clear()
         .env("HOME", &output)
@@ -194,7 +197,7 @@ async fn run_live_cua_fixture(surface: CapturedTuiSurface) -> TestResult<()> {
         group_released: false,
         output: output.clone(),
         child_ownership: if component_fixture.is_some() {
-            CapturedChildOwnership::RetainedPythonChild
+            CapturedChildOwnership::RetainedAdapterChild
         } else {
             CapturedChildOwnership::FixtureCapability(fixture.capability().to_owned())
         },
@@ -220,7 +223,7 @@ async fn run_live_cua_fixture(surface: CapturedTuiSurface) -> TestResult<()> {
     fs::write(
         output.join("cua-ready.json"),
         format!(
-            "{{\"kind\":\"listener-ready-not-ui\",\"surface\":{},\"url\":{},\"ttyd_pid\":{},\"binary_sha256\":{},\"ttyd_sha256\":{},\"child_pid_file\":{},\"viewport_file\":{},\"stop_file\":{},\"lifetime_seconds\":600,\"quota_fixture_scenario\":{scenario_json},\"artifact_export\":{artifact_export}}}\n",
+            "{{\"kind\":\"listener-ready-not-ui\",\"surface\":{},\"url\":{},\"ttyd_pid\":{},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"ttyd_sha256\":{},\"child_pid_file\":{},\"viewport_file\":{},\"stop_file\":{},\"lifetime_seconds\":600,\"quota_fixture_scenario\":{scenario_json},\"artifact_export\":{artifact_export}}}\n",
             encode_json_string(surface.label()),
             encode_json_string(&format!("http://127.0.0.1:{}/", address.port())),
             capture.child.id(),
@@ -266,10 +269,13 @@ async fn run_live_cua_fixture(surface: CapturedTuiSurface) -> TestResult<()> {
     let sink_result = artifact_sink.stop().await;
     result?;
     let artifact_count = sink_result?;
+    verified_node_executable()?;
+    permanent_adapter_source("fixture-child.ts")?;
+    permanent_adapter_source("ttyd-adapter.ts")?;
     fs::write(
         output.join("cua-receipt.json"),
         format!(
-            "{{\"kind\":\"live-cua-fixture-lifecycle-only\",\"surface\":{},\"binary_sha256\":{},\"child_exit\":0,\"provider_requests\":0,\"state_and_secrets_unchanged\":true,\"owned_processes_stopped\":true,\"artifact_sink_stopped\":true,\"artifact_count\":{artifact_count},\"last_viewport\":{},\"ui_observation\":\"separate-original-CUA-evidence-required\",\"quota_fixture_scenario\":{scenario_json}}}\n",
+            "{{\"kind\":\"live-cua-fixture-lifecycle-only\",\"surface\":{},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"child_exit\":0,\"provider_requests\":0,\"state_and_secrets_unchanged\":true,\"owned_processes_stopped\":true,\"artifact_sink_stopped\":true,\"artifact_count\":{artifact_count},\"last_viewport\":{},\"ui_observation\":\"separate-original-CUA-evidence-required\",\"quota_fixture_scenario\":{scenario_json}}}\n",
             encode_json_string(surface.label()),
             encode_json_string(&digest_file(&binary)?),
             encode_json_string(fs::read_to_string(output.join("quota-child.viewport"))?.trim()),
@@ -430,12 +436,24 @@ async fn run_provider_filter_capture(
         )?;
     }
     if compact && matches!(surface, CapturedTuiSurface::Quota) {
-        tools.verify_image(
-            &output,
-            "compact-quota-hidden-choice",
-            &output.join("compact-quota-disabled-choice.png"),
-            true,
-        )?;
+        // Same order as quotaNegativePairs in scripts/verification/tui/scene-contracts.ts.
+        for (checkpoint, wrong) in [
+            (
+                "compact-quota-hidden-choice",
+                "compact-quota-disabled-choice",
+            ),
+            // C6: F5 must open Pool details, not leave browse unchanged...
+            ("compact-quota-pool-details", "compact-quota-all"),
+            //...and Escape must actually close it.
+            ("compact-quota-pool-closed", "compact-quota-pool-details"),
+        ] {
+            tools.verify_image(
+                &output,
+                checkpoint,
+                &output.join(format!("{wrong}.png")),
+                true,
+            )?;
+        }
     }
     if compact && sessions {
         for checkpoint in checkpoints
@@ -518,6 +536,7 @@ fn write_filter_receipt(
     surface: CapturedTuiSurface,
     checkpoints: &[&str],
 ) -> TestResult<()> {
+    let (_, node_sha256) = verified_node_executable()?;
     let images = checkpoints
         .iter()
         .map(|name| {
@@ -548,7 +567,7 @@ fn write_filter_receipt(
     fs::write(
         output.join("filter-receipt.json"),
         format!(
-            "{{\"surface\":{},\"columns\":{columns},\"rows\":{rows},\"binary_sha256\":{},\"vhs_sha256\":{},\"ttyd_sha256\":{},\"verifier_sha256\":{},\"verifier_source_sha256\":{},\"verifier_checkpoint_source_sha256\":{},\"driver_source_sha256\":{},\"tape_driver_source_sha256\":{},\"fixed_child_sha256\":{},\"tape_sha256\":{},\"state_and_secrets_unchanged\":true,\"provider_requests\":0,\"child_exit\":0,\"owned_processes_stopped\":true,\"fixture\":\"synthetic typed inputs; actual compiled UI/input/rendering\",\"images\":[{images}]}}\n",
+            "{{\"surface\":{},\"columns\":{columns},\"rows\":{rows},\"binary_sha256\":{},\"node_sha256\":\"{node_sha256}\",\"vhs_sha256\":{},\"ttyd_sha256\":{},\"verifier_sha256\":{},\"verifier_source_sha256\":{},\"verifier_checkpoint_source_sha256\":{},\"driver_source_sha256\":{},\"tape_driver_source_sha256\":{},\"fixed_child_sha256\":{},\"tape_sha256\":{},\"state_and_secrets_unchanged\":true,\"provider_requests\":0,\"child_exit\":0,\"owned_processes_stopped\":true,\"fixture\":\"synthetic typed inputs; actual compiled UI/input/rendering\",\"images\":[{images}]}}\n",
             encode_json_string(surface.label()),
             encode_json_string(&digest_file(binary)?),
             encode_json_string(&digest_file(&tools.vhs)?),
@@ -558,7 +577,9 @@ fn write_filter_receipt(
             encode_json_string(&verifier_checkpoint_source),
             encode_json_string(&driver_source),
             encode_json_string(&tape_driver_source),
-            encode_json_string(&digest_file(&output.join("fixed_quota_child.py"))?),
+            encode_json_string(&digest_file(&permanent_adapter_source(
+                "fixture-child.ts"
+            )?)?),
             encode_json_string(&digest_file(&output.join("quota.tape"))?)
         ),
     )?;

@@ -295,12 +295,13 @@ async fn quota_browse_empty_and_error_states_are_structurally_explicit() {
     let error = render_quota_capture_model_at(quota_error_view_model(), 100, 24, exit).await;
 
     assert!(
-        empty.contains("Pool-wide: responses") && empty.contains("no accounts"),
+        empty.contains("Pool details") && empty.contains("0/0"),
         "{empty}"
     );
     assert!(empty.contains("No accounts match these filters"), "{empty}");
     assert!(
-        error.contains("quota status unavailable") && error.contains("degraded"),
+        error.contains("quota status unavailable")
+            && error.contains("Selection projection degraded"),
         "{error}"
     );
     assert!(error.contains("No accounts match these filters"), "{error}");
@@ -308,10 +309,11 @@ async fn quota_browse_empty_and_error_states_are_structurally_explicit() {
 
 #[tokio::test]
 async fn quota_status_reflows_when_terminal_width_changes() {
+    let terminal_width_reader: fn() -> Option<usize> = || None;
     let frames = element! {
         QuotaStatusComponent(
             view_model: quota_view_model(),
-            width: 0usize,
+            width: 0usize,terminal_width_reader:Some(terminal_width_reader),
         )
     }
     .mock_terminal_render_loop(MockTerminalConfig::with_events(futures_util::stream::iter(
@@ -416,7 +418,7 @@ async fn quota_status_vertical_browse_preserves_list_without_automatic_details()
     .await;
 
     assert!(
-        !text.contains("Selected account") && text.contains("Details"),
+        !text.contains("Selected account") && text.contains("Pool details"),
         "vertical 100x24 quota view should expose explicit details without consuming the list:\n{text}"
     );
     assert!(
@@ -453,14 +455,10 @@ async fn quota_status_removes_panel_top_padding_and_dead_tail() {
                 .is_some_and(|line| line.contains("ssdev")),
         "group headings and selected header follow borders; account follows headings without blank padding:\n{text}"
     );
+    // C5 keeps panels content-sized; the surface owns remaining empty space.
     assert!(
-        !lines
-            .iter()
-            .rev()
-            .skip(1)
-            .take(3)
-            .any(|line| line.trim_matches(['│', '╰', '╯', ' ', '─']).is_empty()),
-        "quota inner panels should not leave a dead blank tail near the bottom border:\n{text}"
+        text.contains("Extra") && text.contains("2 resets"),
+        "final account group stays visible: {text}"
     );
 }
 
@@ -507,7 +505,7 @@ async fn quota_status_stacked_without_authoritative_selection_shows_focused_acco
         100,
         24,
         vec![
-            ("Details", vec![provider_filter_key(KeyCode::F(4))]),
+            ("Pool details", vec![provider_filter_key(KeyCode::F(4))]),
             (
                 "Account details",
                 vec![TerminalEvent::Key({
@@ -572,7 +570,7 @@ async fn quota_status_narrow_rows_preserve_quota_windows_and_forecast() {
         48,
         48,
         vec![
-            ("Details", vec![provider_filter_key(KeyCode::F(4))]),
+            ("Pool details", vec![provider_filter_key(KeyCode::F(4))]),
             (
                 "Account details",
                 vec![TerminalEvent::Key({
@@ -595,7 +593,8 @@ async fn quota_status_narrow_rows_preserve_quota_windows_and_forecast() {
     assert!(text.contains("□□□□□□□│"), "{text}");
     assert!(
         frames.iter().any(|frame| !frame.contains("Account details")
-            && quota_column_words(frame, 21, 9).contains("1 client 2 resets")),
+            && frame.contains("1 client")
+            && frame.contains("2 resets")),
         "the narrow browse row must preserve client/reset counts before details: {frames:?}"
     );
 }

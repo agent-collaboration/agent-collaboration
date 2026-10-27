@@ -1,24 +1,24 @@
 ╭──────────────────────────────────────────────╮
-│ Quota status                    Details Help │
-│ Pool-wide: responses  Accounts 1 · Usable 1  │
+│ Quota status               Pool details Help │
 │ All · Disabled: Shown · 1/1 ▾                │
 │ ┌──────────────────────────────────────────┐ │
-│ │    Account       Status    Quota         │ │
-│ │  ❯ ssdev         available safest        │ │
-│ │    ◎ OpenAI      1 client  quota         │ │
-│ │                  2 resets  Weekly        │ │
-│ │                  Credits   █████         │ │
-│ │                  unknown   83% left      │ │
-│ │                            reset 7d      │ │
-│ │                            5h            │ │
-│ │                            █████         │ │
-│ │                            99% left      │ │
-│ │                            reset 5h      │ │
-│ │                            Weekly pace   │ │
-│ │                            □□□□□□□│□□□   │ │
-│ │                            □□□□  1.00x   │ │
-│ │                            reset pace    │ │
-│ │                            healthy       │ │
+│ │   Account                                │ │
+│ │   ─────────────────────────────────────  │ │
+│ │ ❯ ssdev                                  │ │
+│ │   ◎ OpenAI · 1 client                    │ │
+│ │   ✓ available                            │ │
+│ │   Quota left · reset in                  │ │
+│ │   ─────────────────────────────────────  │ │
+│ │   █████░░ 83% · week · 7d 0h             │ │
+│ │   ██████░ 99% · 5h · 5h 0m               │ │
+│ │   Weekly pace                            │ │
+│ │   ─────────────────────────────────────  │ │
+│ │   healthy                                │ │
+│ │   1.00x reset pace                       │ │
+│ │   Extra                                  │ │
+│ │   ─────────────────────────────────────  │ │
+│ │   Credits unknown                        │ │
+│ │   2 resets                               │ │
 │ └──────────────────────────────────────────┘ │
 │                                              │
 │                                              │
@@ -43,6 +43,6 @@
 │                                              │
 │                                              │
 │                                              │
-│                                              │
-│                                              │
+│ F4 Details  F3 Filters  F5 Pool  F1 Help     │
+│ Ctrl+R Options                               │
 ╰──────────────────────────────────────────────╯

@@ -83,10 +83,19 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
     let fixture = OwnerFixture::new().await;
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);
-    fixture
-        .post(&fixture.root, "observed first carrier failure")
-        .await;
-    let first = runtime.requests.lock().await.recv().await.unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        fixture.post(&fixture.root, "observed first carrier failure"),
+    )
+    .await
+    .expect("initial subscription activity committed");
+    let first = tokio::time::timeout(
+        Duration::from_secs(10),
+        runtime.requests.lock().await.recv(),
+    )
+    .await
+    .expect("first native attempt reached the controlled carrier")
+    .unwrap();
     let push = first.payload.push_id;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime
@@ -100,7 +109,11 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
     let first_held_at = fixture.clock.now();
     assert_eq!(first_observed.held_since, Some(first_held_at));
     assert_eq!(first_observed.scheduled_retry_at, None);
-    let held = view(&app, &fixture).await;
+    // The public view reconciles inline, so inspect only after the carrier is
+    // answered and readiness is Wakeable, never while an attempt is held open.
+    let held = tokio::time::timeout(Duration::from_secs(10), view(&app, &fixture))
+        .await
+        .expect("public view observed the committed readiness hold");
     assert_eq!(
         held.pending_count, 1,
         "allocated Held custody vanished from pendingCount"
@@ -111,19 +124,34 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
     // An indefinite readiness hold has no scheduled retry.
     fixture.clock.advance_without_tokio_time(5);
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    runtime
-        .service
-        .reconcile_reader(fixture.reader.clone())
-        .await
-        .unwrap();
+    // Another readiness pass can start the attempt before this test's own
+    // reconciliation is queued. Receive the actual request to fix that ordering.
+    let preceding_reconcile = tokio::time::timeout(
+        Duration::from_secs(10),
+        runtime
+            .service
+            .request_reconcile_receipt(fixture.reader.clone()),
+    )
+    .await
+    .expect("preceding readiness pass queued");
     let second = tokio::time::timeout(
         Duration::from_secs(10),
         runtime.requests.lock().await.recv(),
     )
     .await
-    .unwrap()
+    .expect("preceding readiness pass started the second native attempt")
     .unwrap();
     assert_eq!(second.payload.push_id, push);
+    // Queue the same All/Refresh pass without waiting behind the attempt whose
+    // completion this test must supply. The receipt is joined after the answer.
+    let second_reconcile = tokio::time::timeout(
+        Duration::from_secs(10),
+        runtime
+            .service
+            .request_reconcile_receipt(fixture.reader.clone()),
+    )
+    .await
+    .expect("reconciliation queued behind the held native attempt");
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime
         .completions
@@ -133,6 +161,17 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
         })
         .unwrap();
     let second_observed = observed_reason(&fixture, &push, "second native refusal").await;
+    for receipt in [preceding_reconcile, second_reconcile] {
+        tokio::time::timeout(Duration::from_secs(10), receipt)
+            .await
+            .expect("readiness reconciliation finished after the carrier answer")
+            .unwrap()
+            .unwrap();
+    }
+    assert!(matches!(
+        runtime.requests.lock().await.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+    ));
     assert_eq!(
         second_observed.held_since,
         Some(first_held_at),
@@ -148,21 +187,31 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
 
     fixture.clock.advance_without_tokio_time(1);
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    runtime
-        .service
-        .reconcile_reader(fixture.reader.clone())
-        .await
-        .unwrap();
+    let final_reconcile = tokio::time::timeout(
+        Duration::from_secs(10),
+        runtime
+            .service
+            .request_reconcile_receipt(fixture.reader.clone()),
+    )
+    .await
+    .expect("final readiness reconciliation queued");
     let third = tokio::time::timeout(
         Duration::from_secs(10),
         runtime.requests.lock().await.recv(),
     )
     .await
-    .unwrap()
+    .expect("final readiness pass started the third native attempt")
     .unwrap();
     assert_eq!(third.payload.push_id, push);
     runtime.await_settled().await;
-    let delivered = view(&app, &fixture).await;
+    tokio::time::timeout(Duration::from_secs(10), final_reconcile)
+        .await
+        .expect("final readiness reconciliation finished after acceptance")
+        .unwrap()
+        .unwrap();
+    let delivered = tokio::time::timeout(Duration::from_secs(10), view(&app, &fixture))
+        .await
+        .expect("public view observed the accepted native outcome");
     assert_eq!(delivered.pending_count, 0);
     assert_eq!(delivered.held_since, None);
     assert_eq!(
@@ -181,8 +230,21 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
         .unwrap();
     assert_eq!(terminal.header_facts, delivery_snapshot.header_facts);
     assert_eq!(terminal.activity, delivery_snapshot.activity);
+    assert_eq!(
+        runtime
+            .completed_native_calls
+            .load(std::sync::atomic::Ordering::SeqCst),
+        3,
+        "each readiness window completed exactly one carrier attempt"
+    );
+    assert!(matches!(
+        runtime.requests.lock().await.try_recv(),
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+    ));
     drop(app);
-    runtime.close().await;
+    tokio::time::timeout(Duration::from_secs(10), runtime.close())
+        .await
+        .expect("native observation fixture shut down after every carrier answer");
 }
 
 #[tokio::test]

@@ -1,9 +1,8 @@
 //! Validate local inputs and retain the generated credential only in memory until admission.
 use super::{FleetCommandError, arguments::EnrollArguments};
 use crate::CliContext;
-use chrono::{DateTime, Utc};
 use codex_router_core::redaction::SecretString;
-use collaboration_central_core::{AccessClientId, EnrollMachine};
+use collaboration_central_core::EnrollMachine;
 use reqwest::{Url, header::HeaderValue};
 use sha2::{Digest, Sha256};
 use std::{
@@ -19,40 +18,22 @@ pub(super) struct PreparedEnrollment {
     pub admin_url: Url,
     pub request: EnrollMachine,
     pub owner_token: HeaderValue,
-    pub access_secret: SecretString,
+    pub owner_header: &'static str,
+    pub access: PreparedAccess,
     pub machine_credential: SecretString,
     #[cfg(debug_assertions)]
     pub allow_plaintext_file_secrets: bool,
+}
+
+pub(super) enum PreparedAccess {
+    Cloudflare(SecretString),
+    SelfHosted(SecretString),
 }
 
 pub(super) fn prepare(
     arguments: EnrollArguments,
     context: &CliContext,
 ) -> Result<PreparedEnrollment, FleetCommandError> {
-    let expires_at = DateTime::parse_from_rfc3339(&arguments.expires_at)
-        .map_err(|_| FleetCommandError::InvalidInput("--expires-at must be an RFC3339 timestamp matching the Access service token expiry"))?.with_timezone(&Utc);
-    if expires_at <= Utc::now() {
-        return Err(FleetCommandError::InvalidInput(
-            "--expires-at must be in the future",
-        ));
-    }
-    if arguments.owner_token_env.is_empty()
-        || arguments
-            .owner_token_env
-            .bytes()
-            .any(|byte| matches!(byte, 0 | b'='))
-    {
-        return Err(FleetCommandError::InvalidInput(
-            "--owner-token-env must name an environment variable",
-        ));
-    }
-    let owner =
-        context
-            .env_var(&arguments.owner_token_env)
-            .ok_or(FleetCommandError::InvalidInput(
-                "the selected owner-token environment variable is unavailable",
-            ))?;
-    let owner_token = sensitive_header(owner)?;
     let endpoint_url = Url::parse(&arguments.endpoint)
         .map_err(|_| FleetCommandError::InvalidInput("invalid central session endpoint"))?;
     if !matches!(endpoint_url.scheme(), "ws" | "wss" | "http" | "https")
@@ -76,13 +57,11 @@ pub(super) fn prepare(
         .set_scheme(scheme)
         .map_err(|()| FleetCommandError::InvalidInput("invalid central endpoint scheme"))?;
     admin_url.set_path("/admin/v1/machines/enroll");
-    let access_client_id = AccessClientId::new(arguments.access_client_id)
-        .map_err(|_| FleetCommandError::InvalidInput("invalid Access client ID"))?;
+    let credentials = super::enrollment_credentials::resolve(&arguments, context, &admin_url)?;
     let label = arguments
         .label
         .try_into()
         .map_err(|_| FleetCommandError::InvalidInput("invalid machine label"))?;
-    let access_secret = read_access_secret(&arguments.access_client_secret_file)?;
     let root = crate::router_root_or_default(arguments.router_root).map_err(|_| {
         FleetCommandError::InvalidInput("Router root is unavailable; pass --router-root")
     })?;
@@ -121,12 +100,13 @@ pub(super) fn prepare(
             installation,
             peer,
             label,
-            access_client_id,
+            access_client_id: credentials.client_id,
             credential_hash,
-            expires_at,
+            expires_at: credentials.expires_at,
         },
-        owner_token,
-        access_secret,
+        owner_token: credentials.owner_token,
+        owner_header: credentials.owner_header,
+        access: credentials.access,
         machine_credential: SecretString::new(format!("Bearer {raw}")),
         #[cfg(debug_assertions)]
         allow_plaintext_file_secrets: arguments.allow_plaintext_file_secrets,
@@ -145,7 +125,7 @@ pub(super) fn sensitive_header(value: &str) -> Result<HeaderValue, FleetCommandE
     Ok(header)
 }
 
-fn read_access_secret(path: &Path) -> Result<SecretString, FleetCommandError> {
+pub(super) fn read_access_secret(path: &Path) -> Result<SecretString, FleetCommandError> {
     let metadata = std::fs::symlink_metadata(path)?;
     if !path.is_absolute()
         || !metadata.is_file()

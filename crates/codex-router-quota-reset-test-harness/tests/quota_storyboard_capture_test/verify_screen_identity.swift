@@ -21,15 +21,23 @@ extension OriginalChoicePixels {
   }
 
   func yellowPixels(in box: CGRect) -> Int {
+    yellowPixelFootprint(in: box).count
+  }
+
+  private func yellowPixelFootprint(in box: CGRect)
+    -> (count: Int, columns: Int, rows: Int, boxHeight: Int)
+  {
     guard [box.minX, box.minY, box.width, box.height].allSatisfy(\.isFinite),
       box.width > 0, box.height > 0, box.minX >= 0, box.minY >= 0,
       box.maxX <= 1, box.maxY <= 1
-    else { return 0 }
+    else { return (0, 0, 0, 0) }
     let left = Int(floor(box.minX * Double(width)))
     let right = Int(ceil(box.maxX * Double(width)))
     let top = Int(floor((1 - box.maxY) * Double(height)))
     let bottom = Int(ceil((1 - box.minY) * Double(height)))
     var count = 0
+    var columns: Set<Int> = []
+    var rows: Set<Int> = []
     for row in top..<min(bottom, height) {
       for column in left..<min(right, width) {
         let index = row * stride + column * 4
@@ -38,10 +46,12 @@ extension OriginalChoicePixels {
         let blue = Int(bytes[index + 2])
         if red > 150 && green > 150 && blue < 150 && min(red, green) * 2 > blue * 3 {
           count += 1
+          columns.insert(column)
+          rows.insert(row)
         }
       }
     }
-    return count
+    return (count, columns.count, rows.count, bottom - top)
   }
 
   // Native word boxes may overlap in blank raster space. The original selected
@@ -56,7 +66,13 @@ extension OriginalChoicePixels {
   }
 
   func accountSelectorVisible(in words: [ScreenTextRegion]) -> Bool? {
-    guard let header = VerifyScreenImage.uniqueAccountHeader(words) else { return nil }
+    guard let header = VerifyScreenImage.uniqueAccountHeader(words) else {
+      // Scrolled pose with no Account heading (48x24 Beta extra):
+      // measure the same two-cell selector gutter left of the body's content
+      // column. The content column is never counted (warning orange passes the
+      // yellow test); an unmeasurable gutter stays unknown.
+      return VerifyScreenImage.headerlessSelectorGutter(words).map { yellowPixels(in: $0) >= 4 }
+    }
     let body = ScreenTextRegion(text: "", bounds: CGRect(x: header.bounds.minX, y: 0,
       width: header.bounds.width, height: header.bounds.minY / 2))
     guard let upperHalf = VerifyScreenImage.accountSelectorBounds(header: header, row: body) else {
@@ -73,7 +89,13 @@ extension OriginalChoicePixels {
     guard let gutter = VerifyScreenImage.accountSelectorBounds(header: header, row: region) else {
       return false
     }
-    return yellowPixels(in: region.bounds) >= 8 && yellowPixels(in: gutter) >= 4
+    let glyph = yellowPixelFootprint(in: gutter)
+    // A continuation's left bearing can enter this fixed column by one pixel
+    // (native Beta row). Require the same two-dimensional glyph evidence as
+    // the choice focus check, rather than mistaking that ink for a second arrow.
+    return yellowPixels(in: region.bounds) >= 8 && glyph.count >= 4
+      && glyph.columns >= 2 && glyph.boxHeight >= 4
+      && glyph.rows >= max(3, glyph.boxHeight / 3)
   }
 
   func selectedNameGutter(beside region: ScreenTextRegion) -> Bool {
@@ -107,6 +129,50 @@ extension VerifyScreenImage {
     guard left >= 0, row.bounds.maxY < header.bounds.minY else { return nil }
     return CGRect(x: left, y: row.bounds.minY,
       width: 2 * cellWidth, height: row.bounds.height)
+  }
+
+  // Body rows lie between the toolbar ("Disabled" word) and footer ("F4" word).
+  // Folded headings or a validated row-start staleness label mark the content
+  // column; the selector gutter is the two cells left of it. Arbitrary body
+  // words and selector glyphs never set the origin. Missing or disagreeing
+  // anchors leave the gutter unmeasurable.
+  static func headerlessSelectorGutter(_ words: [ScreenTextRegion]) -> CGRect? {
+    guard regionsHaveValidBounds(words) else { return nil }
+    let toolbars = words.filter { normalizedMarkerText($0.text) == "disabled" }
+    let footers = words.filter { normalizedMarkerText($0.text) == "f4" }
+    guard toolbars.count == 1, footers.count == 1, let toolbar = toolbars.first,
+      let footer = footers.first, toolbar.bounds.minY > footer.bounds.maxY
+    else { return nil }
+    let body = words.filter {
+      $0.bounds.midY < toolbar.bounds.minY && $0.bounds.midY > footer.bounds.maxY
+    }
+    // With every heading scrolled away (48x12 Beta extra) the
+    // row-start staleness label ("week stale" / "Credits stale") marks the same
+    // column: its first word, nothing left of it on its row, "stale" directly
+    // after it.
+    func isStaleLabel(_ word: ScreenTextRegion) -> Bool {
+      guard ["week", "credits"].contains(normalizedMarkerText(word.text)) else { return false }
+      let cell = word.bounds.width / Double(word.text.count)
+      return !body.contains { sharesTerminalRow($0, word) && $0.bounds.midX < word.bounds.minX }
+        && body.contains { next in
+          normalizedMarkerText(next.text) == "stale" && sharesTerminalRow(next, word)
+            && next.bounds.midX > word.bounds.maxX
+            && next.bounds.minX - word.bounds.maxX <= 1.5 * cell
+        }
+    }
+    let headings = body.filter {
+      ["quota", "weekly", "extra"].contains(normalizedMarkerText($0.text)) || isStaleLabel($0)
+    }
+    guard !headings.isEmpty else { return nil }
+    let cells = headings.map { $0.bounds.width / Double($0.text.count) }.sorted()
+    let cell = cells[cells.count / 2]
+    let origins = headings.map(\.bounds.minX)
+    guard let origin = origins.min(), let farthest = origins.max(), farthest - origin <= cell,
+      origin - 2.5 * cell >= 0
+    else { return nil }
+    return CGRect(
+      x: origin - 2.5 * cell, y: footer.bounds.maxY, width: 2.25 * cell,
+      height: toolbar.bounds.minY - footer.bounds.maxY)
   }
 
   static func selectedFloorDraftValue(
@@ -296,6 +362,44 @@ extension VerifyScreenImage {
     return body
   }
 
+  // Help-body frame from the first pass: its single Quota Help title above its
+  // single Close. The region of interest spans those rows to the right edge.
+  static func helpBodyFrame(_ regions: [ScreenTextRegion])
+    -> (title: ScreenTextRegion, close: ScreenTextRegion)?
+  {
+    guard regionsHaveValidBounds(regions) else { return nil }
+    let titles = regions.filter { normalizedMarkerText($0.text) == "quota help" }
+    let closes = regions.filter { normalizedMarkerText($0.text) == "close" }
+    guard titles.count == 1, closes.count == 1, let title = titles.first, let close = closes.first,
+      title.bounds.minY > close.bounds.maxY
+    else { return nil }
+    return (title, close)
+  }
+
+  static func helpBodyRecognitionBounds(_ regions: [ScreenTextRegion]) -> CGRect? {
+    guard let frame = helpBodyFrame(regions) else { return nil }
+    let minX = max(0, frame.title.bounds.minX - frame.title.bounds.height)
+    return CGRect(
+      x: minX, y: frame.close.bounds.minY, width: 1 - minX,
+      height: frame.title.bounds.maxY - frame.close.bounds.minY)
+  }
+
+  // The second pass alone supplies the help body inside its bounds (rows whose
+  // centre lies strictly between the title and Close); the first pass keeps its
+  // title, Close and everything outside.
+  static func mergingHelpBody(
+    firstPass: [ScreenTextRegion], bodyPass: [ScreenTextRegion], bounds: CGRect
+  ) -> [ScreenTextRegion] {
+    guard let frame = helpBodyFrame(firstPass), regionsHaveValidBounds(bodyPass) else {
+      return firstPass
+    }
+    func insideBody(_ region: ScreenTextRegion) -> Bool {
+      region.bounds.midY < frame.title.bounds.minY && region.bounds.midY > frame.close.bounds.maxY
+    }
+    return firstPass.filter { !(insideBody($0) && $0.bounds.minX >= bounds.minX) }
+      + bodyPass.filter(insideBody)
+  }
+
   // Compare domain name/tag values in the same measured Account field. The
   // source paints one decoration character before/after the tag; their actual
   // bracket appearance is a mandatory personal-original check, not OCR proof.
@@ -399,17 +503,31 @@ extension VerifyScreenImage {
       })
     else { return nil }
     guard let table = uniqueAccountHeader(wordRegions) else { return nil }
-    let status = wordRegions.filter {
-      normalizedMarkerText($0.text) == "status"
-        && abs($0.bounds.midY - table.bounds.midY)
-          <= max(table.bounds.height, $0.bounds.height) / 2
+    // Wide browse bounds the Account group by the next heading on the same row
+    // (Quota left · reset in). Folded browse repeats Account above each block
+    // with nothing beside it, so the group spans the row (C1/C5, 2026-10-23).
+    let cellWidth = table.bounds.width / Double("Account".count)
+    let headerNeighbours = wordRegions.filter {
+      abs($0.bounds.midY - table.bounds.midY)
+        <= max(table.bounds.height, $0.bounds.height) / 2
         && $0.bounds.minX > table.bounds.maxX
     }
-    guard status.count == 1, let status = status.first else { return nil }
-    let left = table.bounds.minX - table.bounds.width / Double("Account".count)
+    // A heading is separated from its neighbour by a column gap; an account
+    // name's own "Account" word sits one cell from its next word.
+    let leftNeighbours = wordRegions.filter {
+      abs($0.bounds.midY - table.bounds.midY)
+        <= max(table.bounds.height, $0.bounds.height) / 2
+        && $0.bounds.maxX <= table.bounds.minX
+        && table.bounds.minX - $0.bounds.maxX < 1.5 * cellWidth
+    }
+    guard leftNeighbours.isEmpty,
+      headerNeighbours.allSatisfy({ $0.bounds.minX - table.bounds.maxX >= 1.5 * cellWidth })
+    else { return nil }
+    let rightBound = headerNeighbours.map(\.bounds.minX).min() ?? 1
+    let left = table.bounds.minX - cellWidth
     let column = wordRegions.filter { region in
       guard region.bounds.maxY < table.bounds.minY,
-        region.bounds.maxX < status.bounds.minX else { return false }
+        region.bounds.maxX < rightBound else { return false }
       if region.bounds.minX >= left { return true }
       // The first native CJK box can include its real selector's raster edge.
       // Only selected text beside that physical glyph may cover its two cells.
@@ -460,6 +578,51 @@ extension VerifyScreenImage {
     return name.isEmpty ? nil : name.joined(separator: " ")
   }
 
+  // 2026-10-23 C5 (hard 48x12): one page below the top pose the selected
+  // account's name continuation is the top body row, painted selected, directly
+  // over its own client line; no Account heading or account name is visible.
+  static func selectedNameContinuationMatches(
+    _ regions: [ScreenTextRegion], continuation: String, clientLine: String,
+    hasSelectedText: (ScreenTextRegion) -> Bool
+  ) -> Bool {
+    guard regionsHaveValidBounds(regions), let rows = terminalRows(regions) else { return false }
+    // Vision reads the client line's "·" as "•" or a spaced ":" (
+    // 48x12 "Claude : 0 clients").
+    func canonical(_ text: String) -> String {
+      normalizedMarkerText(text).replacingOccurrences(of: "•", with: "·")
+        .replacingOccurrences(of: " : ", with: " · ")
+    }
+    let toolbars = regions.filter { canonical($0.text).contains("disabled: shown") }
+    let clients = regions.filter { canonical($0.text).contains(clientLine) }
+    // Vision can split the continuation into word boxes on its one terminal row
+    // (48x12 "Long" / "Name"); every box must be painted selected.
+    let nameRows = rows.filter { canonical(terminalRowText($0)) == continuation }
+    guard toolbars.count == 1, let toolbar = toolbars.first, clients.count == 1,
+      let client = clients.first, nameRows.count == 1, let nameRow = nameRows.first,
+      let firstBox = nameRow.first, nameRow.allSatisfy(hasSelectedText)
+    else { return false }
+    let name = ScreenTextRegion(
+      text: continuation,
+      bounds: nameRow.dropFirst().reduce(firstBox.bounds) { $0.union($1.bounds) })
+    guard name.bounds.midY - client.bounds.midY >= max(name.bounds.height, client.bounds.height) / 2,
+      name.bounds.minY - client.bounds.maxY <= max(name.bounds.height, client.bounds.height),
+      abs(name.bounds.minX - client.bounds.minX)
+        <= 2 * client.bounds.width / Double(max(1, client.text.count))
+    else { return false }
+    let body = regions.filter { $0.bounds.maxY < toolbar.bounds.minY }
+    // Both the continuation and its client line are body rows below the actual
+    // toolbar; an aligned pair above it (header area) never qualifies.
+    guard name.bounds.maxY < toolbar.bounds.minY, client.bounds.maxY < toolbar.bounds.minY
+    else { return false }
+    // Nothing between the toolbar and the continuation: it is the top body row.
+    guard !body.contains(where: { $0.bounds.minY > name.bounds.maxY && !sharesTerminalRow($0, name) })
+    else { return false }
+    return !body.contains { region in
+      let text = canonical(region.text)
+      return text == "account" || text.contains("research account") || windowAccountKey(region) != nil
+    }
+  }
+
 }
 
 
@@ -482,7 +645,10 @@ extension VerifyScreenImage {
     guard titles.count == 1, tags.count == 1, closes.count == 1, inspections.count == 1,
       let title = titles.first, let tag = tags.first,
       let close = closes.first, let inspect = inspections.first,
-      title.bounds.minY > tag.bounds.maxY,
+      // Adjacent row boxes can touch or overlap slightly (40x24 tag
+      // maxY = title minY + 2e-10; the 76x30 tag row pass reaches.0041 into
+      // the title row); the tag row's centre must lie below the title row.
+      title.bounds.minY > tag.bounds.midY,
       min(close.bounds.maxY, inspect.bounds.maxY) - max(close.bounds.minY, inspect.bounds.minY)
         >= min(close.bounds.height, inspect.bounds.height) / 2 else { return [] }
     let body = regions.filter {
@@ -495,15 +661,19 @@ extension VerifyScreenImage {
       return text == "eligibility" || text.hasPrefix("eligibility ")
     }
     guard labels.count == 1, let label = labels.first,
-      tag.bounds.minY > label.bounds.maxY,
+      // Adjacent terminal rows have overlapping glyph boxes in retained originals.
+      // The tag center remains above the whole label, on a distinct row.
+      tag.bounds.midY > label.bounds.maxY, !sharesTerminalRow(tag, label),
       body.contains(where: { $0.text == tag.text && $0.bounds == tag.bounds })
     else { return [] }
     return measuredFieldPairs(body).filter { $0 == "eligibility not checked" }
   }
 
   static func checkIdleReturnMatchingControls() -> (count: Int, failures: [String]) {
-    func word(_ text: String, _ x: Double, _ y: Double, _ width: Double = 0.22) -> ScreenTextRegion {
-      ScreenTextRegion(text: text, bounds: CGRect(x: x, y: y, width: width, height: 0.03))
+    func word(
+      _ text: String, _ x: Double, _ y: Double, _ width: Double = 0.22, _ height: Double = 0.03
+    ) -> ScreenTextRegion {
+      ScreenTextRegion(text: text, bounds: CGRect(x: x, y: y, width: width, height: height))
     }
     let chrome = [word("Options · Resets Help", 0.1, 0.86, 0.55),
       word("東京 [alpha-tag]", 0.1, 0.79, 0.6), word("Close", 0.1, 0.2, 0.1),
@@ -511,6 +681,16 @@ extension VerifyScreenImage {
     let label = word("Eligibility", 0.1, 0.65, 0.25)
     let value = word("Not checked", 0.1, 0.60, 0.28)
     let field = [label, value]
+    // Retained Normal48x24 full-pass boxes, followed by separate
+    // footer word boxes as main projects them before calling this matcher.
+    let nativeTitle = word("Options • Resets", 0.0817, 0.6653, 0.3346, 0.0413)
+    let nativeTag = word("*F OpenAI Research Acco... [alpha-tag]", 0.0817, 0.6198, 0.7860, 0.0455)
+    let nativeLabel = word("Eligibility", 0.0814, 0.5768, 0.2340, 0.0488)
+    let nativeValue = word("Not checked", 0.0817, 0.5413, 0.2335, 0.0372)
+    let nativeFooter = word("Close Credits Inspect", 0.0856, 0.2479, 0.4786, 0.0413)
+    let nativeBody = [nativeTitle, nativeTag, nativeLabel, nativeValue]
+    let nativeActions = [word("Close", 0.0856, 0.2479, 0.1, 0.0413),
+      word("Inspect", 0.4, 0.2479, 0.16, 0.0413)]
     let cases: [(String, [ScreenTextRegion], Bool)] = [
       ("idle-return-stacked", chrome + field, true),
       ("idle-return-inline", chrome + [word("Eligibility Not checked", 0.1, 0.65, 0.6)], true),
@@ -532,6 +712,24 @@ extension VerifyScreenImage {
         word("Not checked", 0.7, 0.65, 0.28)], false),
       ("idle-return-ambiguous-value", chrome + field + [word("Checked", 0.1, 0.60)], false),
       ("idle-return-malformed", chrome + field + [word("invalid", -0.1, 0.5)], false),
+      ("idle-return-native-009-projected-footer", nativeBody + [nativeFooter] + nativeActions, true),
+      ("idle-return-native-009-split-footer", nativeBody + nativeActions, true),
+      ("idle-return-native-009-tag-on-label-row", [nativeTitle, nativeLabel, nativeValue,
+        word(nativeTag.text, 0.4, 0.5768, 0.4, 0.0455), nativeFooter] + nativeActions, false),
+      ("idle-return-native-009-tag-below-label", [nativeTitle, nativeLabel, nativeValue,
+        word(nativeTag.text, 0.0817, 0.50, 0.7860, 0.0455), nativeFooter] + nativeActions, false),
+      ("idle-return-merged-footer-no-close", nativeBody + [
+        word("Credits Inspect", 0.0856, 0.2479, 0.4786, 0.0413),
+        word("Inspect", 0.4, 0.2479, 0.16, 0.0413),
+      ], false),
+      ("idle-return-merged-footer-no-inspect", nativeBody + [
+        word("Close Credits", 0.0856, 0.2479, 0.4786, 0.0413),
+        word("Close", 0.0856, 0.2479, 0.1, 0.0413),
+      ], false),
+      ("idle-return-merged-footer-duplicate-close", nativeBody + [nativeFooter,
+        word("Close", 0.0856, 0.2, 0.1, 0.0413)] + nativeActions, false),
+      ("idle-return-merged-footer-duplicate-inspect", nativeBody + [nativeFooter,
+        word("Inspect", 0.4, 0.2, 0.16, 0.0413)] + nativeActions, false),
     ]
     var failures: [String] = []
     for (name, regions, expected) in cases {

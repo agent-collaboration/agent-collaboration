@@ -36,7 +36,8 @@ pub(super) fn render_provider_controls(
 pub(super) fn render_provider_chooser(
     model: &SessionsPickerModel,
     model_state: State<SessionsPickerModel>,
-    width: usize,
+    content_width: usize,
+    short_filters: bool,
 ) -> Vec<AnyElement<'static>> {
     use super::provider_filter_model::SessionFilterValue;
     let Some(draft) = model.provider_filter_draft.as_ref() else {
@@ -90,8 +91,11 @@ pub(super) fn render_provider_chooser(
         } else {
             element!(codex_router_tui::SelectableRow(selected:false) {#(body)}).into_any()
         };
+        // The short Source choice fits only when its label shares the query
+        // row; the full unavailable reasons remain in the existing body.
+        let inline_source = short_filters && expanded && field == ProviderFilterFocus::Source;
         controls.push(element! {
-            codex_router_tui::FormField(label:label.to_owned(),label_width:14u16,stacked:width<52,has_focus:draft.focus==field) {#(body)}
+            codex_router_tui::FormField(label:label.to_owned(),label_width:if inline_source {8u16}else {14u16},stacked:content_width<52&&!inline_source,has_focus:draft.focus==field) {#(body)}
         }.into_any());
     }
     controls

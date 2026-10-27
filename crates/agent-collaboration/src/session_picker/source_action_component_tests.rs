@@ -56,18 +56,21 @@ async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards
             } else if phase == 1 && text.contains("Checking source") {
                 for event in [key(KeyCode::Enter), ctrl_key('n'), ctrl_key('f'), key(KeyCode::F(1)), key(KeyCode::Down), TerminalEvent::BracketedPaste("do-not-search".to_owned()), TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(MouseEventKind::Down(MouseButton::Left), 5, 1)), TerminalEvent::Resize(100,30)] { sender.send(event).unwrap(); }
                 phase = 2;
-            } else if phase == 2 && text.contains("Checking source") && text.lines().count() == 30 {
-                assert!(!text.contains("Sessions Help"));
+            } else if phase == 2 && text.lines().count() == 30 {
+                assert!(text.contains("Sessions Help"), "Help must open above the pending source check: {text}");
                 assert!(!text.contains("do-not-search"));
                 sender.send(key(KeyCode::Esc)).unwrap();
                 phase = 3;
-            } else if phase == 3 && !text.contains("Checking source") && text.contains("New session") {
+            } else if phase == 3 && text.contains("Checking source") && !text.contains("Sessions Help") {
+                sender.send(key(KeyCode::Esc)).unwrap();
+                phase = 4;
+            } else if phase == 4 && !text.contains("Checking source") && text.contains("New session") {
                 let _ = finish.take().unwrap().send(Err(SourceReadError::ReadUnavailable));
                 sender.send(ctrl_key('d')).unwrap();
-                phase = 4;
+                phase = 5;
             }
         }
-        assert_eq!(phase, 4);
+        assert_eq!(phase, 5);
     }).await.expect("event-controlled Checking cancellation must finish");
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(outcome, None);
@@ -75,7 +78,10 @@ async fn source_action_component_checking_blocks_inputs_resizes_and_esc_discards
 
 #[tokio::test]
 async fn source_action_component_current_prepared_new_returns_exact_captured_outcome() {
-    let preparer: SourceActionPreparer = Arc::new(|profile, action| {
+    let (finish, receive) = tokio::sync::oneshot::channel();
+    let receive = Arc::new(Mutex::new(Some(receive)));
+    let preparer: SourceActionPreparer = Arc::new(move |profile, action| {
+        let receive = receive.lock().unwrap().take().expect("one source check");
         Box::pin(async move {
             assert!(
                 matches!(action, SourceSessionAction::New { ref directory } if directory.as_str() == "/source/only")
@@ -86,16 +92,34 @@ async fn source_action_component_current_prepared_new_returns_exact_captured_out
                 action,
                 source_directory: Some("/source/only".to_owned()),
             };
+            receive.await.unwrap();
             Ok(prepared(&request))
         })
     });
     let mut outcome = Option::<SessionsPickerOutcome>::None;
-    let events =
-        futures_util::stream::iter(configured_new_events()).chain(futures_util::stream::pending());
+    let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
+    for event in configured_new_events() {
+        sender.send(event).unwrap();
+    }
+    let events = futures_util::stream::unfold(receiver, |mut receiver| async {
+        receiver.recv().await.map(|event| (event, receiver))
+    });
+    let mut phase = 0;
+    let mut finish = Some(finish);
     tokio::time::timeout(Duration::from_secs(2), async {
         let mut picker = element! { SessionsPickerComponent(request: source_model().request, source_preparer: Some(preparer), width: 120usize, height: 36usize, selected_outcome_out: &mut outcome) };
-        picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events)).collect::<Vec<_>>().await;
+        picker.mock_terminal_render_loop(MockTerminalConfig::with_events(events)).map(|canvas| {
+            let text = canvas.to_string();
+            if phase == 0 && text.contains("Checking source") {
+                sender.send(key(KeyCode::F(1))).unwrap();
+                phase = 1;
+            } else if phase == 1 && text.contains("Sessions Help") {
+                finish.take().unwrap().send(()).unwrap();
+                phase = 2;
+            }
+        }).collect::<Vec<_>>().await;
     }).await.expect("prepared action must finish without another confirmation");
+    assert_eq!(phase, 2, "Help does not pause a running source check");
     let Some(SessionsPickerOutcome::PreparedSourceSession(prepared)) = outcome else {
         panic!("expected prepared configured source");
     };

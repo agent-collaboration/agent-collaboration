@@ -1,0 +1,27 @@
+{
+	"name": "@codex-router/tui-verification",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"typecheck": "tsc --noEmit",
+		"lint": "oxlint --type-aware --deny-warnings .",
+		"format": "oxfmt .",
+		"format:check": "oxfmt --check .",
+		"test": "vitest run"
+	},
+	"dependencies": {
+		"zod": "4.4.3"
+	},
+	"devDependencies": {
+		"@types/node": "26.6.5",
+		"oxfmt": "0.73.0",
+		"oxlint": "1.88.0",
+		"oxlint-tsgolint": "7.0.2005",
+		"typescript": "7.0.2",
+		"vitest": "5.0.4"
+	},
+	"engines": {
+		"node": "26.12.1"
+	},
+	"packageManager": "pnpm@12.14.0"
+}

@@ -122,7 +122,8 @@ pub(super) fn render_quota_details_button(
     enabled: bool,
     on_open: impl FnMut(()) + Send + Sync + 'static,
 ) -> AnyElement<'static> {
-    element!(QuotaFilterButton(label: "Details".to_owned(), enabled, on_click: on_open)).into_any()
+    element!(QuotaFilterButton(label: "Pool details".to_owned(), enabled, on_click: on_open))
+        .into_any()
 }
 
 pub(super) fn render_quota_filter_actions(

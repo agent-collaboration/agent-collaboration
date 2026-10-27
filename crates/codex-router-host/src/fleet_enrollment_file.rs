@@ -19,7 +19,7 @@ use std::{
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FleetEnrollmentDocument {
     pub endpoint: String,
-    pub access: FleetAccessReference,
+    pub access: FleetAccess,
     pub credential_key: String,
     pub peer: PeerId,
     pub receiver: ReceiverId,
@@ -33,6 +33,41 @@ pub struct FleetEnrollmentDocument {
 pub struct FleetAccessReference {
     pub client_id: String,
     pub client_secret_key: String,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum FleetAccess {
+    Cloudflare(FleetAccessReference),
+    SelfHosted(SelfHostedAccessReference),
+}
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum SelfHostedAccessReference {
+    SelfHosted { assertion_key: String },
+}
+impl From<FleetAccessReference> for FleetAccess {
+    fn from(value: FleetAccessReference) -> Self {
+        Self::Cloudflare(value)
+    }
+}
+impl FleetAccess {
+    fn key_and_kind(&self) -> (&str, FleetSecretKind) {
+        match self {
+            Self::Cloudflare(reference) => (
+                &reference.client_secret_key,
+                FleetSecretKind::AccessClientSecret,
+            ),
+            Self::SelfHosted(SelfHostedAccessReference::SelfHosted { assertion_key }) => {
+                (assertion_key, FleetSecretKind::MachineAssertion)
+            }
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -53,7 +88,8 @@ impl FleetEnrollmentDocument {
     }
     pub fn secret_keys(&self) -> io::Result<(SecretKey, SecretKey)> {
         let invalid = || io::Error::other("invalid Fleet enrollment secret references");
-        let access = SecretKey::new(&self.access.client_secret_key).map_err(|_| invalid())?;
+        let (reference, kind) = self.access.key_and_kind();
+        let access = SecretKey::new(reference).map_err(|_| invalid())?;
         let credential = SecretKey::new(&self.credential_key).map_err(|_| invalid())?;
         let access_identity = FleetSecretKey::parse(&access)
             .map_err(|_| invalid())?
@@ -61,7 +97,7 @@ impl FleetEnrollmentDocument {
         let credential_identity = FleetSecretKey::parse(&credential)
             .map_err(|_| invalid())?
             .ok_or_else(invalid)?;
-        if access_identity.kind() != FleetSecretKind::AccessClientSecret
+        if access_identity.kind() != kind
             || credential_identity.kind() != FleetSecretKind::MachineCredential
             || access_identity.installation() != credential_identity.installation()
             || access_identity.generation() != credential_identity.generation()
@@ -78,8 +114,15 @@ impl FleetEnrollmentDocument {
             .map_err(io::Error::other)?;
         Ok(BoardSessionInputs {
             endpoint: Endpoint::new(&self.endpoint).map_err(io::Error::other)?,
-            access: AccessServiceToken::new(&self.access.client_id, access.expose_secret())
-                .map_err(io::Error::other)?,
+            access: match &self.access {
+                FleetAccess::Cloudflare(reference) => {
+                    AccessServiceToken::new(&reference.client_id, access.expose_secret())
+                }
+                FleetAccess::SelfHosted(_) => {
+                    AccessServiceToken::self_hosted(access.expose_secret())
+                }
+            }
+            .map_err(io::Error::other)?,
             credential: PeerCredential::new(credential.expose_secret().to_owned())
                 .map_err(io::Error::other)?,
             peer: self.peer,

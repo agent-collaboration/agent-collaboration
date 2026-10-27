@@ -6,6 +6,7 @@ use super::responsive_quota_layout::visible_account_window_start;
 
 const DETAIL_LABEL_WIDTH: usize = 10;
 
+#[derive(Clone, Copy)]
 pub(super) struct QuotaAccountListProps<'a> {
     pub(super) rows: &'a [QuotaStatusAccountViewModel],
     pub(super) interactive: bool,
@@ -120,35 +121,22 @@ struct QuotaAccountViewportProps {
 
 #[component]
 fn QuotaAccountViewport(props: &QuotaAccountViewportProps) -> impl Into<AnyElement<'static>> {
-    // Header and rows reserve the same selector and scrollbar cells. Phone
-    // density removes only nested chrome; the three data groups stay intact.
-    let list_inset = if props.compact_phone { 0 } else { 4 };
-    let row_padding = usize::from(!props.compact_phone);
-    let row_width = props.width.saturating_sub(list_inset + 1);
-    let (account_width, status_width, quota_width) =
-        quota_list_columns(row_width.saturating_sub(2 + 2 * row_padding));
+    let row_width = props
+        .width
+        .saturating_sub(if props.compact_phone { 1 } else { 5 });
     let rows=props.rows.iter().enumerate().map(|(index,row)| {
         let account_id=row.account_id.clone();let state=props.focused_account_id;
-        element! {InteractiveQuotaAccountRow(row:Some(row.clone()),width:row_width,compact_phone:props.compact_phone,focused:props.focused_row_index==Some(index),interaction_enabled:props.interaction_enabled,
-            click_handler:move |_|if let Some(mut state)=state {state.set(Some(account_id.clone()));})}.into_any()
+        element! {View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else {2}) {
+            InteractiveQuotaAccountRow(row:Some(row.clone()),width:row_width,compact_phone:props.compact_phone,focused:props.focused_row_index==Some(index),interaction_enabled:props.interaction_enabled,
+                click_handler:move |_|if let Some(mut state)=state {state.set(Some(account_id.clone()));})
+        }}.into_any()
     });
     element! {
-        View(width:props.width as u32,max_height:props.height as u32,min_height:0,flex_shrink:1.0_f32,
-            border_style:if props.compact_phone {BorderStyle::None}else {BorderStyle::Single},border_color:Color::DarkGrey,padding_left:row_padding as u32,padding_right:row_padding as u32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden) {
-            View(padding_left:row_padding as u32,padding_right:(row_padding+1) as u32,flex_shrink:0.0_f32) {
-                codex_router_tui::SelectableRow {
-                    View(column_gap:1) {
-                        View(width:account_width as u32) {Text(content:"Account",color:Color::White)}
-                        View(width:status_width as u32) {Text(content:"Status",color:Color::White)}
-                        View(width:quota_width as u32) {Text(content:"Quota",color:Color::White)}
-                    }
-                }
-            }
+        View(width:props.width as u32,max_height:props.height as u32,min_height:0,flex_shrink:1.0_f32,flex_direction:FlexDirection::Column,overflow:Overflow::Hidden,border_style:if props.compact_phone {BorderStyle::None}else {BorderStyle::Single},border_color:Color::DarkGrey,padding_left:if props.compact_phone {0}else {1},padding_right:if props.compact_phone {0}else {1}) {
+            #(super::quota_account_groups::render_group_headers(row_width.saturating_sub(2)).map(|headers|element! {View(padding_left:2,flex_shrink:0.0_f32) {#(headers)}}))
             codex_router_tui::DialogBodyViewport(scroll_keys:codex_router_tui::DialogScrollKeys::Pages) {
                 #(props.rows.is_empty().then(||element!(Text(content:props.empty_notice.clone().unwrap_or_else(||"No selectable account".to_owned()),color:Color::Grey))))
-                #((rows.enumerate()).map(|(index,row)|element! {
-                    View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:if index==0 {0}else {1}) {#(row)}
-                }))
+                #(rows)
             }
         }
     }
@@ -190,13 +178,21 @@ fn InteractiveQuotaAccountRow(
     props.row.as_ref().map_or_else(
         || element!(View).into_any(),
         |row| {
-            render_account_row(
-                row,
-                props.width,
-                props.focused,
-                props.mode,
-                props.compact_phone,
-            )
+            if props.mode == super::quota_provider_filters::QuotaInteractionMode::Interactive {
+                super::quota_account_groups::render_interactive_account(
+                    row,
+                    props.width,
+                    props.focused,
+                )
+            } else {
+                render_account_row(
+                    row,
+                    props.width,
+                    props.focused,
+                    props.mode,
+                    props.compact_phone,
+                )
+            }
         },
     )
 }
@@ -222,6 +218,9 @@ pub(super) fn render_account_row(
     mode: super::quota_provider_filters::QuotaInteractionMode,
     compact_phone: bool,
 ) -> AnyElement<'static> {
+    if mode == super::quota_provider_filters::QuotaInteractionMode::Interactive {
+        return super::quota_account_groups::render_interactive_account(row, width, focused);
+    }
     let row_padding = usize::from(!compact_phone);
     let body_width = width.saturating_sub(2 + 2 * row_padding);
     let (account_width, status_width, quota_width) = quota_list_columns(body_width);

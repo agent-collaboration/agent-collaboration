@@ -1,9 +1,10 @@
 //! Permanent controls for the actual fixed Normal tape builder.
+use super::super::vhs_wait_pattern_oracle::{ensure_wait_shapes, right_padded_rows, wait_pattern};
 use super::*;
 
 #[test]
 fn added_observations_preserve_every_original_scene_and_require_full_help_return() {
-    assert_eq!(NORMAL_CHECKPOINTS.len(), 42);
+    assert_eq!(NORMAL_CHECKPOINTS.len(), 43);
     for grid in [(32, 24), (48, 12), (40, 24), (48, 24), (76, 30), (120, 36)] {
         let tape = build_normal_component_tape(grid.0, grid.1).expect("declared viewport");
         assert!(tape.ends_with("Type \"q\"\nWait+Line /^QUOTA_STORYBOARD_CHILD_EXIT=0$/\n"));
@@ -56,10 +57,27 @@ fn all_normal_tapes_parse_with_the_nominated_vhs_before_ui() -> TestResult<()> {
     )?;
     let output = root.join("normal-tape-parser-validation");
     std::fs::create_dir(&output)?;
-    for (columns, rows) in [(32, 24), (48, 12), (40, 24), (48, 24), (76, 30), (120, 36)] {
-        let label = format!("{columns}x{rows}");
+    let normal = [(32, 24), (48, 12), (40, 24), (48, 24), (76, 30), (120, 36)]
+        .into_iter()
+        .map(|(columns, rows)| -> TestResult<(String, String)> {
+            Ok((
+                format!("{columns}x{rows}"),
+                build_normal_component_tape(columns, rows)?,
+            ))
+        });
+    // The hard-case tour, including its measured 48x12 poses.
+    let hard_cases = [(32, 24), (48, 12), (40, 24), (48, 24), (76, 30), (120, 36)]
+        .into_iter()
+        .map(|(columns, rows)| -> TestResult<(String, String)> {
+            Ok((
+                format!("hard-cases-{columns}x{rows}"),
+                build_hard_case_component_tape(columns, rows)?,
+            ))
+        });
+    for entry in normal.chain(hard_cases) {
+        let (label, tape) = entry?;
         let path = output.join(format!("{label}.tape"));
-        std::fs::write(&path, build_normal_component_tape(columns, rows)?)?;
+        std::fs::write(&path, tape)?;
         let result = std::process::Command::new(&vhs)
             .args(["validate"])
             .arg(&path)
@@ -133,86 +151,133 @@ fn normal_capture_uses_measured_positions_without_losing_id_title_or_saved_curre
 #[test]
 fn refresh_readiness_accepts_wrapped_success_without_accepting_other_messages() -> TestResult<()> {
     // Text excerpt from the actual failed32 VHS screen, not reconstructed pixels.
-    let script = r#"import re,sys
-pattern = re.compile('(?s)' + sys.argv[1])
-actual = '''│ │Options · Credits     Help│┃│
+    let pattern = wait_pattern(&format!("(?s){CREDIT_REFRESH_READY}"))?;
+    let actual = "│ │Options · Credits     Help│┃│
 │ │東京 OpenAI  [alpha-tag]  │┃│
 │ │Warning: Weekly floor    ││┃│
 │ │1% blocks credit         ││┃│
 │ │routing.                 ││┃│
 │ │                         ││┃│
 │ │Credit balance           ┃│││
-│ │refreshed.               ││││'''
-prefix = 'Options · Credits Help\n東京 OpenAI [alpha-tag]\n'
-positives = [actual, '\n'.join(line.ljust(678) for line in actual.splitlines()),
-    prefix + 'Credit balance refreshed.',
-    prefix + 'Credit' + ' '*1000 + 'balance refreshed.']
-negatives = [actual.replace('refreshed.', 'failed.'),
-    actual.replace('Credit balance', 'balance Credit'),
-    actual.replace('Credit balance', 'Credit stale balance'),
-    actual.replace('refreshed.', 'refreshed.x'),
-    actual.replace('refreshed.', 'unrefreshed.'),
-    actual.replace('alpha-tag', 'beta-tag'),
-    actual.replace('Options · Credits', 'Options · Resets'),
-    actual.replace('refreshed.', 'refreshed'),
-    prefix + 'Credit' + ' '*1001 + 'balance refreshed.',
-    prefix + 'Credit balance' + ' '*1001 + 'refreshed.',
-    prefix + 'NoCredit balance refreshed.']
-assert not re.search('Credit balance refreshed', actual)
-assert all(pattern.search(value) for value in positives)
-assert not any(pattern.search(value) for value in negatives)
-print('refresh readiness:4positive/11negative all expected')
-"#;
-    let result = std::process::Command::new("python3")
-        .args(["-c", script, CREDIT_REFRESH_READY])
-        .output()?;
-    if !result.status.success() {
-        return Err(
-            std::io::Error::other(String::from_utf8_lossy(&result.stderr).into_owned()).into(),
-        );
-    }
-    Ok(())
+│ │refreshed.               ││││";
+    let prefix = "Options · Credits Help\n東京 OpenAI [alpha-tag]\n";
+    let positives = [
+        actual.to_owned(),
+        right_padded_rows(actual, 678),
+        format!("{prefix}Credit balance refreshed."),
+        format!("{prefix}Credit{}balance refreshed.", " ".repeat(1000)),
+    ];
+    let negatives = [
+        actual.replace("refreshed.", "failed."),
+        actual.replace("Credit balance", "balance Credit"),
+        actual.replace("Credit balance", "Credit stale balance"),
+        actual.replace("refreshed.", "refreshed.x"),
+        actual.replace("refreshed.", "unrefreshed."),
+        actual.replace("alpha-tag", "beta-tag"),
+        actual.replace("Options · Credits", "Options · Resets"),
+        actual.replace("refreshed.", "refreshed"),
+        format!("{prefix}Credit{}balance refreshed.", " ".repeat(1001)),
+        format!("{prefix}Credit balance{}refreshed.", " ".repeat(1001)),
+        format!("{prefix}NoCredit balance refreshed."),
+    ];
+    ensure(
+        !actual.contains("Credit balance refreshed"),
+        "the retained screen wraps the message across rows",
+    )?;
+    ensure_wait_shapes(&pattern, &positives, &negatives)
 }
 
 #[test]
 fn result_readiness_requires_complete_known_outcome_across_real_wrapped_rows() -> TestResult<()> {
     // Actual mounted32 post-repair frame, distinct from original VHS images.
-    let script = r#"import re,sys
-pattern = re.compile('(?s)' + sys.argv[1])
-actual = '''│ │Reset result          Help│┃│
+    let pattern = wait_pattern(&format!("(?s){RESET_SUCCESS_READY}"))?;
+    let actual = "│ │Reset result          Help│┃│
 │ │東京 OpenAI  [alpha-tag]  │┃│
 │ │Success — reset          ┃│┃│
-│ │completed                ┃│┃│'''
-prefix = 'Reset result Help\n東京 OpenAI [alpha-tag]\n'
-positive = [actual, '\n'.join(line.ljust(678) for line in actual.splitlines()),
-    prefix + 'Success — reset completed',
-    prefix + 'Success — reset' + ' '*1000 + 'completed']
-negative = [actual.replace('completed', 'comp…'),
-    actual.replace('completed', ''),
-    actual.replace('completed', 'failed'),
-    actual.replace('completed', 'completedx'),
-    actual.replace('Success — reset', 'reset — Success'),
-    actual.replace('Success — reset', 'Success — failed reset'),
-    actual.replace('Success — reset', 'Failure — reset'),
-    actual.replace('Success — reset', 'Success reset'),
-    actual.replace('alpha-tag','beta-tag'),
-    actual.replace('Reset result','Options · Resets'),
-    prefix + 'Success — reset' + ' '*1001 + 'completed',
-    prefix + 'NotSuccess — reset completed']
-assert not re.search('Success.*reset completed', actual, re.S)
-assert all(pattern.search(value) for value in positive)
-assert not any(pattern.search(value) for value in negative)
-print('result readiness:4positive/12negative all expected')
-"#;
-    let result = std::process::Command::new("python3")
-        .args(["-c", script, RESET_SUCCESS_READY])
-        .output()?;
-    if !result.status.success() {
-        return Err(
-            std::io::Error::other(String::from_utf8_lossy(&result.stderr).into_owned()).into(),
-        );
-    }
-    Ok(())
+│ │completed                ┃│┃│";
+    let prefix = "Reset result Help\n東京 OpenAI [alpha-tag]\n";
+    let positive = [
+        actual.to_owned(),
+        right_padded_rows(actual, 678),
+        format!("{prefix}Success — reset completed"),
+        format!("{prefix}Success — reset{}completed", " ".repeat(1000)),
+    ];
+    let negative = [
+        actual.replace("completed", "comp…"),
+        actual.replace("completed", ""),
+        actual.replace("completed", "failed"),
+        actual.replace("completed", "completedx"),
+        actual.replace("Success — reset", "reset — Success"),
+        actual.replace("Success — reset", "Success — failed reset"),
+        actual.replace("Success — reset", "Failure — reset"),
+        actual.replace("Success — reset", "Success reset"),
+        actual.replace("alpha-tag", "beta-tag"),
+        actual.replace("Reset result", "Options · Resets"),
+        format!("{prefix}Success — reset{}completed", " ".repeat(1001)),
+        format!("{prefix}NotSuccess — reset completed"),
+    ];
+    ensure(
+        !wait_pattern("(?s)Success.*reset completed")?.is_match(actual),
+        "the retained screen wraps the result across rows",
+    )?;
+    ensure_wait_shapes(&pattern, &positive, &negative)
+}
+
+#[test]
+fn help_identity_readiness_accepts_wrapped_rows_without_other_names() -> TestResult<()> {
+    // Text excerpt from the actual 76x30 Help timeout screen: the name
+    // wraps onto the next modal row after background browse meter glyphs.
+    let pattern = wait_pattern(&format!("(?s){}", help_identity_readiness()))?;
+    let previous = wait_pattern(
+        r"(?s)Quota Help.*Research[\s│┃]{1,1000}Account[\s│┃]{1,1000}Alpha[\s│┃]{1,1000}Long[\s│┃]{1,1000}Name[\s│┃]{1,1000}\[alpha-tag\]",
+    )?;
+    let actual = "│ │   ────│ Quota Help                                            │────┃ │ │
+│ │   ████│ Account          東京 OpenAI Research Account Alpha ┃ │    ┃ │ │
+│ │   ████│                  Long Name [alpha-tag]              ┃ │    ┃ │ │";
+    let single = "Quota Help\nAccount 東京 OpenAI Research Account Alpha Long Name [alpha-tag]";
+    let positives = [actual.to_owned(), single.to_owned()];
+    let negatives = [
+        actual.replace("Long Name", "Name"),
+        actual.replace("Account Alpha", "Alpha"),
+        actual.replace("Alpha", "Beta"),
+        actual.replace("Long Name", "Name Long"),
+        actual.replace("Account Alpha", "Account Gamma Alpha"),
+        actual.replace("alpha-tag", "beta-tag"),
+        actual.replace("Quota Help", "Quota status"),
+        actual.replace("│                  Long", "                   Long"),
+        single.replace("Alpha Long", "Alpha\nLong"),
+    ];
+    ensure(
+        previous.is_match(single) && !previous.is_match(actual),
+        "the previous expression accepted only the unwrapped name",
+    )?;
+    ensure_wait_shapes(&pattern, &positives, &negatives)
+}
+
+#[test]
+fn hard_details_readiness_accepts_clipped_name_before_exact_tag() -> TestResult<()> {
+    // Text excerpt from the actual hard 32x24 timeout screen.
+    let pattern = wait_pattern(&format!("(?s){HARD_DETAILS_READY}"))?;
+    let actual = "│ │Account details       Help│││
+│ │Claude Resea… [beta-tag]  │││
+│ │Status                   ┃│││
+│ │Credentials locked       ││││
+│ │Reason                   ││││
+│ │beta detail              ││││
+│ │Quota windows            ││┃│
+│ │weekly                   ││┃│
+│ │████ 83% left, reset 7d  ││┃│
+│ │5h                       ││┃│
+│ │Close                     │┃│";
+    let wide = "Account details Help\nClaude Research Account Beta Full Name [beta-tag]\nStatus\nCredentials locked\nClose";
+    let negatives = [
+        actual.replace("Resea…", "Resea"),
+        actual.replace("beta-tag", "alpha-tag"),
+        actual.replace("Credentials locked", "Available"),
+        actual.replace("Close", "Cancel"),
+        actual.replace("Claude", "OpenAI"),
+    ];
+    ensure_wait_shapes(&pattern, &[actual.to_owned(), wide.to_owned()], &negatives)
 }
 
 #[test]
@@ -273,9 +338,8 @@ fn selected_account_wait_matches_actual_phone_fragments_only() -> TestResult<()>
     );
     // Retained current-component32x24 paint from c7-phone-normal-fixture-preflight.log.
     // This checks the generated common regex subset, not fabricated pixels.
-    let script = r#"import re, sys
-pattern = re.compile(sys.argv[1])
-actual = """╭──────────────────────────────╮
+    let pattern = wait_pattern(&pattern)?;
+    let actual = "╭──────────────────────────────╮
 │ Quota status    Details Help │
 │ Pool-wide: responses         │
 │ Accounts 2 · Usable 2        │
@@ -298,30 +362,26 @@ actual = """╭─────────────────────�
 │ │           h    reset   │ │ │
 │ │                5h      │ │ │
 │ └──────────────────────────┘ │
-╰──────────────────────────────╯"""
-valid = [actual, "❯ 東京 OpenAI Research Account Alpha Long Name"]
-invalid = [
-    actual.replace("❯ 東京", "  東京"),
-    actual.replace("Resear", "Reseax"),
-    actual.replace("ch     nt", "xx     nt"),
-    actual.replace("Alpha", "Gamma"),
-    actual.replace("Name", "Nope"),
-    actual.replace("│ │    Resear clie", "│ │           Resear"),
-    actual.replace("Resear", "ResearX"),
-    actual.replace("Alpha", "Long").replace("Long   Cred", "Alpha  Cred"),
-]
-assert all(pattern.search(text) for text in valid), "actual wrapped selected name must match"
-assert not any(pattern.search(text) for text in invalid), "wrong field/name/order/gutter must reject"
-"#;
-    let result = std::process::Command::new("/usr/bin/python3")
-        .args(["-c", script, &pattern])
-        .output()?;
-    if !result.status.success() {
-        return Err(
-            std::io::Error::other(String::from_utf8_lossy(&result.stderr).into_owned()).into(),
-        );
-    }
-    Ok(())
+╰──────────────────────────────╯";
+    // Actual wrapped selected name must match.
+    let valid = [
+        actual.to_owned(),
+        "❯ 東京 OpenAI Research Account Alpha Long Name".to_owned(),
+    ];
+    // Wrong field/name/order/gutter must reject.
+    let invalid = [
+        actual.replace("❯ 東京", "  東京"),
+        actual.replace("Resear", "Reseax"),
+        actual.replace("ch     nt", "xx     nt"),
+        actual.replace("Alpha", "Gamma"),
+        actual.replace("Name", "Nope"),
+        actual.replace("│ │    Resear clie", "│ │           Resear"),
+        actual.replace("Resear", "ResearX"),
+        actual
+            .replace("Alpha", "Long")
+            .replace("Long   Cred", "Alpha  Cred"),
+    ];
+    ensure_wait_shapes(&pattern, &valid, &invalid)
 }
 
 #[test]
@@ -342,9 +402,11 @@ fn selected_account_wait_accepts_observed_phone_prefix_and_padded_vhs_rows() -> 
         })
         .expect("returned browse readiness must remain declared");
     let returned = format!("(?s)Quota status{returned}");
+    let tokyo = wait_pattern(&format!("(?s){tokyo}"))?;
+    let claude = wait_pattern(&format!("(?s){claude}"))?;
+    let returned = wait_pattern(&returned)?;
     // Text from retained original32/120 capture transcripts, never reconstructed pixels.
-    let script = r#"import re, sys
-phone = """╭──────────────────────────────╮
+    let phone = "╭──────────────────────────────╮
 │Quota status      Details Help│
 │Pool-wide: responses          │
 │Accounts 2 · Usable 2         │
@@ -367,8 +429,8 @@ phone = """╭──────────────────────
 │                     □□□□□□□│││
 │                     □□□□□□□ ││
 │                     burn    ││
-╰──────────────────────────────╯"""
-wide = """╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+╰──────────────────────────────╯";
+    let wide = "╭──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
 │ Quota status                                           Clients 1 · Fresh 2 · Stale 0 · Data unknown 0  Details  Help │
 │ Pool-wide: responses  Accounts 2 · Usable 2 · Reserve 0 · Blocked 0 · Pool unknown 0 · Excluded 0                    │
 │ Filters ▾  Provider: All · Disabled: Shown · 2/2 accounts                                                            │
@@ -403,8 +465,8 @@ wide = """╭──────────────────────�
 │                                                                                                                      │
 │                                                                                                                      │
 │                                                                                                                      │
-╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯"""
-claude = """╭──────────────────────────────╮
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯";
+    let claude_screen = "╭──────────────────────────────╮
 │ Quota status    Details Help │
 │ Pool-wide: responses         │
 │ Accounts 2 · Usable 2        │
@@ -427,49 +489,52 @@ claude = """╭─────────────────────�
 │ │                reset   │ │ │
 │ │                4h      │ │ │
 │ └──────────────────────────┘ │
-╰──────────────────────────────╯"""
-
-tokyo = re.compile(sys.argv[1], re.S)
-claude_pattern = re.compile(sys.argv[2], re.S)
-returned = re.compile(sys.argv[3], re.S)
-# Real retained text geometry plus controlled678-cell trailing whitespace,
-# matching the failure mode measured in the original VHS Wait error.
-valid = [phone, wide, '\n'.join(line.ljust(678) for line in phone.splitlines())]
-assert all(tokyo.search(value) for value in valid), 'observed3-cell/wide/padded Tokyo rows must match'
-assert claude_pattern.search(claude), 'retained selected Claude name must match'
-assert claude_pattern.search('\n'.join(line.ljust(678) for line in claude.splitlines())), 'actual VHS right-padding must not block identity readiness'
-invalid = [
-    phone.replace('❯', ' '),
-    phone.replace('Research', 'Wrong'),
-    phone.replace('│  Research', '│             Research'),
-    phone.replace('│  Research', '│Research'),
-    phone.replace('│  Research', '│   ✕Research'),
-    phone.replace('│  Account', '│  Accoun '),
-    phone.replace('Alpha Long', 'Gamma Long'),
-    phone.replace('Name       Credits', 'NameExtra  Credits'),
-    phone.replace('Research', 'Account').replace('│  Account    ↻', '│  Research   ↻'),
-]
-assert not any(tokyo.search(value) for value in invalid), 'wrong name/column/gutter/prefix/fragment/suffix/order must reject'
-assert not claude_pattern.search(claude.replace('ch     clie', 'zz     clie')), 'missing within-word Claude fragment rejects'
-assert returned.search(phone), 'returned browse waits through actual phone name wraps'
-assert not any(returned.search(value) for value in invalid), 'returned browse must retain full selected-name attribution'
-print('6 positive shapes and19 negative shapes passed')
-"#;
-    let result = std::process::Command::new("/usr/bin/python3")
-        .args(["-c", script, &tokyo, &claude, &returned])
-        .output()?;
-    if !result.status.success() {
-        return Err(
-            std::io::Error::other(String::from_utf8_lossy(&result.stderr).into_owned()).into(),
-        );
-    }
-    Ok(())
+╰──────────────────────────────╯";
+    // Real retained text geometry plus controlled678-cell trailing whitespace,
+    // matching the failure mode measured in the original VHS Wait error.
+    // Observed3-cell/wide/padded Tokyo rows must match; wrong
+    // name/column/gutter/prefix/fragment/suffix/order must reject.
+    let invalid = [
+        phone.replace('❯', " "),
+        phone.replace("Research", "Wrong"),
+        phone.replace("│  Research", "│             Research"),
+        phone.replace("│  Research", "│Research"),
+        phone.replace("│  Research", "│   ✕Research"),
+        phone.replace("│  Account", "│  Accoun "),
+        phone.replace("Alpha Long", "Gamma Long"),
+        phone.replace("Name       Credits", "NameExtra  Credits"),
+        phone
+            .replace("Research", "Account")
+            .replace("│  Account    ↻", "│  Research   ↻"),
+    ];
+    ensure_wait_shapes(
+        &tokyo,
+        &[
+            phone.to_owned(),
+            wide.to_owned(),
+            right_padded_rows(phone, 678),
+        ],
+        &invalid,
+    )?;
+    // Retained selected Claude name must match, and actual VHS right-padding
+    // must not block identity readiness; a missing within-word fragment rejects.
+    ensure_wait_shapes(
+        &claude,
+        &[
+            claude_screen.to_owned(),
+            right_padded_rows(claude_screen, 678),
+        ],
+        &[claude_screen.replace("ch     clie", "zz     clie")],
+    )?;
+    // Returned browse waits through actual phone name wraps and retains full
+    // selected-name attribution.
+    ensure_wait_shapes(&returned, &[phone.to_owned()], &invalid)
 }
 
 #[test]
 fn last_reset_page_wait_requires_actual_title_and_ordinal() -> TestResult<()> {
-    let script = r#"import re, sys
-actual = """╭──────────────────────────────╮
+    let pattern = wait_pattern(&format!("(?s){LAST_RESET_VOUCHER_READY}"))?;
+    let historical = "╭──────────────────────────────╮
 │Quota status      Details Help│
 │Pool-wide: responses          │
 │Accounts 2 · Usable 2         │
@@ -492,28 +557,29 @@ actual = """╭─────────────────────�
 │                     □□□□□□□ ││
 │                     burn    ││
 │                     unavaila││
-╰──────────────────────────────╯"""
-
-pattern = re.compile(sys.argv[1], re.S)
-historical = actual
-# Expected text vector after Root54's literal caller-title cutover; not a new capture.
-actual = historical.replace('Account options · Re', 'Options · Resets')
-valid = [actual, 'Options · Resets Synthetic reset voucher 7 · available Review', '\n'.join(line.ljust(678) for line in actual.splitlines())]
-invalid = [actual.replace('voucher 7', 'voucher 6'), actual.replace('voucher 7', 'voucher 70'), actual.replace('voucher 7', 'voucher 7x'), actual.replace('Synthetic reset', 'Other reset'), actual.replace('Synthetic reset', ''), actual.replace('Options · Resets', 'Credit usage'), actual.replace('Review', 'Inspect'), 'Options · Resets voucher-7 Review', historical, actual.replace('Options · Resets', 'Options · Credits')]
-assert all(pattern.search(value) for value in valid), 'visible final voucher title must synchronize after bottom scroll'
-assert not any(pattern.search(value) for value in invalid), 'wrong voucher/name/suffix/pane/Review must reject'
-print('3positive/10negative last-page/title protocol shapes')
-"#;
-    let pattern = format!("(?s){LAST_RESET_VOUCHER_READY}");
-    let result = std::process::Command::new("/usr/bin/python3")
-        .args(["-c", script, &pattern])
-        .output()?;
-    if !result.status.success() {
-        return Err(
-            std::io::Error::other(String::from_utf8_lossy(&result.stderr).into_owned()).into(),
-        );
-    }
-    Ok(())
+╰──────────────────────────────╯";
+    // Expected literal caller-title text vector; this is a control, not a capture.
+    let actual = historical.replace("Account options · Re", "Options · Resets");
+    // Visible final voucher title must synchronize after bottom scroll.
+    let valid = [
+        actual.clone(),
+        "Options · Resets Synthetic reset voucher 7 · available Review".to_owned(),
+        right_padded_rows(&actual, 678),
+    ];
+    // Wrong voucher/name/suffix/pane/Review must reject.
+    let invalid = [
+        actual.replace("voucher 7", "voucher 6"),
+        actual.replace("voucher 7", "voucher 70"),
+        actual.replace("voucher 7", "voucher 7x"),
+        actual.replace("Synthetic reset", "Other reset"),
+        actual.replace("Synthetic reset", ""),
+        actual.replace("Options · Resets", "Credit usage"),
+        actual.replace("Review", "Inspect"),
+        "Options · Resets voucher-7 Review".to_owned(),
+        historical.to_owned(),
+        actual.replace("Options · Resets", "Options · Credits"),
+    ];
+    ensure_wait_shapes(&pattern, &valid, &invalid)
 }
 
 #[test]
@@ -545,11 +611,17 @@ fn lower_browse_evidence_keeps_all_facts_and_restores_identity_before_switching_
             .lines()
             .rfind(|line| line.starts_with("Wait+Screen"))
             .unwrap();
-        assert_eq!(
-            pace_wait.contains("Weekly[\\s│┃]{1,1000}pace[\\s│┃]{1,1000}Unknown"),
-            columns == 32
-        );
-        assert_eq!(pace_wait.contains("burn"), columns != 32);
+        // The pace value is "burn unavailable" at every grid (C1, 2026-10-23).
+        assert!(!pace_wait.contains("Unknown"));
+        assert!(pace_wait.contains("burn"));
+        let credit_wait = tape
+            .split("Screenshot component-quota-browse-credit-window.png")
+            .next()
+            .unwrap()
+            .lines()
+            .rfind(|line| line.starts_with("Wait+Screen"))
+            .unwrap();
+        assert!(credit_wait.contains(r"62\.5k credits"));
         let mut previous = 0;
         for checkpoint in [
             "browse",
@@ -573,20 +645,39 @@ fn lower_browse_evidence_keeps_all_facts_and_restores_identity_before_switching_
             .split("Screenshot component-quota-browse-page-returned.png")
             .next()
             .unwrap();
-        assert_eq!(
-            lower.matches("PageDown\n").count(),
-            usize::from((columns, rows) == (48, 12)) * 2
-        );
-        assert_eq!(
-            lower
-                .matches("PageDown@1ms 256\nPageUp\nPageUp\nPageUp\n")
-                .count(),
-            usize::from((columns, rows) == (48, 12))
-        );
-        assert_eq!(
-            lower.matches("PageUp@1ms 256\n").count(),
-            usize::from((columns, rows) == (48, 12))
-        );
+        // The short viewport uses the independently witnessed complete groups,
+        // with an acknowledged bottom between forward and reverse paging.
+        if (columns, rows) == (48, 12) {
+            let bottom = "PageDown@1ms 256\nWait+Screen /(?s)Quota status.*Extra.*Credits unknown.*2 resets/\n";
+            assert_eq!(lower.matches(bottom).count(), 2);
+            assert!(lower.contains(&format!(
+                "{bottom}{}Wait+Screen /(?s)Quota status.*62\\.5k credits/",
+                "PageUp\n".repeat(5)
+            )));
+            let value_pose = format!("{bottom}{}", "PageUp\n".repeat(6));
+            assert!(lower.contains(&value_pose));
+            assert_eq!(lower.matches("PageDown\n").count(), 2, "heading pose only");
+            assert_eq!(lower.matches("PageUp@1ms 256\n").count(), 3);
+        } else {
+            // Other grids retain their existing forward-only measured poses.
+            let pages: [usize; 3] = match (columns, rows) {
+                (48, 24) | (32, 24) => [1, 0, 0],
+                _ => [0, 0, 0],
+            };
+            assert_eq!(
+                lower.matches("PageDown\n").count(),
+                pages.iter().sum::<usize>()
+            );
+            assert!(!lower.contains("PageDown@1ms 256"));
+            assert_eq!(
+                lower.matches("PageUp@1ms 256\n").count(),
+                pages.iter().filter(|count| **count > 0).count()
+            );
+            assert!(lower.contains(&format!(
+                "{}Wait+Screen /(?s)Quota status.*62\\.5k credits/",
+                "PageDown\n".repeat(pages[0])
+            )));
+        }
         let help = tape
             .split("Screenshot component-quota-help-top.png")
             .nth(1)
@@ -610,4 +701,140 @@ fn lower_browse_evidence_keeps_all_facts_and_restores_identity_before_switching_
             "initial means before manual scroll"
         );
     }
+}
+
+#[test]
+fn hard_case_tour_declares_every_grid_and_exact_rendered_facts() {
+    for (columns, rows) in [(120, 36), (76, 30), (48, 24), (48, 12), (40, 24), (32, 24)] {
+        let tape = build_hard_case_component_tape(columns, rows).expect("declared grid");
+        let shots: Vec<&str> = tape
+            .lines()
+            .filter_map(|line| line.strip_prefix("Screenshot "))
+            .map(|name| name.trim_end_matches(".png"))
+            .collect();
+        let expected: &[&str] = match (columns, rows) {
+            (48, 12) => &HARD_CASE_SHORT_CHECKPOINTS,
+            (120, 36) => &HARD_CASE_CHECKPOINTS,
+            _ => &HARD_CASE_PARTIAL_CHECKPOINTS,
+        };
+        assert_eq!(shots, expected);
+        validate_hard_case_checkpoints(columns, rows, &shots)
+            .expect("the consumer accepts the tour");
+        // Literals come from the fixture through render_window/extra_group.
+        for fact in [
+            "Credentials locked",
+            "92% · week · 6d 16h",
+            "83% · 5h · 2h 10m",
+            "75% · week · —",
+            "week stale",
+            "No data · 5h · —",
+            r"125\.5 credits",
+            "Credits stale",
+            "Pool details.*Accounts: 2.*Usable: 1.*Reserve: 0.*Close",
+            "Pool details.*Blocked: 1.*Pool unknown: 0.*Excluded: 0.*Fresh: 0.*Close",
+            "Pool details.*Stale: 1.*Data unknown: 1.*Clients: 1.*Credentials locked.*Close",
+        ] {
+            assert!(tape.contains(fact), "{fact}");
+        }
+        // The whole census body is one pose only where it fits (120x36).
+        assert_eq!(
+            tape.contains("Accounts: 2.*Usable: 1.*Reserve: 0.*Blocked: 1.*Pool unknown: 0.*Excluded: 0.*Fresh: 0.*Stale: 1.*Data unknown: 1.*Clients: 1"),
+            (columns, rows) == (120, 36)
+        );
+        assert!(tape.contains("Down\n"), "Beta is selected before its facts");
+        assert!(
+            tape.contains("F5\nUp@1ms 256\n"),
+            "Pool details opens with F5"
+        );
+        assert!(tape.contains("Escape\n"), "Pool details closes with Esc");
+        assert!(tape.ends_with("Type \"q\"\nWait+Line /^QUOTA_STORYBOARD_CHILD_EXIT=0$/\n"));
+    }
+    // 48x12 measured page counts: name continuation 1,
+    // week 2, 5h 3, back to the top and Down to Beta, Beta continuation 1, Beta
+    // week 2, stale/no data 3, credits 6 (totals unchanged by the continuations).
+    let short = build_hard_case_component_tape(48, 12).expect("measured short grid");
+    for step in [
+        "Screenshot component-quota-hard-browse-top.png\nSleep 250ms\nPageDown\n",
+        "Screenshot component-quota-hard-alpha-name-continued.png\nSleep 250ms\nPageDown\n",
+        "Screenshot component-quota-hard-alpha-week.png\nSleep 250ms\nPageDown\n",
+        "Screenshot component-quota-hard-alpha-short.png\nSleep 250ms\nPageUp\nPageUp\nPageUp\nDown\n",
+        "Screenshot component-quota-hard-beta-selected.png\nSleep 250ms\nPageDown\n",
+        "Screenshot component-quota-hard-beta-name-continued.png\nSleep 250ms\nPageDown\n",
+        "Screenshot component-quota-hard-beta-week.png\nSleep 250ms\nPageDown\n",
+        "Screenshot component-quota-hard-beta-short.png\nSleep 250ms\nPageDown\nPageDown\nPageDown\n",
+        "Screenshot component-quota-hard-beta-extra.png\nSleep 250ms\nPageUp\nPageUp\nPageUp\nPageUp\nPageUp\nPageUp\nF5\n",
+    ] {
+        assert!(short.contains(step), "{step}");
+    }
+    assert!(!short.contains("component-quota-hard-pool-details-complete"));
+    assert!(build_hard_case_component_tape(48, 13).is_err());
+    let mut reordered = HARD_CASE_CHECKPOINTS.to_vec();
+    reordered.swap(1, 2);
+    assert!(validate_hard_case_checkpoints(120, 36, &reordered).is_err());
+    assert!(validate_hard_case_checkpoints(120, 36, &HARD_CASE_CHECKPOINTS[1..]).is_err());
+    assert!(validate_hard_case_checkpoints(48, 12, &HARD_CASE_CHECKPOINTS).is_err());
+}
+
+#[test]
+fn hard_beta_windows_waits_bind_the_wrapped_selection_and_facts_after_its_marker() -> TestResult<()>
+{
+    // Actual hard-case 120x36 VHS screen text, not pixels: Beta's name wraps
+    // after "Account" with its week window on the marker row.
+    let actual = "│ Quota status                                                                           Clients 1  Pool details  Help │
+│ Credentials locked                                                                                                   │
+│ Filters ▾  Provider: All · Disabled: Shown · 2/2 accounts                                                            │
+│ ┌──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐ │
+│ │   Account                 Quota left · reset in                 Weekly pace              Extra                   │ │
+│ │   ─────────────────────── ───────────────────────────────────── ──────────────────────── ──────────────────────  │ │
+│ │   東京 OpenAI Research    ██████░ 92% · week · 6d 16h           burn unavailable         62.5k credits           │ │
+│ │   Account Alpha Long Name █████░░ 83% · 5h · 2h 10m             reset pace unavailable   2 resets                │ │
+│ │   ◎ OpenAI · 1 client                                                                                            │ │
+│ │   Credentials locked                                                                                             │ │
+│ │                                                                                                                  │ │
+│ │                                                                                                                  │ │
+│ │ ❯ Claude Research Account █████░░ 75% · week · —                burn unavailable         125.5 credits           │ │
+│ │   Beta Full Name          week stale                            reset pace unavailable   Credits stale           │ │
+│ │   ◆ Claude · 0 clients    No data · 5h · —                                               2 resets                │ │
+│ │   Credentials locked                                                                                             │ │";
+    let name = wait_pattern(&format!("(?s){}", hard_beta_selected_name_readiness()))?;
+    let facts = wait_pattern(&format!("(?s){HARD_BETA_WINDOW_FACTS_READY}"))?;
+    let previous = wait_pattern(&format!(
+        "(?s){}.*75% · week · —.*week stale.*No data · 5h · —",
+        hard_beta_selected_name_readiness()
+    ))?;
+    ensure(
+        !previous.is_match(actual),
+        "the single post-name expression rejected this retained wrapped frame",
+    )?;
+    let screens = [actual.to_owned(), right_padded_rows(actual, 2400)];
+    // The marker must start Beta's whole wrapped name.
+    ensure_wait_shapes(
+        &name,
+        &screens,
+        &[
+            actual
+                .replace("│ │ ❯ Claude", "│ │   Claude")
+                .replace("│ │   東京", "│ │ ❯ 東京"),
+            actual.replace(
+                "Beta Full Name          week",
+                "Beta Full               week",
+            ),
+            actual.replace("Beta Full Name", "Gamma Full Name"),
+            actual.replace("Claude Research Account █", "Claude Research          █"),
+        ],
+    )?;
+    // Every Beta window fact must follow the selection marker.
+    ensure_wait_shapes(
+        &facts,
+        &screens,
+        &[
+            actual.replace("75% · week · —", "75% · week · 1d"),
+            actual.replace("week stale", "week fresh"),
+            actual.replace("No data · 5h · —", "No data · 5h · 1h"),
+            actual.replace('❯', " "),
+            actual
+                .replace("█████░░ 75% · week · —", "█████░░ 80% · week · —")
+                .replace("92% · week · 6d 16h", "75% · week · —"),
+        ],
+    )
 }

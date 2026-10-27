@@ -31,7 +31,8 @@ fn assertion(header: &str, claims: &str) -> String {
 }
 fn policy() -> AccessPolicy {
     AccessPolicy {
-        team_domain: "fixture.cloudflareaccess.com".into(),
+        issuer: "https://fixture.cloudflareaccess.com".into(),
+        jwks_url: "https://fixture.cloudflareaccess.com/cdn-cgi/access/certs".into(),
         session_audience: "session".into(),
         admin_audience: "admin".into(),
         owner_identity: "owner@example.invalid".into(),

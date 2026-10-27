@@ -286,19 +286,20 @@ async fn image_checker_success_nonzero_and_malformed_negative_preserve_outputs()
             ttyd: PathBuf::new(),
             image_verifier: checker,
             dynamic_library_path: String::new(),
-            image_timeout: Duration::from_secs(1),
+            // This case proves output and exit semantics using the real checker
+            // budget. The separate hung/stop cases above prove short deadlines.
+            image_timeout: Duration::from_secs(30),
             stop_file: None,
         };
+        let started = Instant::now();
+        let observation = tools.verify_image(
+            &output,
+            "compact-quota-all",
+            &output.join("unused.png"),
+            negative,
+        );
         ensure(
-            tools
-                .verify_image(
-                    &output,
-                    "compact-quota-all",
-                    &output.join("unused.png"),
-                    negative,
-                )
-                .is_ok()
-                == accepted,
+            observation.is_ok() == accepted,
             "controlled checker outcome must retain image success/rejection semantics",
         )?;
         let prefix = if negative {
@@ -306,10 +307,15 @@ async fn image_checker_success_nonzero_and_malformed_negative_preserve_outputs()
         } else {
             "compact-quota-all"
         };
-        ensure(
-            fs::read_to_string(output.join(format!("{prefix}.image-observation.json")))? == stdout,
-            "image stdout must survive success and failure",
-        )?;
+        let actual_stdout =
+            fs::read_to_string(output.join(format!("{prefix}.image-observation.json")))?;
+        if actual_stdout != stdout {
+            return Err(format!(
+                "{label}: image stdout must survive success and failure; elapsed={:?}, observation={observation:?}, stdout={actual_stdout:?}, stderr={:?}",
+                started.elapsed(),
+                fs::read_to_string(output.join(format!("{prefix}.image-observation.stderr")))?,
+            ).into());
+        }
         ensure(
             fs::read_to_string(output.join(format!("{prefix}.image-observation.stderr")))?
                 == "controlled stderr",
