@@ -128,13 +128,6 @@ fn blocking_websocket_tunnel_preserves_first_frame_and_sanitizes_upstream_handsh
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[cfg_attr(
-    target_os = "linux",
-    expect(
-        clippy::large_futures,
-        reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
-    )
-)]
 async fn async_websocket_tunnel_forwards_first_frame_and_second_local_frame() {
     let upstream_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,
@@ -301,13 +294,6 @@ async fn async_websocket_tunnel_forwards_first_frame_and_second_local_frame() {
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[cfg_attr(
-    target_os = "linux",
-    expect(
-        clippy::large_futures,
-        reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
-    )
-)]
 async fn async_websocket_tunnel_propagates_upstream_close_to_idle_local_client() {
     let upstream_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,
@@ -414,13 +400,6 @@ async fn async_websocket_tunnel_propagates_upstream_close_to_idle_local_client()
 }
 
 #[tokio::test(flavor = "current_thread")]
-#[cfg_attr(
-    target_os = "linux",
-    expect(
-        clippy::large_futures,
-        reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
-    )
-)]
 async fn async_websocket_tunnel_handles_control_frames_before_first_data_without_selection() {
     let local_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
         Ok(listener) => listener,
@@ -499,13 +478,6 @@ async fn async_websocket_tunnel_handles_control_frames_before_first_data_without
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
-)]
-#[cfg_attr(
-    target_os = "linux",
-    expect(
-        clippy::large_futures,
-        reason = "Proxy pass-through stays unboxed per AGENTS.md; Linux adds 352 bytes to the Mac layout and exceeds 16 KiB."
-    )
 )]
 async fn async_websocket_tunnel_sanitizes_upstream_handshake() {
     let upstream_listener = match tokio::net::TcpListener::bind("127.0.0.1:0").await {
