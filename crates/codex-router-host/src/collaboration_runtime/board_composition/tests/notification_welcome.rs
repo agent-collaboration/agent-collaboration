@@ -99,14 +99,27 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     // Execute the real SDK copy while its real Welcome is gated before the Host.
     // Discard only this returned prompt, modelling a gap in event delivery.
     // No source row, copy cursor, acknowledgement or frame is fabricated.
-    let events = writer
-        .sender
-        .replicate_once(harness.central.receiver)
-        .await?;
-    assert!(events.iter().any(|event| matches!(
-        event,
-        fleet_sync_writer::ReplicationEvents::Acknowledged { .. }
-    )));
+    tokio::time::timeout(BOUND, async {
+        loop {
+            let events = writer
+                .sender
+                .replicate_once(harness.central.receiver)
+                .await?;
+            assert!(events.iter().any(|event| matches!(
+                event,
+                fleet_sync_writer::ReplicationEvents::Acknowledged { .. }
+            )));
+            if replication
+                .acknowledged_mail_changes(&seed.project)
+                .await?
+                .max_handoff_seq
+                == Some(1)
+            {
+                return Ok::<_, TestError>(());
+            }
+        }
+    })
+    .await??;
     assert_eq!(
         replication
             .acknowledged_mail_changes(&seed.project)
@@ -137,7 +150,8 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
         Duration::from_secs(10),
         harness.central.notifications.wait_submission(seed.item),
     )
-    .await;
+    .await
+    .map_err(|_| io::Error::other("eligible remote handoff stayed pending after its real Welcome"));
     publisher.shutdown().await;
     harness.mail.actors.shutdown().await;
     drop(app);
@@ -147,10 +161,6 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     drop(fleet);
     drop(replication);
     harness.close().await?;
-    assert!(
-        publication.is_ok(),
-        "eligible remote handoff stayed pending after its real Welcome"
-    );
     assert_eq!(
         publication?,
         Some(fleet_sync_protocol::Epoch::new(seed.epoch.get())?)
