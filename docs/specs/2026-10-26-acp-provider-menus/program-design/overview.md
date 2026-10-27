@@ -14,23 +14,7 @@ flowchart TD
   A --> S[Stock slash uses Codex controls]
 ```
 
-ACP gives the provider a command list and a prompt path, without a standard skill discriminator. Codex already reads server-supplied skills for `# Can Router alone deliver both menus?
-
-**It can translate the provider's data. It cannot make stock Codex's `/` popup consume a new list.** The recommended design is one common menu interface with small provider shims, plus a narrow client integration for the two menus. Neither that client change nor a nonstandard provider integration is approved yet.
-
-The two outcomes remain `$` for the provider's skills and `/` for its other commands. A partial route is described below as partial, never as completion of both.
-
-## What exists today
-
-```mermaid
-flowchart TD
-  P[Provider ACP command list] --> R[Router retains metadata]
-  R --> A[Codex app-server boundary]
-  A --> D[Stock dollar skill input exists]
-  A --> S[Stock slash uses Codex controls]
-```
-
-ACP gives the provider a command list and a prompt path, without a standard skill discriminator. . Its inspected `/` popup accepts built-in Codex controls and model service-tier rows, rather than an arbitrary provider-action list. The tier rows come from model catalogue data, but selecting one changes Codex turn-context settings and persists that setting; it does not submit a provider command. Router's current provider `skills/list` response is empty. A generic ACP client and the stock Codex terminal are different consumers.
+ACP gives the provider a command list and a prompt path, without a standard skill discriminator. Codex already reads server-supplied skills for `$`. Its inspected `/` popup accepts built-in Codex controls and model service-tier rows, rather than an arbitrary provider-action list. The tier rows come from model catalogue data, but selecting one changes Codex turn-context settings and persists that setting; it does not submit a provider command. Router's current provider `skills/list` response is empty. A generic ACP client and the stock Codex terminal are different consumers.
 
 ## One common interface with small shims
 
