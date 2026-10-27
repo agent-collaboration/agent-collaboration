@@ -4,7 +4,7 @@ struct RecoveringClaudeQuotaCredentialResolver {
     recovery_calls: std::sync::atomic::AtomicUsize,
 }
 
-impl crate::credential_runtime::AsyncProviderCredentialResolver
+impl codex_router_quota_service::credential_resolution::AsyncProviderCredentialResolver
     for RecoveringClaudeQuotaCredentialResolver
 {
     async fn resolve_provider_credentials_async(
@@ -71,7 +71,10 @@ impl QuotaRefreshProvider for RecordingClaudeQuotaProvider {
     async fn fetch_quota(
         &self,
         request: QuotaRefreshProviderRequest,
-    ) -> Result<QuotaRefreshProviderResponse, crate::quota::QuotaCommandError> {
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
         let call_number = {
             let mut requests = self
                 .requests
@@ -84,12 +87,14 @@ impl QuotaRefreshProvider for RecordingClaudeQuotaProvider {
             requests.len()
         };
         if self.unauthorized_once && call_number == 1 {
-            return Err(crate::quota::QuotaCommandError::ProviderStatus { status: 401 });
+            return Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderStatus { status: 401 });
         }
         Ok(QuotaRefreshProviderResponse {
             windows: vec![QuotaRefreshProviderWindow {
                 limit_window_seconds: 18_000,
-                headroom: crate::quota::QuotaWindowHeadroom::BasisPoints(7_500),
+                headroom: codex_router_quota_service::quota::QuotaWindowHeadroom::BasisPoints(
+                    7_500,
+                ),
                 reset_unix_seconds: Some(20_000),
                 effective: true,
             }],
@@ -227,16 +232,16 @@ fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval
     let resolver = FixedClaudeQuotaCredentialResolver;
     let mut stdout = Vec::new();
     must_ok(test_async_runtime().block_on(
-        crate::quota::refresh_quota_store_paths_with_dependencies_and_floor_notifier(
+        codex_router_quota_service::quota::refresh_quota_store_paths_with_dependencies_and_floor_notifier(
             &mut stdout,
             &state_path,
             &router_root.join("secrets"),
             "unused-openai-base-url".to_owned(),
             &resolver,
             &provider,
-            crate::quota::QuotaRefreshObservationContext {
+            codex_router_quota_service::quota::QuotaRefreshObservationContext {
                 observed_unix_seconds: 2_000,
-                schedule: crate::quota::QuotaRefreshSchedule::Background {
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Background {
                     interval_seconds: 400,
                 },
                 weekly_floor_observer: None,

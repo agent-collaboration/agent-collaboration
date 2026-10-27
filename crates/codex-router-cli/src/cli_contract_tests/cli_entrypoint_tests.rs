@@ -493,7 +493,20 @@ fn quota_reset_test_harness_is_a_distinct_non_installable_package() {
     assert!(!cli_manifest.contains("name = \"codex-router-quota-reset-test-harness\""));
     assert!(!cli_manifest.contains("portable-pty"));
     assert!(cli_manifest.contains("quota-reset-test-harness = ["));
-    assert!(cli_manifest.contains("agent-collaboration/quota-reset-test-harness"));
+    assert!(harness_manifest.contains("agent-collaboration/quota-reset-test-harness"));
+    for section in ["[dependencies]", "[features]"] {
+        let section_body = cli_manifest
+            .split_once(section)
+            .expect("manifest section")
+            .1;
+        let section_body = section_body.split("\n[").next().expect("section body");
+        let active_configuration = section_body
+            .lines()
+            .filter_map(|line| line.split('#').next())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!active_configuration.contains("agent-collaboration"));
+    }
     assert!(harness_manifest.contains("name = \"codex-router-quota-reset-test-harness\""));
     assert!(harness_manifest.contains("publish = false"));
     assert!(harness_manifest.contains("portable-pty"));

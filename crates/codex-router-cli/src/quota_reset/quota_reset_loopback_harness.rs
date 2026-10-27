@@ -8,13 +8,13 @@ use std::path::PathBuf;
 
 use thiserror::Error;
 
-use super::InteractiveResetSessionFactory;
-use super::LoopbackInteractiveResetSessionFactory;
 use crate::ArgumentParser;
 use crate::CliCommand;
 use crate::CliContext;
 use crate::CliError;
 use crate::quota::QuotaCommand;
+use codex_router_quota_service::quota_reset::InteractiveResetSessionFactory;
+use codex_router_quota_service::quota_reset::LoopbackInteractiveResetSessionFactory;
 
 const ROUTER_ROOT_OPTION: &str = "--router-root";
 const FIXTURE_CAPABILITY_OPTION: &str = "--fixture-capability";
@@ -245,6 +245,7 @@ where
         context.stdout_is_terminal(),
         context.stdout_terminal_width(),
         &reset_session_factory,
+        &format!("http://{}", dispatch.provider_listener),
     )
     .await
     .map_err(CliError::from)?;
@@ -261,8 +262,8 @@ mod tests {
     use std::sync::atomic::Ordering;
 
     use super::*;
-    use crate::quota_reset::InteractiveResetSession;
-    use crate::quota_reset::QuotaResetError;
+    use codex_router_quota_service::quota_reset::InteractiveResetSession;
+    use codex_router_quota_service::quota_reset::QuotaResetError;
 
     static FIXTURE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -306,13 +307,6 @@ mod tests {
             Err(QuotaResetError::Response {
                 message: "test factory must not be called".to_owned(),
             })
-        }
-
-        fn credit_usage_refresher(
-            &self,
-            _router_root: &Path,
-        ) -> crate::presentation::quota::CreditUsageRefresher {
-            panic!("non-interactive test must not compose a credit refresher");
         }
     }
 

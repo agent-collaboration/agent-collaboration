@@ -1,5 +1,5 @@
 use super::*;
-use crate::quota::QuotaRefreshSchedule;
+use codex_router_quota_service::quota::QuotaRefreshSchedule;
 
 struct SnapshotRenewalCredentialResolver {
     state_path: PathBuf,

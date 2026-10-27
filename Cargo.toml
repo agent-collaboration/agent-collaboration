@@ -32,6 +32,8 @@ members = [
     "crates/agent-collaboration",
     "crates/codex-router-auth",
     "crates/codex-router-cli",
+    "crates/codex-router-quota-service",
+    "crates/codex-router-quota-tui",
     "crates/codex-native-integration",
     "crates/codex-router-core",
     "crates/codex-router-tui",

@@ -68,7 +68,6 @@ pub(crate) use cli_argument_parsing::ArgumentParser;
 use cli_argument_parsing::{CliCommand, ProfileCommand, TokenCommand};
 
 const DEFAULT_MAX_SNAPSHOT_AGE_SECONDS: u64 = 300;
-const DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS: u64 = 180;
 const DEFAULT_SESSION_PIN_IDLE_TTL_SECONDS: u64 = DEFAULT_SESSION_PIN_IDLE_TTL.as_secs();
 const LOCAL_TOKEN_ENV_VAR: &str = "CODEX_ROUTER_TOKEN";
 const DEFAULT_ROUTER_ROOT_DIR: &str = ".codex-router";
@@ -152,20 +151,6 @@ pub async fn run_quota_reset_test_harness() -> i32 {
             .await
     {
         let _ = writeln!(stderr, "{error}");
-        return 2;
-    }
-    0
-}
-
-/// Runs the compiled sessions-picker PTY harness without loading Codex session state.
-///
-/// The installed `codex-router` binary does not reference this feature-gated entry point.
-#[cfg(feature = "quota-reset-test-harness")]
-#[doc(hidden)]
-pub fn run_sessions_picker_test_harness() -> i32 {
-    let result = agent_collaboration::run_sessions_picker_test_harness();
-    if let Err(error) = result {
-        let _ = writeln!(std::io::stderr(), "{error}");
         return 2;
     }
     0
