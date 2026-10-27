@@ -131,6 +131,33 @@ pub fn record_quota_refresh_metric(
         );
 }
 
+#[cfg(feature = "quota-reset-test-harness")]
+pub fn record_storyboard_quota_error(
+    stage: &'static str,
+    error: &crate::quota_service_error::QuotaServiceError,
+) {
+    // Discriminants contain no payload. Their interpretation is bound to the
+    // captured source, unlike raw error messages containing account/SQL data.
+    let state_variant = match error {
+        crate::quota_service_error::QuotaServiceError::StateStore(error) => {
+            Some(std::mem::discriminant(error))
+        }
+        _ => None,
+    };
+    let sqlite_busy = matches!(
+        error,
+        crate::quota_service_error::QuotaServiceError::StateStore(StateStoreError::Sqlite { message })
+            if message.contains("database is locked") || message.contains("database is busy")
+    );
+    tracing::warn!(
+        target: "quota_storyboard_diagnostic",
+        stage,
+        quota_error_variant = ?std::mem::discriminant(error),
+        state_error_variant = ?state_variant,
+        sqlite_busy,
+    );
+}
+
 pub fn record_claude_usage_auth_rejected_after_renewal() {
     global::meter("codex-router")
         .u64_counter("codex_router_claude_usage_auth_rejected_after_renewal_total")
@@ -165,69 +192,6 @@ pub fn quota_guard_bucket(guard_deficit: u32) -> &'static str {
     }
 }
 
-#[cfg(feature = "quota-reset-test-harness")]
-pub fn record_storyboard_quota_error(
-    stage: &'static str,
-    error: &crate::quota_service_error::QuotaServiceError,
-) {
-    // Discriminants contain no payload. Their interpretation is bound to the
-    // captured source, unlike raw error messages containing account/SQL data.
-    let state_variant = match error {
-        crate::quota_service_error::QuotaServiceError::StateStore(error) => {
-            Some(std::mem::discriminant(error))
-        }
-        _ => None,
-    };
-    let sqlite_busy = matches!(
-        error,
-        crate::quota_service_error::QuotaServiceError::StateStore(StateStoreError::Sqlite { message })
-            if message.contains("database is locked") || message.contains("database is busy")
-    );
-    tracing::warn!(
-        target: "quota_storyboard_diagnostic",
-        stage,
-        quota_error_variant = ?std::mem::discriminant(error),
-        state_error_variant = ?state_variant,
-        sqlite_busy,
-    );
-}
-
 #[cfg(test)]
-mod diagnostic_tests {
-    use super::*;
-    #[cfg(feature = "quota-reset-test-harness")]
-    #[test]
-    fn storyboard_quota_diagnostics_omit_error_payloads() {
-        let path =
-            std::env::temp_dir().join(format!("quota-diagnostic-{}.log", std::process::id()));
-        let file = std::fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .expect("fresh diagnostic fixture file");
-        let subscriber = tracing_subscriber::fmt()
-            .with_env_filter("off,quota_storyboard_diagnostic=warn")
-            .with_writer(file)
-            .without_time()
-            .with_ansi(false)
-            .finish();
-        tracing::subscriber::with_default(subscriber, || {
-            record_storyboard_quota_error(
-                "report_reload",
-                &crate::quota_service_error::QuotaServiceError::StateStore(
-                    StateStoreError::CorruptQuotaSnapshot {
-                        account_id: "private-account-sentinel".to_owned(),
-                        field: "private-field-sentinel",
-                    },
-                ),
-            );
-        });
-        let evidence = std::fs::read_to_string(&path).expect("retained diagnostic");
-        std::fs::remove_file(path).expect("diagnostic fixture cleanup");
-        assert!(evidence.contains("report_reload"));
-        assert!(evidence.contains("quota_error_variant"));
-        assert!(evidence.contains("state_error_variant"));
-        assert!(!evidence.contains("private-account-sentinel"));
-        assert!(!evidence.contains("private-field-sentinel"));
-    }
-}
+#[path = "quota_status_metrics_diagnostic_tests.rs"]
+mod diagnostic_tests;

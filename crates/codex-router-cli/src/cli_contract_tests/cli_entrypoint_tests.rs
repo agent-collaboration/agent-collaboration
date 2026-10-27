@@ -557,7 +557,7 @@ fn sessions_catalog_reads_codex_state_read_only_via_sqlx() {
 
     let cli_sessions_source = must_ok(fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../agent-collaboration/src/session_commands/session_catalog_query.rs"),
+            .join("../agent-session-inventory/src/session_commands/session_catalog_query.rs"),
     ));
     assert!(cli_sessions_source.contains("load_stored_sessions"));
     assert!(!cli_sessions_source.contains("sqlx::"));
