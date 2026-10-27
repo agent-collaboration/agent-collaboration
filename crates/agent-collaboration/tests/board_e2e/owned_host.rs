@@ -123,6 +123,14 @@ pub fn artifact_command(binary: &Path) -> FixtureResult<Command> {
 
 impl BoardHost {
     pub async fn start(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
+        Self::start_on_port(directory, session, 0).await
+    }
+
+    pub(super) async fn start_on_port(
+        directory: &Path,
+        session: Option<&Path>,
+        port: u16,
+    ) -> FixtureResult<Self> {
         let binary = std::env::var_os("CODEX_ROUTER_E2E_HOST_BINARY")
             .map(PathBuf::from)
             .ok_or("set CODEX_ROUTER_E2E_HOST_BINARY to prebuilt target/debug/examples/board-debug-runtime")?;
@@ -132,7 +140,7 @@ impl BoardHost {
             .mode(0o600)
             .open(directory.join(format!("host-{}.stderr", uuid::Uuid::now_v7())))?;
         let mut command = artifact_command(&binary)?;
-        command.arg(directory).arg("0");
+        command.arg(directory).arg(port.to_string());
         let status_interval = directory.join("fixture-mail-status-interval-ms");
         if status_interval.is_file() {
             command.env(
@@ -184,21 +192,7 @@ impl BoardHost {
         }
         let manifest: collaboration_client::protocol::ServiceManifest =
             serde_json::from_slice(&std::fs::read(self.directory.join("service.json"))?)?;
-        let url = reqwest::Url::parse(&ready.mcp_url)?;
-        if ready.mcp_url != manifest.mcp.url
-            || url.host_str() != Some("127.0.0.1")
-            || url.scheme() != "http"
-            || matches!(url.port(), None | Some(8787 | 8788 | 43127))
-        {
-            return Err(format!(
-                "Host ready/manifest/listener identity mismatch: same_url={}, http={}, loopback={}, port={:?}",
-                ready.mcp_url == manifest.mcp.url,
-                url.scheme() == "http",
-                url.host_str() == Some("127.0.0.1"),
-                url.port()
-            )
-            .into());
-        }
+        require_listener_identity(&ready.mcp_url, &manifest.mcp.url)?;
         self.mcp_url = ready.mcp_url;
         Ok(())
     }
@@ -426,4 +420,23 @@ impl BoardHost {
             }
         }
     }
+}
+
+pub(super) fn require_listener_identity(ready_url: &str, manifest_url: &str) -> FixtureResult {
+    let url = reqwest::Url::parse(ready_url)?;
+    if ready_url != manifest_url
+        || url.host_str() != Some("127.0.0.1")
+        || url.scheme() != "http"
+        || matches!(url.port(), None | Some(8787 | 8788))
+    {
+        return Err(format!(
+            "Host ready/manifest/listener identity mismatch: same_url={}, http={}, loopback={}, port={:?}",
+            ready_url == manifest_url,
+            url.scheme() == "http",
+            url.host_str() == Some("127.0.0.1"),
+            url.port()
+        )
+        .into());
+    }
+    Ok(())
 }

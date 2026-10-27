@@ -636,6 +636,7 @@ async fn exercise_held_empty_thread(
     let collaboration_protocol::MessageSendResult::Local(started) = started else {
         return Err("local held connection returned remote custody".into());
     };
+    let first_message_receipt = format!("{:?}", started.receipt);
     if !matches!(started.receipt.outcome, DeliveryOutcome::Started)
         || !matches!(
             started.receipt.client,
@@ -643,7 +644,12 @@ async fn exercise_held_empty_thread(
         )
         || holder.contains("empty-thread")
     {
-        return Err("first message did not start through the held connection".into());
+        return Err(format!(
+            "first message did not start through the held connection: receipt={first_message_receipt}; binding_retained={}; backend_finished={}",
+            holder.contains("empty-thread"),
+            backend.is_finished(),
+        )
+        .into());
     }
     served.stop().await?;
     subscription_delivery.shutdown().await;

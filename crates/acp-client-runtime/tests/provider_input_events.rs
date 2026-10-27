@@ -139,6 +139,27 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
             == 7
     );
 
+    let submitted = tokio::time::timeout(Duration::from_secs(2), events.recv())
+        .await
+        .expect("submitted task starts")
+        .expect("event");
+    let SessionEvent::ItemStarted { item: submitted } = submitted else {
+        panic!("expected submitted task, got {submitted:?}");
+    };
+    assert_eq!(
+        submitted.kind,
+        session_event_model::SessionItemKind::UserMessage
+    );
+    assert_eq!(submitted.text.as_deref(), Some("First"));
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("submitted task completes"),
+        Some(SessionEvent::ItemCompleted {
+            item_id: submitted.item_id
+        })
+    );
+
     let steering = client
         .steer_contents_with_input(
             session_id.clone(),
@@ -313,6 +334,26 @@ async fn prompt_required_preserves_steer_input_when_prompted_normally() {
         panic!("expected TurnStarted, got {started:?}");
     };
     assert_eq!(observed_input, input_id);
+    let submitted = tokio::time::timeout(Duration::from_secs(2), events.recv())
+        .await
+        .expect("submitted task starts")
+        .expect("event");
+    let SessionEvent::ItemStarted { item: submitted } = submitted else {
+        panic!("expected submitted task, got {submitted:?}");
+    };
+    assert_eq!(
+        submitted.kind,
+        session_event_model::SessionItemKind::UserMessage
+    );
+    assert_eq!(submitted.text.as_deref(), Some("Hello"));
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(2), events.recv())
+            .await
+            .expect("submitted task completes"),
+        Some(SessionEvent::ItemCompleted {
+            item_id: submitted.item_id
+        })
+    );
     assert!(
         matches!(events.recv().await, Some(SessionEvent::TurnEnded { turn_id: ended_id,
         outcome: session_event_model::TurnOutcome::Ended { stop_reason: session_event_model::StopReason::EndTurn, .. }
@@ -369,6 +410,20 @@ async fn text_and_thought_chunks_publish_ordered_items() {
                 | SessionEvent::ItemCompleted { .. }
         )
     });
+    let Some(SessionEvent::ItemStarted { item: submitted }) = items.next() else {
+        panic!("submitted task not retained: {observed:?}")
+    };
+    assert_eq!(
+        submitted.kind,
+        session_event_model::SessionItemKind::UserMessage
+    );
+    assert_eq!(submitted.text.as_deref(), Some("Begin"));
+    assert_eq!(
+        items.next(),
+        Some(&SessionEvent::ItemCompleted {
+            item_id: submitted.item_id.clone()
+        })
+    );
     let Some(SessionEvent::ItemStarted { item: message }) = items.next() else {
         panic!("agent message not started: {observed:?}")
     };

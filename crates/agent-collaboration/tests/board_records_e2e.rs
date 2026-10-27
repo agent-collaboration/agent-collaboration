@@ -73,6 +73,100 @@ use codex_router_test_support::FixtureResult;
 use fixture::scenario;
 use serde_json::json;
 
+#[test]
+fn listener_identity_accepts_matching_shared_debug_port_number() {
+    let url = "http://127.0.0.1:43127/mcp";
+    assert!(owned_host::require_listener_identity(url, url).is_ok());
+}
+
+#[test]
+fn listener_identity_accepts_matching_ordinary_port() {
+    let url = "http://127.0.0.1:46171/mcp";
+    assert!(owned_host::require_listener_identity(url, url).is_ok());
+}
+
+#[test]
+fn listener_identity_rejects_different_manifest() {
+    assert!(
+        owned_host::require_listener_identity(
+            "http://127.0.0.1:46171/mcp",
+            "http://127.0.0.1:46172/mcp"
+        )
+        .is_err()
+    );
+}
+
+#[test]
+fn listener_identity_rejects_nonloopback_https_implicit_port_and_legacy_ports() {
+    for url in [
+        "http://192.0.2.1:46171/mcp",
+        "https://127.0.0.1:46171/mcp",
+        "http://127.0.0.1/mcp",
+        "http://127.0.0.1:8787/mcp",
+        "http://127.0.0.1:8788/mcp",
+    ] {
+        assert!(
+            owned_host::require_listener_identity(url, url).is_err(),
+            "{url}"
+        );
+    }
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+#[ignore = "Opt-in owned listener counterexample; requires unused 127.0.0.1:43127 and prebuilt board-debug-runtime"]
+async fn real_owned_listener_on_43127_matches_manifest_and_serves_installation() -> FixtureResult {
+    use codex_router_test_support::scenario_finalization::run_scenario;
+    use std::{os::unix::fs::PermissionsExt, path::PathBuf};
+
+    match tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        tokio::net::TcpStream::connect(("127.0.0.1", 43127)),
+    )
+    .await
+    {
+        Ok(Err(error)) if error.kind() == std::io::ErrorKind::ConnectionRefused => {}
+        Ok(Ok(_)) => return Err("listener fixture blocked: port 43127 is occupied".into()),
+        Ok(Err(error)) => return Err(format!("listener fixture preflight blocked: {error}").into()),
+        Err(error) => return Err(format!("listener fixture preflight timed out: {error}").into()),
+    }
+
+    // A preflight free-port check is not a reservation. Actual bind failure is
+    // a blocked probe, never authority to displace another listener or retry.
+    let parent = std::env::var_os("CODEX_ROUTER_E2E_PARENT")
+        .map(PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir);
+    let root = tempfile::Builder::new()
+        .prefix("2026-10-board-listener-43127-")
+        .tempdir_in(parent)?;
+    std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))?;
+    let host = match owned_host::BoardHost::start_on_port(root.path(), None, 43127).await {
+        Ok(host) => host,
+        Err(error) => {
+            eprintln!(
+                "Rust board listener failure evidence retained: {}",
+                root.keep().display()
+            );
+            return Err(error);
+        }
+    };
+    run_scenario(
+        host,
+        async |host: &mut owned_host::BoardHost| {
+            assert_eq!(reqwest::Url::parse(&host.mcp_url)?.port(), Some(43127));
+            let _: collaboration_client::protocol::InstallationIdentity =
+                serde_json::from_value(host.mcp("installation_show", json!({})).await?)?;
+            Ok(())
+        },
+        owned_host::BoardHost::stop,
+        || Ok(()),
+    )
+    .await
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."

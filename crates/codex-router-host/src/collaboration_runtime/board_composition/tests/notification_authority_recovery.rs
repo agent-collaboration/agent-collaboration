@@ -140,6 +140,38 @@ async fn assert_recovery() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let writer = fixture.harness.projects.ensure(&fixture.project).await?;
+    let item_reference: message_board::MailItemRef =
+        fixture.seed_item.as_uuid().to_string().try_into()?;
+    let mut frozen_read = writer.store.snapshot().await?;
+    let frozen = frozen_read
+        .mail_handoff(&item_reference)
+        .await?
+        .ok_or("missing frozen handoff")?;
+    let message_board_storage::MailHandoffItem::Delivery(original) = frozen.item else {
+        return Err("expected frozen delivery".into());
+    };
+    // Compare canonical serde envelope bytes, not transport frame formatting.
+    let original_bytes = serde_json::to_vec(original.as_ref())?;
+    let original_reference = fleet_sync_protocol::DeliveryItemRef {
+        item: original.id(),
+        digest: original.digest().clone(),
+    };
+    assert_eq!(original_reference.item, fixture.seed_item);
+    frozen_read.finish().await?;
+    assert!(
+        !fixture
+            .harness
+            .mail
+            .rows()
+            .await?
+            .iter()
+            .any(|row| row.category == "outbox"),
+        "unexpected initial outgoing custody"
+    );
+    assert!(
+        fixture.harness.mail.pending_submissions().await?.is_empty(),
+        "unexpected initial pending Submit operation"
+    );
     // Real replication makes the frozen item eligible. Discard only its returned
     // prompt while the actual Welcome is still held before the Host event loop.
     let acknowledgement = writer
@@ -284,8 +316,28 @@ async fn assert_recovery() -> Result<(), TestError> {
         writer.store.writer_state().await?,
         fleet_sync_lease::WriterState::Writing { .. }
     ));
-    let submitted=fixture.harness.transport.observer.events().into_iter().filter(|event|matches!(event,transport::WireEvent::MailSubmit(item) if *item==fixture.seed_item)).count();
-    assert_eq!(submitted, 1, "renewal duplicated the frozen publication");
+    // Pinned SDK AnswerLost retry precondition, not a publication cardinality.
+    fixture
+        .harness
+        .transport
+        .observer
+        .wait_for(
+            |events| {
+                events
+                    .iter()
+                    .filter(|event| {
+                        matches!(event,
+                            transport::WireEvent::MailSubmit(item) if *item == fixture.seed_item
+                        )
+                    })
+                    .count()
+                    >= 2
+            },
+            "same frozen item did not produce a second actual submission attempt",
+        )
+        .await?;
+    let confirmed_submission =
+        assert_frozen_submission(&fixture, &original_reference, &original_bytes).await?;
     let shown = fixture
         .application
         .messages()
@@ -299,6 +351,17 @@ async fn assert_recovery() -> Result<(), TestError> {
     assert!(
         matches!(shown,collaboration_protocol::MessageShowResult::Remote { mail } if matches!(&mail.context,collaboration_protocol::MailReadContext::Project { project,.. } if project==&fixture.project) && !matches!(mail.status,collaboration_protocol::RemoteDeliveryStatus::Refused { .. }))
     );
+
+    let mut frozen_read = writer.store.snapshot().await?;
+    let readback = frozen_read
+        .mail_handoff(&item_reference)
+        .await?
+        .ok_or("frozen handoff disappeared")?;
+    let message_board_storage::MailHandoffItem::Delivery(readback) = readback.item else {
+        return Err("frozen delivery changed kind".into());
+    };
+    assert_eq!(serde_json::to_vec(readback.as_ref())?, original_bytes);
+    frozen_read.finish().await?;
 
     // Lose actual persisted authority while the same SDK item remains queued.
     // The next typed rejection must warn, without upgrading unknown authority.
@@ -330,6 +393,27 @@ async fn assert_recovery() -> Result<(), TestError> {
         !lost.fields.contains_key("confirmed_epoch"),
         "lost authority was represented as confirmed"
     );
+    let after_loss = fixture
+        .harness
+        .transport
+        .observer
+        .events()
+        .iter()
+        .filter(|event| matches!(event, transport::WireEvent::SubmissionEpoch { .. }))
+        .count();
+    fixture
+        .harness
+        .transport
+        .observer
+        .wait_for(
+            |events| {
+                events.iter().filter(|event| matches!(event,
+            transport::WireEvent::SubmissionEpoch { item, .. } if *item == fixture.seed_item
+        )).count() > after_loss
+            },
+            "no further real dispatch after the lost-authority diagnostic",
+        )
+        .await?;
     assert!(matches!(
         fixture
             .harness
@@ -342,10 +426,163 @@ async fn assert_recovery() -> Result<(), TestError> {
             ..
         }
     ));
+    let lost_submission =
+        assert_frozen_submission(&fixture, &original_reference, &original_bytes).await?;
+    assert_eq!(
+        confirmed_submission, lost_submission,
+        "authority loss changed logical submission identity"
+    );
     eprintln!(
-        "native renewal recovered one frozen publication; confirmed and lost NotWriter diagnostics: {confirmed:?}; {lost:?}"
+        "native renewal recovered one frozen custody/admission across repeated wire attempts; confirmed and lost NotWriter diagnostics: {confirmed:?}; {lost:?}"
     );
     drop(writer);
     drop(database);
     fixture.close().await
+}
+
+#[derive(Debug, Eq, PartialEq)]
+struct StableSubmission {
+    id: runtime_primitives::OperationId,
+    kind: String,
+    version: u32,
+    key: durable_steps::RequestKey,
+    input: Vec<u8>,
+    digest: Vec<u8>,
+    steps: Vec<(u64, runtime_primitives::StepName, StableStep)>,
+}
+
+#[derive(Debug, Eq, PartialEq)]
+enum StableStep {
+    Local(Vec<u8>),
+    Pending(durable_steps::storage::CallIntent),
+}
+
+async fn assert_frozen_submission(
+    fixture: &ProjectNotificationFixture,
+    reference: &fleet_sync_protocol::DeliveryItemRef,
+    original_bytes: &[u8],
+) -> Result<StableSubmission, TestError> {
+    let mail = &fixture.harness.mail;
+    let rows = mail.rows().await?;
+    let custody = rows
+        .iter()
+        .filter(|row| row.category == "outbox")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        custody.len(),
+        1,
+        "duplicate or missing SDK outgoing custody"
+    );
+    assert_eq!(
+        custody[0].metadata.as_deref(),
+        Some("1"),
+        "custody is not live"
+    );
+    assert_eq!(custody[0].identity, reference.item.as_uuid().to_string());
+    assert!(matches!(
+        mail.outbox_status(reference.item).await?.state,
+        OutboxStatusState::Known {
+            status: DeliveryStatus::Queued,
+            ..
+        }
+    ));
+    let epoch = mail
+        .owner
+        .mail_submission_epoch(&reference.item.as_uuid().to_string().try_into()?)
+        .await?
+        .ok_or("missing custody epoch")?;
+    assert_eq!(epoch.project, fixture.project);
+    assert_eq!(epoch.epoch, fixture.seed_epoch);
+    let envelopes = fixture
+        .harness
+        .central
+        .notifications
+        .submitted_envelopes(reference.item)
+        .await;
+    assert!(!envelopes.is_empty(), "no actual consumer receipt");
+    for envelope in envelopes {
+        assert_eq!(envelope, original_bytes, "retry changed frozen bytes");
+    }
+    let mut epochs = Vec::new();
+    for event in fixture.harness.transport.observer.events() {
+        match event {
+            transport::WireEvent::MailSubmit(item) => {
+                assert_eq!(item, reference.item, "unexpected submitted identity")
+            }
+            transport::WireEvent::SubmissionEpoch { item, epoch } => {
+                assert_eq!(item, reference.item, "unexpected epoch identity");
+                epochs.push(epoch);
+            }
+            transport::WireEvent::GenericSubmit(_) => {
+                return Err("project submission bypassed authority adapter".into());
+            }
+            _ => {}
+        }
+    }
+    assert!(epochs.len() >= 2, "actual repeated attempts missing");
+    assert!(
+        epochs
+            .iter()
+            .all(|epoch| *epoch == Some(fixture.seed_epoch.get())),
+        "retry changed submitted authority epoch: {epochs:?}"
+    );
+    let mut operations = mail.pending_submissions().await?;
+    let resolved = mail.resolve_submit(reference.clone()).await?;
+    assert_eq!(
+        serde_json::to_vec(&resolved.item)?,
+        original_bytes,
+        "custody changed frozen payload"
+    );
+    assert_eq!(
+        operations.len(),
+        1,
+        "duplicate or missing pending SDK Submit operation"
+    );
+    let operation = operations.pop().ok_or("missing submit operation")?;
+    assert_eq!(
+        operation.request_key,
+        fleet_sync_delivery::delivery_request_key(&reference.item)?
+    );
+    let durable_steps::storage::OperationExecution::Running { input, .. } = operation.execution
+    else {
+        return Err("submit operation is not pending".into());
+    };
+    let submitted: fleet_sync_delivery::SubmitInput = serde_json::from_slice(&input)?;
+    assert_eq!(submitted.item, reference.item);
+    assert_eq!(submitted.digest, reference.digest);
+    assert_eq!(submitted.relay, resolved.relay);
+    assert_eq!(submitted.mailbox, resolved.item.recipient().peer);
+    let (record, steps) = mail.operation(operation.id).await?;
+    assert_eq!(record.ok_or("submit disappeared")?.id, operation.id);
+    let mut stable_steps = Vec::new();
+    let mut pending_calls = 0;
+    for step in steps {
+        assert_eq!(step.operation, operation.id);
+        let state = match step.state {
+            durable_steps::storage::StepState::Local { output } => StableStep::Local(output),
+            durable_steps::storage::StepState::CallPending { intent, attempt } => {
+                assert!(matches!(
+                    attempt.reach,
+                    durable_steps::storage::CallReach::Dispatching
+                        | durable_steps::storage::CallReach::MayHaveReached
+                ));
+                pending_calls += 1;
+                StableStep::Pending(intent)
+            }
+            durable_steps::storage::StepState::CallDone { .. } => {
+                return Err("NotWriter falsely settled a call".into());
+            }
+        };
+        stable_steps.push((step.position, step.name, state));
+    }
+    assert_eq!(pending_calls, 1, "expected one pending remote submit call");
+    Ok(StableSubmission {
+        id: operation.id,
+        kind: operation.kind,
+        version: operation.version,
+        key: operation.request_key,
+        input,
+        digest: operation.input_digest,
+        steps: stable_steps,
+    })
 }
