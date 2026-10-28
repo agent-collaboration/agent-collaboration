@@ -23,9 +23,9 @@ filter = "binary(update_reexec) | binary(runtime_restart) | binary(compiled_cli_
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# These real central/child cases also need an exclusive scheduling window. A
-# delayed NotWriter check can cross the SDK retry deadline; starving the archive
-# or Serve child crosses their unchanged request and shutdown deadlines.
+# These real central/child cases also need an exclusive scheduling window;
+# starving the archive or Serve child crosses their unchanged request and
+# shutdown deadlines. The renewal proof gates its NotWriter reply explicitly.
 [[profile.ci.overrides]]
 filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (test(=collaboration_runtime::board_composition::machine_session::mail_notice_events::harness::notification_owner::authority_recovery::real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority) | test(tailscale_exposure::) | test(tailscale_process::) | test(collaboration_runtime::startup_contract_tests::)))"
 test-group = "process-runtime"

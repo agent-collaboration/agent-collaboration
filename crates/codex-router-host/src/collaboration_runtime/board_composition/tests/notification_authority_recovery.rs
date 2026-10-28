@@ -239,25 +239,50 @@ async fn assert_recovery() -> Result<(), TestError> {
 
     // No board mutation, copy acknowledgement, explicit publisher prompt or
     // unrelated hint follows. This is the actual generic registry renewal reply.
+    let (submission_entered, release_submission) = fixture
+        .harness
+        .transport
+        .observer
+        .hold_next_mail_submit(fixture.seed_item);
     release_renewal
         .send(())
         .map_err(|_| io::Error::other("renewal gate closed"))?;
+    tokio::time::timeout(BOUND, submission_entered)
+        .await
+        .map_err(|_| {
+            io::Error::other(format!(
+                "publication after actual renewal; wire={:?}; diagnostics={:?}",
+                fixture.harness.transport.observer.events(),
+                events.lock().unwrap()
+            ))
+        })??;
+
+    // Count publication before NotWriter releases the SDK's ordinary retry.
+    // Rescan the frozen handoff while its first real reply is held: replay
+    // admission must not enqueue another submission, including after CI15.
     tokio::time::timeout(
         BOUND,
         fixture
-            .harness
-            .central
-            .notifications
-            .wait_submission(fixture.seed_item),
+            .publisher
+            .wait_project_idle_for_test(&fixture.project),
     )
-    .await
-    .map_err(|_| {
-        io::Error::other(format!(
-            "publication after actual renewal; wire={:?}; diagnostics={:?}",
-            fixture.harness.transport.observer.events(),
-            events.lock().unwrap()
-        ))
-    })?;
+    .await?;
+    fixture
+        .publisher
+        .queue_project(fixture.project.clone())
+        .await?;
+    tokio::time::timeout(
+        BOUND,
+        fixture
+            .publisher
+            .wait_project_idle_for_test(&fixture.project),
+    )
+    .await?;
+    let submitted=fixture.harness.transport.observer.events().into_iter().filter(|event|matches!(event,transport::WireEvent::MailSubmit(item) if *item==fixture.seed_item)).count();
+    assert_eq!(submitted, 1, "renewal duplicated the frozen publication");
+    release_submission
+        .send(())
+        .map_err(|_| io::Error::other("submission gate closed"))?;
     let confirmed = wait_diagnostic(
         &events,
         &changed,
@@ -284,8 +309,27 @@ async fn assert_recovery() -> Result<(), TestError> {
         writer.store.writer_state().await?,
         fleet_sync_lease::WriterState::Writing { .. }
     ));
-    let submitted=fixture.harness.transport.observer.events().into_iter().filter(|event|matches!(event,transport::WireEvent::MailSubmit(item) if *item==fixture.seed_item)).count();
-    assert_eq!(submitted, 1, "renewal duplicated the frozen publication");
+    // Deliberately cross the retry boundary, rather than racing it in the count.
+    // The fixture rejects project authority before it ever calls Delivery::Submit.
+    let envelopes = tokio::time::timeout(
+        BOUND,
+        fixture
+            .harness
+            .central
+            .notifications
+            .wait_submission_count(fixture.seed_item, 2),
+    )
+    .await?;
+    assert!(
+        envelopes.windows(2).all(|pair| pair.first() == pair.get(1)),
+        "NotWriter retry changed the frozen envelope"
+    );
+    assert!(
+        !fixture.harness.transport.observer.events().iter().any(
+            |event| matches!(event, transport::WireEvent::GenericSubmit(item) if *item == fixture.seed_item)
+        ),
+        "NotWriter fixture unexpectedly forwarded delivery custody"
+    );
     let shown = fixture
         .application
         .messages()

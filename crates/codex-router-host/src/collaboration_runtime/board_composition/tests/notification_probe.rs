@@ -108,6 +108,17 @@ impl NotificationProbe {
             .collect()
     }
 
+    pub async fn wait_submission_count(&self, item: ItemId, count: usize) -> Vec<Vec<u8>> {
+        loop {
+            let changed = self.submitted.notified();
+            let envelopes = self.submitted_envelopes(item).await;
+            if envelopes.len() >= count {
+                return envelopes;
+            }
+            changed.await;
+        }
+    }
+
     pub async fn wait_submission(&self, item: ItemId) -> Option<Epoch> {
         loop {
             let changed = self.submitted.notified();
