@@ -118,35 +118,3 @@ pub async fn require_cold_terminal(directory: &std::path::Path, item: &str) -> F
     let closed = connection.close().await;
     result.and(closed.map_err(Into::into))
 }
-
-/// Public requested controls must not append handoffs, group expansions, decisions or feed rows.
-pub async fn project_control_counts(sender: &BoardFixture) -> FixtureResult<Value> {
-    if sender.host.is_some() {
-        return Err("project readback requires a joined Host".into());
-    }
-    let path = sender
-        .directory
-        .join("projects")
-        .join(&sender.project)
-        .join("e1.sqlite");
-    let connection = sqlx_turso::TursoConnectOptions::new()
-        .filename(path)
-        .read_only(true)
-        .create_if_missing(false)
-        .connect()
-        .await?;
-    let mut result = None;
-    codex_router_test_support::scenario_finalization::run_scenario(
-        connection,
-        async |connection: &mut sqlx_turso::TursoConnection| {
-            let json = sqlx_turso::sqlx::query_scalar::<sqlx_turso::Turso, String>(
-                "SELECT json_object('handoffs',(SELECT COUNT(*) FROM mail_handoffs),'expansions',(SELECT COUNT(*) FROM mail_cancel_expansions),'decisions',(SELECT COUNT(*) FROM request_decisions),'feed',(SELECT COUNT(*) FROM project_feed))")
-                .fetch_one(connection).await?;
-            result = Some(serde_json::from_str(&json)?);
-            Ok(())
-        },
-        |connection| async { connection.close().await.map_err(Into::into) },
-        || Ok(()),
-    ).await?;
-    result.ok_or_else(|| "project control readback result absent".into())
-}

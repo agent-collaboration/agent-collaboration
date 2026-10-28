@@ -493,10 +493,10 @@ fn cards_and_cross_project_rows_require_their_own_copy_context() {
 }
 
 #[test]
-fn remote_status_history_and_requested_cancel_results_keep_closed_advertised_shapes() {
+fn remote_status_and_history_keep_closed_advertised_shapes() {
     use collaboration_protocol::{
         MailReadContext, MessageHistoryEntry, MessageHistoryResult, MessageShowResult, PushOrigin,
-        RemoteMessageStatus, RequestedCancelOutcome, RequestedCancelResult,
+        RemoteMessageStatus,
     };
     let show = advertised_output_validator("router_show");
     let history = advertised_output_validator("message_history");
@@ -547,32 +547,5 @@ fn remote_status_history_and_requested_cancel_results_keep_closed_advertised_sha
             }),
         );
         assert_eq!(encoded["records"][0]["mail"]["status"], status);
-    }
-    for tool in ["message_cancel", "project_notification_cancel"] {
-        let validator = advertised_output_validator(tool);
-        for outcome in [
-            serde_json::json!({"kind":"pending"}),
-            serde_json::json!({"kind":"prevented"}),
-            serde_json::json!({"kind":"tooLate","at":"delivered"}),
-            serde_json::json!({"kind":"tooLate","at":"uncertain"}),
-            serde_json::json!({"kind":"refused","reason":{"kind":"mailboxFull"}}),
-        ] {
-            let result = RequestedCancelResult {
-                cancel: item.clone(),
-                target: item.clone(),
-                outcome: serde_json::from_value::<RequestedCancelOutcome>(outcome.clone()).unwrap(),
-            };
-            let mut encoded = validated_structured_content(
-                &validator,
-                tool,
-                super::super::success_result(&result),
-            );
-            assert_eq!(encoded["outcome"], outcome);
-            encoded["outcome"] = serde_json::json!({"kind":"done"});
-            assert!(
-                !validator.is_valid(&encoded),
-                "{tool} accepted an unknown control result"
-            );
-        }
     }
 }

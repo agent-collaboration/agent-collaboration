@@ -70,7 +70,6 @@ impl MailDeliveryRuntime {
             let empty = batch.events.is_empty();
             let through = batch.through;
             let items: Vec<_> = batch.events.iter().map(|event| event.item).collect();
-            let projected_items = items.clone();
             self.store
                 .transaction(move |scope| {
                     Box::pin(async move {
@@ -78,12 +77,6 @@ impl MailDeliveryRuntime {
                             .apply_status_batch(after, batch)
                             .await
                             .map_err(delivery_rollback)?;
-                        for item in projected_items {
-                            super::requested_cancellation::project_requested_outbox_outcome(
-                                scope, item, limits,
-                            )
-                            .await?;
-                        }
                         Ok(())
                     })
                 })
@@ -129,10 +122,7 @@ impl MailDeliveryRuntime {
                         .publish_status(publication)
                         .await
                         .map_err(delivery_rollback)?;
-                    super::requested_cancellation::project_requested_outbox_outcome(
-                        scope, item, limits,
-                    )
-                    .await
+                    Ok(())
                 })
             })
             .await?;

@@ -201,33 +201,14 @@ async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_pu
         Some(&json!(item)),
         "{history}"
     );
-    // The fixture runs the real SDK engine, so admission may already have been
-    // attempted. Supply a canonical Sent publication to establish this cancel
-    // case deterministically; Pending must never promise a local withdrawal.
+    // Publish canonical Sent custody through the real SDK owner. The CLI read
+    // must reflect that transition without creating a local carrier injection.
     let mail = surfaces.mail_runtime();
     mail.publish_status(serde_json::from_value(json!({
         "item":item,"status":{"kind":"sent","value":{"seq":7}},"version":1,"cancel":null,
     }))?)
     .await?;
     drop(mail);
-    let cancel = MailItemId::generate();
-    let (code, cancelled, printed) = cli(
-        &surfaces,
-        &[
-            "message",
-            "cancel",
-            "--item",
-            item.as_str(),
-            "--cancel-id",
-            cancel.as_str(),
-        ],
-    )
-    .await?;
-    assert_eq!(code, 0, "{cancelled}; {printed}");
-    assert_eq!(
-        cancelled.pointer("/result/record/outcome/kind"),
-        Some(&json!("pending"))
-    );
     let (code, shown, _) = cli(&surfaces, &["show", item.as_str()]).await?;
     assert_eq!(code, 0);
     assert_eq!(
