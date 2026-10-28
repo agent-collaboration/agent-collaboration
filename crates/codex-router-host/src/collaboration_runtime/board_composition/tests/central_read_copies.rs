@@ -64,7 +64,9 @@ fn copy_files(root: &Path) -> Result<BTreeSet<PathBuf>, io::Error> {
 async fn superseded_local_file_reads_native_central_copy_with_distinct_authority_and_pinned_generations()
 -> TestResult {
     // Arrange actual board creation, writer publication and the existing machine session.
-    let mut runtime = Box::pin(Runtime::new()).await?;
+    let mut runtime = Box::pin(Runtime::new())
+        .await
+        .map_err(|error| io::Error::other(format!("arrange central read fixture: {error}")))?;
     let context = runtime.admission.runtime_test_context();
     let writer = runtime.projects.ensure(&runtime.project).await?;
     let mut write = writer.store.begin_admission(context.origin.clone()).await?;
@@ -89,7 +91,8 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
             tokio::task::yield_now().await;
         }
     })
-    .await??;
+    .await
+    .map_err(|error| io::Error::other(format!("initial copy replication: {error}")))??;
     *runtime.central.read_copy_entries.lock().await = vec![directory_entry(&state, 9)?];
 
     // The real SDK persists loss of e1. The retained e1 file must never be read
@@ -127,7 +130,9 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
     };
 
     // Act through the public projection and production-attached registry source.
-    let view = timeout(BOUND, application.board().view_work(view_request.clone())).await??;
+    let view = timeout(BOUND, application.board().view_work(view_request.clone()))
+        .await
+        .map_err(|error| io::Error::other(format!("first central view: {error}")))??;
     assert_eq!(view.source, CopySource::ReadCopy {});
     assert_eq!(view.as_of, head);
     assert_eq!(
@@ -161,7 +166,8 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
             subject: TrailSubject::Project,
         }),
     )
-    .await??;
+    .await
+    .map_err(|error| io::Error::other(format!("central continuation card: {error}")))??;
     assert_eq!(card.source, CopySource::ReadCopy {});
     assert_eq!(card.as_of, head);
     assert_eq!(card.replicated_through, head);
@@ -177,7 +183,9 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
     assert!(!pinned_paths.is_empty(), "no real installed copy file");
 
     *runtime.central.read_copy_entries.lock().await = vec![directory_entry(&state, 10)?];
-    let refreshed = timeout(BOUND, application.board().view_work(view_request.clone())).await??;
+    let refreshed = timeout(BOUND, application.board().view_work(view_request.clone()))
+        .await
+        .map_err(|error| io::Error::other(format!("refreshed central view: {error}")))??;
     assert_eq!(
         refreshed.current_writer,
         CurrentWriter::Held {
@@ -233,7 +241,8 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
             tokio::task::yield_now().await;
         }
     })
-    .await?;
+    .await
+    .map_err(|error| io::Error::other(format!("pinned generation disposal: {error}")))?;
     assert_eq!(
         durable_file_hashes(&retained)?,
         retained_before,
@@ -327,11 +336,14 @@ async fn superseded_local_file_reads_native_central_copy_with_distinct_authority
             tokio::task::yield_now().await;
         }
     })
-    .await?;
+    .await
+    .map_err(|error| io::Error::other(format!("restore invalidated generation: {error}")))?;
 
     // A transiently unavailable source preserves the last completed generation.
     runtime.central.stop().await?;
-    let stale = timeout(BOUND, application.board().view_work(view_request)).await??;
+    let stale = timeout(BOUND, application.board().view_work(view_request))
+        .await
+        .map_err(|error| io::Error::other(format!("offline completed generation: {error}")))??;
     assert_eq!(stale.as_of, head);
     assert_eq!(stale.current_writer, restored.current_writer);
     drop(application);
