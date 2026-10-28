@@ -149,8 +149,6 @@ pub(super) enum RepositoryCommand {
 pub(super) enum ProjectCommand {
     /// Claim an unheld project and verify its seeded native store before writing.
     Claim(ProjectClaimArguments),
-    /// Request cancellation of one notification without writing a project record.
-    NotificationCancel(OperationFileArguments),
     /// Create a project on an active board.
     Create(ProjectCreateArguments),
     /// Replace a project's title.

@@ -29,11 +29,6 @@ pub struct ProjectRequest {
     deny_unknown_fields
 )]
 pub enum BoardOperation {
-    /// A requested mail control; only its dedicated read-only admission accepts it.
-    NotificationCancel {
-        cancel_id: Option<crate::MailItemRef>,
-        target: crate::MailItemRef,
-    },
     WorkstreamCreate {
         workstream_id: WorkstreamId,
         name: ResourceName,

@@ -7,7 +7,6 @@ import { heldCopy, heldCopyCase } from "./cases/held-copy.ts";
 import { remoteWakes, remoteWakesCase } from "./cases/remote-wakes.ts";
 import { remoteWakeLimits, remoteWakeLimitsCase } from "./cases/remote-wake-limits.ts";
 import { remoteWakeExpiry, remoteWakeExpiryCase } from "./cases/remote-wake-expiry.ts";
-import { messageCancellation, messageCancellationCase } from "./cases/message-cancellation.ts";
 import { forwardedPosts, forwardedPostsCase } from "./cases/forwarded-posts.ts";
 
 export interface RunnableCase extends CaseRegistration {
@@ -40,7 +39,6 @@ export function casesFor(): readonly RunnableCase[] {
     { ...remoteWakesCase, run: remoteWakes },
     { ...remoteWakeLimitsCase, run: remoteWakeLimits },
     { ...remoteWakeExpiryCase, run: remoteWakeExpiry },
-    { ...messageCancellationCase, run: messageCancellation },
     // F observes delivery; its native and Worker non-retention proof is separate.
     { ...forwardedPostsCase, run: forwardedPosts },
   );

@@ -1,4 +1,4 @@
-//! Requested mail retirement keeps its route and call identity in the existing journal.
+//! Direct mail and wake retirement keep their route and call identity in the existing journal.
 use super::{
     CallEnvelope, CallFailure, CallTarget, CarrierAcceptance, DeliveryLimits, ItemId,
     MailCallRouter, MailHost, MailStore, PeerId, RouterDeliveryTypes, StoreError, TursoScope,

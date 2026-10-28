@@ -491,7 +491,6 @@ impl CollaborationRuntime {
                     .map(|_| subscription_presence.clone()),
                 subscription_clock.clone(),
                 Some(interactions.clone()),
-                mail_delivery.clone(),
                 project_replication,
                 session_context,
                 project_admission

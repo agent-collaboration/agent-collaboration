@@ -255,7 +255,6 @@ pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServe
     board_tool!(router, "project_claim", board_sync_protocol::ProjectClaimRequest => board_sync_protocol::ProjectClaimReply, project_claim, true);
     board_tool!(router, "project_create", ProjectCreateRequest => WriteReply, project_create, true);
     board_tool!(router, "project_update", ProjectUpdateRequest => WriteReply, project_update, true);
-    board_tool!(router, "project_notification_cancel", ProjectRequest => collaboration_protocol::RequestedCancelResult, project_notification_cancel, true);
     board_tool!(router, "project_list", ProjectListRequest => ProjectListResult, project_list, false);
     board_tool!(router, "project_show", ProjectShowRequest => ProjectShowResult, project_show, false);
     board_tool!(router, "thread_post", ThreadPostRequest => WriteReply, thread_post, true);

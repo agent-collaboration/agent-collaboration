@@ -84,41 +84,4 @@ impl MessagingCase<'_> {
             }
         }
     }
-
-    pub async fn cancel(&self, original: &str, cancel: &str) -> FixtureResult<Value> {
-        let result = self
-            .sender
-            .host()?
-            .mcp(
-                "message_cancel",
-                json!({
-                    "cancelId":cancel,"target":original,"sender":{"kind":"humanUser"}
-                }),
-            )
-            .await?;
-        assert_eq!(result.get("cancel"), Some(&json!(cancel)));
-        assert_eq!(result.get("target"), Some(&json!(original)));
-        Ok(result)
-    }
-
-    pub async fn wait_prevented(&self, original: &str, cancel: &str) -> FixtureResult<Value> {
-        let mut last = Value::Null;
-        let observed = tokio::time::timeout(Duration::from_secs(30), async {
-            loop {
-                last = self.cancel(original, cancel).await?;
-                if last.get("outcome") == Some(&json!({"kind":"prevented"})) {
-                    return Ok(last.clone());
-                }
-                tokio::time::sleep(Duration::from_millis(20)).await;
-            }
-        })
-        .await;
-        match observed {
-            Ok(answer) => answer,
-            Err(error) => Err(format!(
-                "cancel {cancel} for {original} expected Prevented; last={last}; {error}"
-            )
-            .into()),
-        }
-    }
 }
