@@ -39,7 +39,9 @@ const fn classify_operator_request(
         OperatorRequest::RestartAppServer => HostOperation::RestartAppServer,
         OperatorRequest::UpdateCodex => HostOperation::UpdateCodex,
         OperatorRequest::RestartRouter => HostOperation::RestartRouter,
-        OperatorRequest::Status | OperatorRequest::AwaitHostStart => HostOperation::Status,
+        OperatorRequest::Status | OperatorRequest::AwaitHostStart | OperatorRequest::StopHost => {
+            HostOperation::Status
+        }
     };
     MutationAdmission::StartMutation(operation)
 }
@@ -216,6 +218,24 @@ pub(super) fn handle_operator_work(work: OperatorWork, context: OperatorRuntimeC
         return;
     }
     match work.request {
+        OperatorRequest::StopHost => {
+            // A stop interrupts active work exactly as the owning terminal's SIGTERM
+            // does. The signal handler remains the only owner of shutdown convergence.
+            if rustix::process::kill_process(
+                rustix::process::getpid(),
+                rustix::process::Signal::TERM,
+            )
+            .is_err()
+            {
+                send_terminal_response(
+                    work.response,
+                    OperatorRequest::StopHost,
+                    TerminalClassification::Failed,
+                    snapshot,
+                    "could not request orderly Host shutdown",
+                );
+            }
+        }
         OperatorRequest::RestartHost { executable } => {
             let request = OperatorRequest::RestartHost {
                 executable: executable.clone(),

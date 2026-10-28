@@ -471,6 +471,29 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
             "public native attachment must reach the same managed backend",
         )?;
         drop(native);
+        let stopped = run_host_subcommand(
+            &replacement_binary, &router_root, &codex_home, &socket_path, &["stop"],
+        ).await?;
+        check(stopped.status.success(), &String::from_utf8_lossy(&stopped.stderr))?;
+        check(String::from_utf8(stopped.stdout)? == "Host stopped.\n", "stop did not print exactly one result line")?;
+        check(host.try_wait()?.is_some(), "stop returned before the Host exited")?;
+        let paths = codex_router_host::HostCoordinationPaths::for_router_root(&router_root);
+        let released = codex_router_host::HostInstanceLock::acquire(&paths)?;
+        drop(released);
+        check(!socket_path.exists(), "managed app-server socket leaked after stop")?;
+        check(!router_root.join("host.sock").exists(), "operator socket leaked after stop")?;
+        for name in ["control.sock", "codex-native.sock", "codex-acp.sock"] {
+            check(!router_root.join("agent-communication").join(name).exists(), "collaboration socket leaked after stop")?;
+        }
+        let stopped_again = run_host_subcommand(
+            &replacement_binary, &router_root, &codex_home, &socket_path, &["stop"],
+        ).await?;
+        check(stopped_again.status.success(), "idempotent stop failed")?;
+        check(String::from_utf8(stopped_again.stdout)? == "Host is not running.\n", "second stop did not report absence")?;
+        let after = run_host_subcommand(
+            &replacement_binary, &router_root, &codex_home, &socket_path, &["status"],
+        ).await?;
+        check(String::from_utf8_lossy(&after.stderr).contains("no shared Codex host is running"), "status did not report absence after stop")?;
         Ok::<(), Box<dyn std::error::Error>>(())
     }
     .await;

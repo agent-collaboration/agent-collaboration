@@ -93,7 +93,7 @@ cargo run -p codex-router-cli -- host
 
 The host starts `codex-router serve` when a compatible router is absent, starts
 the managed Codex app-server and enabled ACP providers, and answers its lifecycle
-commands (`host status`, `host restart`) on a separate owner-only operator socket.
+commands (`host status`, `host restart`, `host stop`) on a separate owner-only operator socket.
 On first start it creates owner-editable
 `<router-root>/providers.json` with Claude and Cursor enabled. The default
 executables are `claude-agent-acp` and `agent acp`; explicit Host provider flags
@@ -129,6 +129,7 @@ connections; the native TUI owns bounded reconnection without a Sessions supervi
 cargo run -p agent-collaboration --bin agent-sessions -- --id 019fe7c6-f493-7f02-be72-2feac69d6e6d
 cargo run -p codex-router-cli -- host status
 cargo run -p codex-router-cli -- host restart
+cargo run -p codex-router-cli -- host stop
 cargo run -p codex-router-cli -- host app-server restart
 cargo run -p codex-router-cli -- host app-server update
 cargo run -p codex-router-cli -- host router restart
@@ -138,6 +139,13 @@ cargo run -p codex-router-cli -- host router restart
 command and waits for replacement readiness. It retains the Host's configuration
 and does not download a binary. For an installed Host, run `codex-router host
 restart` after installing the newer version.
+
+`host stop` stops every agent session the Host manages and runs the existing
+orderly shutdown of its providers, managed Codex app-server and owned Router.
+It waits for the Host process to exit and release `host.lock`, then prints one
+line. It succeeds when no Host is running. A shutdown timeout is an error; the
+command never force-kills the Host. Use `--router-root PATH` to select another
+Router root, as with the other Host commands.
 
 `host app-server restart` restarts only managed Codex without updating it.
 `host app-server update` runs the managed Codex updater. If executable content

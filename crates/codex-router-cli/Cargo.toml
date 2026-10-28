@@ -53,12 +53,13 @@ crossterm.workspace = true
 indicatif.workspace = true
 iocraft.workspace = true
 codex-router-tui.workspace = true
-nix.workspace = true
+nix = { workspace = true, features = ["event"] }
 opentelemetry.workspace = true
 opentelemetry-appender-tracing.workspace = true
 opentelemetry-otlp.workspace = true
 opentelemetry_sdk.workspace = true
 reqwest.workspace = true
+rustix = { workspace = true, features = ["event"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
