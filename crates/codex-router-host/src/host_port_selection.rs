@@ -30,7 +30,7 @@ pub struct SelectedHostPort {
     pub source: HostPortSource,
 }
 
-/// Immutable startup selections; file edits apply at the next whole-Host start.
+/// Host port values with their startup authorities; file edits apply at the next whole-Host start.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HostPortSelection {
     pub router: SelectedHostPort,

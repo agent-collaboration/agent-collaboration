@@ -57,6 +57,10 @@ whole-Host restart. Router-only `host router restart` retains launch-time ports.
 Hosts started before 0.1.109 saved their resolved ports as explicit flags;
 those persist across replacements until a fresh Host start lets the file apply.
 
+An explicit `--mcp-bind 127.0.0.1:0` selects an ephemeral listener for disposable
+runs. Status reports its actual assigned port with source `flag`; a replacement
+retains the ephemeral choice and may receive a different port.
+
 Read the actual MCP URL from the current manifest. With defaults it is
 `http://127.0.0.1:19742/mcp` (debug `http://127.0.0.1:18788/mcp`). The MCP backend
 stays on loopback HTTP. For private tailnet access, the owner can start the Host

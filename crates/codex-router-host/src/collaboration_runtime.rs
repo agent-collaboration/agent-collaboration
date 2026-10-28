@@ -151,6 +151,10 @@ pub struct CollaborationRuntime {
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
 impl CollaborationRuntime {
+    pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
+        self.collaboration_api.local_address()
+    }
+
     #[cfg(feature = "runtime-test-support")]
     pub async fn runtime_test_drain_project_publisher(
         &self,

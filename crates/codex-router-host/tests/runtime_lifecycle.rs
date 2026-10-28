@@ -15,6 +15,8 @@ use codex_router_host::HostCoordinationPaths;
 use codex_router_host::HostDeadlineInputs;
 use codex_router_host::HostDeadlines;
 use codex_router_host::HostPhase;
+use codex_router_host::HostPortSelection;
+use codex_router_host::HostPortSource;
 use codex_router_host::HostRuntime;
 use codex_router_host::HostSnapshot;
 use codex_router_host::ManagedChildLaunchPlans;
@@ -23,6 +25,7 @@ use codex_router_host::OperatorFrame;
 use codex_router_host::OperatorRequest;
 use codex_router_host::RecoveryBudget;
 use codex_router_host::RouterCondition;
+use codex_router_host::SelectedHostPort;
 use codex_router_host::TerminalClassification;
 use codex_router_test_support::native_app_server::run_native_app_server_fixture;
 use codex_router_test_support::router_health::PersistentRouterHealthFixture;
@@ -99,6 +102,20 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
         managed_executable: managed_executable.clone(),
         deadlines,
     })
+    .with_port_selection(HostPortSelection {
+        router: SelectedHostPort {
+            port: router.address().port(),
+            source: HostPortSource::Flag,
+        },
+        mcp: SelectedHostPort {
+            port: 0,
+            source: HostPortSource::Flag,
+        },
+        tailscale_https: SelectedHostPort {
+            port: 18789,
+            source: HostPortSource::Default,
+        },
+    })
     .with_collaboration_directory(
         collaboration_directory.clone(),
         collaboration_directory.clone(),
@@ -136,6 +153,21 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
         codex_router_host::HostedReadiness::Ready,
         "host startup must reach full readiness",
     )?;
+    let initial_ports = terminal_snapshot(&initial_frames)?
+        .port_selection()
+        .ok_or("Host must report its selected ports")?;
+    let manifest: collaboration_protocol::ServiceManifest = serde_json::from_slice(
+        &std::fs::read(collaboration_directory.join("service.json"))?,
+    )?;
+    let actual_mcp_port = reqwest::Url::parse(&manifest.mcp.url)?
+        .port_or_known_default()
+        .ok_or("published MCP URL must name its bound port")?;
+    let probe = tokio::net::TcpStream::connect(std::net::SocketAddr::from((
+        [127, 0, 0, 1],
+        actual_mcp_port,
+    )))
+    .await?;
+    drop(probe);
     check(
         initial_frames.iter().any(|frame| {
             matches!(
@@ -322,6 +354,16 @@ async fn runtime_recovery_restart_is_bounded_and_idle_is_event_driven()
 
     runtime.abort();
     let _runtime_result = runtime.await;
+    check_equal(
+        initial_ports.mcp.port,
+        actual_mcp_port,
+        "status must report the actual bound ephemeral MCP port, not requested zero",
+    )?;
+    check_equal(
+        initial_ports.mcp.source,
+        HostPortSource::Flag,
+        "the effective MCP port must retain its explicit launch source",
+    )?;
     Ok(())
 }
 

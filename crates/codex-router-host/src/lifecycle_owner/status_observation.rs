@@ -41,7 +41,16 @@ impl StatusObservation {
     pub(super) fn snapshot(
         self,
         state: &RuntimeState,
+        mcp_listen_address: Option<std::net::SocketAddr>,
     ) -> (HostSnapshot, Option<ExecutableIdentityTask>) {
+        let mut port_selection = self.port_selection;
+        if let Some(ports) = &mut port_selection
+            && let Some(address) = mcp_listen_address
+        {
+            // An explicit ephemeral bind selects zero; only the listener knows
+            // the effective port, while its startup authority remains the flag.
+            ports.mcp.port = address.port();
+        }
         let snapshot = HostSnapshot::new(HostSnapshotDimensions {
             phase: state.phase.clone(),
             router: self.router,
@@ -53,7 +62,7 @@ impl StatusObservation {
             recovery_budget: state.recovery_budget,
             last_lifecycle_outcome: state.last_lifecycle_outcome.clone(),
         })
-        .with_port_selection(self.port_selection);
+        .with_port_selection(port_selection);
         (snapshot, self.pending_identity)
     }
 }
