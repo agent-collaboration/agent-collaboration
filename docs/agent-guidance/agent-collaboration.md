@@ -54,7 +54,7 @@ only to loopback; the file's MCP port uses `127.0.0.1`.
 source (`flag`, `ports.json`, or `default`). A whole-Host `host restart` retains
 explicit launch flags and rereads the file, so file edits apply at the next
 whole-Host restart. Router-only `host router restart` retains launch-time ports.
-Hosts started before 0.1.108 saved their resolved ports as explicit flags;
+Hosts started before 0.1.109 saved their resolved ports as explicit flags;
 those persist across replacements until a fresh Host start lets the file apply.
 
 Read the actual MCP URL from the current manifest. With defaults it is
