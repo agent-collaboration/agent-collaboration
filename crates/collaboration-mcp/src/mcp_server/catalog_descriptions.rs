@@ -163,9 +163,6 @@ pub(super) fn operation_description(name: &str) -> &'static str {
         "project_update" => {
             "Updates a project's title in the fleet directory. Use project_describe for its description."
         }
-        "project_notification_cancel" => {
-            "Requests cancellation of one frozen project notification as the reported project lead or explicit owner. Identity is not authenticated. The SDK keeps the first canonical cancel ID; Pending does not claim prevention. This reads project authority without adding a project request or record."
-        }
         "project_list" => "Lists a bounded page of projects for a board. Read-only.",
         "project_show" => {
             "Reads a project's directory entry and local project state, including its description. State is notLocal when no local project store is available. Read-only."

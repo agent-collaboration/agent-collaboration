@@ -68,7 +68,6 @@ macro_rules! project_tools {
 }
 
 project_tools! {
-    ProjectNotificationCancel => ("project_notification_cancel", ProjectToolSelection::Operation { kind: "notificationCancel" }, BoardOperation::NotificationCancel { .. }),
     WorkstreamCreate => ("workstream_create", ProjectToolSelection::Operation { kind: "workstreamCreate" }, BoardOperation::WorkstreamCreate { .. }),
     WorkstreamRename => ("workstream_rename", ProjectToolSelection::Operation { kind: "workstreamRename" }, BoardOperation::WorkstreamRename { .. }),
     WorkstreamClose => ("workstream_close", ProjectToolSelection::Operation { kind: "workstreamClose" }, BoardOperation::WorkstreamClose { .. }),

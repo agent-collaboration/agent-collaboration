@@ -11,16 +11,6 @@ use collaboration_service::collaboration_application::{MessageFailure, MessageFa
 
 #[tool_router(router = message_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "message_cancel", description = "Requests cancellation of one direct message through its sender Router. Sender identity is declared, not authenticated. Supply cancelId for safe same-content replay; if absent it is minted once. The Router derives the frozen recipient and the SDK decides sender equality and canonical control identity. Pending does not claim prevention.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::RequestedCancelResult>>())]
-    pub(super) async fn message_cancel(
-        &self,
-        Parameters(request): Parameters<collaboration_protocol::MessageCancelRequest>,
-    ) -> CallToolResult {
-        application_result(
-            self.application.messages().message_cancel(request).await,
-            OperationEffect::Unknown,
-        )
-    }
     #[tool(name = "message_send", description = "Submits one agent-authored or explicit human message with exact auto, queue, or steer semantics. Agent sender identity is reported by the request's client, not authenticated. Supply itemId for safe same-content replay; different content under that ID is itemConflict. If omitted, the Router mints and returns an ID, and retrying an omitted-ID call after a lost local answer may duplicate. A local result includes the stored push id (the itemId), link, target and recorded delivery receipt. A remote result is queued with the item and frozen target once the sender outbox has custody; accepted input or a peer write does not prove completion or an agent reply. Router-authored content is not a public caller input, and uncertain dispatch is never replayed automatically.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<MessageSendResult>>())]
     pub(super) async fn message_send(
         &self,

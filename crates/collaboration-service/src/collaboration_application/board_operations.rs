@@ -8,9 +8,8 @@ use collaboration_protocol::{
     ThreadSubscriptionView,
 };
 use message_board::{
-    AuthorityRole, BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardId,
-    BoardNextAction, BoardOperation, Identity, PostId, ProjectId, ProjectRequest, ProtocolVersion,
-    RecordKind, RecordRef, ResourceIdentity, RoleRequirement, RoleSubject, SubscriptionState,
+    BoardError, BoardErrorDetails, BoardFailureKind, BoardFailureStage, BoardId, BoardNextAction,
+    Identity, PostId, ProjectId, RecordKind, RecordRef, ResourceIdentity, SubscriptionState,
     ThreadId, WorkspaceId,
 };
 use std::{sync::Arc, time::Duration};
@@ -34,8 +33,6 @@ mod board_inbox_events;
 mod board_inbox_reads;
 #[path = "board_non_post_refusals.rs"]
 mod board_non_post_refusals;
-#[path = "board_notification_cancel.rs"]
-mod board_notification_cancel;
 #[path = "board_paging.rs"]
 mod board_paging;
 #[path = "board_participant_pages.rs"]
@@ -77,7 +74,6 @@ pub struct BoardOperations {
         Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
     pub(super) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
     pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
-    pub(super) mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
     pub(super) project_replication:
         std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     pub(super) session_context: crate::collaboration_application::SessionContextReader,
@@ -99,7 +95,6 @@ impl BoardOperations {
         >,
         subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
         interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
-        mail_delivery: Option<std::sync::Arc<crate::MailDeliveryRuntime>>,
         project_replication: std::sync::Arc<
             dyn collaboration_contracts::ProjectReplicationPosition,
         >,
@@ -115,7 +110,6 @@ impl BoardOperations {
             subscription_presence,
             subscription_clock,
             interaction_store,
-            mail_delivery,
             project_replication,
             session_context,
             registry,

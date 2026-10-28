@@ -1,4 +1,4 @@
-//! Sender custody and requested cancellation are typed separately from native pushes.
+//! Sender custody are typed separately from native pushes.
 use crate::{
     MailDigest, MailItemId, PushOrigin, PushRecordShowParams, PushRecordShowResult, SessionRef,
 };
@@ -154,42 +154,4 @@ pub enum RemoteSizeField {
     Address,
     Acceptance,
     StatusRoute,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-pub enum MessageCancelSender {
-    Agent { sender: SessionRef },
-    HumanUser,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct MessageCancelRequest {
-    pub cancel_id: Option<MailItemId>,
-    pub target: MailItemId,
-    pub sender: MessageCancelSender,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RequestedCancelResult {
-    pub cancel: MailItemId,
-    pub target: MailItemId,
-    pub outcome: RequestedCancelOutcome,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase",
-    deny_unknown_fields
-)]
-pub enum RequestedCancelOutcome {
-    Pending,
-    Prevented,
-    TooLate {
-        at: collaboration_mail_protocol::TooLateAt,
-    },
-    Refused {
-        reason: collaboration_mail_protocol::MailRefusal,
-    },
 }

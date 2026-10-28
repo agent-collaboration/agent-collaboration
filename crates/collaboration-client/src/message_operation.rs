@@ -193,18 +193,6 @@ impl CollaborationClient {
         serde_json::from_value(value)
             .map_err(|_| ClientError::Protocol("invalid Router push show result"))
     }
-    pub async fn message_cancel(
-        &self,
-        request: collaboration_protocol::MessageCancelRequest,
-    ) -> Result<collaboration_protocol::RequestedCancelResult, ClientError> {
-        let value = self
-            .connection
-            .call("message_cancel", serde_json::json!(request))
-            .await?;
-        serde_json::from_value(value).map_err(|_| {
-            ClientError::Protocol("invalid requested cancel result; inspect before retrying")
-        })
-    }
 
     pub async fn message_inbox(
         &self,
