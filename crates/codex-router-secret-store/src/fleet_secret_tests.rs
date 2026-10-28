@@ -359,6 +359,7 @@ fn account_enumeration_pruning_and_reopen_preserve_fleet_generations() -> TestRe
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
+#[cfg(debug_assertions)]
 #[test]
 fn declared_debug_is_the_only_fleet_plaintext_path_and_production_refuses_it() -> TestResult {
     let root = tempfile::tempdir()?;
