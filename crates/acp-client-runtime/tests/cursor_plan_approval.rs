@@ -1,7 +1,5 @@
 //! Cursor create_plan is a blocking Approval with a preceding plan Item.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -38,6 +36,11 @@ impl InteractionPort for PlanPort {
     fn binding_retirement(_context: &Self::Context) -> CancellationToken {
         CancellationToken::new()
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn request_approval(
         &self,
         _context: Self::Context,
@@ -86,6 +89,15 @@ impl SessionEventSink for PlanEventSink {
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if let SessionEvent::ItemStarted { item } = event
             && item.kind == SessionItemKind::Plan
@@ -100,6 +112,10 @@ impl SessionEventSink for PlanEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_plan_case(
     answer: ApprovalPortOutcome,
 ) -> (

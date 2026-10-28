@@ -1,9 +1,16 @@
 //! A real Welcome repairs a missed publication prompt after a durable copy acknowledgement.
 use super::*;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::seed_unacknowledged_notification;
-use collaboration_service::{CollaborationApplication, MachineIdentity, ProjectAdmissionProps, ServiceIdentity, SessionDeliveryRouter};
+use collaboration_contracts::MachineIdentity;
+use collaboration_service::ProjectAdmissionProps;
+use collaboration_service::ApplicationFixture;
+use collaboration_runtime::SessionDeliveryRouter;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_hint_was_missed()
 -> Result<(), TestError> {
     let _ = tracing_subscriber::fmt()
@@ -13,7 +20,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("router");
     let mut central = TestFleet::start_mail_as(&directory.path().join("central"), None).await?;
-    let seed = seed_unacknowledged_notification(&root, &mut central).await?;
+    let seed = Box::pin(seed_unacknowledged_notification(&root, &mut central)).await?;
     // The same service, peer, receiver and saved client session survive. Only
     // the original Router's native file handles and loops have closed.
     let mut harness =
@@ -38,9 +45,9 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
         fleet: fleet.clone(),
         identity: machine,
     })?);
-    let replication: Arc<dyn collaboration_service::ProjectReplicationPosition> =
+    let replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition> =
         harness.projects.clone();
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
@@ -62,8 +69,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
         Arc::downgrade(&harness.mail.mail),
     ));
     harness.publisher = Arc::downgrade(&publisher);
-    let app =
-        CollaborationApplication::new(identity.with_notification_publisher(publisher.clone()));
+    let app = (identity.with_notification_publisher(publisher.clone())).build();
     harness.admission = Arc::downgrade(&admission);
     harness.fleet = Arc::downgrade(&fleet);
     assert!(!*harness.welcomed.borrow());

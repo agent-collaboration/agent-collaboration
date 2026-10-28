@@ -40,8 +40,8 @@ fn test_subscription_push_store(fixture: &OwnerFixture) -> SubscriptionPushStore
     let (observations, _) = broadcast::channel(1);
     SubscriptionPushStore::new(SubscriptionPushStoreProps {
         store: Arc::clone(&fixture.interactions),
-        delivery: Arc::new(crate::SessionDeliveryRouter::new(Vec::new())),
-        machine: crate::MachineIdentity::new(
+        delivery: Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new())),
+        machine: collaboration_contracts::MachineIdentity::new(
             UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
             Some("Owner-test-machine"),
         )
@@ -94,7 +94,7 @@ async fn receive_expiry_request_with_owner_observations(
     runtime: &OwnerRuntime,
     trace: &mut OwnerObservationTrace,
     cycle: &str,
-) -> crate::layer_zero::DeliveryRequest {
+) -> collaboration_contracts::layer_zero::DeliveryRequest {
     let wait_for_request = async {
         loop {
             tokio::select! {
@@ -161,7 +161,7 @@ async fn close_owner_with_timeout(
 
 #[tokio::test(start_paused = true)]
 async fn successive_selected_activity_batches_store_distinct_canonical_origin_refs() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let push = test_subscription_push_store(&fixture);
     let target = target_session(&fixture.reader).unwrap();
     let scope = SubscriptionScope::thread(fixture.root.clone());
@@ -199,7 +199,11 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
         );
 
         let prepared = push
-            .activity(&target, &batch, crate::LoadPolicy::LoadedOnly)
+            .activity(
+                &target,
+                &batch,
+                collaboration_contracts::LoadPolicy::LoadedOnly,
+            )
             .await
             .unwrap();
         let stored = fixture
@@ -244,7 +248,7 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
 
 #[tokio::test]
 async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let scope = SubscriptionScope::thread(fixture.root.clone());
     let target = target_session(&fixture.reader).unwrap();
 
@@ -422,7 +426,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
 #[tokio::test]
 async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_explicit_error() {
     tokio::time::timeout(Duration::from_secs(30), async {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,

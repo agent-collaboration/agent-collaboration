@@ -79,6 +79,10 @@ async fn mailbox_effects(fixture: &Fixture) -> TestResult<MailboxEffects> {
     })).await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn delivered_retired_mail_keeps_compact_identity_and_replays_without_new_effects()
 -> TestResult {

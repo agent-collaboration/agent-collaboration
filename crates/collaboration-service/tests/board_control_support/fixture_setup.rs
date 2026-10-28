@@ -93,7 +93,7 @@ pub(super) fn cursor(post: &Post) -> Result<FeedCursor, TestError> {
         _ => Err("project post has fleet position".into()),
     }
 }
-#[allow(clippy::panic_in_result_fn)] // This test helper checks the returned independent reply.
+
 pub(super) async fn acknowledge(
     client: &CollaborationClient,
     actor: &Identity,

@@ -1,11 +1,11 @@
 //! Run views derive lifecycle payloads from the validated stored record without inventing native IDs.
-use crate::wakeup_projection::timestamp;
 use agent_automation::{RunPhase, RunRecord};
 use collaboration_protocol::{
     CodexGeneration, DeliveryReceipt, DeliveryRouteEvidence, EndpointRef, ExecutionTiming,
     NativeExecution, RetainedSummary, RunExecution, RunExecutionEvidence, RunSnapshot, RunState,
     SessionRef,
 };
+use collaboration_runtime::observation_timestamp::timestamp;
 pub(crate) fn snapshot<TReceipt: Into<DeliveryReceipt>>(
     record: RunRecord<SessionRef, EndpointRef, CodexGeneration, TReceipt>,
 ) -> Result<RunSnapshot, ()> {
@@ -13,7 +13,7 @@ pub(crate) fn snapshot<TReceipt: Into<DeliveryReceipt>>(
         .evidence
         .route
         .as_ref()
-        .map(crate::delivery_route_projection::project)
+        .map(collaboration_runtime::delivery_route_projection::project)
         .transpose()?;
     let inputs = record
         .inputs

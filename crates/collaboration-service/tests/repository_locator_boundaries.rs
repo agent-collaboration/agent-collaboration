@@ -1,5 +1,9 @@
 //! Retained maximum escaped locator paging and corrupt stored-locator rejection.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -7,7 +11,10 @@ use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn max_bound_escaped_locators_page_fully_below_the_frame_limit() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let mut expected = Vec::new();
@@ -57,7 +64,10 @@ async fn max_bound_escaped_locators_page_fully_below_the_frame_limit() -> Result
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn oversized_stored_locator_is_rejected_by_domain_decoding() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let path = fixture._directory.path().join("fleet-cache.sqlite");

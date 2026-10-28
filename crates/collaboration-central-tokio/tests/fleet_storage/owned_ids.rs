@@ -39,6 +39,10 @@ impl PlatformIo for TracedIds {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() -> TestResult {
     let root = tempfile::tempdir()?;

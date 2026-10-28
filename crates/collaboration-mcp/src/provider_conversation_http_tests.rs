@@ -2,7 +2,6 @@
 //! Router's own provider operations, here a scripted provider backend that records what it
 //! was asked.
 use crate::api_test_harness::{ServedApi, api_config, test_identity};
-use collaboration_service::CollaborationApplication;
 use reqwest::header::{ACCEPT, CONTENT_TYPE};
 use scripted_provider_backend::ScriptedProviderBackend;
 use serde_json::{Value, json};
@@ -441,7 +440,7 @@ async fn start_listener(path: &std::path::Path, backend: &ScriptedProviderBacken
         ])
         .expect("endpoint directory")
         .with_provider_conversation_backend(Arc::new(backend.clone()));
-    ServedApi::tcp(&api_config(CollaborationApplication::new(identity), path)).await
+    ServedApi::tcp(&api_config((identity).build(), path)).await
 }
 
 fn operation_snapshot(operation_id: &str, operation: &str) -> Value {
@@ -586,7 +585,7 @@ async fn shutdown_aborts_a_call_that_ignores_cancellation_and_joins_it() {
         ])
         .expect("endpoint directory")
         .with_provider_conversation_backend(Arc::new(backend.clone()));
-    let config = api_config(CollaborationApplication::new(identity), temporary.path());
+    let config = api_config((identity).build(), temporary.path());
     let listener =
         ServedApi::tcp_with_call_grace(&config, std::time::Duration::from_millis(200)).await;
     let client = reqwest::Client::new();

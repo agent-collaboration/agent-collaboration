@@ -194,8 +194,10 @@ dependencies = [
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-client",
+ "collaboration-contracts",
  "collaboration-mcp",
  "collaboration-protocol",
+ "collaboration-runtime",
  "collaboration-service",
  "comfy-table",
  "crossterm",
@@ -793,6 +795,8 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "collaboration-central-tokio",
+ "collaboration-contracts",
+ "collaboration-runtime",
  "collaboration-service",
  "fleet-sync-lease",
  "fleet-sync-protocol",
@@ -858,7 +862,9 @@ dependencies = [
  "collaboration-central-core",
  "collaboration-central-tokio",
  "collaboration-client",
+ "collaboration-contracts",
  "collaboration-protocol",
+ "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
@@ -1257,6 +1263,7 @@ dependencies = [
  "collaboration-central-tokio",
  "collaboration-client",
  "collaboration-protocol",
+ "collaboration-runtime",
  "collaboration-service",
  "comfy-table",
  "crossterm",
@@ -1319,6 +1326,7 @@ dependencies = [
  "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",
+ "codex-acp-adapter",
  "codex-native-integration",
  "codex-router-core",
  "codex-router-host",
@@ -1326,9 +1334,11 @@ dependencies = [
  "codex-router-test-support",
  "collaboration-central-conformance",
  "collaboration-client",
+ "collaboration-contracts",
  "collaboration-mail-protocol",
  "collaboration-mcp",
  "collaboration-protocol",
+ "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
@@ -1652,6 +1662,8 @@ dependencies = [
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
  "collaboration-central-core",
+ "collaboration-contracts",
+ "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
@@ -1692,8 +1704,10 @@ dependencies = [
  "codex-acp-adapter",
  "codex-native-integration",
  "collaboration-central-admin-protocol",
+ "collaboration-contracts",
  "collaboration-mcp",
  "collaboration-protocol",
+ "collaboration-runtime",
  "collaboration-service",
  "fleet-admission",
  "fleet-sync-protocol",
@@ -1714,6 +1728,30 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "collaboration-contracts"
+version = "0.1.107"
+dependencies = [
+ "agent-automation",
+ "automation-storage",
+ "board-sync-protocol",
+ "collaboration-mail-protocol",
+ "collaboration-protocol",
+ "fleet-sync-delivery",
+ "fleet-sync-protocol",
+ "fleet-sync-writer",
+ "message-board",
+ "message-board-storage",
+ "nix",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "session-event-model",
+ "thiserror 2.0.18",
+ "tokio",
  "uuid",
 ]
 
@@ -1744,7 +1782,9 @@ dependencies = [
  "codex-native-integration",
  "codex-router-host",
  "collaboration-client",
+ "collaboration-contracts",
  "collaboration-protocol",
+ "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
@@ -1793,6 +1833,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "collaboration-runtime"
+version = "0.1.107"
+dependencies = [
+ "agent-automation",
+ "automation-storage",
+ "base64 0.22.1",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "chrono",
+ "codex-acp-adapter",
+ "codex-native-integration",
+ "collaboration-contracts",
+ "collaboration-mail-protocol",
+ "collaboration-protocol",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-delivery",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-tokio-runner",
+ "fleet-sync-writer",
+ "futures-util",
+ "getrandom 0.3.4",
+ "interaction-storage",
+ "lifecycle-observation",
+ "message-board",
+ "message-board-storage",
+ "runtime-primitives",
+ "serde",
+ "serde_json",
+ "session-event-model",
+ "sqlx",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-tungstenite",
+ "tokio-util",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "collaboration-service"
 version = "0.1.107"
 dependencies = [
@@ -1807,9 +1890,11 @@ dependencies = [
  "codex-acp-adapter",
  "codex-native-integration",
  "collaboration-client",
+ "collaboration-contracts",
  "collaboration-mail-protocol",
  "collaboration-mcp",
  "collaboration-protocol",
+ "collaboration-runtime",
  "durable-steps",
  "fleet-admission",
  "fleet-sync-delivery",
@@ -7577,6 +7662,15 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
  "web-sys",
+]
+
+[[package]]
+name = "workspace-architecture-check"
+version = "0.1.107"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

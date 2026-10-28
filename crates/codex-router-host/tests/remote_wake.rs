@@ -13,7 +13,6 @@ use std::{os::unix::fs::PermissionsExt, path::Path, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
 
 #[path = "support/registered_route_project.rs"]
-#[allow(clippy::expect_used)] // Existing route fixture asserts fixed inputs and bounded settlement.
 mod registered_route_project;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -21,7 +20,7 @@ const BOUND: Duration = Duration::from_secs(20);
 
 fn origin(root: &Path) -> TestResult<message_board::ActorOrigin> {
     Ok(message_board::ActorOrigin {
-        installation: String::from(collaboration_service::load_service_identity(root)?)
+        installation: String::from(collaboration_runtime::load_service_identity(root)?)
             .try_into()?,
         machine: "remote wake fixture".to_owned().try_into()?,
     })
@@ -64,7 +63,10 @@ fn request(creator: &SessionRef, recipient: &SessionRef) -> TestResult<WakeSendR
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Behavior assertions stay distinct from propagated fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Behavior assertions stay distinct from propagated fixture failures."
+)]
 async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestResult {
     let root = tempfile::Builder::new().prefix("rw-").tempdir_in("/tmp")?;
     let a = root.path().join("a");
@@ -77,13 +79,13 @@ async fn remote_wake_is_owned_and_fires_on_the_recipient_installation() -> TestR
     let central = TestCentral::start_with_peer(
         &root.path().join("central"),
         &origin(&a)?,
-        collaboration_service::load_installation_peer(&a)?,
+        collaboration_runtime::load_installation_peer(&a)?,
     )
     .await?;
     let enrolled: EnrolledTestMachine = central
         .additional_machine(
             &origin(&b)?,
-            collaboration_service::load_installation_peer(&b)?,
+            collaboration_runtime::load_installation_peer(&b)?,
         )
         .await?;
     let socket = b.join("peers/peer.sock");
@@ -361,6 +363,8 @@ async fn peer_record(
             }
             Ok(shown.record)
         }
-        _ => Err("peer push was not owned locally".into()),
+        collaboration_protocol::MessageShowResult::Remote { .. } => {
+            Err("peer push was not owned locally".into())
+        }
     }
 }

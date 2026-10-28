@@ -1,7 +1,6 @@
 //! Independent legacy inbox selection from sealed SQLite copies.
 //! The example follows `ffced1c1`'s inbox predicate and never reads importer output.
 #![deny(clippy::too_many_lines)]
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 #[path = "legacy_selection_oracle/oracle_arguments.rs"]
 mod oracle_arguments;

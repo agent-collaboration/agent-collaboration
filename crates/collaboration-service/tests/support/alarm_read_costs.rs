@@ -1,5 +1,5 @@
 //! Count complete native alarm runs separately from the overlapping foreground request.
-#![allow(dead_code, clippy::unwrap_used, clippy::expect_used, clippy::panic)] // A broken proof recorder must fail.
+
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{Mutex, OnceLock},
@@ -47,6 +47,7 @@ impl<TSubscriber> Layer<TSubscriber> for AlarmReadCostLayer
 where
     TSubscriber: Subscriber + for<'lookup> LookupSpan<'lookup>,
 {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_new_span(&self, attributes: &Attributes<'_>, id: &Id, context: Context<'_, TSubscriber>) {
         if attributes.metadata().name() != "central_alarm" {
             return;
@@ -77,6 +78,8 @@ where
             .extensions_mut()
             .insert(AlarmRunId(run_id));
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_event(&self, event: &Event<'_>, context: Context<'_, TSubscriber>) {
         if event.metadata().target() != "sqlx::query" {
             return;
@@ -104,6 +107,8 @@ where
                 .statements += 1;
         }
     }
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_close(&self, id: Id, context: Context<'_, TSubscriber>) {
         let run_id = context
             .span(&id)
@@ -141,6 +146,7 @@ impl AlarmRunCosts {
             .collect()
     }
 }
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn observe_alarm_costs() -> AlarmCostObservation {
     let state = state().lock().unwrap();
     AlarmCostObservation {
@@ -154,6 +160,8 @@ pub fn observe_alarm_costs() -> AlarmCostObservation {
     }
 }
 impl AlarmCostObservation {
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub async fn finish(self) -> Result<AlarmRunCosts, Box<dyn std::error::Error + Send + Sync>> {
         let mut completed = completed_runs().subscribe();
         let (overlapping_statements, selected) = {

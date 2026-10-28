@@ -9,7 +9,6 @@ const CREDIT_PREVIOUS_RESPONSE_ID: &str = "resp_credit_affinity_owner";
 const NO_REPLAY_PROBE_PATH: &str = "/__credit_affinity_no_replay_probe";
 
 #[test]
-#[allow(clippy::result_large_err)]
 fn assembled_loopback_http_session_affinity_yields_credit_owner_to_included_peer() {
     let temp_dir = ProxyTestTempDir::new("credit_affinity_session_yields_to_included_peer");
     let database_path = temp_dir.path().join("state.sqlite");
@@ -180,7 +179,6 @@ fn assembled_loopback_http_session_affinity_yields_credit_owner_to_included_peer
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
 fn assembled_loopback_http_previous_response_credit_owner_fails_closed_without_replay() {
     let temp_dir = ProxyTestTempDir::new("credit_affinity_previous_response_fails_closed");
     let database_path = temp_dir.path().join("state.sqlite");

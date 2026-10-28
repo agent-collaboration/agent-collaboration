@@ -1,9 +1,18 @@
 //! Requested local controls expose canonical outcomes through the actual CLI and MCP.
 use collaboration_service as mail_service;
+
 #[path = "support/local_mail_surfaces.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 mod local_mail_surfaces;
+
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
 use collaboration_protocol::MailItemId;
 use local_mail_surfaces::{Surfaces, TestResult};
@@ -62,7 +71,10 @@ async fn terminal_control(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn cancel_after_local_delivery_marks_the_original_without_another_native_wake() -> TestResult
 {
     let surfaces = Surfaces::start().await?;
@@ -174,7 +186,10 @@ async fn cancel_after_local_delivery_marks_the_original_without_another_native_w
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn held_local_mail_is_prevented_through_public_control_before_native_delivery() -> TestResult
 {
     let surfaces = Surfaces::start().await?;
@@ -217,7 +232,10 @@ async fn held_local_mail_is_prevented_through_public_control_before_native_deliv
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn omitted_cancel_identity_is_printed_even_when_connection_fails_without_storage()
 -> TestResult {
     let root = tempfile::tempdir()?;

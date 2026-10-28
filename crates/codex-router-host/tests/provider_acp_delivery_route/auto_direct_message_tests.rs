@@ -1,13 +1,14 @@
 use super::*;
 #[path = "auto_direct_message_tests/uncertainty_push_tests.rs"]
 mod uncertainty_push_tests;
+use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
     PushDeliveryState, PushHeaderFacts, PushKind, PushOrigin, PushRecordDraft,
 };
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
-};
+use collaboration_service::BoardAvailability;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use interaction_storage::InteractionStore;
 
 fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalProviderLaunch {
@@ -21,6 +22,7 @@ fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalPro
     )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn save_direct_message(
     store: &InteractionStore,
     target: &SessionRef,

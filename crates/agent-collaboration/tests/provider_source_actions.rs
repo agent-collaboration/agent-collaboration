@@ -9,10 +9,15 @@ use collaboration_protocol::{
     OperationId, ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt as _, time::Duration};
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "integration/configured_inventory_read/recorded_api_listener.rs"]
 mod recorded_api_listener;
 
@@ -42,7 +47,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
         let invoking_directory = root_path.join("different-new-default-project");
         std::fs::create_dir(&saved_directory)?;
         std::fs::create_dir(&invoking_directory)?;
-        let runtime = CollaborationRuntime::start_with_external_providers(
+        let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
             CollaborationRuntimeInputs {
                 board_session: None,
                 directory: root_path.clone(),
@@ -73,7 +78,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                     binding
                 }
             })],
-        )
+        ))
         .await?;
         let client =
             CollaborationClient::connect(&root_path, "source-policy-observer", "1").await?;

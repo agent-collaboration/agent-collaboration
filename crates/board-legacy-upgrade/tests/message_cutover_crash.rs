@@ -1,11 +1,14 @@
 //! A process can disappear after copy commit without authorizing the source drop.
-#![allow(clippy::panic_in_result_fn)]
 mod message_support;
 mod support;
 use board_legacy_upgrade::MessageUpgrade;
 use message_support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn process_exit_after_copy_retries_the_same_ids_before_real_drop() -> TestResult {
     let directory = tempfile::Builder::new()
         .prefix("message-copy-crash-")

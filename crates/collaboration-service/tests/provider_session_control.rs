@@ -6,9 +6,10 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderSessionListParams, ProviderSessionState,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, ServiceIdentity,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use tokio::sync::Mutex;
 #[path = "support/served_api.rs"]
@@ -140,7 +141,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
             "capabilities":[{"name":"create","status":"supported","evidence":"advertised"}]}]
     }))
     .expect("Cursor endpoint");
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![description, cursor_description, no_channel])
         .expect("endpoint")
@@ -148,9 +149,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
         .with_provider_session_hub(hub.clone())
         .with_claude_code_sessions(Arc::new(ClaudeCodeSessionRegistry::new(registry_directory)));
     let second_identity = identity.clone();
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("socket");
+    let served = served_api::ServedApi::start(identity).expect("socket");
     let client = served
         .client("provider-list-test")
         .await
@@ -330,9 +329,7 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
     );
     served.stop().await.expect("close");
 
-    let served = served_api::ServedApi::start(second_identity)
-        .await
-        .expect("second socket");
+    let served = served_api::ServedApi::start(second_identity).expect("second socket");
     let client = served
         .client("provider-list-test")
         .await
@@ -370,16 +367,14 @@ async fn provider_inventory_control_reads_durable_rows_with_hub_state() {
         "availability":{"state":"unavailable","observedAt":"2026-09-26T00:00:00Z","reason":"ACP unavailable"},
         "channels":[]
     })).expect("unavailable Claude endpoint");
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![unavailable_claude])
         .expect("endpoint")
         .with_claude_code_sessions(Arc::new(ClaudeCodeSessionRegistry::new(
             root.path().join("claude-fixture-registry"),
         )));
-    let served = served_api::ServedApi::start(identity)
-        .await
-        .expect("third socket");
+    let served = served_api::ServedApi::start(identity).expect("third socket");
     let client = served
         .client("terminal-only-list-test")
         .await

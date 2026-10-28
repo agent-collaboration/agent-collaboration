@@ -1,14 +1,29 @@
 //! Real board admission, renderer, prepared push and Layer-0 routing; only the agent endpoint stands in.
+use collaboration_service::ApplicationFixture;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 use board_fixture::native_mail_owner;
+use collaboration_contracts::{
+    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
+    DeliveryContractError, DeliveryFuture, LoadPolicy, MachineIdentity, RoutePresence,
+    SessionDeliveryRoute, layer_zero,
+};
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushKind, RouterOriginRef, SessionReachability,
 };
-use collaboration_service::*;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::{
+    BoardAvailability, IntentReply, MailPushDeliveryProps, NotificationPublisher, ProjectAdmission,
+    ProjectAdmissionProps, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
+    SystemSubscriptionClock,
+};
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
@@ -25,8 +40,8 @@ impl SessionDeliveryRoute for CapturingEndpoint {
     fn claim(
         &self,
         _: &collaboration_protocol::SessionRef,
-    ) -> DeliveryFuture<'_, collaboration_service::NativeRouteClaim> {
-        Box::pin(async { Ok(collaboration_service::NativeRouteClaim::holds()) })
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
+        Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
     }
     fn presence(
         &self,
@@ -38,7 +53,7 @@ impl SessionDeliveryRoute for CapturingEndpoint {
         &'a self,
         request: layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             let outcome = self
                 .outcomes
@@ -65,19 +80,22 @@ impl SessionDeliveryRoute for CapturingEndpoint {
     }
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let registry = board_fixture::new_registry(directory.path())?;
+    let registry = board_fixture::native_registry::new_registry(directory.path())?;
     let origin = ActorOrigin {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("intent proof".to_owned())?,
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
         directory.path(),
-        Arc::new(board_fixture::PendingRegistration),
+        Arc::new(board_fixture::native_registry::PendingRegistration),
         &origin,
     )
     .await?;
@@ -123,7 +141,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
         )?,
         clock: Arc::new(SystemSubscriptionClock),
     });
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
@@ -153,9 +171,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     ));
     let identity = identity.with_notification_publisher(publisher.clone());
     delivery.start().await?;
-    let api =
-        ServedCollaborationApi::start(directory.path(), CollaborationApplication::new(identity))
-            .await?;
+    let api = ServedCollaborationApi::start(directory.path(), (identity).build())?;
     let actor = json!({"kind":"human","humanId":"owner"});
     let header = || json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":actor});
     let workspace = WorkspaceId::generate();
@@ -177,7 +193,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     create["boardId"] = json!(board);
     create["projectId"] = json!(project);
     create["title"] = json!("project");
-    board_fixture::prepare_registered_creation(
+    board_fixture::registered_project::prepare_registered_creation(
         &fleet,
         &registry,
         &serde_json::from_value(create.clone())?,

@@ -35,7 +35,7 @@ impl DirectoryPair {
             std::fs::DirBuilder::new().mode(0o700).create(directory)?;
         }
         let second_origin = origin(&second_root)?;
-        let second_peer = collaboration_service::load_installation_peer(&second_root)?;
+        let second_peer = collaboration_runtime::load_installation_peer(&second_root)?;
         Ok(Self {
             root,
             first_root,
@@ -55,7 +55,7 @@ impl DirectoryPair {
             TestCentral::start_with_peer(
                 &self.root.path().join("central"),
                 &origin(&self.first_root)?,
-                collaboration_service::load_installation_peer(&self.first_root)?,
+                collaboration_runtime::load_installation_peer(&self.first_root)?,
             )
             .await?,
         );
@@ -220,7 +220,7 @@ impl DirectoryPair {
 
 fn origin(directory: &std::path::Path) -> FixtureResult<ActorOrigin> {
     Ok(ActorOrigin {
-        installation: String::from(collaboration_service::load_service_identity(directory)?)
+        installation: String::from(collaboration_runtime::load_service_identity(directory)?)
             .try_into()?,
         machine: "installation-directory fixture".to_owned().try_into()?,
     })

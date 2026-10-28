@@ -4,7 +4,16 @@
 //! They run the same carrier clients the CLIs do, inside the Host: a Codex conversation or
 //! observation runs on its carrier socket; a provider conversation or observation runs on the
 //! Router's own operations.
-use super::*;
+use super::{
+    BoundedObservationRequest, BoundedObservationResult, CallToolResult, CollaborationMcpServer,
+    ConversationCancelInput, ConversationClient, ConversationClientError,
+    ConversationCreateOutcome, ConversationCreatePromptOutcome,
+    ConversationCreatePromptToolRequest, ConversationCreateToolRequest,
+    ConversationLoadToolRequest, ConversationOperationResult, ConversationOperationSubmission,
+    ConversationPromptToolRequest, Duration, McpToolOutput, OperationEffect, Parameters,
+    conversation_call_cancelled, conversation_create_tool_result, conversation_tool_result,
+    failure, operation_error_result, structured_result, tool, tool_router,
+};
 
 #[tool_router(router = carrier_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {

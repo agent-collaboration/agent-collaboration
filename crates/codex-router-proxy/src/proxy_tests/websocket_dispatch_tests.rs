@@ -1,7 +1,10 @@
 use super::*;
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchanged() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_large_first_frame");
     let database_path = temp_dir.path().join("state.sqlite");
@@ -158,7 +161,10 @@ fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchange
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_reloads_local_auth_and_closes_old_token_websocket() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_token_rotation");
     let database_path = temp_dir.path().join("state.sqlite");

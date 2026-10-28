@@ -1,9 +1,14 @@
 //! Recipient push policy and native I/O; custody and outcome writes remain in the library.
-use crate::{
-    LoadPolicy, MachineIdentity, MailPushPreparation, RouterDeliveryTypes, SubscriptionClock,
-    SubscriptionDeliveryService, TargetPresence, TargetPresenceProbe,
-    mail_push_preparation::prepare_mail_push_with_load_policy, received_mail_push,
-};
+use crate::SubscriptionClock;
+use crate::SubscriptionDeliveryService;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::RouterDeliveryTypes;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::MailPushPreparation;
+use collaboration_runtime::mail_push_preparation::prepare_mail_push_with_load_policy;
+use collaboration_runtime::received_mail_push;
 use fleet_sync_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
 use fleet_sync_protocol::DeliveryItem;
 use interaction_storage::InteractionStore;

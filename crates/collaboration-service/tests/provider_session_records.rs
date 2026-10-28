@@ -6,10 +6,10 @@ use collaboration_protocol::{
     ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
     RouterAccess, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    ProviderOperationAdmission, ProviderOperationStore, ProviderOperationStoreError,
-    ProviderSessionRecord,
-};
+use collaboration_runtime::ProviderOperationAdmission;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderOperationStoreError;
+use collaboration_runtime::ProviderSessionRecord;
 use message_board::HumanId;
 use sqlx::{Connection, SqliteConnection};
 

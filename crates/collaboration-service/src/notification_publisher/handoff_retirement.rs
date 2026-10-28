@@ -1,5 +1,5 @@
 //! Retire only the acknowledged settled prefix, retaining progress across partial completion.
-use super::*;
+use super::{BoardError, ProjectId, PublisherInner, publication_epoch};
 use message_board::{CancelExpansionSeq, HandoffSeq};
 use message_board_storage::MailHandoffItem;
 

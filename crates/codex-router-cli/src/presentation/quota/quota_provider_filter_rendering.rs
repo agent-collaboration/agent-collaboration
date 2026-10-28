@@ -1,7 +1,10 @@
 use codex_router_tui::UseDialogInteraction;
 use iocraft::prelude::*;
 
-use super::quota_provider_filters::*;
+use super::quota_provider_filters::{
+    QuotaAccountFilters, QuotaFilterAction, QuotaFilterController, QuotaFilterDraft,
+    QuotaFilterFocus, QuotaFilterValue, QuotaInteractionMode, quota_filter_choices,
+};
 
 const NARROW_FILTER_TOOLBAR_WIDTH: usize = 90;
 
@@ -76,7 +79,7 @@ pub(super) fn render_quota_filter_toolbar(
         filters.disabled.label()
     );
     element! {
-        View(width: width as u32, height: 1, column_gap: 2, flex_shrink: 0.0_f32) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX), height: 1, column_gap: 2, flex_shrink: 0.0_f32) {
             QuotaFilterButton(label: if narrow { full_label } else { "Filters ▾".to_owned() }, enabled, on_click: on_open)
             #(if !narrow { Some(element!(Text(content: summary, color: Color::White, wrap: TextWrap::NoWrap))) } else { None })
         }
@@ -112,7 +115,7 @@ pub(super) fn render_quota_filter_chooser(
         element! {codex_router_tui::FormField(label:label.to_owned(),label_width:17u16,stacked:width<52,has_focus:draft.focus==field) {#(body)}}.into_any()
     }).collect::<Vec<_>>();
     element! {
-        View(width:width as u32,max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             #(fields)
         }
     }.into_any()

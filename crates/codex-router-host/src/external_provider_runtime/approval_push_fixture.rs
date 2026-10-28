@@ -1,11 +1,13 @@
 //! Private store-backed approval composition and native notice capture.
 
 use automation_storage::AutomationStore;
+use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
     MachineId, PushKind, PushLineInput, PushOrigin, PushRecord, RouterLink, SessionRef,
     UuidIdentity, render_push_line,
 };
-use collaboration_service::{MachineIdentity, ServiceIdentity, ServiceInteractionBroker};
+
+use collaboration_runtime::ServiceInteractionBroker;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::{
     path::{Path, PathBuf},
@@ -31,11 +33,8 @@ impl ApprovalPushFixture {
         legacy_owner.close().await?;
         let store = broker.interaction_store();
         let machine_identity = MachineIdentity::new(service_id.clone(), Some("approval-fixture"))?;
-        let service_id_text = String::from(service_id.clone());
-        let identity = ServiceIdentity::new(&service_id_text, &service_id_text)?
-            .with_machine_identity(machine_identity.clone())?
-            .with_approval_broker(Arc::clone(broker));
-        drop(identity);
+        broker.install_display_names(collaboration_runtime::SessionDisplayNameCache::default());
+        broker.install_push_context(store.clone(), machine_identity.clone());
         Ok(Self {
             store,
             legacy_path,

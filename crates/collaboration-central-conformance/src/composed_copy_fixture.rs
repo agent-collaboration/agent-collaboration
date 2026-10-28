@@ -1,7 +1,17 @@
 //! Copy scenarios use real admitted sessions and the composed Registry journal.
-use crate::{ConformanceClient, ConformanceResult, composed_client::*, enroll_admitted_peer};
+use crate::{
+    ConformanceClient, ConformanceResult,
+    composed_client::{copy_probe, operation},
+    enroll_admitted_peer,
+};
 use board_sync_protocol::BoardAnnotation;
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    CommitSequence, CopyOrigin, CopyStatus, CopyStatusAnswer, CreateCopy, CreateCopyAnswer,
+    DatabaseId, Epoch, FenceRequest, FenceResult, OperationAnswer, OperationRequest, PeerId, Piece,
+    PieceContents, PieceDigest, ReplicatedTransaction, ReplicationAnswer, ReplicationPosition,
+    ReplicationRequest, RowChange, SnapshotCursor, SnapshotPage, SnapshotRead, SqlValue,
+    TransactionKey, TransactionPart,
+};
 use serde_json::json;
 
 pub(crate) struct CopyFixture {
@@ -118,7 +128,9 @@ impl CopyFixture {
     pub async fn first_page(&self, client: &ConformanceClient) -> ConformanceResult<SnapshotPage> {
         match self.page(client, None).await? {
             SnapshotRead::Page(page) => Ok(*page),
-            other => Err(format!("copy suite first page {other:?}").into()),
+            other @ SnapshotRead::Moved { .. } => {
+                Err(format!("copy suite first page {other:?}").into())
+            }
         }
     }
     pub async fn fence(

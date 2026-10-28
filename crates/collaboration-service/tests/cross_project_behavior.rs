@@ -1,6 +1,14 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -8,7 +16,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Cross-project references and independent scoped read marks survive archive filtering and actual reopening.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Cross-project references and independent scoped read marks survive archive filtering and actual reopening."
+)]
 async fn cross_project_references_and_unread_summaries_keep_independent_scope()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

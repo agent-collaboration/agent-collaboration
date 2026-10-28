@@ -3,7 +3,7 @@
 use crate::{access_verification, cloudflare_transport};
 use collaboration_central_conformance::{RuntimeControlRequest, RuntimeFaultObservation};
 use collaboration_central_core::{AccessCaller, ObjectAddress};
-use worker::*;
+use worker::{Env, Headers, Method, Request, RequestInit, Response, Result};
 
 pub(crate) const CONTROL_PATH: &str = "/admin/v1/conformance/runtime";
 pub(crate) const OBJECT_PATH: &str = "/test/runtime-control";

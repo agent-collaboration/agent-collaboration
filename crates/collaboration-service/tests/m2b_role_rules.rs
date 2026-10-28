@@ -1,5 +1,9 @@
 //! U64: authority, distinctness and cardinality through real MCP admission and Turso.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
@@ -42,7 +46,10 @@ async fn assignments(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn many_roles_add_repeat_and_release_exactly_the_named_holder() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     for role in ["advisor", "reviewer", "operator"] {
@@ -131,7 +138,10 @@ async fn many_roles_add_repeat_and_release_exactly_the_named_holder() -> Result<
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn workstream_grants_check_authority_before_distinctness_in_both_directions()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -326,7 +336,10 @@ async fn workstream_grants_check_authority_before_distinctness_in_both_direction
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Contract assertions; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; Result propagates fixture errors."
+)]
 async fn active_lead_cannot_be_moved_through_role_grant() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;

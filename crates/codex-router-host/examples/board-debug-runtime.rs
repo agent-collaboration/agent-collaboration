@@ -147,7 +147,10 @@ mod tests {
     use super::*;
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions fail the test while fixture errors propagate."
+    )]
     fn launcher_refuses_nonprivate_or_nontemporary_state() -> Result<(), Box<dyn Error>> {
         assert!(validate_debug_directory(Path::new("/"), 0).is_err());
         assert!(validate_debug_directory(Path::new("."), 0).is_err());
@@ -163,7 +166,10 @@ mod tests {
     }
 
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions fail the test while fixture errors propagate."
+    )]
     fn launcher_refuses_the_production_port() -> Result<(), Box<dyn Error>> {
         let directory = tempfile::tempdir()?;
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;

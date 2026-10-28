@@ -1,12 +1,19 @@
 //! A card's latest trail must fit the same real response bound as other board reads.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn escaped_latest_trail_is_a_bounded_prefix_without_losing_the_recorded_count()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

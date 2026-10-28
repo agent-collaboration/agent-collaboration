@@ -58,6 +58,11 @@ impl Hook for FocusRevealHook {
             .natural_height
             .get()
             .saturating_sub(scroll.viewport_height.get());
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "The offset is clamped to 0..=maximum, and maximum is a u16 cell count."
+        )]
         let next =
             (i32::from(scroll.layout_offset) + displacement).clamp(0, i32::from(maximum)) as u16;
         if next != scroll.offset.get() {

@@ -259,7 +259,7 @@ fn hash_executable(executable: PathBuf) -> Result<ExecutableIdentity, Executable
     let mut file =
         std::fs::File::open(&canonical_path).map_err(ExecutableIdentityError::Filesystem)?;
     let mut hasher = Sha256::new();
-    let mut chunk = [0_u8; HASH_CHUNK_BYTES];
+    let mut chunk = vec![0_u8; HASH_CHUNK_BYTES].into_boxed_slice();
     loop {
         let read = file
             .read(&mut chunk)

@@ -9,6 +9,10 @@ mod debug_backend_restart;
 mod durable_delivery_recovery;
 #[path = "automation_live_support/native_fork_continuation.rs"]
 mod native_fork_continuation;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "automation_live_support/proof_context.rs"]
 mod proof_context;
 #[path = "automation_live_support/scheduled_continuity.rs"]

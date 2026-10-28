@@ -10,12 +10,12 @@ pub struct DeliveryConfig {
 }
 
 #[cfg(test)]
-#[allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal deployment-config assertions fail their test."
-)]
 mod tests {
     use super::*;
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn relay_identity_is_required_validated_and_serialized_explicitly()
     -> Result<(), Box<dyn std::error::Error>> {

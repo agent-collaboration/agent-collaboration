@@ -1,11 +1,19 @@
-use collaboration_service::{
-    BoardAvailability, MachineIdentity, ServiceIdentity, SessionDeliveryRouter,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresenceProbe,
-};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
+use collaboration_runtime::SessionDeliveryRouter;
+use collaboration_service::ApplicationFixture;
+use collaboration_service::BoardAvailability;
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod native_mail_owner;
 use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
@@ -40,7 +48,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             clock: Arc::new(SystemSubscriptionClock),
         });
     subscription_delivery.start().await.unwrap();
-    let identity = ServiceIdentity::new(id, id)
+    let identity = ApplicationFixture::new(id, id)
         .unwrap()
         .with_automation_store(Arc::clone(&automation_store))
         .with_session_delivery(delivery)
@@ -58,7 +66,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
         },
     )
     .unwrap();
-    let served = served_api::ServedApi::start(identity).await.unwrap();
+    let served = served_api::ServedApi::start(identity).unwrap();
     let target =
         json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"thread"});
     // Act: submit through the actual tool, not an error helper.

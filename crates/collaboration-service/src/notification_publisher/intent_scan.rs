@@ -1,5 +1,5 @@
 //! Derived scan positions bound repeated intent decoding without owning custody.
-use super::*;
+use super::{BoardError, INTENT_PAGE_SIZE, IntentHandling, ProjectId, PublisherInner};
 use message_board::{EpochNumber, FeedCursor, FeedPosition, Record};
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 

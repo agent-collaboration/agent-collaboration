@@ -12,7 +12,7 @@ use message_board::*;
 
 #[tokio::test]
 async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders_project() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let local = super::follow_admission_proofs::current_membership(&fixture).await;
     assert_eq!(local.policy().mode(), SubscriptionMode::Deliver);
     let remote_project = ProjectId::generate();

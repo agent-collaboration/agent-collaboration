@@ -1,15 +1,25 @@
 //! V8: real CLI and MCP transport share Local custody. External carrier I/O is the named stand-in.
 use super::native_mail_owner;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryClientReceipt, DeliveryOutcome, DeliveryReceipt, SessionReachability, SessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, BoardAvailability,
-    CollaborationApplication, DeliveryFuture, MachineIdentity, ServiceIdentity,
-    SessionMessageDelivery, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock, TargetPresence, TargetPresenceProbe,
-};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::BoardAvailability;
+
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
+
 use serde_json::{Value, json};
 use std::{
     os::unix::fs::PermissionsExt,
@@ -28,9 +38,9 @@ pub(super) struct CarrierStandIn {
 impl SessionMessageDelivery for CarrierStandIn {
     fn deliver<'a>(
         &'a self,
-        _request: collaboration_service::layer_zero::DeliveryRequest,
+        _request: collaboration_contracts::layer_zero::DeliveryRequest,
         _evidence: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         self.injections.fetch_add(1, Ordering::SeqCst);
         Box::pin(async {
             Ok({
@@ -39,8 +49,8 @@ impl SessionMessageDelivery for CarrierStandIn {
                     reachability: Some(SessionReachability::ClaudeCodePeer),
                     client: Some(DeliveryClientReceipt::ClaudeCodePeer),
                 };
-                collaboration_service::NativeDeliveryResult::observed(
-                    collaboration_service::NativeObservedOutcome::PeerMessageWritten,
+                collaboration_contracts::NativeDeliveryResult::observed(
+                    collaboration_contracts::NativeObservedOutcome::PeerMessageWritten,
                     receipt.reachability,
                     receipt.client,
                 )
@@ -74,7 +84,7 @@ pub(super) struct Surfaces {
     pub(super) carrier: Arc<CarrierStandIn>,
 }
 impl Surfaces {
-    #[allow(dead_code)] // Only the companion compaction target needs the frozen reference.
+    // Only the companion compaction target needs the frozen reference.
     pub(super) async fn delivery_reference(
         &self,
         item: &collaboration_protocol::MailItemId,
@@ -85,7 +95,7 @@ impl Surfaces {
             .get_push_record(&push)
             .await?
             .ok_or("saved native push")?;
-        let item = collaboration_service::outgoing_mail_message(
+        let item = collaboration_runtime::outgoing_mail_message(
             &draft_from_saved_push(record),
             &SERVICE.to_owned().try_into()?,
             self.peer,
@@ -99,12 +109,12 @@ impl Surfaces {
         Self::start_with_session(None).await
     }
     pub(super) async fn start_with_session(
-        session: Option<collaboration_service::MailDeliverySession>,
+        session: Option<collaboration_runtime::MailDeliverySession>,
     ) -> TestResult<Self> {
         Self::start_with_project_admission(session, None).await
     }
     pub(super) async fn start_with_project_admission(
-        session: Option<collaboration_service::MailDeliverySession>,
+        session: Option<collaboration_runtime::MailDeliverySession>,
         admission: Option<Arc<collaboration_service::ProjectAdmission>>,
     ) -> TestResult<Self> {
         let root = tempfile::Builder::new()
@@ -127,7 +137,7 @@ impl Surfaces {
             clock: Arc::new(SystemSubscriptionClock),
         });
         delivery.start().await?;
-        let mut identity = ServiceIdentity::new(SERVICE, SERVICE)?
+        let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?
             .with_session_delivery(carrier.clone())
             .with_subscription_delivery_service(delivery.clone(), carrier.clone());
         if let Some(admission) = admission {
@@ -149,9 +159,7 @@ impl Surfaces {
             },
             session,
         )?;
-        let api =
-            ServedCollaborationApi::start(root.path(), CollaborationApplication::new(identity))
-                .await?;
+        let api = ServedCollaborationApi::start(root.path(), (identity).build())?;
         Ok(Self {
             root,
             api,
@@ -165,7 +173,7 @@ impl Surfaces {
     pub(super) fn session(id: &str) -> Value {
         json!({"endpoint":{"serviceId":SERVICE,"endpointId":"claude-local"},"sessionId":id})
     }
-    #[allow(dead_code)] // Remote public-surface proofs inspect the actual SDK status owner.
+    // Remote public-surface proofs inspect the actual SDK status owner.
     pub(super) fn mail_runtime(&self) -> Arc<collaboration_service::MailDeliveryRuntime> {
         self.native.runtime_handle()
     }
@@ -178,7 +186,7 @@ impl Surfaces {
         }
         value
     }
-    #[allow(dead_code)] // Only held-custody proof targets use this input.
+    // Only held-custody proof targets use this input.
     pub(super) fn held_input(id: Option<&str>, text: &str) -> Value {
         let mut value = Self::input(id, text);
         if let Some(fields) = value.as_object_mut() {

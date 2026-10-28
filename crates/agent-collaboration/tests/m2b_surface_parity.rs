@@ -1,7 +1,12 @@
 //! V8: executable CLI and MCP tools share role/subject admission and replay decisions.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
+
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 pub mod board_fixture;
 use board_cli_execution::cli;
 use board_fixture::{BoardFixture, TestError};
@@ -42,7 +47,6 @@ async fn replay_role(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
 async fn six_role_names_and_holder_qualified_releases_match_cli_and_mcp() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, stream) = fixture.project().await?;
@@ -88,7 +92,10 @@ async fn six_role_names_and_holder_qualified_releases_match_cli_and_mcp() -> Res
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn every_about_grammar_and_refile_match_cli_mcp_and_current_subject_reads()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

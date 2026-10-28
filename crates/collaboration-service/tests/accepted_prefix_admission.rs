@@ -2,13 +2,20 @@
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_bootstrapped_file_reopened_as_provisional_is_superseded() -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
     let (project, _) = source.project().await?;
@@ -41,7 +48,10 @@ async fn a_bootstrapped_file_reopened_as_provisional_is_superseded() -> Result<(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_filename_epoch_that_differs_from_the_native_file_is_refused() -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
     let (project, _) = source.project().await?;
@@ -59,7 +69,7 @@ async fn a_filename_epoch_that_differs_from_the_native_file_is_refused() -> Resu
     )
     .await?;
     match target._registry.existing_project(&project).await {
-        Err(collaboration_service::ProjectRegistryError::Storage(
+        Err(collaboration_runtime::ProjectRegistryError::Storage(
             message_board_storage::ProjectStorageError::Writer(
                 fleet_sync_writer::OpenError::Corrupt { field },
             ),
@@ -82,7 +92,10 @@ fn current_request(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn cold_metadata_from_another_project_is_refused_without_rewriting_the_file()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -97,13 +110,13 @@ async fn cold_metadata_from_another_project_is_refused_without_rewriting_the_fil
     .await?;
     let path = projects.join(other.as_str()).join("e1.sqlite");
     let before = tokio::fs::read(&path).await?;
-    let registry = collaboration_service::ProjectStoreRegistry::new(
+    let registry = collaboration_runtime::ProjectStoreRegistry::new(
         directory.path(),
         Some(board_fixture::fixture_peer()?),
         std::sync::Arc::new(runtime_primitives::SystemClock),
     );
     match registry.existing_project(&other).await {
-        Err(collaboration_service::ProjectRegistryError::Storage(
+        Err(collaboration_runtime::ProjectRegistryError::Storage(
             message_board_storage::ProjectStorageError::Writer(
                 fleet_sync_writer::OpenError::Corrupt { field },
             ),
@@ -117,7 +130,10 @@ async fn cold_metadata_from_another_project_is_refused_without_rewriting_the_fil
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn inherited_cursors_keep_marks_and_late_anchors_while_new_close_coordinates_use_the_admitted_epoch()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -226,7 +242,10 @@ async fn inherited_cursors_keep_marks_and_late_anchors_while_new_close_coordinat
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_current_epoch_acknowledgement_covers_an_inherited_stand_down_for_the_exact_reader()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;

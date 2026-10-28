@@ -8,7 +8,7 @@ use fleet_sync_protocol::{
 };
 
 fn envelopes(
-    original: &DeliveryItem<crate::RouterDeliveryTypes>,
+    original: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
     proposed: ItemId,
 ) -> (
     DeliveryEnvelope<BoardDeliveryTypes>,
@@ -240,18 +240,20 @@ async fn a_relay_refused_proposed_child_keeps_its_epoch_but_waits_for_the_other_
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
-                    .mark_submitted(
-                        &input,
-                        fleet_sync_protocol::SubmitResult::CancelAlreadyRequested {
-                            existing: recorded,
-                            status: DeliveryStatus::Held,
-                            version: StatusVersion::new(1),
-                            cancel: Some(CancelResult::Pending),
-                        },
-                    )
-                    .await
-                    .map_err(durable_steps::StoreError::backend)
+                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
+                    scope, limits,
+                )
+                .mark_submitted(
+                    &input,
+                    fleet_sync_protocol::SubmitResult::CancelAlreadyRequested {
+                        existing: recorded,
+                        status: DeliveryStatus::Held,
+                        version: StatusVersion::new(1),
+                        cancel: Some(CancelResult::Pending),
+                    },
+                )
+                .await
+                .map_err(durable_steps::StoreError::backend)
             })
         })
         .await

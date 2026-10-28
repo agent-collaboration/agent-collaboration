@@ -3,16 +3,20 @@ use super::*;
 use super::notification_owner::ProjectNotificationFixture;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
 use std::num::NonZeroUsize;
 use super::split_transport::SplitTransport;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn staged_handoff_parts_wait_for_the_final_acknowledgement_and_reopen_keeps_the_mark()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let seed = NotificationSeed {
         project: fixture.project.clone(),
         item: fixture.seed_item,
@@ -108,7 +112,12 @@ async fn staged_handoff_parts_wait_for_the_final_acknowledgement_and_reopen_keep
     let central = fixture.close_keeping_central().await?;
     // Every original local file owner is closed. Reconstruct the port from a
     // newly opened native registry, before new replication or Host Welcome.
-    let mut reopened = ProjectNotificationFixture::resume(directory.path(), central, seed).await?;
+    let mut reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        seed,
+    ))
+    .await?;
     assert!(!*reopened.harness.welcomed.borrow());
     let restored_marks = reopened
         .harness

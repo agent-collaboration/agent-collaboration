@@ -1,10 +1,13 @@
-#![allow(clippy::panic_in_result_fn)]
 mod support;
 use board_legacy_upgrade::prepare_sources;
 use message_board::*;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn relabelled_or_different_owner_rerun_keeps_semantic_digest_while_integrity_changes()
 -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
@@ -55,6 +58,10 @@ async fn relabelled_or_different_owner_rerun_keeps_semantic_digest_while_integri
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn changed_legacy_description_changes_the_semantic_import_identity() -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
     let first = prepare_path(&path).await?;

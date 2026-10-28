@@ -2,7 +2,9 @@ use crate::project_record_codec::{
     ProjectRowEnvelope, ProjectRowWrite, require_one_row, task_link_kind_tag, timestamp,
 };
 use crate::{ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    Fact, PlanRevision, PlanRevisionHash, RecordKind, RecordRef, TaskLinkEvent, TaskLinkEventKind,
+};
 
 impl ProjectWriteTransaction {
     pub(crate) async fn write_fact(

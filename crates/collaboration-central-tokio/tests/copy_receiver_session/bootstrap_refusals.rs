@@ -1,8 +1,5 @@
 //! Bootstrap rollback certainty crosses the real Copy/session boundary unchanged.
-#![allow(
-    clippy::panic_in_result_fn,
-    reason = "Literal assertions qualify permanent conformance cases."
-)]
+
 use super::*;
 use collaboration_central_conformance::{RuntimeControl, RuntimeControlRequest, owner_assertion};
 use collaboration_central_core::ObjectAddress;
@@ -42,6 +39,10 @@ async fn control(
         .error_for_status()?;
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn bootstrap_full_preserves_correlated_no_effect_while_an_unrelated_copy_progresses_and_reply_loss_stays_unknown()
 -> ConformanceResult<()> {

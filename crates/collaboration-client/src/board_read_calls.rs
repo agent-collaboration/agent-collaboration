@@ -2,7 +2,12 @@
 use super::{BoardClientError, CollaborationClient};
 use crate::ClientError;
 use message_board::public_replies::{RequestEffectsRead, RequestEffectsRequest};
-use message_board::*;
+use message_board::{
+    DiscoverySearchRequest, DiscoverySearchResult, InboxAcknowledgeReply, InboxAcknowledgeRequest,
+    InboxFetchRequest, InboxFetchResult, InboxScope, InboxWorkspacesRequest, InboxWorkspacesResult,
+    PostListRequest, PostListResult, PostSearchRequest, PostSearchResult, PostShowRequest,
+    PostShowResult, ReadScopeRef, ResourceIdentity,
+};
 impl CollaborationClient {
     pub async fn request_effects(
         &self,

@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! The directory pages have a fixed bound, typed identities and a progressing peer cursor.
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardReadPage, InstallationPeerPage,
@@ -12,6 +11,10 @@ const FRAME: &str = "019a1234-5678-7000-8000-000000000001";
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 const PEER: &str = "019a1234-5678-7000-8000-000000000073";
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn peers(count: usize) -> Vec<(ServiceId, wire::PeerId)> {
     (0..count)
         .map(|index| {

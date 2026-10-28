@@ -1,10 +1,14 @@
 use codex_acp_adapter::{AcpSchemaCatalog, NativeStoredSessions};
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::QuestionResponse;
-use collaboration_service::{
-    AcpChannelListener, HubEvent, NativeControlBackend, NativeGenerationGate,
-    ServiceInteractionBroker, SessionCommandPort, SessionEventHub, TypedApprovalResolution,
-    UnmaterializedThreadHolder,
-};
+use collaboration_runtime::AcpChannelListener;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_runtime::TypedApprovalResolution;
+use collaboration_runtime::UnmaterializedThreadHolder;
 use message_board::{Identity, SessionEndpointRef};
 use serde_json::{Value, json};
 use session_event_model::{
@@ -36,7 +40,6 @@ async fn send_frame(writer: &mut tokio::net::unix::OwnedWriteHalf, frame: Value)
     Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn connect_actor(
     path: &Path,
     human_id: &str,
@@ -94,7 +97,10 @@ fn approval(request_id: &str) -> Result<ApprovalRequest, Box<dyn std::error::Err
 mod remediation;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn only_the_approver_receives_and_decides_exact_provider_options() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -123,7 +129,7 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         endpoint,
@@ -272,7 +278,10 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -300,7 +309,7 @@ async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResu
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),

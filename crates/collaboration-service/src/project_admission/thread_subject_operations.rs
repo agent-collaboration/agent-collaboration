@@ -1,6 +1,8 @@
 //! Subject scope and role policy consume only the operands loaded under the project lock.
 use super::operation_context::{OperationContext, OperationPlan};
-use message_board::*;
+use message_board::{
+    Record, RecordId, Refusal, RoleRefusal, RoleRequirement, ThreadId, ThreadRefiled, ThreadSubject,
+};
 
 impl OperationContext<'_> {
     pub(super) fn require_project_role(&self) -> Result<(), Refusal> {

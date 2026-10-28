@@ -1,5 +1,9 @@
 //! Shared caller-field limits for admission and authoritative record decoding.
-use crate::*;
+use crate::{
+    BoardKind, EvidencePointer, GrantKind, IntentRefusal, IntentState, MAX_MESSAGE_TEXT_BYTES,
+    Record, Refusal, RoleEnd, StoredDecision, TextValidationError, TrailRefusal, WorkTrailRow,
+    WorkstreamState,
+};
 
 pub const MAX_TRAIL_TAGS: usize = 32;
 pub const MAX_TRAIL_LINKS: usize = 16;

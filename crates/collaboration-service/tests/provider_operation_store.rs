@@ -1,3 +1,4 @@
+use codex_acp_adapter::ConversationOperationRecorder;
 use collaboration_protocol::{
     CodexGeneration, ConversationBindingIdentity, EndpointId, EndpointRef, GenerationNumber,
     NonEmptyText, OperationId, ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities,
@@ -6,10 +7,11 @@ use collaboration_protocol::{
     ProviderOperationStage, ProviderPromptStopReason, ProviderReconciliationState,
     ProviderRuntimeIdentity, ProviderTransport, SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    CodexConversationOperationRecorder, ConversationOperationRecorder, ProviderOperationAdmission,
-    ProviderOperationAdmissionResult, ProviderOperationStore, ProviderOperationStoreError,
-};
+use collaboration_runtime::CodexConversationOperationRecorder;
+use collaboration_runtime::ProviderOperationAdmission;
+use collaboration_runtime::ProviderOperationAdmissionResult;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderOperationStoreError;
 use sqlx::{Connection, Row, SqliteConnection};
 use std::{collections::HashSet, path::PathBuf};
 
@@ -23,7 +25,10 @@ fn open_future_is_send_for_host_composition() {
     assert_send(ProviderOperationStore::open(&path));
 }
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This compile-time Send proof must type-check without executing real store mutations."
+)]
 fn store_operation_futures_are_send<'a>(
     store: &'a mut ProviderOperationStore,
     operation_id: &'a OperationId,
@@ -155,7 +160,7 @@ fn admission(id: &str, admitted_at_ms: i64) -> TestResult<ProviderOperationAdmis
 
 fn admitted_record(
     result: ProviderOperationAdmissionResult,
-) -> TestResult<collaboration_service::ProviderOperationRecord> {
+) -> TestResult<collaboration_runtime::ProviderOperationRecord> {
     match result {
         ProviderOperationAdmissionResult::Admitted(record) => Ok(record),
         ProviderOperationAdmissionResult::Existing(_) => {
@@ -661,7 +666,7 @@ async fn legacy_binding_migration_preserves_existing_operation_and_rejects_inval
     let mut connection =
         SqliteConnection::connect(&format!("sqlite:{}", database.path.display())).await?;
     sqlx::raw_sql(include_str!(
-        "../migrations/202609240001_conversation_binding_identity.sql"
+        "../../collaboration-runtime/migrations/202609240001_conversation_binding_identity.sql"
     ))
     .execute(&mut connection)
     .await?;

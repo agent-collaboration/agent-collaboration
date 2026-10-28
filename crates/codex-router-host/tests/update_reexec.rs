@@ -438,7 +438,7 @@ async fn explicit_host_restart_child_entrypoint() -> Result<(), Box<dyn std::err
             "--nocapture",
         ])
         .with_environment("CODEX_HOST_RESTART_RETAINED", "retained-host-environment");
-    let result = HostRuntime::run(
+    let result = Box::pin(HostRuntime::run(
         HostConfig::new(HostConfigInputs {
             coordination_paths: HostCoordinationPaths::new(operator_socket, instance_lock),
             router_endpoint,
@@ -449,7 +449,7 @@ async fn explicit_host_restart_child_entrypoint() -> Result<(), Box<dyn std::err
         }),
         ManagedChildLaunchPlans::new(None, app_server),
         ManagedUpdateInputs::production().with_replacement_command(replacement),
-    )
+    ))
     .await;
     Err(format!("explicit host restart returned unexpectedly: {result:?}").into())
 }
@@ -536,7 +536,7 @@ async fn changed_update_host_child_entrypoint() -> Result<(), Box<dyn std::error
         "changed_update_replacement_child_entrypoint",
         "--nocapture",
     ]);
-    let result = HostRuntime::run(
+    let result = Box::pin(HostRuntime::run(
         HostConfig::new(HostConfigInputs {
             coordination_paths: HostCoordinationPaths::new(operator_socket, instance_lock),
             router_endpoint,
@@ -549,7 +549,7 @@ async fn changed_update_host_child_entrypoint() -> Result<(), Box<dyn std::error
         ManagedUpdateInputs::production()
             .with_deadlines(fixture_update_deadlines()?)
             .with_replacement_command(replacement),
-    )
+    ))
     .await;
     Err(format!("changed-update host returned unexpectedly: {result:?}").into())
 }

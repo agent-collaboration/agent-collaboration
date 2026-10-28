@@ -1,12 +1,19 @@
 //! A later unavailable project cannot hide earlier independent initialization writes.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn aggregate_initializations_expose_each_result_when_a_project_file_is_moving()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -16,8 +23,12 @@ async fn aggregate_initializations_expose_each_result_when_a_project_file_is_mov
         "requestId":RequestId::generate(),"protocolVersion":1,"actor":fixture.actor,
         "projectId":moving,"boardId":fixture.board,"title":moving.as_str()
     }))?;
-    board_fixture::settle_accepted_creation(&fixture._fleet, &input, &fixture.record_origin()?)
-        .await?;
+    board_fixture::registered_project::settle_accepted_creation(
+        &fixture._fleet,
+        &input,
+        &fixture.record_origin()?,
+    )
+    .await?;
     let (third, _) = fixture.project().await?;
     let moving_store = fixture._registry.open_project(&moving).await?;
     let mut empty = moving_store.snapshot().await?;
@@ -44,7 +55,7 @@ async fn aggregate_initializations_expose_each_result_when_a_project_file_is_mov
         .await?;
     assert!(matches!(
         fixture._registry.orphan_project(&moving).await,
-        Err(collaboration_service::ProjectRegistryError::Move(
+        Err(collaboration_runtime::ProjectRegistryError::Move(
             fleet_sync_writer::MoveAsideError::Publish(
                 fleet_sync_writer::native_file::PublishError::CheckpointBusy { .. },
             )

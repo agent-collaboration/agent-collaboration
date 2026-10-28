@@ -35,7 +35,10 @@ async fn foreign_join(fixture: &SubscriptionFixture) -> Result<FeedCursor, TestE
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Cursor binding and corrupt native rows must fail at real public readers.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Cursor binding and corrupt native rows must fail at real public readers."
+)]
 async fn participant_cursor_is_thread_bound_and_unknown_stored_role_is_rejected()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -133,7 +136,10 @@ async fn participant_cursor_is_thread_bound_and_unknown_stored_role_is_rejected(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // The list must validate and project holders from the same native seat truth as show.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The list must validate and project holders from the same native seat truth as show."
+)]
 async fn thread_list_rejects_corrupt_projected_orchestrator_records() -> Result<(), TestError> {
     let fixture = SubscriptionFixture::empty().await?;
     assert_accepted(

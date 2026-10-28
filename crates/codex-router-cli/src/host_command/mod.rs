@@ -228,7 +228,7 @@ pub(crate) async fn run_host_command<W: Write + Send>(
     let coordination_paths = HostCoordinationPaths::for_router_root(&router_root);
     if command.runs_foreground() {
         let provider_launches = external_provider_launches(&command)?;
-        return foreground_launch::run_foreground_host(
+        return Box::pin(foreground_launch::run_foreground_host(
             foreground_launch::ForegroundHostInputs {
                 owner_human_id: command.owner_human_id.clone(),
                 router_root,
@@ -245,7 +245,7 @@ pub(crate) async fn run_host_command<W: Write + Send>(
             },
             context,
             telemetry,
-        )
+        ))
         .await;
     }
 

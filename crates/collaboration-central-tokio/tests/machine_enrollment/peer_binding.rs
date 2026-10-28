@@ -19,6 +19,10 @@ async fn stored_bindings(fixture: &Fixture) -> TestResult<Value> {
     })).await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn another_service_cannot_claim_a_recorded_peer_even_after_registry_reopen() -> TestResult {
     // Arrange: the caller supplies its stable identity before enrollment.
@@ -79,6 +83,10 @@ async fn another_service_cannot_claim_a_recorded_peer_even_after_registry_reopen
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn an_existing_service_cannot_change_its_peer_while_active_revoked_or_readmitting()
 -> TestResult {

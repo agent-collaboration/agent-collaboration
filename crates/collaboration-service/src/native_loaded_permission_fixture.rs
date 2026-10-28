@@ -84,9 +84,9 @@ impl RecordedPolicyFixture {
         }
     }
 
-    pub(super) fn scheduled_run(&self) -> crate::ScheduledRunSubmission {
-        crate::ScheduledRunSubmission {
-            run_id: RunId::generate(), target: target(), payload: crate::scheduled_run_contract::ScheduledRunPayload::Fresh { task_input: "validate scheduled policy".to_owned().try_into().unwrap() }, precondition: crate::DeliveryPrecondition::Unpinned,
+    pub(super) fn scheduled_run(&self) -> collaboration_contracts::ScheduledRunSubmission {
+        collaboration_contracts::ScheduledRunSubmission {
+            run_id: RunId::generate(), target: target(), payload: collaboration_contracts::ScheduledRunPayload::Fresh { task_input: "validate scheduled policy".to_owned().try_into().unwrap() }, precondition: collaboration_contracts::DeliveryPrecondition::Unpinned,
             inputs: serde_json::from_value::<CapturedRunInputs<_, _>>(json!({ "scheduleChangeId":agent_automation::ChangeId::generate(),"instructionRevisionId":agent_automation::RevisionId::generate(),"instructionText":"Validate policy","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"ownedThread","target":target(),"cwd":self.directory.path()},"executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"} })).unwrap(),
             recorded: serde_json::from_value(json!({"kind":"codexAppServer","target":target(),"generation":self.generation,"clientUserMessageId":"loaded-policy-input","nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"notDispatched","cessation":"notApplicable"})).unwrap(),
         }
@@ -113,10 +113,16 @@ pub(super) struct PolicyServerCase {
 
 /// Native replies and synthetic schema/endpoint metadata stand in for upstream; storage and sockets are real.
 /// CapturingRunSink below is a separate stand-in; stored-run cases use the real sink.
-pub(super) async fn policy_server(
+type PolicyServerTask = tokio::task::JoinHandle<Result<Vec<Vec<Value>>, TestError>>;
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The spawned fixture asserts the recorded admission order before replying."
+)]
+pub(super) fn policy_server(
     fixture: &RecordedPolicyFixture,
     scenario: PolicyServerCase,
-) -> Result<tokio::task::JoinHandle<Result<Vec<Vec<Value>>, TestError>>, TestError> {
+) -> Result<PolicyServerTask, TestError> {
     let listener = tokio::net::UnixListener::bind(fixture.directory.path().join("native.sock"))?;
     let cwd = fixture.directory.path().to_string_lossy().into_owned();
     let roots = fixture
@@ -154,7 +160,7 @@ pub(super) async fn policy_server(
                     }
                     "turn/start" => {
                         if let Some((store, run_id)) = &scenario.stored_run {
-                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,crate::stored_run_receipt::StoredRunReceipt>(run_id).await?;
+                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
                             if record.evidence.timing.is_none()
                                 || !matches!(record.evidence.route,Some(RouteEffectEvidence::CodexAppServer(effects)) if effects.submission==agent_automation::SubmissionEffect::Dispatching && effects.resume==agent_automation::PreparationEffect::Accepted)
                             {
@@ -209,7 +215,7 @@ impl RunEvidenceSink for CapturingRunSink {
     fn record(
         &self,
         evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> crate::DeliveryFuture<'_, RunEvidenceDisposition> {
+    ) -> collaboration_contracts::DeliveryFuture<'_, RunEvidenceDisposition> {
         if matches!(&evidence, RouteEffectEvidence::CodexAppServer(effects) if effects.submission == agent_automation::SubmissionEffect::Dispatching)
         {
             self.turn_intent.store(true, Ordering::SeqCst);
@@ -225,7 +231,9 @@ impl RunEvidenceSink for CapturingRunSink {
             })
         })
     }
-    fn record_stop_intent(&self) -> crate::DeliveryFuture<'_, RunEvidenceDisposition> {
+    fn record_stop_intent(
+        &self,
+    ) -> collaboration_contracts::DeliveryFuture<'_, RunEvidenceDisposition> {
         Box::pin(async { Ok(RunEvidenceDisposition::AdmissionRefused) })
     }
 }

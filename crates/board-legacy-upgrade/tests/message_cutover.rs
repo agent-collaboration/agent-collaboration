@@ -1,5 +1,4 @@
 //! Four real tables cross owners; only A's migrator may finish the move.
-#![allow(clippy::panic_in_result_fn)]
 mod message_support;
 use board_legacy_upgrade::{MessageCopyCounts, MessageUpgrade, MessageUpgradeReport};
 use interaction_storage::InteractionStore;
@@ -7,6 +6,10 @@ use message_support::*;
 use rusqlite::{Connection, params};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn copy_cold_reopen_retry_keeps_first_ids_and_history_then_owning_drop_is_atomic()
 -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -113,6 +116,10 @@ async fn copy_cold_reopen_retry_keeps_first_ids_and_history_then_owning_drop_is_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn current_product_automation_store_is_already_moved_and_untouched() -> TestResult {
     let directory = tempfile::tempdir()?;
     let source = directory.path().join("automation.sqlite");
@@ -138,6 +145,10 @@ async fn current_product_automation_store_is_already_moved_and_untouched() -> Te
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn changed_destination_refuses_drop_and_retry_never_overwrites_it() -> TestResult {
     let directory = tempfile::tempdir()?;
     let source = directory.path().join("automation.sqlite");
@@ -168,6 +179,10 @@ async fn changed_destination_refuses_drop_and_retry_never_overwrites_it() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn released_native_receipt_extensions_copy_exactly_and_read_through_the_strict_owner()
 -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -221,6 +236,10 @@ async fn released_native_receipt_extensions_copy_exactly_and_read_through_the_st
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn changed_source_refuses_drop_after_destination_commit() -> TestResult {
     let directory = tempfile::tempdir()?;
     let source = directory.path().join("automation.sqlite");
@@ -240,6 +259,10 @@ async fn changed_source_refuses_drop_after_destination_commit() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn invalid_destination_additions_or_changed_worker_payload_never_authorize_drop() -> TestResult
 {
     for defect in ["worker-id", "retention", "worker-payload"] {
@@ -277,6 +300,10 @@ async fn invalid_destination_additions_or_changed_worker_payload_never_authorize
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn an_absent_source_is_explicit_and_never_creates_a_message_store() -> TestResult {
     let directory = tempfile::tempdir()?;
     let source = directory.path().join("automation.sqlite");
@@ -295,6 +322,10 @@ async fn an_absent_source_is_explicit_and_never_creates_a_message_store() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn incomplete_or_foreign_source_profiles_refuse_without_mutation() -> TestResult {
     for defect in [
         "missing-table",
@@ -359,6 +390,10 @@ async fn incomplete_or_foreign_source_profiles_refuse_without_mutation() -> Test
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn known_empty_prefixes_are_supported_but_unversioned_nonempty_intents_refuse() -> TestResult
 {
     for version in [

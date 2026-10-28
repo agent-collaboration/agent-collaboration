@@ -1,6 +1,14 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -8,7 +16,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove real reader-state effects; Result propagates setup errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove real reader-state effects; Result propagates setup errors."
+)]
 async fn an_archived_content_read_advances_its_mark_without_activity_or_a_request_key()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -94,7 +105,10 @@ async fn an_archived_content_read_advances_its_mark_without_activity_or_a_reques
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // The data must still answer when stand-down refuses its reader-state effect.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The data must still answer when stand-down refuses its reader-state effect."
+)]
 async fn an_archived_read_answers_data_but_cannot_bypass_unacknowledged_stand_down()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

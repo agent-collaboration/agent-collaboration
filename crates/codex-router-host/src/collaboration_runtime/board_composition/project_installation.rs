@@ -4,7 +4,7 @@ use super::{
     project_writers::{ProjectWriterSlot, ProjectWriters},
     snapshot_installation::{SnapshotInstallIdentity, SnapshotInstallation},
 };
-use collaboration_service::ProjectStoreRegistry;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_protocol::{
     Epoch, LeaseAnswer, LeaseRequest, LeaseState, OperationAnswer, OperationRequest, RenewAnswer,
     RenewRequest, ReplicationPosition,

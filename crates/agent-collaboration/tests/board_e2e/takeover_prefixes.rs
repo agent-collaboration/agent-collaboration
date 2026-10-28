@@ -396,6 +396,10 @@ fn discarded_copy_excludes_cause(
     cause.is_some_and(|cause| copy.epoch == cause.epoch && copy.sequence < cause.sequence)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn discarded_copy_rejects_a_missing_cause_capture() -> FixtureResult {
     let ack_before_crash = serde_json::from_value(json!({"epoch":1,"sequence":99}))?;

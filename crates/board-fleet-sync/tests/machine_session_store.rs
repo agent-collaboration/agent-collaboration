@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use board_fleet_sync::MachineSessionStore;
 use fleet_sync_protocol::{NoticePosition, SessionId};
 use fleet_sync_session::{ClientSessionState, SessionClientStore};
@@ -6,6 +5,10 @@ use std::os::unix::fs::PermissionsExt;
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn reopen_retains_the_same_session_and_latest_durable_notice_cursor() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -38,6 +41,10 @@ async fn reopen_retains_the_same_session_and_latest_durable_notice_cursor() -> T
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn malformed_session_state_refuses_instead_of_minting_another_identity() -> TestResult {
     let directory = tempfile::tempdir()?;

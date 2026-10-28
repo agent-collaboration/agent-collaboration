@@ -1,5 +1,3 @@
-#![allow(clippy::unwrap_used)]
-
 use collaboration_client::{BoardClientError, CollaborationClient};
 use message_board::{
     ActingForIdentity, Description, HumanId, Identity, ResourceIdentity, ResourceName,
@@ -7,6 +5,10 @@ use message_board::{
 };
 use serde_json::Value;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/scripted_api.rs"]
 mod scripted_api;
 use scripted_api::ScriptedApi;
@@ -14,7 +16,7 @@ use scripted_api::ScriptedApi;
 #[tokio::test]
 async fn response_loss_after_board_write_transmission_returns_typed_inspection_identity() {
     let workspace_id = WorkspaceId::generate();
-    let (api, mut calls) = ScriptedApi::start().await.unwrap();
+    let (api, mut calls) = ScriptedApi::start().unwrap();
     let client = CollaborationClient::connect(api.directory(), "board-uncertainty-test", "1")
         .await
         .unwrap();
@@ -60,6 +62,10 @@ async fn response_loss_after_board_write_transmission_returns_typed_inspection_i
     );
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn project_create_request(workspace_id: WorkspaceId) -> WorkspaceCreateRequest {
     WorkspaceCreateRequest {
         request_id: message_board::RequestId::generate(),

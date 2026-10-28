@@ -3,7 +3,11 @@
 //! board. Each decodes its typed request, calls one application operation and presents the
 //! typed result or rejection.
 use super::board_argument_classification::decode_board_arguments;
-use super::*;
+use super::{
+    API_RESULT_BUDGET, CallToolResponse, CollaborationMcpServer, Deserialize, McpToolOutput, Tool,
+    ToolCallContext, ToolRoute, ToolRouter, domain_result, operation_description, schemars,
+    validation_failure,
+};
 use collaboration_protocol::{
     ThreadSubscribeRequest, ThreadSubscriptionsRequest, ThreadSubscriptionsResult,
     ThreadUnsubscribeRequest,
@@ -99,7 +103,15 @@ macro_rules! board_tool {
 }
 
 pub(super) fn register_automation_mutation_tools(router: &mut ToolRouter<CollaborationMcpServer>) {
-    use collaboration_protocol::*;
+    use collaboration_protocol::{
+        AutomationConfiguration, AutomationConfigureRequest, AutomationPage, AutomationPageRequest,
+        DeliveryInspection, DeliveryShowRequest, InstructionCreateParams, InstructionShowParams,
+        InstructionSnapshot, InstructionUpdateParams, RunRecoveryRequest, RunShowRequest,
+        RunSnapshot, ScheduleCreateRequest, ScheduleEnableRequest, ScheduleExportResult,
+        ScheduleImportRequest, SchedulePrepareRequest, ScheduleShowRequest, ScheduleSnapshot,
+        ScheduleUpdateRequest, WakeMutationRequest, WakeMutationResult, WakeSendRequest,
+        WakeShowRequest, WakeSnapshot,
+    };
     domain_tool!(router, "instruction_create", InstructionCreateParams => InstructionSnapshot, automation.instruction_create, true);
     domain_tool!(router, "instruction_update", InstructionUpdateParams => InstructionSnapshot, automation.instruction_update, true);
     domain_tool!(router, "instruction_show", InstructionShowParams => InstructionSnapshot, automation.instruction_show, false);
@@ -127,7 +139,13 @@ pub(super) fn register_automation_mutation_tools(router: &mut ToolRouter<Collabo
 pub(super) fn register_automation_inspection_tools(
     router: &mut ToolRouter<CollaborationMcpServer>,
 ) {
-    use collaboration_protocol::*;
+    use collaboration_protocol::{
+        AttemptHistoryPage, AttemptInspection, AutomationEventsPage, AutomationEventsRequest,
+        AutomationPage, AutomationPageRequest, DeliveryAttemptsRequest, DeliveryInspection,
+        DeliveryListRequest, DeliveryShowRequest, InstructionSnapshot, OperationShowRequest,
+        OperationSnapshot, RevisionListRequest, RevisionRecord, RunListRequest, RunShowRequest,
+        RunSnapshot, RunSummariesRequest, ScheduleSnapshot, SummaryInspection,
+    };
     domain_tool!(router, "run_reconcile", RunShowRequest => RunSnapshot, automation.run_reconcile(budget), false);
     domain_tool!(router, "delivery_reconcile", DeliveryShowRequest => DeliveryInspection, automation.delivery_reconcile(budget), false);
     domain_tool!(router, "operation_show", OperationShowRequest => OperationSnapshot, automation.operation_show(budget), false);
@@ -144,7 +162,28 @@ pub(super) fn register_automation_inspection_tools(
 
 pub(super) fn register_board_tools(router: &mut ToolRouter<CollaborationMcpServer>) {
     use message_board::public_replies::{RequestEffectsRead, RequestEffectsRequest, WriteReply};
-    use message_board::*;
+    use message_board::{
+        AdrCreateRequest, AdrTransitionRequest, BoardArchiveRequest, BoardCloseRequest,
+        BoardCreateRequest, BoardListRequest, BoardListResult, BoardReadReply, BoardShowRequest,
+        BoardShowResult, BoardUpdateRequest, ContinuationCard, ContinuationCardRequest,
+        DiscoverySearchRequest, DiscoverySearchResult, FeedRead, FeedReadRequest,
+        FleetRecordListRequest, FleetRecordShowRequest, InboxAcknowledgeReply,
+        InboxAcknowledgeRequest, InboxFetchRequest, InboxFetchResult, InboxWorkspacesRequest,
+        InboxWorkspacesResult, LeadLoad, LeadLoadRequest, OwnerView, OwnerViewRequest,
+        PostListRequest, PostListResult, PostSearchRequest, PostSearchResult, PostShowRequest,
+        PostShowResult, ProjectCreateRequest, ProjectListRequest, ProjectListResult,
+        ProjectRecordListRequest, ProjectRecordShowRequest, ProjectRequest, ProjectShowRequest,
+        ProjectShowResult, ProjectUpdateRequest, ProjectViewRequest, ProjectWatchRequest, Record,
+        RecordListResult, RepositoryAttachRequest, RepositoryDetachRequest, RepositoryListRequest,
+        RepositoryListResult, SessionContext, SessionContextRequest, SubtaskListRequest,
+        ThreadCreateRequest, ThreadJoinRequest, ThreadLeaveRequest, ThreadListRequest,
+        ThreadListResult, ThreadParticipantListRequest, ThreadParticipantListResult,
+        ThreadPostRequest, ThreadRefileRequest, ThreadRenewRequest, ThreadResolveRequest,
+        ThreadShowRequest, ThreadShowResult, ThreadUnresolveRequest, ThreadUnwatchRequest,
+        ThreadWatchRequest, WorkTrailReadResult, WorkTrailShowRequest, WorkView,
+        WorkspaceArchiveRequest, WorkspaceCreateRequest, WorkspaceListRequest, WorkspaceListResult,
+        WorkspaceShowRequest, WorkspaceShowResult, WorkspaceUpdateRequest,
+    };
     board_tool!(router, "request_effects", RequestEffectsRequest => RequestEffectsRead, request_effects, false);
     board_tool!(router, "workstream_create", ProjectRequest => WriteReply, workstream_create, true);
     board_tool!(router, "workstream_rename", ProjectRequest => WriteReply, workstream_rename, true);

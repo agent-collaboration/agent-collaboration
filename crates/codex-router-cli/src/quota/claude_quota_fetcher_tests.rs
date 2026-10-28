@@ -1,4 +1,6 @@
 use super::*;
+#[cfg(test)]
+use crate::quota::Duration;
 use codex_router_core::ids::AccountId;
 use codex_router_core::provider::Provider;
 use codex_router_core::redaction::SecretString;

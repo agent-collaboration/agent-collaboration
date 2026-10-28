@@ -16,8 +16,9 @@ use collaboration_protocol::{
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-impl<'service> AutomationOperations<'service> {
+impl AutomationOperations {
     /// Pages one delivery's attempts as of a pinned observation time.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_attempts(
         &self,
         request: DeliveryAttemptsRequest,
@@ -37,6 +38,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Pages one Run's summary attempts as of a pinned observation time.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_summaries(
         &self,
         request: RunSummariesRequest,
@@ -55,13 +57,14 @@ impl<'service> AutomationOperations<'service> {
         .await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn attempt_history<TRecord: DeserializeOwned>(
         &self,
         selection: AttemptSelection,
         budget: ResultByteBudget,
     ) -> InspectionResult<AttemptHistoryPage<TRecord>> {
         let store = self.inspection_store()?;
-        let service_id = &self.identity.service_id;
+        let service_id = self.identity.service_id();
         let digest = cursor::filter_digest(&selection.filters)
             .map_err(|()| failure::invalid("request", "Cannot encode owner filters."))?;
         let position = selection
@@ -106,8 +109,8 @@ impl<'service> AutomationOperations<'service> {
         };
         let invalid_record = || failure::storage(StorageError::InvalidRecord);
         let mut coverage = match (
-            crate::wakeup_projection::timestamp(page.history_from_ms),
-            crate::wakeup_projection::timestamp(page.as_of_ms),
+            collaboration_runtime::observation_timestamp::timestamp(page.history_from_ms),
+            collaboration_runtime::observation_timestamp::timestamp(page.as_of_ms),
         ) {
             (Ok(history_from), Ok(as_of)) => AttemptHistoryCoverage {
                 history_from,
@@ -192,13 +195,14 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Reads retained automation events after `after`, disclosing any retention gap.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn automation_events(
         &self,
         request: AutomationEventsRequest,
         budget: ResultByteBudget,
     ) -> InspectionResult<AutomationEventsPage> {
         let store = self.inspection_store()?;
-        let service_id = &self.identity.service_id;
+        let service_id = self.identity.service_id();
         let after = request
             .after
             .as_deref()

@@ -1,5 +1,4 @@
 #![cfg(unix)]
-#![allow(clippy::expect_used, clippy::panic)]
 //! Common Host startup must select the global native CLI, never the bridge SDK bundle.
 
 #[path = "support/global_claude_fixture.rs"]

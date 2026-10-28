@@ -10,7 +10,12 @@ use collaboration_central_core::{FleetDecisionFault, StepControl, StepControlRep
 use durable_steps::StoreError;
 use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::{SinkExt, StreamExt};
-use message_board::*;
+use message_board::{
+    BoardId, ChangeOutcome, DecisionEffect, DecisionEffectsPage, FeedPosition, FleetFeedEntry,
+    FleetPosition, RecordPlacement, Refusal, RequestDecision, RequestEffectsCursor,
+    RequestEffectsRead, RequestEffectsRefusal, RequestId, RequestLedgerEntry, StoredDecision,
+    WorkspaceId,
+};
 use reqwest_websocket::{Message, WebSocket};
 use std::time::Duration;
 

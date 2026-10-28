@@ -34,7 +34,7 @@ async fn write_project(
 
 #[tokio::test]
 async fn lagged_activity_rescans_the_reader_and_recovers_a_different_project() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -54,7 +54,7 @@ async fn lagged_activity_rescans_the_reader_and_recovers_a_different_project() {
     read.finish().await.unwrap();
     let second = ProjectId::generate();
     let create = serde_json::from_value(json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":human("board-owner"),"boardId":board,"projectId":second,"title":"second project"})).unwrap();
-    fixture.prepare_additional_project(&create).await;
+    Box::pin(fixture.prepare_additional_project(&create)).await;
     assert!(matches!(
         fixture
             .admission

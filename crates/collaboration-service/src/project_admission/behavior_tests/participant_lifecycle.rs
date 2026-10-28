@@ -3,7 +3,10 @@ use super::participant_intervals::{create_as, roster};
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // All seat transitions cross native admission and immutable feed facts.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "All seat transitions cross native admission and immutable feed facts."
+)]
 async fn replace_handover_and_human_resolve_are_atomic_position_transitions()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::empty().await?;
@@ -176,7 +179,10 @@ async fn replace_handover_and_human_resolve_are_atomic_position_transitions()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // The reader opt-out exception does not permit leave-and-resolve work.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The reader opt-out exception does not permit leave-and-resolve work."
+)]
 async fn archived_leave_resolve_refuses_without_changing_participant_or_watch_state()
 -> Result<(), TestError> {
     let fixture = SubscriptionFixture::empty().await?;
@@ -235,7 +241,10 @@ async fn archived_leave_resolve_refuses_without_changing_participant_or_watch_st
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // The combined transition publishes one observed lifecycle change to another reader.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The combined transition publishes one observed lifecycle change to another reader."
+)]
 async fn leave_resolve_publishes_unread_to_another_active_watcher() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::empty().await?;
     let actor = session("resolving-orchestrator")?;

@@ -1,4 +1,11 @@
-use super::*;
+use super::{
+    DEPLETED_QUOTA_LABEL, DisplayQuotaWindow, QUOTA_STATUS_SAMPLE_FRESH_SECONDS, QuotaPaceSnapshot,
+    QuotaRunRateConfidence, QuotaWindowFact, QuotaWindowStatus,
+    RESET_PACE_RUNOUT_LABEL_THRESHOLD_HUNDREDTHS, ResetPaceMeterSegments, ResetPaceState,
+    ResetPaceViewModel, SampleConfidence, SampleMetadata, V1_WEEKLY_WINDOW_SECONDS,
+    format_burn_rate_basis_points_per_hour, format_duration, format_relative_time,
+    run_rate_confidence_label,
+};
 
 pub(super) fn quota_pace_snapshot(
     windows: &[DisplayQuotaWindow],
@@ -429,9 +436,12 @@ pub(super) fn reset_pace_meter_fill_for_snapshot(
         reset_unix_seconds.saturating_sub(projected_exhaustion_unix_seconds.max(now_unix_seconds));
     (
         0,
-        early_by_seconds
-            .saturating_mul(7)
-            .div_ceil(time_until_reset_seconds) as usize,
+        usize::try_from(
+            early_by_seconds
+                .saturating_mul(7)
+                .div_ceil(time_until_reset_seconds),
+        )
+        .unwrap_or(7),
     )
 }
 

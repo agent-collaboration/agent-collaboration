@@ -1,3 +1,6 @@
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::ProviderSessionInspectFuture;
+use collaboration_contracts::ProviderSettingsFuture;
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationCreateRequest, ConversationLoadRequest,
     ConversationOperationFailure, ConversationOperationReconcileRequest,
@@ -7,11 +10,10 @@ use collaboration_protocol::{
     ProviderBindingIdentity, ProviderSessionInspectRequest, ProviderSessionInspectResult,
     ProviderSettingsAcceptRequest, ProviderSettingsResult, ProviderSettingsSetRequest,
 };
-use collaboration_service::collaboration_application::CollaborationRejection;
-use collaboration_service::{
-    CollaborationApplication, ProviderConversationBackend, ProviderSessionInspectFuture,
-    ProviderSettingsFuture, ServiceIdentity,
-};
+use collaboration_service::ApplicationFixture;
+use collaboration_service::CollaborationApplication;
+use collaboration_service::collaboration_rejection::CollaborationRejection;
+
 use serde::Serialize;
 use serde_json::{Value, json};
 use std::{future::Future, pin::Pin, sync::Arc};
@@ -167,7 +169,7 @@ fn settings_result(target: collaboration_protocol::SessionRef) -> ProviderSettin
 
 #[tokio::test]
 async fn settings_methods_forward_typed_actor_without_operation_id() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     let set = json!({"target":session("provider-conversation"),"actor":actor("creator"),"setting":"mode","value":"ask"});
     let set_response = call(&fixture, "conversation/settingsSet", set.clone()).await?;
     ensure(
@@ -207,7 +209,7 @@ async fn settings_methods_forward_typed_actor_without_operation_id() -> TestResu
 
 #[tokio::test]
 async fn resume_and_close_dispatch_as_inspectable_provider_operations() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     let resume = json!({
         "operationId":operation_id(),
         "target":session("provider-conversation"),
@@ -243,7 +245,7 @@ async fn resume_and_close_dispatch_as_inspectable_provider_operations() -> TestR
 
 #[tokio::test]
 async fn human_creator_and_approver_survive_create_and_load_control_dispatch() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     let human = json!({"humanId":"owner"});
     let create = json!({
         "operationId":operation_id(),
@@ -381,20 +383,19 @@ fn published<TResult: Serialize>(result: Result<TResult, impl CollaborationRejec
     }
 }
 
-async fn initialized_fixture() -> TestResult<(Fixture, RecordingBackend)> {
-    initialized_fixture_with_endpoint(None).await
+fn initialized_fixture() -> TestResult<(Fixture, RecordingBackend)> {
+    initialized_fixture_with_endpoint(None)
 }
 
-async fn initialized_fixture_with_endpoint(
+fn initialized_fixture_with_endpoint(
     endpoint_description: Option<EndpointDescription>,
 ) -> TestResult<(Fixture, RecordingBackend)> {
     let claude_binding = binding(endpoint(), "claudeCode", "claude-agent-acp")?;
     let cursor_binding = binding(cursor_endpoint(), "cursor", "cursor-agent-acp")?;
     let snapshot = snapshot(claude_binding.clone())?;
-    let submission =
-        serde_json::from_value(json!({"admission":"admitted","operation":snapshot.clone()}))?;
+    let submission = serde_json::from_value(json!({"admission":"admitted","operation":snapshot}))?;
     let wait_result =
-        serde_json::from_value(json!({"operation":snapshot.clone(),"output":{"kind":"pending"}}))?;
+        serde_json::from_value(json!({"operation":snapshot,"output":{"kind":"pending"}}))?;
     let backend = RecordingBackend {
         bindings: vec![claude_binding, cursor_binding],
         calls: Arc::new(Mutex::new(Vec::new())),
@@ -404,25 +405,25 @@ async fn initialized_fixture_with_endpoint(
         snapshot,
         wait_result,
     };
-    let identity = ServiceIdentity::new(SERVICE, EPOCH)?
+    let identity = ApplicationFixture::new(SERVICE, EPOCH)?
         .with_provider_conversation_backend(Arc::new(backend.clone()));
     let identity = match endpoint_description {
         Some(description) => identity.with_endpoints(vec![description])?,
         None => identity,
     };
-    Ok((fixture(identity).await?, backend))
+    Ok((fixture(identity)?, backend))
 }
 
-async fn fixture(identity: ServiceIdentity) -> TestResult<Fixture> {
+fn fixture(identity: ApplicationFixture) -> TestResult<Fixture> {
     Ok(Fixture {
-        application: CollaborationApplication::new(identity.clone()),
-        served: served_api::ServedApi::start(identity).await?,
+        application: (identity.clone()).build(),
+        served: served_api::ServedApi::start(identity)?,
     })
 }
 
 #[tokio::test]
 async fn initialized_control_forwards_all_provider_conversation_methods() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     let mutation = json!({"operationId":operation_id(),"generation":generation(),"requestedBy":actor("caller"),"approver":actor("approver")});
     let requests = [
         (
@@ -490,7 +491,7 @@ async fn initialized_control_forwards_all_provider_conversation_methods() -> Tes
 
 #[tokio::test]
 async fn omitted_generation_uses_current_binding_for_each_mutation() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     for (method, params) in [
         (
             "conversation/create",
@@ -531,7 +532,7 @@ async fn omitted_generation_uses_current_binding_for_each_mutation() -> TestResu
 
 #[tokio::test]
 async fn dispatch_resolves_the_requested_dynamic_provider_binding() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     let response = call(&fixture, "conversation/create", json!({
         "operationId":operation_id(),"endpoint":cursor_endpoint(),"generation":generation(),
         "workingDirectory":"/tmp/provider-work","createdBy":actor("caller"),"approver":actor("approver"),
@@ -551,7 +552,7 @@ async fn dispatch_resolves_the_requested_dynamic_provider_binding() -> TestResul
 
 #[tokio::test]
 async fn existing_operation_id_returns_existing_before_stale_generation_validation() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     *backend.existing_lookup.lock().await = true;
     let response = call(
         &fixture,
@@ -577,7 +578,7 @@ async fn existing_operation_id_returns_existing_before_stale_generation_validati
 
 #[tokio::test]
 async fn backend_failure_is_returned_as_the_structured_control_error() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     let failure: ConversationOperationFailure = serde_json::from_value(json!({
         "kind":"outcomeUnknown","stage":"settlement","effect":"unknown",
         "message":"provider response was lost","operationId":operation_id(),"target":session("provider-conversation")
@@ -600,7 +601,7 @@ async fn backend_failure_is_returned_as_the_structured_control_error() -> TestRe
 
 #[tokio::test]
 async fn malformed_and_foreign_identity_requests_never_reach_backend() -> TestResult {
-    let (fixture, backend) = initialized_fixture().await?;
+    let (fixture, backend) = initialized_fixture()?;
     // Malformed input is refused by the API's own decoder before any operation runs.
     let malformed = fixture
         .served
@@ -658,8 +659,8 @@ async fn unavailable_provider_conversation_names_endpoint_and_catalog_recovery()
         "channels":[]
     }))?;
     let identity =
-        ServiceIdentity::new(SERVICE, EPOCH)?.with_endpoints(vec![endpoint_description])?;
-    let fixture = fixture(identity).await?;
+        ApplicationFixture::new(SERVICE, EPOCH)?.with_endpoints(vec![endpoint_description])?;
+    let fixture = fixture(identity)?;
     for (method, params) in [
         (
             "conversation/create",
@@ -728,7 +729,7 @@ async fn unavailable_catalog_vetoes_a_still_present_provider_binding() -> TestRe
     let description: EndpointDescription = serde_json::from_value(json!({
         "endpoint":endpoint(),"label":"Fixture Claude","availability":availability,"channels":[]
     }))?;
-    let (fixture, backend) = initialized_fixture_with_endpoint(Some(description)).await?;
+    let (fixture, backend) = initialized_fixture_with_endpoint(Some(description))?;
     let response = call(
         &fixture,
         "conversation/prompt",

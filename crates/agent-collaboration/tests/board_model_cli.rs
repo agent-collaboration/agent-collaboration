@@ -1,12 +1,13 @@
 //! V8 uses the executable, v3 manifest, MCP socket, admission and native stores.
+
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
-    ServiceIdentity,
-};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
@@ -23,7 +24,10 @@ fn request_file(directory: &Path, name: &str, value: &Value) -> Result<String, T
     Ok(path.to_str().ok_or("non-UTF8 fixture path")?.to_owned())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_request_ids()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -60,7 +64,7 @@ async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_reque
         interaction_storage::InteractionStore::open(directory.path().join("interaction.sqlite"))
             .await?,
     );
-    let routes = Arc::new(collaboration_service::SessionDeliveryRouter::new(Vec::new()));
+    let routes = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new()));
     let delivery = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Available(Arc::new(
@@ -81,17 +85,15 @@ async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_reque
     delivery.start().await?;
     let api = ServedCollaborationApi::start(
         directory.path(),
-        CollaborationApplication::new(
-            ServiceIdentity::new(
-                "00000000-0000-4000-8000-000000000001",
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission)
-            .with_automation_store(automation)
-            .with_subscription_delivery_service(delivery.clone(), routes),
-        ),
-    )
-    .await?;
+        (ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission)
+        .with_automation_store(automation)
+        .with_subscription_delivery_service(delivery.clone(), routes))
+        .build(),
+    )?;
     let actor = r#"{"kind":"human","humanId":"owner"}"#;
     let workspace = WorkspaceId::generate();
     let board = BoardId::generate();

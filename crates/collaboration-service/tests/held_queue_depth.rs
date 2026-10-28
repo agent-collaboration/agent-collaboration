@@ -1,6 +1,10 @@
 //! P1 diagnostic: actual per-target owner and SQLite, with no concurrent admissions.
 #[path = "support/board_fixture.rs"]
-#[allow(dead_code)] // This scenario uses only the shared fixture's replay and shutdown paths.
+// This scenario uses only the shared fixture's replay and shutdown paths.
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_fixture;
 #[path = "support/held_queue_counter.rs"]
 mod held_queue_counter;
@@ -9,15 +13,25 @@ mod native_delivery;
 use automation_storage::AutomationStore;
 use board_fixture::native_mail_owner;
 use board_fixture::{BoardFixture, TestError};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, MailItemId, MessageContent, MessageDelivery,
     PushDeliveryState, SessionMessageSendParams, SessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, BoardAvailability, CollaborationApplication, DeliveryFuture,
-    MachineIdentity, ServiceIdentity, SessionMessageDelivery, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock, TargetPresence, TargetPresenceProbe,
-};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::BoardAvailability;
+use collaboration_service::CollaborationApplication;
+
+use collaboration_service::SubscriptionDeliveryService;
+use collaboration_service::SubscriptionDeliveryServiceProps;
+use collaboration_service::SystemSubscriptionClock;
+
 use serde_json::json;
 use std::{
     sync::{
@@ -38,15 +52,15 @@ impl TargetPresenceProbe for UnloadedTarget {
 impl SessionMessageDelivery for UnloadedTarget {
     fn reconcile_attempt(
         &self,
-        _: collaboration_service::AttemptReconciliationContext,
-    ) -> DeliveryFuture<'_, collaboration_service::AttemptReconciliation> {
-        Box::pin(async { Ok(collaboration_service::AttemptReconciliation::StillUnknown) })
+        _: collaboration_contracts::AttemptReconciliationContext,
+    ) -> DeliveryFuture<'_, collaboration_contracts::AttemptReconciliation> {
+        Box::pin(async { Ok(collaboration_contracts::AttemptReconciliation::StillUnknown) })
     }
     fn deliver<'a>(
         &'a self,
-        _: collaboration_service::layer_zero::DeliveryRequest,
+        _: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Box::pin(async { Ok(native_delivery::scripted(held())) })
     }
@@ -154,7 +168,10 @@ async fn assert_refused_without_custody(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+)]
 async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity_boundary()
 -> Result<(), TestError> {
     let counter = held_queue_counter::SqlCounter::default();
@@ -189,7 +206,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
         clock: Arc::new(SystemSubscriptionClock),
     });
     service.start().await?;
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )?
@@ -206,7 +223,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
             clock: Arc::new(SystemSubscriptionClock),
         },
     )?;
-    let app = CollaborationApplication::new(identity);
+    let app = (identity).build();
     let target: SessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"held-depth-target"}),
     )?;

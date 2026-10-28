@@ -1,5 +1,4 @@
 //! Legacy global bounds must retain their thread's imported coverage.
-#![allow(clippy::panic_in_result_fn)]
 mod message_support;
 mod support;
 use board_legacy_upgrade::{MessageUpgrade, MessageUpgradeError};
@@ -7,6 +6,10 @@ use interaction_storage::InteractionStore;
 use message_support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn shipped_activity_range_reads_through_the_current_message_owner() -> TestResult {
     // Arrange: the retained shipped board fixture and the ffced1c1 range shape.
     let (directory, board) = support::fixture_copy("legacy-complete.sqlite")?;
@@ -83,6 +86,10 @@ async fn shipped_activity_range_reads_through_the_current_message_owner() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn all_unmapped_or_empty_ranges_are_counted_and_refuse_without_mutation() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("automation.sqlite");
@@ -107,6 +114,10 @@ async fn all_unmapped_or_empty_ranges_are_counted_and_refuse_without_mutation() 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn legacy_admission_rejects_malformed_and_already_translated_range_shapes() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("automation.sqlite");

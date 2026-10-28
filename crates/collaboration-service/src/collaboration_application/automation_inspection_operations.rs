@@ -19,14 +19,14 @@ use tokio::sync::Mutex;
 
 pub(super) type InspectionResult<TResult> = Result<TResult, AutomationInspectionFailure>;
 
-impl<'service> AutomationOperations<'service> {
-    pub(super) fn inspection_store(
-        &self,
-    ) -> InspectionResult<&'service Arc<Mutex<AutomationStore>>> {
+impl AutomationOperations {
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
+    pub(super) fn inspection_store(&self) -> InspectionResult<&Arc<Mutex<AutomationStore>>> {
         self.store().ok_or_else(failure::unavailable)
     }
 
     /// Pages instruction documents, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn instruction_list(
         &self,
         request: AutomationPageRequest,
@@ -46,6 +46,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Pages schedules, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn schedule_list(
         &self,
         request: AutomationPageRequest,
@@ -65,6 +66,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Pages one schedule's Runs, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_list(
         &self,
         request: RunListRequest,
@@ -84,6 +86,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Pages one instruction's revisions, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn revision_list(
         &self,
         request: RevisionListRequest,
@@ -103,6 +106,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Pages deliveries, optionally of one wake, newest first.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_list(
         &self,
         request: DeliveryListRequest,
@@ -121,13 +125,14 @@ impl<'service> AutomationOperations<'service> {
         .await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn list_collection<TRecord: DeserializeOwned>(
         &self,
         selection: CollectionSelection,
         budget: ResultByteBudget,
     ) -> InspectionResult<AutomationPage<TRecord>> {
         let store = self.inspection_store()?;
-        let service_id = &self.identity.service_id;
+        let service_id = self.identity.service_id();
         let digest = cursor::filter_digest(&selection.filters)
             .map_err(|()| failure::invalid("filters", "Cannot encode collection filters."))?;
         let position = match &selection.cursor {
@@ -226,6 +231,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Reconciles a delivery from exact native queue evidence; input is never resent.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn delivery_reconcile(
         &self,
         request: DeliveryShowRequest,
@@ -234,16 +240,14 @@ impl<'service> AutomationOperations<'service> {
         let store = self.inspection_store()?;
         let record = read_delivery(store, &request).await?;
         let session_delivery = self
-            .identity
             .session_delivery
             .as_ref()
             .ok_or_else(failure::unavailable)?;
         let interactions = self
-            .identity
             .interaction_store
             .as_ref()
             .ok_or_else(failure::unavailable)?;
-        crate::delivery_reconciliation::reconcile(
+        collaboration_runtime::delivery_reconciliation::reconcile(
             store,
             interactions,
             session_delivery.as_ref(),
@@ -263,6 +267,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Reconciles a Run from exact native evidence; work is never started or interrupted.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn run_reconcile(
         &self,
         request: RunShowRequest,
@@ -270,10 +275,10 @@ impl<'service> AutomationOperations<'service> {
     ) -> InspectionResult<RunSnapshot> {
         let store = self.inspection_store()?;
         let record = read_run(store, &request).await?;
-        crate::run_reconciliation::reconcile(
+        collaboration_runtime::run_reconciliation::reconcile(
             store,
-            self.identity.scheduled_run_execution.as_ref(),
-            self.identity.native_backend.as_ref(),
+            self.scheduled_run_execution.as_ref(),
+            self.native_backend.as_ref(),
             record,
         )
         .await
@@ -285,6 +290,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Shows an operation's original receipt; nothing is resubmitted.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_show(
         &self,
         request: OperationShowRequest,
@@ -294,6 +300,7 @@ impl<'service> AutomationOperations<'service> {
     }
 
     /// Reconciles an unsettled configuration operation through the Host, then shows its receipt.
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     pub async fn operation_reconcile(
         &self,
         request: OperationShowRequest,
@@ -302,6 +309,7 @@ impl<'service> AutomationOperations<'service> {
         self.inspect_operation(request, true, budget).await
     }
 
+    #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
     async fn inspect_operation(
         &self,
         request: OperationShowRequest,
@@ -331,7 +339,7 @@ impl<'service> AutomationOperations<'service> {
                     | automation_storage::StoredOperationState::Failed { .. }
             )
         {
-            if let Some(backend) = self.identity.configuration_backend.as_ref() {
+            if let Some(backend) = self.configuration_backend.as_ref() {
                 if let Err(error) = backend.reconcile(request.operation_id.clone()).await {
                     explanation = Some(error.message);
                 }
@@ -346,7 +354,7 @@ impl<'service> AutomationOperations<'service> {
             }
         }
         let mut snapshot =
-            crate::operation_receipt_projection::snapshot(record, &self.identity.service_id)
+            crate::operation_receipt_projection::snapshot(record, self.identity.service_id())
                 .map_err(failure::storage)?;
         if let (
             Some(message),
@@ -380,6 +388,7 @@ struct CollectionSelection {
 }
 
 /// Records are projected as JSON so pages can be measured; the page returns them typed.
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 pub(super) fn typed_records<TRecord: DeserializeOwned>(
     records: Vec<Value>,
 ) -> InspectionResult<Vec<TRecord>> {
@@ -430,6 +439,7 @@ fn valid_id(collection: &AutomationCollection, value: &str) -> bool {
     }
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn read_delivery(
     store: &Arc<Mutex<AutomationStore>>,
     request: &DeliveryShowRequest,
@@ -437,17 +447,18 @@ async fn read_delivery(
     automation_storage::DeliveryRecord<
         SessionRef,
         CodexGeneration,
-        crate::stored_delivery_receipt::StoredDeliveryReceipt,
+        collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt,
     >,
 > {
     store
         .lock()
         .await
-        .read_delivery::<SessionRef, CodexGeneration, crate::stored_delivery_receipt::StoredDeliveryReceipt>(&request.delivery_id)
+        .read_delivery::<SessionRef, CodexGeneration, collaboration_runtime::stored_delivery_receipt::StoredDeliveryReceipt>(&request.delivery_id)
         .await
         .map_err(failure::storage)
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 async fn read_run(
     store: &Arc<Mutex<AutomationStore>>,
     request: &RunShowRequest,
@@ -456,17 +467,18 @@ async fn read_run(
         SessionRef,
         EndpointRef,
         CodexGeneration,
-        crate::stored_run_receipt::StoredRunReceipt,
+        collaboration_runtime::stored_run_receipt::StoredRunReceipt,
     >,
 > {
     store
         .lock()
         .await
-        .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&request.run_id)
+        .read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&request.run_id)
         .await
         .map_err(failure::storage)
 }
 
+#[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
 fn bounded_reconciliation<TResult: serde::Serialize>(
     result: TResult,
     budget: ResultByteBudget,

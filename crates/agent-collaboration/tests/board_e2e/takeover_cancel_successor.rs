@@ -168,6 +168,10 @@ async fn wait_for_replay_or_publication(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_local_replay(
     local: &[Value],
     prefix: RemoteEndPrefix,

@@ -1,6 +1,5 @@
 //! Real owner HTTP, Fleet continuation, Registry ImportTask and receiver staging.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_conformance::{
     ConformanceResult, JwksFixtureServer, fixture_policy, owner_assertion,
@@ -121,6 +120,10 @@ async fn durable_rows(
     Ok(result)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn reservation_and_seed_identity_survive_reopen_without_reporting_completion()
 -> ConformanceResult<()> {

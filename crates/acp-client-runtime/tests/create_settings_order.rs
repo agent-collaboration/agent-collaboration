@@ -1,7 +1,5 @@
 //! A real ACP subprocess proves that create settings finish before any prompt.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::{
@@ -117,6 +115,14 @@ impl SessionEventSink for SettingsEventSink {
         Box::pin(async { Ok(()) })
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if let SessionEvent::SettingsChanged { settings } = event {
             self.0.lock().expect("settings events").push(settings);

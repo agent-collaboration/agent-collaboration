@@ -6,7 +6,7 @@ mod tests {
         AcpConversation, ClientError, ConversationCreateRequest, ConversationEvent,
     };
     use collaboration_mcp::test_support::ServedCollaborationApi;
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     use serde_json::{Value, json};
     use std::{os::unix::fs::DirBuilderExt, path::PathBuf, time::Duration};
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
@@ -75,11 +75,10 @@ mod tests {
                 "schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]
         }))
         .unwrap_or_else(|error| panic!("fixture endpoint: {error}"));
-        let identity = ServiceIdentity::new(service_id, service_id)
+        let identity = ApplicationFixture::new(service_id, service_id)
             .and_then(|identity| identity.with_endpoints(vec![endpoint]))
             .unwrap_or_else(|error| panic!("fixture identity: {error}"));
-        let served = ServedCollaborationApi::start(&root, CollaborationApplication::new(identity))
-            .await
+        let served = ServedCollaborationApi::start(&root, (identity).build())
             .unwrap_or_else(|error| panic!("serve: {error}"));
         let listener = tokio::net::UnixListener::bind(root.join("acp.sock"))
             .unwrap_or_else(|error| panic!("ACP socket: {error}"));

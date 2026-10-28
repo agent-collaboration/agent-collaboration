@@ -21,18 +21,18 @@ impl CallRouter for NoFillerCalls {
     }
 }
 struct QuotaAcknowledgements(AcknowledgedProjectChanges);
-impl crate::ProjectReplicationPosition for QuotaAcknowledgements {
+impl collaboration_contracts::ProjectReplicationPosition for QuotaAcknowledgements {
     fn acknowledged_mail_changes<'a>(
         &'a self,
         _: &'a ProjectId,
-    ) -> crate::AcknowledgedMailChangesFuture<'a> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'a> {
         Box::pin(async { Ok(self.0.clone()) })
     }
     fn replicated_through<'a>(
         &'a self,
         _: &'a ProjectId,
         epoch: EpochNumber,
-    ) -> crate::ReplicatedPositionFuture<'a> {
+    ) -> collaboration_contracts::ReplicatedPositionFuture<'a> {
         Box::pin(async move {
             Ok(FeedCursor {
                 epoch,
@@ -44,9 +44,9 @@ impl crate::ProjectReplicationPosition for QuotaAcknowledgements {
 
 #[tokio::test]
 async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity_returns() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
         // Arrange an inherited remote original: no sender row reserves its cancel slot.
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.runtime().await;
         let mut batches = Vec::new();
         for _ in 0..3 {
@@ -99,13 +99,13 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         let query = FrozenMailQuery::open(fixture.directory.path(), peer).await;
         query.accept_submissions();
         query.release();
-        let limits = DeliveryLimits::new::<crate::RouterDeliveryTypes>(
+        let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             32 * 1024 * 1024,
             100,
             32 * 1024 * 1024,
             1,
             32 * 1024 * 1024,
-            minimum_settlement_allowance::<crate::RouterDeliveryTypes>().unwrap(),
+            minimum_settlement_allowance::<collaboration_contracts::RouterDeliveryTypes>().unwrap(),
         )
         .unwrap();
         let observer = interaction_storage::InteractionAtomicStore::new(
@@ -115,7 +115,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                 runtime_primitives::SystemClock,
             )),
         );
-        let filler = DeliveryItem::<crate::RouterDeliveryTypes>::new(
+        let filler = DeliveryItem::<collaboration_contracts::RouterDeliveryTypes>::new(
             ItemId::new(uuid::Uuid::now_v7()).unwrap(),
             original.sender().clone(),
             original.recipient().clone(),
@@ -128,7 +128,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         let queued = observer
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
                         .enqueue(filler, relay)
                         .await
                         .map_err(delivery_rollback)
@@ -144,7 +144,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                     interactions: fixture.interactions.clone(),
                     actors: runtime.service.clone(),
                     presence: fixture.presence.clone(),
-                    machine: crate::MachineIdentity::new(
+                    machine: collaboration_contracts::MachineIdentity::new(
                         SERVICE_ID.to_owned().try_into().unwrap(),
                         None,
                     )
@@ -161,7 +161,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             max_expansion_seq: Some(child_sequence.get()),
             ..Default::default()
         }));
-        let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+        let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
             .unwrap()
             .with_project_replication(marks)
             .with_project_admission(fixture.admission.clone())
@@ -175,18 +175,17 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             fixture.interactions.clone(),
             Arc::downgrade(&native.runtime_handle()),
         ));
-        let app = Arc::new(CollaborationApplication::new(
-            identity.with_notification_publisher(publisher.clone()),
-        ));
-        let control: fleet_sync_protocol::DeliveryCancel<crate::RouterDeliveryTypes> =
-            match serde_json::from_value::<DeliveryEnvelope<crate::RouterDeliveryTypes>>(
-                frozen.clone(),
-            )
-            .unwrap()
-            {
-                DeliveryEnvelope::Cancel(control) => control,
-                _ => panic!("frozen child control"),
-            };
+        let app = Arc::new((identity.with_notification_publisher(publisher.clone())).build());
+        let control: fleet_sync_protocol::DeliveryCancel<
+            collaboration_contracts::RouterDeliveryTypes,
+        > = match serde_json::from_value::<
+            DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>,
+        >(frozen.clone())
+        .unwrap()
+        {
+            DeliveryEnvelope::Cancel(control) => control,
+            DeliveryEnvelope::Item(_) => panic!("frozen child control"),
+        };
         let refusal = native
             .runtime()
             .enqueue_project_cancel(control, epoch)
@@ -229,7 +228,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         observer
             .transaction(move |scope| {
                 Box::pin(async move {
-                    Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
+                    Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(scope, limits)
                         .record_failure(filler_id, DeliveryFailureKind::ExecutionFailed)
                         .await
                         .map_err(delivery_rollback)
@@ -301,15 +300,17 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             observer
                 .transaction(move |scope| {
                     Box::pin(async move {
-                        Outbox::<_, crate::RouterDeliveryTypes>::new(scope, limits)
-                            .publish_status(fleet_sync_protocol::StatusPublication {
-                                item,
-                                status: DeliveryStatus::Cancelled,
-                                version: StatusVersion::new(2),
-                                cancel: Some(CancelResult::Prevented),
-                            })
-                            .await
-                            .map_err(delivery_rollback)
+                        Outbox::<_, collaboration_contracts::RouterDeliveryTypes>::new(
+                            scope, limits,
+                        )
+                        .publish_status(fleet_sync_protocol::StatusPublication {
+                            item,
+                            status: DeliveryStatus::Cancelled,
+                            version: StatusVersion::new(2),
+                            cancel: Some(CancelResult::Prevented),
+                        })
+                        .await
+                        .map_err(delivery_rollback)
                     })
                 })
                 .await
@@ -360,7 +361,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         runtime.close().await;
         fixture.close_native(native).await;
         query.close().await;
-    })
+    }))
     .await
     .expect("bounded actual outbox quota and frozen-child recovery");
 }

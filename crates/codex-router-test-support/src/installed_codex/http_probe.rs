@@ -1,4 +1,10 @@
-use super::*;
+use super::{
+    AccountId, Arc, AtomicBool, Command, Duration, ErrorKind, Instant, IntoClientRequest,
+    MaybeTlsStream, Message, MockHttpSseTranscript, MockWebSocketTranscript, Mutex, Ordering,
+    Output, Path, PathBuf, RETAIN_SMOKE_ROOT_ENV, Read, Request, Response, SMOKE_EXPECTED_TEXT,
+    SMOKE_PROMPT, SMOKE_TARGET_MODEL, Shutdown, SmokeSeed, Stdio, TcpListener, Value, Write,
+    accept_hdr, connect, fs, thread,
+};
 
 pub(super) fn record_http_sse_only_transcript(
     transcript: &Arc<Mutex<Option<MockWebSocketTranscript>>>,
@@ -410,7 +416,10 @@ pub(super) fn smoke_http_sse_events() -> Vec<Value> {
     ]
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 pub(super) fn run_mock_websocket(
     stream: std::net::TcpStream,
     transcript: Arc<Mutex<Option<MockWebSocketTranscript>>>,

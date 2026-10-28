@@ -1,5 +1,4 @@
 //! Force the real install runner and bootstrap renew to meet at the drain boundary.
-#![allow(clippy::panic_in_result_fn)]
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
@@ -10,7 +9,7 @@ use board_central_test_support::{
     DispatchFaultObservation, ObjectAddress, RuntimeControl, TestCentral,
 };
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::ProjectClaim;
+use collaboration_contracts::ProjectClaim;
 use fleet_sync_protocol::*;
 use fleet_sync_session::SessionClientStore;
 use fleet_sync_writer::BootstrapGrant;
@@ -44,6 +43,10 @@ fn held_renewal(observation: DispatchFaultObservation) -> Result<RenewRequest, i
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_publication()
 -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -206,7 +209,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
                 }
             }
         }).await??;
-        assert!(matches!(registry.existing_project(&project).await, Err(collaboration_service::ProjectRegistryError::Installing { .. })));
+        assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER held-runner-renewal drain-entered registry-unpublished");
         central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatchAndHoldNext { destination: ObjectAddress::Registry }).await?;
         let observed = central.runtime_control(connection.clone(), RuntimeControl::AwaitHeldDispatch).await?;
@@ -219,7 +222,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         assert!(*install.stop.borrow());
         drop(drained);
         assert!(!claimed.is_finished());
-        assert!(matches!(registry.existing_project(&project).await, Err(collaboration_service::ProjectRegistryError::Installing { .. })));
+        assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         println!("CLAIM_ORDER fresh-bootstrap-renewal held install-tasks-drained registry-unpublished");
         central.runtime_control(connection.clone(), RuntimeControl::ResumeDispatch).await?;
         assert!(matches!(timeout(BOUND, &mut claimed).await???, ProjectClaimReply::Claimed { epoch: actual, start: actual_start, .. } if actual == epoch && actual_start == start));

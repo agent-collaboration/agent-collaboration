@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn restore_clears_interrupted_selection_marks_and_keeps_draining_window_deadline()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -96,7 +99,10 @@ async fn restore_clears_interrupted_selection_marks_and_keeps_draining_window_de
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn restart_before_notice_settlement_reselects_the_same_range() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let reader = fixture.reader.clone();

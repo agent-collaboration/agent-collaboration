@@ -1,5 +1,5 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
+
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, JwksFixtureServer, fixture_policy,
 };
@@ -60,6 +60,10 @@ async fn readback(root: &Path) -> ConformanceResult<FleetReadback> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn owner_fleet_import_is_atomic_and_replays_without_rewriting() -> ConformanceResult<()> {
     let jwks = JwksFixtureServer::start().await?;

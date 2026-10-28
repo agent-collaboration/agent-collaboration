@@ -163,6 +163,10 @@ async fn kill_child(kind: CrashKind) -> Result<(tempfile::TempDir, CrashState), 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn notice_ack_never_precedes_native_admission_at_sigkill_and_welcome_recovers()
 -> Result<(), TestError> {
     let (directory, state) = kill_child(CrashKind::Notice).await?;
@@ -250,6 +254,10 @@ async fn notice_ack_never_precedes_native_admission_at_sigkill_and_welcome_recov
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn canonical_publication_stays_owed_until_native_commit_at_sigkill_then_catch_up_repairs()
 -> Result<(), TestError> {
     let (directory, state) = kill_child(CrashKind::Publication).await?;
@@ -293,6 +301,10 @@ async fn canonical_publication_stays_owed_until_native_commit_at_sigkill_then_ca
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn missing_native_publication_owner_never_answers_applied_or_retires_the_owed_status()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -360,16 +372,20 @@ async fn missing_native_publication_owner_never_answers_applied_or_retires_the_o
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn remote_mail_crash_child_entry() -> Result<(), TestError> {
     let Some(base) = std::env::var_os(CHILD_ROOT).map(PathBuf::from) else {
         return Ok(());
     };
     let kind: CrashKind = serde_json::from_str(&std::env::var(CHILD_KIND)?)?;
     if matches!(kind, CrashKind::FrontierRetirement) {
-        return retirement::retirement_checkpoint_child(&base).await;
+        return Box::pin(retirement::retirement_checkpoint_child(&base)).await;
     }
     if matches!(kind, CrashKind::StatusBatch) {
-        return status_atomicity::status_batch_child(&base).await;
+        return Box::pin(status_atomicity::status_batch_child(&base)).await;
     }
     let mut harness = MailHarness::open_manual(&base, None).await?;
     let mut state = CrashState {

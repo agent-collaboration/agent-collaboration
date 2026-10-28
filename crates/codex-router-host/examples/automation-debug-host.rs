@@ -180,12 +180,12 @@ pub(crate) async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("{}", serde_json::to_string(&prepared)?);
     drop(probe);
-    HostRuntime::run_acquired(
+    Box::pin(HostRuntime::run_acquired(
         config,
         ManagedChildLaunchPlans::new(Some(router), launch),
         ManagedUpdateInputs::production().with_replacement_command(replacement_command),
         instance,
-    )
+    ))
     .await?;
     Ok(())
 }

@@ -2,7 +2,10 @@
 use crate::project_actor_rows::actor_id;
 use crate::project_record_codec::{require_one_row, stored_bool};
 use crate::{ImportRowKind, ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    EpochNumber, FeedCursor, FeedPosition, Identity, ProjectId, RecordId, RecordRef, RecordedActor,
+    ThreadId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

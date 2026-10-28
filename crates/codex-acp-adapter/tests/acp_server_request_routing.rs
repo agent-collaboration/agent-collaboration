@@ -42,7 +42,10 @@ impl AcpSessionRoute for ScriptedCodexRoute {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn unknown_bare_session_load_does_not_default_to_codex_route()
 -> Result<(), Box<dyn std::error::Error>> {
     let (client, server) = tokio::net::UnixStream::pair()?;
@@ -73,7 +76,10 @@ async fn unknown_bare_session_load_does_not_default_to_codex_route()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn explicit_codex_session_ref_routes_load_on_a_new_multi_route_connection()
 -> Result<(), Box<dyn std::error::Error>> {
     let (client, server) = tokio::net::UnixStream::pair()?;
@@ -107,7 +113,10 @@ async fn explicit_codex_session_ref_routes_load_on_a_new_multi_route_connection(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn single_native_route_can_validate_a_bare_stored_session_load()
 -> Result<(), Box<dyn std::error::Error>> {
     let (client, server) = tokio::net::UnixStream::pair()?;
@@ -167,7 +176,10 @@ impl AcpSessionRoute for ScriptedProviderRoute {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn server_initiated_approval_reply_returns_to_owning_session_route()
 -> Result<(), Box<dyn std::error::Error>> {
     let (client, server) = tokio::net::UnixStream::pair()?;

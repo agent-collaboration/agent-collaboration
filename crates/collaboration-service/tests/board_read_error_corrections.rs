@@ -1,5 +1,9 @@
 //! Malformed board reads keep typed field diagnostics without exposing supplied values.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;

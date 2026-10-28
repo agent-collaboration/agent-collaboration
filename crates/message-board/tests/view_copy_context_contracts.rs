@@ -5,7 +5,10 @@ use serde_json::json;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions compare the wire contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions compare the wire contract; Result propagates fixture errors.
 fn copy_source_only_exposes_a_writer_or_an_acknowledged_copy() -> TestResult {
     for (source, expected) in [
         (CopySource::Writer {}, json!({"kind":"writer"})),
@@ -30,7 +33,10 @@ fn copy_source_only_exposes_a_writer_or_an_acknowledged_copy() -> TestResult {
 }
 
 #[test]
-#[allow(clippy::panic_in_result_fn)] // Assertions compare the wire contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions compare the wire contract; Result propagates fixture errors.
 fn current_writer_keeps_a_grant_unheld_import_and_unknown_distinct() -> TestResult {
     for (writer, expected) in [
         (

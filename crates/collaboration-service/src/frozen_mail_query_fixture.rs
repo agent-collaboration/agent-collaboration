@@ -33,7 +33,7 @@ pub(crate) struct FrozenMailQuery {
     retire_requests: Arc<Mutex<Vec<RetirementRequest>>>,
     accept_submissions: Arc<AtomicBool>,
     submissions: Arc<Mutex<Vec<fleet_sync_protocol::DeliveryItemRef>>>,
-    pub session: crate::MailDeliverySession,
+    pub session: collaboration_runtime::MailDeliverySession,
     pub entered: mpsc::UnboundedReceiver<Vec<ItemId>>,
     released: watch::Sender<bool>,
     stopped: watch::Sender<bool>,
@@ -242,7 +242,7 @@ impl FrozenMailQuery {
             retire_requests,
             accept_submissions,
             submissions,
-            session: crate::MailDeliverySession {
+            session: collaboration_runtime::MailDeliverySession {
                 requests,
                 welcomed: readiness,
                 peer,

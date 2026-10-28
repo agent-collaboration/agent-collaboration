@@ -1,5 +1,4 @@
 //! Retained, synthetic-only measurements for the offline import's actual CLI path.
-#![allow(clippy::panic_in_result_fn)]
 mod support;
 
 use message_board::PostId;
@@ -11,6 +10,10 @@ use std::{
 };
 use support::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn grow_fixture(source: &Path, posts: usize) -> TestResult {
     let mut connection = rusqlite::Connection::open(source)?;
     connection.execute_batch("PRAGMA foreign_keys=ON")?;
@@ -61,6 +64,10 @@ fn grow_fixture(source: &Path, posts: usize) -> TestResult {
 
 #[tokio::test]
 #[ignore = "manual 893 scaling measurement; runs the real native import at 1k/5k/10k posts"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn offline_import_phase_growth_at_three_synthetic_sizes() -> TestResult {
     for posts in [1000, 5000, 10000] {
         // Arrange: only retained synthetic data is enlarged, in an isolated copy.

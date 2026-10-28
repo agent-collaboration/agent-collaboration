@@ -2,14 +2,20 @@
 use super::board_paging::fingerprint;
 use super::board_record_paging::FeedPageSource;
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    AggregateCursor, BoardError, BoardOperation, BoardShowRequest, Identity, InboxFetchRequest,
+    InboxFetchResult, InboxPage, InboxReadMode, InboxScope, InboxWorkspacesRequest,
+    InboxWorkspacesResult, PostListRequest, PostListScope, PostSelection, ProjectRequest,
+    ProjectWriteCallResult, ReadInitializationOutcome, ReadPosition, ReadScope, WorkspaceId,
+    WorkspaceUnreadSummary,
+};
 #[derive(serde::Serialize)]
 struct InboxReadFilter<'query> {
     scope: &'query InboxScope,
     reader: &'query Identity,
     read_mode: InboxReadMode,
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn inbox_fetch(
         &self,
         request: InboxFetchRequest,

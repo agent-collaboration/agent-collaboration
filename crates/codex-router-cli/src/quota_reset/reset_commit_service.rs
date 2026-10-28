@@ -165,7 +165,7 @@ fn render_safe_provider_failure(error: &QuotaResetError) -> RenderSafeFailure {
         | QuotaResetError::CredentialStoreUnavailable => RenderSafeFailure::CredentialUnavailable,
         QuotaResetError::Request { .. } => RenderSafeFailure::Transport,
         QuotaResetError::Status { .. } => RenderSafeFailure::ProviderStatus,
-        _ => RenderSafeFailure::InvalidResponse,
+        QuotaResetError::Response { .. } => RenderSafeFailure::InvalidResponse,
     }
 }
 
@@ -554,7 +554,7 @@ where
         };
         let usage = self.revalidate_usage(context.clone()).await;
         let inventory = self
-            .revalidate_inventory(context.clone(), now_unix_seconds as i64)
+            .revalidate_inventory(context.clone(), now_unix_seconds.cast_signed())
             .await;
         let authorization =
             Self::validate_revalidation(context, &usage, &inventory).and_then(|validated| {

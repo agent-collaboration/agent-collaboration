@@ -4,7 +4,9 @@ use collaboration_protocol::{
     CodexGeneration, EndpointDescription, InstructionCreateParams, InstructionText, OperationId,
     ScheduleCreateRequest, SchedulePrepareRequest, SessionRef,
 };
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceIdentity};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
@@ -84,17 +86,17 @@ async fn exercise_preparation(
         gate,
         codex_home: root.clone(),
     };
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_scheduled_run_execution(Arc::new(
-            collaboration_service::CodexAppServerScheduledRuns::new(
+            collaboration_runtime::CodexAppServerScheduledRuns::new(
                 native_backend.clone(),
-                Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+                Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ),
         ))
         .with_native_backend(native_backend)?;
-    let served = served_api::ServedApi::start(identity.clone()).await?;
+    let served = served_api::ServedApi::start(identity.clone())?;
     let client = served.client("prepare-fixture").await?;
     let instruction = client
         .create_instruction(InstructionCreateParams {
@@ -226,7 +228,7 @@ async fn exercise_preparation(
         if !correct_error {
             return Err("known preparation rejection became unrecoverable uncertainty".into());
         }
-        let served_retry_client = served_api::ServedApi::start(identity.clone()).await?;
+        let served_retry_client = served_api::ServedApi::start(identity.clone())?;
         let retry_client = served_retry_client.client("ownership-recovery").await?;
         let retry = retry_client.prepare_schedule(serde_json::from_value(json!({
             "operationId":OperationId::generate(),"scheduleId":schedule.schedule_id,
@@ -246,7 +248,7 @@ async fn exercise_preparation(
         {
             return Err("lost allocation response invented no effect".into());
         }
-        let served_replay_client = served_api::ServedApi::start(identity).await?;
+        let served_replay_client = served_api::ServedApi::start(identity)?;
         let replay_client = served_replay_client.client("prepare-replay").await?;
         let replay = replay_client.prepare_schedule(request).await;
         let replay = match replay {

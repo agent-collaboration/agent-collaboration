@@ -1,7 +1,12 @@
 //! Owned test data for the same checked receipt rule on each real store.
 
 use crate::ConformanceResult;
-use message_board::*;
+use message_board::{
+    ActorOrigin, BoardId, CanonicalHash, ChangeOutcome, DecisionEffect, FleetFeedEntry,
+    FleetPosition, HumanId, MachineLabel, RecordEnvelope, RecordId, RecordPlacement, RecordScope,
+    RecordTime, RecordedActor, RequestId, RequestLedgerEntry, ServiceId, StoredDecision,
+    WorkspaceId,
+};
 
 pub fn receipt_fixture(request_id: RequestId) -> ConformanceResult<RequestLedgerEntry> {
     Ok(RequestLedgerEntry {

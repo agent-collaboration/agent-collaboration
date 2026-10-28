@@ -3,6 +3,7 @@ use super::{
     START_NEW_DETAILS_HEIGHT, SessionConversationPreview, SessionPickerRecord, SessionsPickerModel,
     fit_line, no_matching_sessions_label, start_new_args_label,
 };
+use crate::presentation::session_picker::picker_rendering::iocraft_cell_count;
 use codex_router_tui::{UiHeading, UiHeadingLevel};
 use iocraft::prelude::*;
 
@@ -14,8 +15,8 @@ pub(super) fn render_start_new_details(
     let detail_width = width.saturating_sub(4);
     element! {
         View(
-            width: width as u32,
-            height: height.max(START_NEW_DETAILS_HEIGHT) as u32,
+            width: iocraft_cell_count(width),
+            height: iocraft_cell_count(height.max(START_NEW_DETAILS_HEIGHT)),
             flex_direction: FlexDirection::Column,
             border_style: BorderStyle::Single,
             border_color: Color::DarkGrey,
@@ -53,7 +54,7 @@ pub(super) fn render_details(
         let state = provider_state_label(record);
         return element! {
             View(
-                width: width as u32,
+                width: iocraft_cell_count(width),
                 height,
                 flex_direction: FlexDirection::Column,
                 flex_shrink: 0.0_f32,
@@ -96,7 +97,7 @@ pub(super) fn render_details(
 
     element! {
         View(
-            width: width as u32,
+            width: iocraft_cell_count(width),
             height,
             flex_shrink: 0.0_f32,
             flex_direction: FlexDirection::Column,
@@ -225,7 +226,7 @@ fn render_structured_details(
             .collect()
     };
     element! {
-        View(width:width as u32,max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             #(fields)
             UiHeading(content:"Original title",level:UiHeadingLevel::Section)
             codex_router_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:codex_router_tui::UiTextRole::Body,wrap:TextWrap::Wrap)

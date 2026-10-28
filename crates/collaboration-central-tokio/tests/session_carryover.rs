@@ -8,17 +8,17 @@ use collaboration_central_tokio::{TokioServer, TokioSettings};
 use std::time::Duration;
 #[path = "native_http/support.rs"]
 mod configuration;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/copy_read_scenarios.rs"]
-#[allow(
-    dead_code,
-    reason = "Only the real Copy read assertions are reused here."
-)]
 mod copy_read_scenarios;
-#[path = "support/copy_wait_scenarios.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "Only the real Copy setup is reused in this suite."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "support/copy_wait_scenarios.rs"]
 mod copy_wait_scenarios;
 #[path = "support/malformed_frame_scenarios.rs"]
 mod malformed_frame_scenarios;

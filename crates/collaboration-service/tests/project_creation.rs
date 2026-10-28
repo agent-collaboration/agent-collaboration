@@ -1,5 +1,9 @@
 //! Central-first creation gates and initialization after an explicit registered-state input.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 use message_board::*;
@@ -20,7 +24,10 @@ fn request(fixture: &BoardFixture) -> Result<ProjectCreateRequest, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_directory_request_without_central_acceptance_creates_no_native_file()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_offline().await?;
@@ -69,7 +76,10 @@ async fn a_directory_request_without_central_acceptance_creates_no_native_file()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn accepted_directory_survives_reopen_and_pending_registration_records_nothing()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_offline().await?;
@@ -80,8 +90,12 @@ async fn accepted_directory_survives_reopen_and_pending_registration_records_not
     );
     // Reconnect the real owning central to supply the directory decision.
     let fixture = fixture.restart_read_fixture().await?;
-    board_fixture::settle_accepted_creation(&fixture._fleet, &request, &fixture.record_origin()?)
-        .await?;
+    board_fixture::registered_project::settle_accepted_creation(
+        &fixture._fleet,
+        &request,
+        &fixture.record_origin()?,
+    )
+    .await?;
     // Crash after the directory decision, before a Host has bootstrapped the native file.
     let fixture = fixture.restart_read_fixture().await?;
     assert_eq!(
@@ -121,7 +135,10 @@ async fn accepted_directory_survives_reopen_and_pending_registration_records_not
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn directory_refusal_keeps_its_structured_reason_without_creating_a_file()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_offline().await?;
@@ -172,7 +189,10 @@ async fn directory_refusal_keeps_its_structured_reason_without_creating_a_file()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn ready_registration_recovery_uses_complete_input_and_the_creating_ledger_once()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_offline().await?;
@@ -238,7 +258,10 @@ async fn ready_registration_recovery_uses_complete_input_and_the_creating_ledger
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn registered_creation_preserves_initial_state_and_replays_after_reopen_without_effects()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

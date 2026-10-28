@@ -1,15 +1,22 @@
 //! Actual public producer, two authenticated peers and generic relay; external carrier I/O stands in.
 use super::*;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::NativeDeliveryResult;
+use collaboration_contracts::NativeObservedOutcome;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_mcp::test_support::ServedCollaborationApi;
 use collaboration_protocol::{
     DeliveryClientReceipt, MailItemId, PushId, SessionReachability, SessionRef as RouterSessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext,
-    CollaborationApplication, DeliveryContractError, DeliveryFuture, MachineIdentity,
-    NativeDeliveryResult, NativeObservedOutcome, ServiceIdentity, SessionMessageDelivery,
-    TargetPresence, TargetPresenceProbe,
-};
+use collaboration_service::ApplicationFixture;
+
 use fleet_sync_protocol::DeliveryStatus;
 use runtime_primitives::SystemClock;
 use serde_json::json;
@@ -38,7 +45,7 @@ impl TargetPresenceProbe for CarrierStandIn {
 impl SessionMessageDelivery for CarrierStandIn {
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
     ) -> DeliveryFuture<'a, NativeDeliveryResult> {
         Box::pin(async move {
@@ -121,7 +128,7 @@ impl RecipientRuntime {
         let mail = mail_owner::MailOwner::open_for_machine(
             root,
             inputs.peer,
-            collaboration_service::MailDeliverySession {
+            collaboration_runtime::MailDeliverySession {
                 requests: requests.clone(),
                 welcomed: ready.clone(),
                 peer: inputs.peer,
@@ -215,14 +222,18 @@ impl RecipientRuntime {
 
 async fn serve(
     root: &Path,
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
 ) -> Result<ServedCollaborationApi, TestError> {
     tokio::fs::create_dir_all(root).await?;
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
-    Ok(ServedCollaborationApi::start(root, CollaborationApplication::new(identity)).await?)
+    Ok(ServedCollaborationApi::start(root, (identity).build())?)
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_through_real_relay_and_canonical_status()
 -> Result<(), TestError> {
     let mut source = MailHarness::open(false).await?;
@@ -248,7 +259,7 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
     let target: RouterSessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":RECIPIENT,"endpointId":"claude-local"},"sessionId":"real-remote-recipient",
     }))?;
-    let identity = ServiceIdentity::new(SOURCE, SOURCE)?
+    let identity = ApplicationFixture::new(SOURCE, SOURCE)?
         .with_interaction_store(source.mail.owner.clone())
         .with_installation_peer(source.peer())
         .map_err(io::Error::other)?
@@ -331,7 +342,7 @@ async fn public_remote_send_queued_before_welcome_reaches_distinct_recipient_thr
     );
     let receiving = serve(
         &source.root.join("recipient-api"),
-        ServiceIdentity::new(RECIPIENT, RECIPIENT)?
+        ApplicationFixture::new(RECIPIENT, RECIPIENT)?
             .with_interaction_store(recipient.mail.owner.clone()),
     )
     .await?;

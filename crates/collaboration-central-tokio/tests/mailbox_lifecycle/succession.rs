@@ -52,6 +52,10 @@ async fn publication(
         .await?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn successor_rank_survives_reopen_and_old_replay_cannot_reclaim_status_or_retirement()
 -> TestResult {
@@ -105,6 +109,10 @@ async fn successor_rank_survives_reopen_and_old_replay_cannot_reclaim_status_or_
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn cancel_reserve_fetch_and_receipt_keep_exact_identity_at_mailbox_capacity() -> TestResult {
     // The real library's original item reserves one cancel; a second cancel for

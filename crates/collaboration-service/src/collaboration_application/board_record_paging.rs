@@ -1,8 +1,12 @@
 //! Project-local keysets, a prefix-preserving key merge, and batched lazy body validation.
 use super::board_paging::{ProjectReadCursor, invalid_cursor};
 use super::{BoardOperations, admission_error};
-use crate::ProjectReadSnapshot;
-use message_board::*;
+use collaboration_runtime::ProjectReadSnapshot;
+use message_board::{
+    AggregateCursor, BoardError, BoardId, BoardState, FeedCursor, FeedEntry, FeedPosition,
+    Identity, InboxReadMode, MergeKey, MergeTime, PostListRequest, PostListScope, PostOrdering,
+    PostSelection, ProjectId, ReadPosition, Record, SearchPostKind, WorkspaceId, WorkspaceState,
+};
 use message_board_storage::{
     FeedPageBounds, FeedPageDirection, FeedPageKey, PostPageFilter, PostPageScope, StoredFeedEntry,
 };
@@ -33,7 +37,7 @@ pub(super) struct ProjectReadPage<TRecord> {
     pub unavailable: Vec<ProjectId>,
     pub next_cursor: Option<String>,
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn project_feed_page<TRecord: Serialize>(
         &self,
         request: &PostListRequest,
@@ -140,14 +144,14 @@ impl BoardOperations<'_> {
             };
             let mut snapshot = match store.snapshot().await {
                 Ok(snapshot) => snapshot,
-                Err(crate::ProjectRegistryError::Storage(
+                Err(collaboration_runtime::ProjectRegistryError::Storage(
                     message_board_storage::ProjectStorageError::Database(_)
                     | message_board_storage::ProjectStorageError::MoveAsidePending { .. },
                 ))
                 | Err(
-                    crate::ProjectRegistryError::Unavailable { .. }
-                    | crate::ProjectRegistryError::Installing { .. }
-                    | crate::ProjectRegistryError::Quarantined { .. },
+                    collaboration_runtime::ProjectRegistryError::Unavailable { .. }
+                    | collaboration_runtime::ProjectRegistryError::Installing { .. }
+                    | collaboration_runtime::ProjectRegistryError::Quarantined { .. },
                 ) => {
                     unavailable.push(project);
                     continue;
@@ -470,7 +474,7 @@ async fn page_bounds(
                 Some(*cursor)
             }
             ReadPosition::Aggregate { cursor } => cursor.per_project.get(project).copied(),
-            _ => None,
+            ReadPosition::Project { .. } => None,
         }
     };
     let zero = FeedCursor {

@@ -237,7 +237,9 @@ pub(super) fn collaboration_service_directory(
             | collaboration_client::ServiceDirectoryError::RelativeDebugRouterRoot => {
                 "Router root must be absolute".to_owned()
             }
-            other => other.to_string(),
+            other @ collaboration_client::ServiceDirectoryError::RelativeExplicitDirectory => {
+                other.to_string()
+            }
         };
         SessionsCommandError::AppServerSocket(message)
     })

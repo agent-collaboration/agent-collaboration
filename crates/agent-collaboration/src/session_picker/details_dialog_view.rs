@@ -1,11 +1,15 @@
 //! Shared dialog chrome with session-owned, captured Details actions.
 use super::super::details_dialog_state::{ClipboardRequestStatus, SessionDetailsTarget};
 use super::super::session_id_clipboard::SessionClipboardWriter;
-use super::*;
+use super::{
+    AnyElement, SessionConversationPreview, SessionsPickerModel, SessionsPickerOutcome, Size,
+    State, View, element, render_details,
+};
 use codex_router_tui::{
     DialogAction, DialogFrame, DialogKeyboardOwner, DialogMargins, DialogPresentation, UiText,
     UiTextRole,
 };
+use iocraft::prelude::TextWrap;
 
 pub(super) fn render_details_dialog(
     model: &SessionsPickerModel,

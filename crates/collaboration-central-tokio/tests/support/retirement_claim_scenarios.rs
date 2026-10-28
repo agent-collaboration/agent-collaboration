@@ -192,7 +192,7 @@ async fn await_unheld_directory(
                     lease: DirectoryLease::Unheld,
                     ..
                 }) => return Ok(()),
-                other => {
+                other @ DirectorySide::Known(_) => {
                     return Err(format!(
                         "Retiring publication fabricated a holder or expiry: {other:?}"
                     )

@@ -73,6 +73,10 @@ impl FollowMembership {
         Ok(json!({"root":self.thread,"from":cursor,"through":cursor,"postCount":1}))
     }
 
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     pub fn assert_frozen(
         &self,
         item: &DeliveryItem<BoardDeliveryTypes>,

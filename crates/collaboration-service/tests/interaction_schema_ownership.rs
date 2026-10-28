@@ -1,5 +1,7 @@
 use collaboration_protocol::EndpointRef;
-use collaboration_service::{NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
 use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
 
@@ -85,7 +87,7 @@ async fn typed_json_is_ignored_on_fresh_startup_and_reopen() {
     // Validate the fixture independently so startup errors cannot manufacture a pass.
     let records: std::collections::BTreeMap<
         String,
-        collaboration_service::InteractionHistoryRecord,
+        collaboration_runtime::InteractionHistoryRecord,
     > = serde_json::from_slice(original).expect("valid old typed JSON");
     assert_eq!(records["old-refusal"].request_id(), "old-refusal");
     let directory = tempfile::tempdir().expect("isolated hard cutover fixture");

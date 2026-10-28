@@ -1,5 +1,3 @@
-#![allow(clippy::expect_used)]
-
 use super::*;
 use crate::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
@@ -7,6 +5,15 @@ use crate::{
     ProviderAcpDeliveryRoute, ProviderSessionActivity,
 };
 use agent_automation::RouteEffectEvidence;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCloseRequest, ConversationOperationQueueState,
     ConversationOperationSettlement, ConversationOperationShowRequest,
@@ -18,12 +25,9 @@ use collaboration_protocol::{
     ProviderCapabilityStatus, ProviderKind, ProviderRequestedPolicy, ProviderRuntimeIdentity,
     ProviderTransport, ProviderWorkingDirectory, PushId, RouterAccess, SessionId,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryContractError, DeliveryFuture, DeliveryPrecondition,
-    EndpointDirectory, LoadPolicy, ProviderConversationBackend, ProviderOperationStore,
-    ProviderSessionRecord, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use std::sync::Arc;
 
 struct NoLivePeer;
@@ -404,7 +408,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
     assert_eq!(
         queue_state,
         ConversationOperationQueueState::NotSubmitted {
-            reason: collaboration_service::NOT_LOADED_REASON.to_owned(),
+            reason: collaboration_contracts::NOT_LOADED_REASON.to_owned(),
         }
     );
     assert!(

@@ -11,7 +11,7 @@ const PUSH_ID: &str = "019f0000-0000-7000-8000-000000000101";
 const OTHER_PUSH_ID: &str = "019f0000-0000-7000-8000-000000000102";
 
 async fn connected_client() -> (ScriptedApi, CollaborationClient, ScriptedCalls) {
-    let (api, calls) = ScriptedApi::start().await.expect("scripted API");
+    let (api, calls) = ScriptedApi::start().expect("scripted API");
     let client = CollaborationClient::connect(api.directory(), "message-test", "1")
         .await
         .expect("connect");

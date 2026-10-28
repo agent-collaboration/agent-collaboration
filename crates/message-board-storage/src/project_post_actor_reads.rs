@@ -1,6 +1,6 @@
 //! Cooldown uses known Router time only and then reads the selected immutable post.
 use crate::{ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{Identity, RecordId, RecordKind, RecordRef, RecordTime, RecordedActor};
 
 impl ProjectWriteTransaction {
     pub async fn latest_cooldown_post_key(

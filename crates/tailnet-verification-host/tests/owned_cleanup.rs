@@ -1,5 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
-
 use std::collections::BTreeMap;
 use std::io::{BufRead, BufReader};
 use std::os::unix::process::CommandExt;
@@ -18,6 +16,10 @@ use codex_router_tailnet_verification_host::profile_projection::ProfileProjectio
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn harmless_child() -> Result<Child, Box<dyn std::error::Error>> {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../verification/fixtures/harmless-owned-child.ts");
@@ -45,6 +47,10 @@ fn harmless_child() -> Result<Child, Box<dyn std::error::Error>> {
     Ok(child)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn exercise_cleanup(action: &str) -> Result<(), Box<dyn std::error::Error>> {
     let evidence = tempfile::tempdir()?;
     if action == "write-failure" {
@@ -115,6 +121,10 @@ fn evidence_write_failure_still_cleans_the_real_owned_child()
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn denied_or_empty_inventory_remains_unavailable_and_protected_mismatch_is_rejected()
 -> Result<(), Box<dyn std::error::Error>> {
     let own_pid = i32::try_from(std::process::id())?;
@@ -144,6 +154,10 @@ fn denied_or_empty_inventory_remains_unavailable_and_protected_mismatch_is_rejec
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn composed_body_error_cleans_child_before_exact_profile_restore()
 -> Result<(), Box<dyn std::error::Error>> {
     let root = tempfile::tempdir()?;
@@ -167,6 +181,10 @@ fn composed_body_error_cleans_child_before_exact_profile_restore()
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn native_launcher_creates_the_same_session_and_group_as_its_host_pid()
 -> Result<(), Box<dyn std::error::Error>> {
     let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))

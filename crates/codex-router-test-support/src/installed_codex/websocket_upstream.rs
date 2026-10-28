@@ -1,4 +1,14 @@
-use super::*;
+use super::{
+    Arc, AtomicBool, BufRead, BufReader, Command, ConcurrentUpstreamSharedState, Duration,
+    ErrorKind, InstalledCodexSmokeMode, Instant, Message, MockHttpRequestResult,
+    MockWebSocketTranscript, Mutex, Ordering, PressureHandles,
+    QUOTA_RECONNECT_SQLITE_PRESSURE_READY_TIMEOUT, QuotaReconnectSqlitePressureConfig,
+    QuotaReconnectUpstreamState, Request, Response, Stdio, TcpListener, UPSTREAM_ACCEPT_TIMEOUT,
+    accept_hdr, accept_with_deadline, bearer_token_from_headers, is_prewarm_request_frame,
+    looks_like_websocket_upgrade, mpsc, quota_reconnect_usage_limit_frame,
+    record_http_sse_only_transcript, respond_to_http_request, run_mock_websocket,
+    smoke_prewarm_events, smoke_response_events, thread, timestamp_millis,
+};
 
 pub(super) fn run_mock_upstream(
     listener: TcpListener,
@@ -111,7 +121,10 @@ pub(super) fn run_quota_reconnect_mock_upstream(
     }
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 pub(super) fn run_quota_reconnect_mock_websocket_session(
     stream: std::net::TcpStream,
     state: Arc<Mutex<QuotaReconnectUpstreamState>>,

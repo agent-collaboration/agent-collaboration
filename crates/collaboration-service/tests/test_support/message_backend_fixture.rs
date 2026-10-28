@@ -4,14 +4,20 @@ use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
 use collaboration_client::{
     ClientError, MessageSendError, MessageSendRequest, PublicMessageContent,
 };
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     CodexGeneration, DeliveryReceipt, EndpointDescription, MessageDelivery, PushMessageSendResult,
     PushRecord, SessionRef,
 };
-use collaboration_service::{
-    CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-    ServiceInteractionBroker, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_service::ApplicationFixture;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
@@ -281,7 +287,7 @@ async fn exercise_message(
     } else {
         None
     };
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_automation_store(Arc::clone(&automation_store))
         .with_endpoints(vec![description])?
         .with_native_backend(native_backend.clone())?;
@@ -289,7 +295,7 @@ async fn exercise_message(
         service_id.to_owned().try_into()?,
         identity.endpoint_directory(),
         native_backend,
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(match &broker {
         Some(broker) => route.with_approval_broker(broker),
@@ -298,11 +304,11 @@ async fn exercise_message(
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
     let presence = Arc::new(FixturePresence(if unloaded {
-        collaboration_service::TargetPresence::Wakeable
+        collaboration_contracts::TargetPresence::Wakeable
     } else {
-        collaboration_service::TargetPresence::Running
+        collaboration_contracts::TargetPresence::Running
     }));
-    let machine_identity = collaboration_service::MachineIdentity::new(
+    let machine_identity = collaboration_contracts::MachineIdentity::new(
         service_id.to_owned().try_into()?,
         Some("message-backend-fixture"),
     )?;
@@ -340,7 +346,7 @@ async fn exercise_message(
             clock,
         },
     )?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let backend = tokio::spawn(async move {
         let (stream, _) = tokio::time::timeout(Duration::from_secs(3), listener.accept()).await??;
         let mut socket = tokio_tungstenite::accept_async(stream).await?;
@@ -493,13 +499,13 @@ async fn exercise_message(
     })
 }
 
-struct FixturePresence(collaboration_service::TargetPresence);
+struct FixturePresence(collaboration_contracts::TargetPresence);
 
-impl collaboration_service::TargetPresenceProbe for FixturePresence {
+impl collaboration_contracts::TargetPresenceProbe for FixturePresence {
     fn presence(
         &self,
         _: &SessionRef,
-    ) -> collaboration_service::DeliveryFuture<'_, collaboration_service::TargetPresence> {
+    ) -> collaboration_contracts::DeliveryFuture<'_, collaboration_contracts::TargetPresence> {
         Box::pin(async { Ok(self.0.clone()) })
     }
 }

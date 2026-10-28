@@ -3,9 +3,13 @@ use super::*;
 use collaboration_protocol::PushDeliveryState;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplicated_end()
 -> TestResult {
-    let mut fixture = RuleFixture::open(true).await?;
+    let mut fixture = Box::pin(RuleFixture::open(true)).await?;
     let proof = async {
         let notifications = fixture
             .holder
@@ -13,7 +17,7 @@ async fn held_local_follow_keeps_prevention_when_takeover_discards_its_unreplica
             .as_ref()
             .ok_or("old native owner")?;
         let (release, task) = notifications.hold_progress_writer().await?;
-        let seed = fixture.seed_follow(true).await?;
+        let seed = Box::pin(fixture.seed_follow(true)).await?;
         fixture.confirm_prefix(fixture.head().await?).await?;
         wait_seed_handoff_acknowledgment(&fixture, seed.handoff_sequence).await?;
         release.send(()).map_err(|_| "native progress hold ended")?;

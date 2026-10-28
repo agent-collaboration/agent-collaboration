@@ -437,7 +437,7 @@ impl SessionPickerRecord {
                 Some(*state),
                 None,
                 None,
-                PickerRuntimeStatus::from_provider(state),
+                PickerRuntimeStatus::from_provider(*state),
             ),
             ProviderSessionSummary::ClaudeCodeInteractive {
                 target,

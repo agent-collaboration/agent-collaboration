@@ -7,7 +7,7 @@ async fn a_client_that_disconnects_cancels_its_call_on_both_listeners() {
     let directory = private_directory();
     let config = api_config(wake_application(directory.path()).await, directory.path());
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let wake = tcp.call_tool("wake_send", wake_send_arguments()).await;
     let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
     let long_wait = json!({"wakeupId": wakeup_id, "timeoutSeconds": 1500});
@@ -31,11 +31,11 @@ async fn a_client_that_disconnects_from_a_mutation_waiting_on_the_store_leaves_n
     let directory = private_directory();
     let (admission, registry, fleet, fleet_runtime) = project_admission(directory.path()).await;
     let config = api_config(
-        CollaborationApplication::new(test_identity().with_project_admission(admission.clone())),
+        (test_identity().with_project_admission(admission.clone())).build(),
         directory.path(),
     );
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let board = board_scope(&tcp).await;
     let project = ProjectId::generate();
     let create = project_create_arguments("Cancellation setup", &board, project.clone());
@@ -143,12 +143,10 @@ async fn a_wake_wait_ends_at_its_bound_while_the_store_is_held() {
     let directory = private_directory();
     let automation = automation_store(directory.path()).await;
     let config = api_config(
-        CollaborationApplication::new(
-            test_identity().with_automation_store(Arc::clone(&automation)),
-        ),
+        (test_identity().with_automation_store(Arc::clone(&automation))).build(),
         directory.path(),
     );
-    let api = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let wake = api.call_tool("wake_send", wake_send_arguments()).await;
     let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
     let cursor = structured(&wake)["latestEventCursor"].clone();

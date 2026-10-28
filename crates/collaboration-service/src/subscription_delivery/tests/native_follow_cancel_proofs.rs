@@ -11,7 +11,7 @@ use message_board_storage::{MailCancelGroupCause, MailHandoffItem};
 
 #[tokio::test]
 async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_range() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
             &fixture.root,
@@ -137,9 +137,17 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
             )
             .await;
         }
-        tokio::time::timeout(Duration::from_secs(6), runtime.observe(|event| matches!(event,
-            crate::service_identity::subscription_delivery::subscription_service::OwnerObservation::Stopped
-        ))).await.unwrap();
+        tokio::time::timeout(
+            Duration::from_secs(6),
+            runtime.observe(|event| {
+                matches!(
+                    event,
+                    crate::subscription_delivery::subscription_service::OwnerObservation::Stopped
+                )
+            }),
+        )
+        .await
+        .unwrap();
     }
     let mut outcomes = Vec::new();
     for item in &frozen {
@@ -204,7 +212,7 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
 
 #[tokio::test]
 async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;

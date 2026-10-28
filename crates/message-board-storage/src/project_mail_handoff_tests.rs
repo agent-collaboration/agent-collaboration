@@ -1,5 +1,5 @@
 //! Native handoff rows survive owning reopen and refuse altered frozen identities.
-#![allow(clippy::indexing_slicing)] // Each literal page index follows its asserted length.
+// Each literal page index follows its asserted length.
 use crate::{MailHandoffItem, ProjectStorageError, ProjectStore, project_test_support::origin};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
@@ -11,6 +11,10 @@ use sqlx::{ConnectOptions, Connection, Row};
 
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn terminal_item_lookup_uses_the_exact_indexed_handoff_query_and_detects_a_scan() -> TestResult
 {
@@ -89,6 +93,10 @@ async fn terminal_item_lookup_uses_the_exact_indexed_handoff_query_and_detects_a
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn frontier_writes_are_monotonic_atomic_feed_free_and_survive_owner_reopen() -> TestResult {
     // Arrange two immutable handoffs in the actual owning writer.
@@ -153,6 +161,10 @@ async fn frontier_writes_are_monotonic_atomic_feed_free_and_survive_owner_reopen
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn settled_frontier_reopens_and_refuses_ambiguous_or_impossible_stored_rows() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -279,6 +291,10 @@ fn notification(
     ))))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn frozen_handoffs_commit_in_transaction_order_replay_exactly_and_survive_reopen()
 -> TestResult {
@@ -353,6 +369,10 @@ async fn frozen_handoffs_commit_in_transaction_order_replay_exactly_and_survive_
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn rolled_back_handoff_and_its_cause_leave_no_allocation_or_sequence_gap() -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -388,6 +408,10 @@ async fn rolled_back_handoff_and_its_cause_leave_no_allocation_or_sequence_gap()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn stored_handoff_decode_refuses_bad_keys_sequences_envelope_identities_and_digests()
 -> TestResult {

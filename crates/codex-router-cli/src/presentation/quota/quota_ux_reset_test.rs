@@ -296,8 +296,8 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                     .send(if pointer {
                                         TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                                             MouseEventKind::Down(MouseButton::Left),
-                                            yes_column as u16,
-                                            yes_row as u16,
+                                            u16::try_from(yes_column).unwrap_or(u16::MAX),
+                                            u16::try_from(yes_row).unwrap_or(u16::MAX),
                                         ))
                                     } else {
                                         provider_filter_key(KeyCode::Right)
@@ -338,8 +338,8 @@ async fn actual_confirmation_pointer_and_keys_share_selection_and_disabled_yes_c
                                             TerminalEvent::FullscreenMouse(
                                                 FullscreenMouseEvent::new(
                                                     MouseEventKind::Down(MouseButton::Left),
-                                                    no_column as u16,
-                                                    no_row as u16,
+                                                    u16::try_from(no_column).unwrap_or(u16::MAX),
+                                                    u16::try_from(no_row).unwrap_or(u16::MAX),
                                                 ),
                                             )
                                         } else {

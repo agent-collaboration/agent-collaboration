@@ -1,8 +1,7 @@
 //! Component proofs for the actual Host factory; process-level G2 remains separate.
-#![allow(clippy::panic_in_result_fn)]
 use super::*;
+use collaboration_contracts::ProjectRegistrationState;
 use collaboration_protocol::UuidIdentity;
-use collaboration_service::ProjectRegistrationState;
 use fleet_sync_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationRefusal};
 use fleet_sync_session::SessionClientStore;
 use fleet_sync_writer::WriterRegistrationOutcome;
@@ -71,18 +70,18 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 // No application row has replicated before the first write. This supplies that
 // input at the existing acknowledgement port; native authority stays real.
 struct EmptyProjectProgress;
-impl collaboration_service::ProjectReplicationPosition for EmptyProjectProgress {
+impl collaboration_contracts::ProjectReplicationPosition for EmptyProjectProgress {
     fn acknowledged_mail_changes<'port>(
         &'port self,
         _: &'port ProjectId,
-    ) -> collaboration_service::AcknowledgedMailChangesFuture<'port> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'port> {
         Box::pin(async { Ok(message_board_storage::AcknowledgedProjectChanges::default()) })
     }
     fn replicated_through<'port>(
         &'port self,
         _: &'port ProjectId,
         epoch: EpochNumber,
-    ) -> collaboration_service::ReplicatedPositionFuture<'port> {
+    ) -> collaboration_contracts::ReplicatedPositionFuture<'port> {
         Box::pin(async move {
             Ok(FeedCursor {
                 epoch,
@@ -100,6 +99,10 @@ pub(super) fn identity() -> Result<MachineIdentity, Box<dyn std::error::Error + 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn absent_enrollment_constructs_no_machine_session_or_resume_file() -> TestResult {
     // E26 requires no session for None. A constructor that starts an anonymous
     // client or mints enrollment would create this file and fail the oracle.
@@ -161,13 +164,12 @@ async fn assert_rejected_receipt_read(
     request: &ProjectCreateRequest,
 ) -> TestResult {
     use message_board::public_replies as public;
-    let application = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     let read = application
         .board()
         .request_effects(public::RequestEffectsRequest {
@@ -188,6 +190,10 @@ async fn assert_rejected_receipt_read(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("router");
@@ -247,6 +253,10 @@ async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_first_record()
 -> TestResult {
     // Directory settlement is a typed fixture input. Host bootstrap, registration,
@@ -314,14 +324,13 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
             fleet_sync_writer::WriteRefusal::Provisional | fleet_sync_writer::WriteRefusal::Seeding
         ))
     ));
-    let projection = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone())
-        .with_project_replication(Arc::new(EmptyProjectProgress)),
-    );
+    let projection = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone())
+    .with_project_replication(Arc::new(EmptyProjectProgress)))
+    .build();
     let before_grant = projection
         .board()
         .view_work(ProjectViewRequest {
@@ -425,6 +434,10 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_registration_refusal_moves_an_empty_file_and_replays_the_original_reason()
 -> TestResult {
     let _ = tracing_subscriber::fmt()
@@ -524,7 +537,7 @@ async fn native_registration_refusal_moves_an_empty_file_and_replays_the_origina
     assert!(
         matches!(
             refresh.synchronize().await,
-            Err(collaboration_service::FleetClientError::InvalidReply {
+            Err(collaboration_runtime::FleetClientError::InvalidReply {
                 field: "fleetCursor"
             })
         ),

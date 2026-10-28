@@ -4,7 +4,9 @@ use crate::{
     RouterLocalStorageError, fleet_record_codec::decode_fleet_record,
     project_record_io::record_kind_tag,
 };
-use message_board::*;
+use message_board::{
+    BoardId, ProjectId, Record, RecordKind, RecordRef, RepositoryRef, WorkspaceId,
+};
 
 pub enum FleetListFilter<'scope> {
     Workspaces {

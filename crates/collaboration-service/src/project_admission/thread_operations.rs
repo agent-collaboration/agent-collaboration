@@ -2,7 +2,14 @@ use super::{
     ProjectAdmissionError,
     operation_context::{ConversationMutation, OperationContext, OperationPlan},
 };
-use message_board::*;
+use message_board::{
+    BoardOperation, FeedCursor, FeedPosition, Identity, ImplementerHolder, LifecycleFact,
+    NotifyTarget, OrchestratorHolder, Participant, ParticipantClosedReason, ParticipantProps,
+    ParticipantRole, Placement, Post, PostCooldownSeconds, PostId, PostReferences, PostText,
+    ReadMark, ReadScope, Record, RecordId, RecordKind, RecordPlacement, RecordRef,
+    RecordedParticipantRole, ReferenceTarget, Refusal, SubscriptionPolicyPatch, SubscriptionScope,
+    Thread, ThreadId, ThreadRefusal, ThreadResolutionReason, ThreadState, ThreadSubject,
+};
 use message_board_storage::ProjectWriteTransaction;
 
 impl OperationContext<'_> {
@@ -404,7 +411,7 @@ impl OperationContext<'_> {
             ReadScope::Thread { thread_id } => {
                 self.thread(thread_id)?;
             }
-            _ => {}
+            ReadScope::Project { .. } => {}
         }
         Ok(())
     }
@@ -536,7 +543,10 @@ fn add_targets(plan: &mut OperationPlan, cause: RecordRef, targets: &[NotifyTarg
 mod cooldown_tests {
     use super::remaining_post_cooldown;
     #[test]
-    #[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions prove the test contract; Result propagates fixture errors."
+    )]
     fn cooldown_rounds_up_and_caps_a_regressed_clock() -> Result<(), Box<dyn std::error::Error>> {
         let previous = chrono::DateTime::from_timestamp_millis(100_000).ok_or("time")?;
         for (elapsed, expected) in [

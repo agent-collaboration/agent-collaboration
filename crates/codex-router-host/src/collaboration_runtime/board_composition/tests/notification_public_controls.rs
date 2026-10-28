@@ -1,7 +1,7 @@
 //! Public project status and requested controls use current roles and native SDK custody.
 use super::*;
+use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::ProjectReplicationPosition;
 use fleet_sync_delivery::OutboxStatusState;
 use fleet_sync_protocol::DeliveryStatus;
 use serde_json::{Value, json};
@@ -24,14 +24,18 @@ fn assert_accepted(reply: &Value) {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_requester_without_project_writes()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let api_root = directory.path().join("public-project-api");
     tokio::fs::create_dir_all(&api_root).await?;
     std::fs::set_permissions(&api_root, std::fs::Permissions::from_mode(0o700))?;
-    let api = ServedCollaborationApi::start(&api_root, fixture.application.clone()).await?;
+    let api = ServedCollaborationApi::start(&api_root, fixture.application.clone())?;
     let writer = fixture.harness.projects.ensure(&fixture.project).await?;
     let mut snapshot = writer.store.snapshot().await?;
     let project_record = snapshot

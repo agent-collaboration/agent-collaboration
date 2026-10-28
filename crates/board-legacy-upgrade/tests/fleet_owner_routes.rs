@@ -1,10 +1,13 @@
 //! The retained Fleet obligations run on current owner and normal-session routes.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 mod central_fixture;
 mod support;
 #[path = "upload_support/mod.rs"]
-#[allow(
+#[expect(
     dead_code,
     reason = "Other shared helpers serve the project publication tests."
 )]
@@ -39,6 +42,10 @@ async fn counts(root: &std::path::Path) -> TestResult<FleetApplicationCounts> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_imported_fleet_bundle_is_atomic_and_retains_first_records_on_replay_and_conflict()
 -> TestResult {
     // Arrange: D's actual bundle, not a second synthetic Fleet transformation.

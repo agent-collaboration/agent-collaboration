@@ -1,11 +1,18 @@
 //! V1 task/link/subtask rules are observed at MCP against independent native projects.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
 use serde_json::json;
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn dependency_target_in_another_project_is_distinguished_from_missing()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -76,7 +83,10 @@ async fn dependency_target_in_another_project_is_distinguished_from_missing()
     Ok(())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn cycle_drop_noop_and_subtask_lifecycle_keep_distinct_decisions() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -176,7 +186,10 @@ async fn cycle_drop_noop_and_subtask_lifecycle_keep_distinct_decisions() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn concurrent_links_replace_and_trail_subject_rules_preserve_atomic_outcomes()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

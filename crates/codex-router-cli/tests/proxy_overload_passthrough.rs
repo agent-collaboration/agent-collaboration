@@ -1,5 +1,3 @@
-#![allow(clippy::panic)]
-
 #[cfg(not(feature = "keychain-test-support"))]
 compile_error!("proxy overload process tests require keychain-test-support");
 
@@ -408,6 +406,7 @@ async fn compiled_router_forwards_overload_and_keeps_explicit_requests_on_same_s
     );
 }
 
+#[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
 async fn run_header_control(
     context: HeaderControlRunContext<'_>,
     control_name: &str,

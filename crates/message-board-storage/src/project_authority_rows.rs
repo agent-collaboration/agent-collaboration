@@ -4,7 +4,11 @@ use crate::project_actor_rows::decode_actor;
 use crate::project_record_codec::{
     stored_counter, stored_json, stored_project_row, stored_tag, stored_text,
 };
-use message_board::*;
+use message_board::{
+    FeedCursor, GrantKind, OwnerGrant, OwnerGrantId, OwnerWordsProvenance, ProjectId, Record,
+    RecordKind, RecordRef, ResourceName, RoleAssignment, RoleAssignmentId, RoleAssignmentProps,
+    RoleSubject, StandDownAcknowledgement, WorkstreamId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

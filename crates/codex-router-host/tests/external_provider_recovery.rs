@@ -2,6 +2,7 @@ use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
     ExternalProviderSupervisor,
 };
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     CodexGeneration, ConversationAdmissionState, ConversationCreateRequest,
     ConversationLoadRequest, ConversationOperationReconcileRequest,
@@ -13,9 +14,8 @@ use collaboration_protocol::{
     ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory, RouterAccess, SessionId,
     SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    ProviderConversationBackend, ProviderOperationAdmission, ProviderOperationStore,
-};
+use collaboration_runtime::ProviderOperationAdmission;
+use collaboration_runtime::ProviderOperationStore;
 use std::{path::Path, path::PathBuf, process::Command, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 

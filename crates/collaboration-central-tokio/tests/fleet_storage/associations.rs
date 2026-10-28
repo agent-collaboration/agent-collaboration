@@ -7,6 +7,10 @@ use fleet_admission::{FleetImportRecord, FleetOperation, FleetRequestResult};
 use message_board::{ChangeOutcome, Record, RequestDecision};
 use sqlx_core::{query::query, row::Row};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn repository_associations_and_workspace_payload_change_together_and_replay() -> TestResult {
     let root = tempfile::tempdir()?;

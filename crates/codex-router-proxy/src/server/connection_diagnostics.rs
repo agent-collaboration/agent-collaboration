@@ -1,4 +1,4 @@
-use super::*;
+use super::{LoopbackRouterRuntimeError, websocket_runtime_error_kind};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct LoopbackConnectionDiagnostic {

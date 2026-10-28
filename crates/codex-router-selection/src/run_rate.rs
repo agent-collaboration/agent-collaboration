@@ -234,12 +234,15 @@ impl QuotaRunRateEstimator {
         let burned_percent = first_observation
             .remaining_headroom_percent
             .saturating_sub(latest_observation.remaining_headroom_percent);
-        let burn_rate_basis_points_per_hour = u64::from(burned_percent)
-            .saturating_mul(100)
-            .saturating_mul(3_600)
-            .checked_div(span_seconds)
-            .unwrap_or(0)
-            .min(u64::from(u32::MAX)) as u32;
+        let burn_rate_basis_points_per_hour = u32::try_from(
+            u64::from(burned_percent)
+                .saturating_mul(100)
+                .saturating_mul(3_600)
+                .checked_div(span_seconds)
+                .unwrap_or(0)
+                .min(u64::from(u32::MAX)),
+        )
+        .unwrap_or(u32::MAX);
         let confidence = if segment_observations.len() >= 3
             && span_seconds >= NORMAL_CONFIDENCE_MIN_SPAN_SECONDS
         {

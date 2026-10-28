@@ -3,7 +3,10 @@ use super::participant_intervals::roster;
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Delivery keeps declared presence monotonic; bookmarks now bind complete feed coverage.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Delivery keeps declared presence monotonic; bookmarks now bind complete feed coverage."
+)]
 async fn subscription_handoff_keeps_last_seen_monotonic_and_participant_changes_stay_out_of_inbox()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;

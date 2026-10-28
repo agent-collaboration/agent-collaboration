@@ -2,7 +2,10 @@
 #![deny(clippy::too_many_lines)]
 #[path = "board_e2e/installation_directory_pair.rs"]
 mod installation_directory_pair;
-#[allow(dead_code)] // Reuse the process owner; companion board cases use its CLI methods.
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)] // Reuse the process owner; companion board cases use its CLI methods.
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
 use codex_router_test_support::{FixtureResult, scenario_finalization::run_scenario};

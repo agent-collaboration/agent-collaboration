@@ -44,6 +44,8 @@ tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 
 [dev-dependencies]
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
 durable-steps.workspace = true
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
@@ -74,7 +76,7 @@ agent-automation = { path = "../agent-automation", version = "0.1.16" }
 automation-storage = { path = "../automation-storage", version = "0.1.16" }
 codex-router-host = { workspace = true, features = ["runtime-test-support"] }
 lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
-collaboration-service = { path = "../collaboration-service", version = "0.1.14" }
+collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 tokio-util.workspace = true

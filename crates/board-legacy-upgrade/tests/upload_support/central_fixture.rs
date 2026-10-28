@@ -7,10 +7,6 @@ use reqwest::header::{HeaderMap, HeaderValue};
 use std::{net::SocketAddr, path::Path, time::Duration};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
-#[allow(
-    dead_code,
-    reason = "Publication and restart integration tests share this stopped-owner fixture."
-)]
 pub struct RestartableCentral {
     root: tempfile::TempDir,
     jwks: Option<JwksFixtureServer>,
@@ -18,10 +14,6 @@ pub struct RestartableCentral {
     listen: SocketAddr,
 }
 
-#[allow(
-    dead_code,
-    reason = "Some importer test targets only need the original one-start fixture."
-)]
 impl RestartableCentral {
     pub async fn start() -> TestResult<Self> {
         let root = tempfile::tempdir()?;

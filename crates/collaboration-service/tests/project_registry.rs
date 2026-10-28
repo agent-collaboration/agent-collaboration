@@ -1,7 +1,7 @@
 //! Real registry/library scope proof. The enrolled PeerId is B5's explicit fixture stand-in.
-#![allow(clippy::panic_in_result_fn)]
 use board_fleet_sync::BOARD_LEASE_POLICY;
-use collaboration_service::{ProjectRegistryError, ProjectStoreRegistry};
+use collaboration_runtime::ProjectRegistryError;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_lease::WriterState;
 use fleet_sync_protocol::{
     DatabaseId, Epoch, LeaseState, LeaseStatus, PeerId, RenewAnswer, RenewResult,
@@ -59,6 +59,10 @@ fn peer() -> Result<PeerId, Box<dyn std::error::Error + Send + Sync>> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn never_enrolled_writer_is_refused_before_any_file_is_created() -> TestResult {
     let directory = tempfile::tempdir()?;
     let root = directory.path().join("router");
@@ -77,6 +81,10 @@ async fn never_enrolled_writer_is_refused_before_any_file_is_created() -> TestRe
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn an_unregistered_native_file_remains_unwritable_after_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;
     let peer = peer()?;
@@ -124,6 +132,10 @@ async fn an_unregistered_native_file_remains_unwritable_after_reopen() -> TestRe
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn real_clock_expiry_refuses_an_open_write_keeps_reads_and_renewal_resumes_the_same_epoch()
 -> TestResult {
     let directory = tempfile::tempdir()?;

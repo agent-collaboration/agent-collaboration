@@ -1,7 +1,8 @@
 //! Original rollback, fence, concurrent snapshot and reopen assertions on one core.
 
 use crate::{
-    AdmittedPeerSocket, ConformanceClient, ConformanceResult, RuntimeControl, composed_client::*,
+    AdmittedPeerSocket, ConformanceClient, ConformanceResult, RuntimeControl,
+    composed_client::{control, copy_probe, operation},
     enroll_admitted_peer,
 };
 use board_sync_protocol::BoardAnnotation;

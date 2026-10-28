@@ -1,5 +1,4 @@
 //! Loopback proxy boundary for codex-router.
-#![cfg_attr(test, allow(clippy::panic_in_result_fn))]
 
 pub mod account_selection;
 pub(crate) mod claude_edge;

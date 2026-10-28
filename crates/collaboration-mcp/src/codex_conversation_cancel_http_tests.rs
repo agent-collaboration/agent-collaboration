@@ -20,12 +20,12 @@ async fn codex_conversation_cancel_names_turn_interrupt_without_sending_acp_canc
             "schemaDigest":format!("sha256:{}", collaboration_protocol::ACP_SCHEMA_DIGEST)}]
     }))
     .expect("Codex endpoint description");
-    let identity = collaboration_service::ServiceIdentity::new(service_id, epoch)
+    let identity = collaboration_service::ApplicationFixture::new(service_id, epoch)
         .expect("service identity")
         .with_endpoints(vec![description])
         .expect("endpoint directory");
     // The carrier tools discover the ACP socket from the Router's own endpoint directory.
-    let application = collaboration_service::CollaborationApplication::new(identity);
+    let application = (identity).build();
     let acp =
         tokio::net::UnixListener::bind(root.path().join("codex-acp.sock")).expect("ACP listener");
     let acp_peer = tokio::spawn(async move {

@@ -55,7 +55,6 @@ pub(crate) fn sensitive_header(value: &str) -> Result<HeaderValue, ConnectFailur
 }
 
 #[cfg(test)]
-#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
     #[test]

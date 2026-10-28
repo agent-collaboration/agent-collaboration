@@ -10,9 +10,11 @@ workspace = true
 
 [features]
 # The API served the way a Host serves it, for other crates' tests.
-test-support = []
+test-support = ["collaboration-service/test-support"]
 
 [dependencies]
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.30" }
@@ -31,6 +33,7 @@ tokio-util.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+collaboration-service = { path = "../collaboration-service", version = "0.1.30", features = ["test-support"] }
 durable-steps.workspace = true
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }

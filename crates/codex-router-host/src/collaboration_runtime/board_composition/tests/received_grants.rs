@@ -32,7 +32,7 @@ pub(super) async fn wait_published_project(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
     epoch: u64,
-) -> Result<Arc<collaboration_service::NativeProjectStore>, Box<dyn std::error::Error + Send + Sync>>
+) -> Result<Arc<collaboration_runtime::NativeProjectStore>, Box<dyn std::error::Error + Send + Sync>>
 {
     timeout(BOUND, async {
         loop {
@@ -79,8 +79,12 @@ pub(super) async fn write_and_replicate(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy() -> TestResult {
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (prefix, expected) = project_claim::imported_snapshot(
         &fixture.central,
@@ -210,11 +214,15 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> TestResult {
-    use collaboration_service::ProjectClaim;
+    use collaboration_contracts::ProjectClaim;
     use fleet_sync_session::SessionClientStore;
     use fleet_sync_tokio_runner::{InstallStatus, NativeWriterRuntime};
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (prefix, expected) = project_claim::imported_snapshot(
         &fixture.central,
@@ -415,8 +423,12 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn same_epoch_unavailable_writer_is_not_stopped_as_an_older_snapshot_owner() -> TestResult {
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (prefix, expected) = project_claim::imported_snapshot(
         &fixture.central,
@@ -464,9 +476,13 @@ async fn same_epoch_unavailable_writer_is_not_stopped_as_an_older_snapshot_owner
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn received_idle_holder_move_preserves_claimed_prefix_without_an_intervening_write()
 -> TestResult {
-    let fixture = claim_fixture::ClaimFixture::start().await?;
+    let fixture = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (prefix, expected) = project_claim::imported_snapshot(
         &fixture.central,

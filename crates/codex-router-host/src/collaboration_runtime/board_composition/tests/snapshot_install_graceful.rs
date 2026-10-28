@@ -5,7 +5,7 @@ use crate::collaboration_runtime::board_composition::{
     project_writers::{ProjectWriterSlot, ProjectWriters},
 };
 use crate::collaboration_runtime::{CollaborationRuntime, CollaborationRuntimeInputs};
-use collaboration_service::ProjectReadCopySource;
+use collaboration_runtime::ProjectReadCopySource;
 use fleet_sync_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest};
 use fleet_sync_session::SessionClientStore;
 use std::os::unix::fs::PermissionsExt;
@@ -72,7 +72,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
     if before_ready {
         stop_held_install(&inputs, projects, runtime).await
     } else {
-        resume_and_post(&inputs, projects, runtime).await
+        Box::pin(resume_and_post(&inputs, projects, runtime)).await
     }
 }
 
@@ -169,11 +169,11 @@ async fn stop_held_install(
     ));
     assert!(matches!(
         registry.existing_project(project).await,
-        Err(collaboration_service::ProjectRegistryError::Installing { .. })
+        Err(collaboration_runtime::ProjectRegistryError::Installing { .. })
     ));
     assert!(matches!(
         registry.open_project(project).await,
-        Err(collaboration_service::ProjectRegistryError::Installing { .. })
+        Err(collaboration_runtime::ProjectRegistryError::Installing { .. })
     ));
     let slot = projects.writer_slot(project).await;
     let mut stopped = {

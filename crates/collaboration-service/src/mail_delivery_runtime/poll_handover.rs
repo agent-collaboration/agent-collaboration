@@ -1,5 +1,8 @@
 //! Poll readiness and push preparation borrow the same physical owner as SDK custody.
-use super::*;
+use super::{
+    AtomicStore, Clock, DeliveryItem, Inbox, ItemId, LocalMailTask, MailDeliveryRuntime,
+    RouterDeliveryTypes, StoreError, WakeScheduler,
+};
 use collaboration_mail_protocol::NotificationSource;
 use collaboration_protocol::{PushHeaderFacts, PushRecord};
 use message_board::{PendingRootNotice, SubscriptionBatch};
@@ -100,7 +103,7 @@ impl MailDeliveryRuntime {
                     let NotificationSource::FollowBatch { membership, .. } = &body.source else {
                         return Err(invalid());
                     };
-                    let draft = crate::received_mail_push::received_poll_mail_push(
+                    let draft = collaboration_runtime::received_mail_push::received_poll_mail_push(
                         &item,
                         pending.received_at,
                     )

@@ -6,7 +6,10 @@ use codex_router_host::{
 use collaboration_protocol::{EndpointId, EndpointRef, SessionId, SessionRef};
 use std::os::unix::fs::PermissionsExt as _;
 
-#[allow(clippy::expect_used)]
+#[expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 async fn assert_provider_ready(directory: &std::path::Path) {
     let client = collaboration_client::CollaborationClient::connect(directory, "face-proof", "1")
         .await
@@ -158,7 +161,7 @@ async fn composed_acp_connection_admits_provider_without_codex_generation() {
 
 #[tokio::test]
 async fn app_server_socket_creates_and_prompts_with_the_owner_identity() {
-    use collaboration_service::ProviderOperationStore;
+    use collaboration_runtime::ProviderOperationStore;
     use futures_util::{SinkExt, StreamExt};
     use serde_json::{Value, json};
     use tokio::{

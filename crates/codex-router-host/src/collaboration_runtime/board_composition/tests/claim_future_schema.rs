@@ -53,8 +53,12 @@ impl ReplicatedSchema for FutureBoardSchema {
 
 #[tokio::test]
 #[cfg(feature = "runtime-test-support")]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() -> TestResult {
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     use message_board::public_replies as public;
 
     let directory = tempfile::tempdir()?;
@@ -105,13 +109,12 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
             identity: identity()?,
         },
     )?);
-    let application = CollaborationApplication::new(
-        ServiceIdentity::new(
-            origin()?.installation.as_str(),
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (ApplicationFixture::new(
+        origin()?.installation.as_str(),
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     let before = durable_file_hashes(&path)?;
     let modified = std::fs::metadata(&path)?.modified()?;
     let proof = async {
@@ -201,9 +204,13 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_schema_too_new_preserves_the_actual_copy_identity_and_supported_version()
 -> TestResult {
-    let fixture = ClaimFixture::start().await?;
+    let fixture = Box::pin(ClaimFixture::start()).await?;
     let proof = async {
         let project = ProjectId::generate();
         let source_path = fixture.directory.path().join("future.sqlite");

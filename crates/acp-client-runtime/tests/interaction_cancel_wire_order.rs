@@ -1,7 +1,5 @@
 //! ACP interaction replies must enter the wire before a Turn cancellation.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use acp_client_runtime::{
@@ -94,6 +92,10 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn assert_cancelled_reply_precedes_cancel(kind: &str) {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("wire-order.json");

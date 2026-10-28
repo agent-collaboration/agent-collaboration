@@ -1,13 +1,16 @@
 //! The owning native mapping and public view keep failures and accepted-line epochs.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
-use collaboration_service::{
-    NativeProjectStore, ProjectReplicationPosition, ReplicatedPositionFuture,
-};
+use collaboration_contracts::ProjectReplicationPosition;
+use collaboration_contracts::ReplicatedPositionFuture;
+use collaboration_runtime::NativeProjectStore;
 use fleet_sync_protocol::ReplicationPosition;
 use message_board::*;
 use serde_json::{Value, json};
@@ -36,7 +39,7 @@ impl ProjectReplicationPosition for ProgressPort {
     fn acknowledged_mail_changes<'port>(
         &'port self,
         _: &'port ProjectId,
-    ) -> collaboration_service::AcknowledgedMailChangesFuture<'port> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'port> {
         Box::pin(async move {
             match self.source.lock().await.clone() {
                 Some(Source::Native { store, through }) => store
@@ -64,7 +67,7 @@ impl ProjectReplicationPosition for ProgressPort {
             match self.source.lock().await.clone() {
                 Some(Source::Fixed(cursor)) => Ok(cursor),
                 Some(Source::Native { store, through }) => {
-                    collaboration_service::project_replication_cursor(&store, through, epoch).await
+                    collaboration_runtime::project_replication_cursor(&store, through, epoch).await
                 }
                 None => Ok(FeedCursor {
                     epoch,
@@ -94,6 +97,10 @@ async fn head(fixture: &BoardFixture, project: &ProjectId) -> Result<FeedCursor,
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_mapping_failure_is_board_unavailable_instead_of_zero_progress()
 -> Result<(), TestError> {
     let port = Arc::new(ProgressPort::default());
@@ -148,6 +155,10 @@ async fn native_mapping_failure_is_board_unavailable_instead_of_zero_progress()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledged_inherited_prefix_keeps_the_epoch_that_assigned_its_rows()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -209,6 +220,10 @@ async fn acknowledged_inherited_prefix_keeps_the_epoch_that_assigned_its_rows()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledgement_after_the_pinned_view_is_bounded_to_that_views_as_of()
 -> Result<(), TestError> {
     let port = Arc::new(ProgressPort::default());
@@ -226,9 +241,10 @@ async fn acknowledgement_after_the_pinned_view_is_bounded_to_that_views_as_of()
         port.release.notify_one();
         Ok::<_, TestError>(())
     };
-    let (reply, advanced) = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-        tokio::join!(viewing, advancing)
-    })
+    let (reply, advanced) = Box::pin(tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        async { tokio::join!(viewing, advancing) },
+    ))
     .await?;
     advanced?;
     let reply = reply?;

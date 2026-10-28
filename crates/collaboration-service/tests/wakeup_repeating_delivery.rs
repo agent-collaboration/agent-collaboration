@@ -1,15 +1,22 @@
 //! A recurring wake creates a fresh push identity for each real native delivery.
 use agent_automation::{ExpiryRule, TimingRule, WakeupId};
 use automation_storage::{AutomationStore, WakeCreate};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, EndpointId, EndpointRef, OperationId, PushHeaderFacts,
     PushId, PushKind, PushOrigin, RouterLink, RouterOriginRef, SavedMessage, SessionId, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{
-    CodexAppServerDeliveryRoute, MachineIdentity, NativeControlBackend, NativeGenerationGate,
-    ServiceIdentity, SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_service::ApplicationFixture;
+
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
 use futures_util::{SinkExt as _, StreamExt as _};
 use serde_json::{Value, json};
 use sqlx::Connection as _;
@@ -152,7 +159,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .await
         .expect("create recurring wake");
 
-    let identity = ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
         .expect("create service identity")
         .with_machine_identity(
             MachineIdentity::new(service_identity.clone(), Some("wake-repeating-fixture"))
@@ -169,7 +176,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         service_identity,
         identity.endpoint_directory(),
         native_backend,
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));

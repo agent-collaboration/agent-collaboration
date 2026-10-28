@@ -74,7 +74,11 @@ fn non_file_service_manifest_is_rejected() {
 fn oversized_service_manifest_is_rejected() {
     let directory = tempfile::tempdir().expect("service directory");
     let manifest_path = directory.path().join("service.json");
-    let oversized_manifest = vec![b' '; (MAX_SERVICE_MANIFEST_BYTES + 1) as usize];
+    let oversized_manifest = vec![
+        b' ';
+        usize::try_from(MAX_SERVICE_MANIFEST_BYTES + 1)
+            .expect("fixture manifest limit fits usize")
+    ];
     fs::write(&manifest_path, oversized_manifest).expect("oversized manifest fixture");
 
     let error = parse_router_proxy_endpoint(&manifest_path)
@@ -490,7 +494,7 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
         "fixture endpoint".to_owned(),
     )
     .expect("Claude endpoint fixture");
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
             board_session: None,
             directory: service_directory.clone(),
@@ -503,7 +507,7 @@ async fn active_inventory_uses_the_existing_claude_local_discovery() {
             owner_human_id: None,
         },
         vec![claude_endpoint],
-    )
+    ))
     .await
     .expect("collaboration runtime");
     let launch_target = ClaudeLaunchTarget {

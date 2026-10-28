@@ -264,6 +264,10 @@ async fn snapshot(fixture: &BoardFixture) -> FixtureResult<Snapshot> {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_schema(snapshot: &Snapshot, fixture: &BoardFixture) -> FixtureResult {
     assert!(
         snapshot

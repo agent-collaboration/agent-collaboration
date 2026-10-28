@@ -2,17 +2,25 @@
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/native_authority.rs"]
 mod native_authority;
-use board_fixture::{BoardFixture, ControlledClock, TestError, accepted, fixture_peer};
+use board_fixture::controlled_clock::ControlledClock;
+use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use message_board::*;
 use runtime_primitives::{Clock, SystemClock};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 use std::sync::Arc;
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn native_expiry_does_not_record_a_request_and_same_epoch_renewal_evaluates_it_again()
 -> Result<(), TestError> {
     let clock = Arc::new(ControlledClock::at(SystemClock.now()));
@@ -58,7 +66,10 @@ async fn native_expiry_does_not_record_a_request_and_same_epoch_renewal_evaluate
     Ok(())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn a_seeded_writer_replays_known_requests_and_evaluates_unknown_requests()
 -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
@@ -94,7 +105,10 @@ async fn a_seeded_writer_replays_known_requests_and_evaluates_unknown_requests()
     Ok(())
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn schema_mismatch_is_a_gate_result_and_expiry_still_has_priority() -> Result<(), TestError> {
     let clock = Arc::new(ControlledClock::at(SystemClock.now()));
     let initial = clock.now();
@@ -128,7 +142,10 @@ async fn schema_mismatch_is_a_gate_result_and_expiry_still_has_priority() -> Res
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn a_future_schema_refuses_mcp_writes_without_a_ledger_or_feed_append()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -180,7 +197,7 @@ async fn seed_empty_project(
     project: &ProjectId,
     clock: Arc<dyn Clock>,
 ) -> Result<std::path::PathBuf, TestError> {
-    let registry = collaboration_service::ProjectStoreRegistry::new(
+    let registry = collaboration_runtime::ProjectStoreRegistry::new(
         fixture._directory.path(),
         Some(fixture_peer()?),
         clock.clone(),

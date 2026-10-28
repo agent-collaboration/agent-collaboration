@@ -1,7 +1,10 @@
 //! Enable admission requires a prepared owned address or an available fresh-thread endpoint.
-use crate::{ScheduleCapability, ScheduleDestination, ScheduleSupport, ScheduledRunExecution};
 use agent_automation::{ExecutionDestination, OperationId, ScheduleDefinition, ScheduleId};
 use automation_storage::{AutomationStore, BindingAddress, StorageError};
+use collaboration_contracts::ScheduleCapability;
+use collaboration_contracts::ScheduleDestination;
+use collaboration_contracts::ScheduleSupport;
+use collaboration_contracts::ScheduledRunExecution;
 use collaboration_protocol::{EndpointRef, SessionRef, UuidIdentity};
 use std::sync::Arc;
 use tokio::sync::Mutex;

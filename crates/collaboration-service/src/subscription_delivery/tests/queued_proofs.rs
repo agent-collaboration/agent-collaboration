@@ -2,7 +2,7 @@ use super::super::{
     SubscriptionClock, SubscriptionWaitFilter, subscription_service::OwnerObservation,
 };
 use super::owner_fixture::*;
-use crate::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliation;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushDeliveryState, SessionReachability,
 };
@@ -10,7 +10,7 @@ use message_board::{SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionS
 
 #[tokio::test(start_paused = true)]
 async fn declared_renewal_before_covering_wait_changes_only_the_covered_membership() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let uncovered_root = fixture.add_root().await;
     for root in [&fixture.root, &uncovered_root] {
         fixture
@@ -144,7 +144,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
 
 #[tokio::test(start_paused = true)]
 async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
     fixture.post(&fixture.root, "Queued activity").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -207,7 +207,7 @@ async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
 
 #[tokio::test(start_paused = true)]
 async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
     fixture.post(&fixture.root, "Not submitted").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
@@ -215,7 +215,7 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
     let (_, reply) = runtime.reconciliations.lock().await.recv().await.unwrap();
     // Keep the reader unavailable while asserting its readiness Hold. A Running
     // reader is allowed to release this unscheduled hold immediately (925/941).
-    *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Wakeable;
+    *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Wakeable;
     reply
         .send(AttemptReconciliation::KnownNotSubmitted)
         .ok()
@@ -234,7 +234,7 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
     assert_eq!(board.pending_count, 1);
     assert_eq!(board.held_since, Some(fixture.clock.now()));
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Running;
+    *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Running;
     fixture.clock.advance(30).await;
     let retried = runtime.requests.lock().await.recv().await.unwrap();
     assert_eq!(retried.payload.push_id, request.payload.push_id);
@@ -251,7 +251,7 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
 
 #[tokio::test(start_paused = true)]
 async fn acp_queue_still_unknown_settles_unknown_with_route_evidence() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
     fixture.post(&fixture.root, "Unknown queue").await;
     let request = runtime.requests.lock().await.recv().await.unwrap();

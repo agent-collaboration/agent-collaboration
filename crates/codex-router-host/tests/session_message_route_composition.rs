@@ -1,8 +1,14 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! The Host's real router selects provider and peer clients through the collaboration API.
+#[path = "support/session_follow_fixture.rs"]
+mod follow_fixture;
 #[path = "support/registered_route_project.rs"]
 mod registered_route_project;
+use follow_fixture::post_thread_activity_for_sessions;
 #[path = "support/session_message_route_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod route_fixture;
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
@@ -13,12 +19,13 @@ use collaboration_protocol::{
     DeliveryOutcome, DeliveryRejectionReason, EndpointId, EndpointRef, ProviderRequestedPolicy,
     ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use registered_route_project::route_project_requests;
 use route_fixture::{
-    create_provider_target, load_provider_target, message, post_thread_activity_for_sessions,
-    prompt_and_approve_from_peer_provider, provider_fixture, publish_peer, send_and_wait_wake,
-    wait_for_completed_provider_prompts, wait_for_prompt_text,
+    create_provider_target, load_provider_target, message, prompt_and_approve_from_peer_provider,
+    provider_fixture, publish_peer, send_and_wait_wake, wait_for_completed_provider_prompts,
+    wait_for_prompt_text,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
@@ -30,8 +37,8 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
     let route_project = route_project_requests();
-    let identity = collaboration_service::MachineIdentity::new(
-        collaboration_service::load_service_identity(root.path()).expect("Host service identity"),
+    let identity = collaboration_contracts::MachineIdentity::new(
+        collaboration_runtime::load_service_identity(root.path()).expect("Host service identity"),
         None,
     )
     .expect("Host machine label");
@@ -48,7 +55,7 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
                 .try_into()
                 .expect("origin label"),
         },
-        collaboration_service::load_installation_peer(root.path()).expect("installation peer"),
+        collaboration_runtime::load_installation_peer(root.path()).expect("installation peer"),
     )
     .await
     .expect("real route central enrollment");

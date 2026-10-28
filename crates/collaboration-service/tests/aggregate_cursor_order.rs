@@ -1,17 +1,25 @@
 //! Counterexample: legal project positions can have wall-clock times in reverse order.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use collaboration_service::{
-    CollaborationApplication, MachineIdentity, ProjectAdmission, ProjectAdmissionProps,
-    ServiceIdentity,
-};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_backwards()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
@@ -23,12 +31,12 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
     };
     let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
         directory.path(),
-        Arc::new(board_fixture::PendingRegistration),
+        Arc::new(board_fixture::native_registry::PendingRegistration),
         &origin,
     )
     .await?;
     let fleet = Arc::new(fleet);
-    let registry = board_fixture::new_registry(directory.path())?;
+    let registry = board_fixture::native_registry::new_registry(directory.path())?;
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
         registry: registry.clone(),
         fleet: fleet.clone(),
@@ -39,15 +47,13 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
     })?);
     let api = ServedCollaborationApi::start(
         directory.path(),
-        CollaborationApplication::new(
-            ServiceIdentity::new(
-                installation.as_str(),
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission),
-        ),
-    )
-    .await?;
+        (ApplicationFixture::new(
+            installation.as_str(),
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission))
+        .build(),
+    )?;
     let actor = Identity::Human {
         human_id: HumanId::try_from("reader".to_owned())?,
     };
@@ -76,7 +82,7 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
         request["projectId"] = json!(project);
         request["boardId"] = json!(board);
         request["title"] = json!(title);
-        board_fixture::prepare_registered_creation(
+        board_fixture::registered_project::prepare_registered_creation(
             &fleet,
             &registry,
             &serde_json::from_value(request.clone())?,

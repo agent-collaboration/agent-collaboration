@@ -86,10 +86,10 @@ pub(super) fn prepare(
         .recursive(true)
         .mode(0o700)
         .create(&directory)?;
-    let installation = String::from(collaboration_service::load_service_identity(&directory)?)
+    let installation = String::from(collaboration_runtime::load_service_identity(&directory)?)
         .try_into()
         .map_err(|_| FleetCommandError::InvalidInput("invalid installation identity"))?;
-    let peer = collaboration_service::load_installation_peer(&directory)?;
+    let peer = collaboration_runtime::load_installation_peer(&directory)?;
     let raw = random_machine_token(&mut std::fs::File::open("/dev/urandom")?)?;
     let credential_hash = raw_token_hash(&raw);
     Ok(PreparedEnrollment {

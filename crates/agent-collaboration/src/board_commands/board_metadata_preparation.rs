@@ -1,5 +1,14 @@
 //! Prepare typed metadata operations before transmission.
-use super::*;
+use super::{
+    BoardArchiveRequest, BoardCloseRequest, BoardCreateRequest, BoardListRequest,
+    BoardMetadataCommand, BoardShowRequest, BoardUpdateRequest, CommandContext,
+    PreparedBoardCommand, ProjectCommand, ProjectCreateRequest, ProjectListRequest,
+    ProjectShowRequest, ProjectUpdateRequest, ProtocolVersion, RepositoryCommand,
+    RepositoryListRequest, WorkspaceArchiveRequest, WorkspaceCommand, WorkspaceCreateRequest,
+    WorkspaceShowRequest, WorkspaceUpdateRequest, command_context, optional_repository,
+    parse_bounded_text, parse_mutation_identity, parse_or_generate_uuid_v7, parse_uuid_v7,
+    prepare_page_request, required_repository,
+};
 pub(super) fn prepare_board_metadata(
     command: BoardMetadataCommand,
 ) -> Result<(PreparedBoardCommand, CommandContext), String> {

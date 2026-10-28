@@ -1,5 +1,5 @@
 //! Test-only native arrangement for conversation scenarios; WS grant policy has separate proof.
-use crate::ProjectStoreRegistry;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::*;
 
 pub(crate) async fn create(

@@ -348,6 +348,10 @@ pub(super) async fn measure(fixture: &Fixture, kind: &'static str, expected: Rec
     );
     Ok(())
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn encoded_size(row: &[SqlValue]) -> TestResult<usize> {
     let bytes = serde_json::to_vec(row)?;
     assert_eq!(serde_json::from_slice::<Vec<SqlValue>>(&bytes)?, row);
@@ -363,6 +367,10 @@ fn maximum_integer_width(value: &mut Value) {
         _ => {}
     }
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn numeric_upper(row: &[SqlValue]) -> TestResult<usize> {
     // A separate conservative reservation, matching A's method. These wider
     // integers are not presented as values that passed domain admission.

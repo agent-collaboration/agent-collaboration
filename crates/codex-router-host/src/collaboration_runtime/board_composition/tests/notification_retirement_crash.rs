@@ -2,7 +2,7 @@
 use super::*;
 use super::super::notification_owner::ProjectNotificationFixture;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, RecipientOutcome};
 use message_board::{FeedCursor, HandoffSeq, MailItemRef};
 use message_board_storage::MailHandoffItem;
@@ -21,6 +21,10 @@ struct RetirementCheckpoint {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before_progress()
 -> Result<(), TestError> {
     // Arrange: the child can report ready only after the real ACK and deletion.
@@ -36,8 +40,12 @@ async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before
     )
     .await?;
     central.release()?;
-    let mut reopened =
-        ProjectNotificationFixture::resume(directory.path(), central, checkpoint.seed).await?;
+    let mut reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        checkpoint.seed,
+    ))
+    .await?;
     let marks = reopened
         .harness
         .projects
@@ -149,7 +157,7 @@ async fn acknowledged_sdk_retirement_retries_absent_custody_after_sigkill_before
 }
 
 pub(super) async fn retirement_checkpoint_child(base: &Path) -> Result<(), TestError> {
-    let mut fixture = ProjectNotificationFixture::open_local(base).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open_local(base)).await?;
     fixture.start().await?;
     let peer = fixture.harness.peer();
     let item = fixture.seed_item;

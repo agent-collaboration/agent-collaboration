@@ -8,11 +8,11 @@ use std::sync::atomic::{AtomicU64, Ordering};
 mod activation_history;
 
 struct FrontierMarks(AtomicU64);
-impl crate::ProjectReplicationPosition for FrontierMarks {
+impl collaboration_contracts::ProjectReplicationPosition for FrontierMarks {
     fn acknowledged_mail_changes<'a>(
         &'a self,
         _: &'a ProjectId,
-    ) -> crate::AcknowledgedMailChangesFuture<'a> {
+    ) -> collaboration_contracts::AcknowledgedMailChangesFuture<'a> {
         Box::pin(async {
             Ok(message_board_storage::AcknowledgedProjectChanges {
                 settled_through: Some(self.0.load(Ordering::SeqCst)),
@@ -24,7 +24,7 @@ impl crate::ProjectReplicationPosition for FrontierMarks {
         &'a self,
         _: &'a ProjectId,
         epoch: EpochNumber,
-    ) -> crate::ReplicatedPositionFuture<'a> {
+    ) -> collaboration_contracts::ReplicatedPositionFuture<'a> {
         Box::pin(async move {
             Ok(FeedCursor {
                 epoch,
@@ -49,8 +49,8 @@ pub(super) async fn frontier(fixture: &OwnerFixture) -> HandoffSeq {
 
 #[tokio::test]
 async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_frozen_and_settled() {
-    tokio::time::timeout(Duration::from_secs(30), async {
-        let fixture = OwnerFixture::new().await;
+    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.runtime().await;
         let (app, native, publisher) =
             super::native_follow_mail_proofs::follow_application(&fixture, &runtime).await;
@@ -135,12 +135,12 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
         drop(app);
         runtime.close().await;
         fixture.close_native(native).await;
-    }).await.expect("bounded missing-child frontier and real publication recovery");
+    })).await.expect("bounded missing-child frontier and real publication recovery");
 }
 
 #[tokio::test]
 async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_final_delivery() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) =
@@ -308,7 +308,7 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
 
 #[tokio::test]
 async fn quiet_local_delivery_advances_frontier_and_only_acknowledgement_retires_its_custody() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let marks = Arc::new(FrontierMarks(AtomicU64::new(0)));

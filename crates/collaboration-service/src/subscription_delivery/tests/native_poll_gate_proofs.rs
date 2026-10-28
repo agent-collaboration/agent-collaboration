@@ -1,7 +1,7 @@
 //! The same registered wait survives a temporary checker failure; absence never authorizes it.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
 use super::*;
-use crate::service_identity::subscription_delivery::subscription_service::OwnerObservation;
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use crate::{SubscriptionWaitFilter, SubscriptionWaitResult};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem};
@@ -11,7 +11,7 @@ use sqlx::Connection;
 
 #[tokio::test]
 async fn poll_without_its_publisher_stays_held_until_the_same_wait_is_reconciled() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;
@@ -93,7 +93,7 @@ async fn poll_without_its_publisher_stays_held_until_the_same_wait_is_reconciled
 
 #[tokio::test]
 async fn a_temporary_poll_check_failure_reconsiders_the_same_item_on_an_existing_rescan() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
         .await;

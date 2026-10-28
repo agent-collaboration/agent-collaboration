@@ -205,7 +205,10 @@ fn forward_upstream_response(
 
     Ok(())
 }
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 #[cfg(test)]
 fn accept_local_websocket<F>(
     local_stream: TcpStream,

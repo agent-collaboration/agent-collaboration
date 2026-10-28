@@ -1,7 +1,5 @@
 //! An unknown ACP stop reason still ends the Turn with its output intact.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::{

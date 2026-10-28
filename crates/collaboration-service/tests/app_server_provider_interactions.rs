@@ -1,9 +1,13 @@
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::QuestionResponse;
-use collaboration_service::{
-    HubEvent, NativeControlBackend, NativeGenerationGate, RouterSessionAppServerContext,
-    ServiceInteractionBroker, SessionCommandPort, SessionEventHub, TypedApprovalResolution,
-    serve_router_session_app_server_connection,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::RouterSessionAppServerContext;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_runtime::TypedApprovalResolution;
+use collaboration_runtime::serve_router_session_app_server_connection;
 use futures_util::{SinkExt, StreamExt};
 use message_board::Identity;
 use serde_json::{Value, json};
@@ -21,7 +25,10 @@ use acp_provider_backend::ScriptedProviderBackend;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn app_server_approver_decides_exact_option_and_answers_question() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;

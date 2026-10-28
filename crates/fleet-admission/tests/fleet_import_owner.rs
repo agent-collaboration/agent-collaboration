@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use fleet_admission::*;
 use message_board::*;
 
@@ -28,6 +27,10 @@ fn bundle(owner: &str) -> TestResult<FleetImportBundle> {
     Ok(serde_json::from_value(wire)?)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn every_imported_actor_is_the_declared_owner() -> TestResult {
     let decision = decide_import(&bundle("first-importer")?, &FleetSnapshot::empty())?;
@@ -41,6 +44,10 @@ fn every_imported_actor_is_the_declared_owner() -> TestResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn different_declared_owner_replays_without_rewriting_first_attribution_or_digest() -> TestResult {
     let first = bundle("first-importer")?;

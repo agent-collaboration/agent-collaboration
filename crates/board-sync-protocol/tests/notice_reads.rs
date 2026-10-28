@@ -1,4 +1,3 @@
-#![allow(clippy::unwrap_used)]
 //! The shared frame codec distinguishes transport progress, machine progress and read refusals.
 use board_sync_protocol::BoardConsumerProtocol;
 use fleet_sync_protocol as wire;

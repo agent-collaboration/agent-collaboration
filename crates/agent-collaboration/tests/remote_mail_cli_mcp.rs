@@ -1,17 +1,30 @@
 //! Real CLI/MCP remote custody; a closed session cannot supply a scripted queued answer.
 use collaboration_service as mail_service;
 #[path = "support/local_mail_surfaces.rs"]
-#[allow(dead_code)] // The local companion targets use the other fixture operations.
+// The local companion targets use the other fixture operations.
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod local_mail_surfaces;
+
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
+#[expect(
+    dead_code,
+    reason = "Shared native SQL fixture helpers serve different integration targets."
+)]
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code)] // Companion targets use the application-row fault helpers.
+// Companion targets use the application-row fault helpers.
 mod native_sql;
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_protocol::{MailItemId, SessionRef};
-use collaboration_service::MailDeliverySession;
+use collaboration_runtime::MailDeliverySession;
 use durable_steps::AtomicStore;
 use fleet_sync_protocol::{PeerId, SchemaSupport};
 use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
@@ -100,7 +113,10 @@ fn input(item: &MailItemId, target: &SessionRef, text: &str) -> Value {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_push_or_local_injection()
 -> TestResult {
     let (_session_root, surfaces, remote) = offline_surfaces().await?;
@@ -223,7 +239,10 @@ async fn closed_session_remote_send_replays_across_cli_and_mcp_without_sender_pu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_the_real_mcp()
 -> TestResult {
     let (_session_root, surfaces, remote) = offline_surfaces().await?;
@@ -355,7 +374,10 @@ async fn sender_show_reads_canonical_sdk_statuses_and_refusal_payloads_through_t
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_and_received_projection()
 -> TestResult {
     let (_session_root, surfaces, remote) = offline_surfaces().await?;
@@ -407,7 +429,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
     .transaction(move |scope| {
         Box::pin(async move {
             let limits = fleet_sync_delivery::DeliveryLimits::new::<
-                collaboration_service::RouterDeliveryTypes,
+                collaboration_contracts::RouterDeliveryTypes,
             >(
                 64 * 1024 * 1024,
                 10_000,
@@ -415,7 +437,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 10_000,
                 64 * 1024 * 1024,
                 fleet_sync_delivery::minimum_settlement_allowance::<
-                    collaboration_service::RouterDeliveryTypes,
+                    collaboration_contracts::RouterDeliveryTypes,
                 >()
                 .map_err(durable_steps::StoreError::backend)?,
             )
@@ -442,7 +464,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 .map_err(durable_steps::StoreError::backend)?;
             let mut outbox = fleet_sync_delivery::Outbox::<
                 _,
-                collaboration_service::RouterDeliveryTypes,
+                collaboration_contracts::RouterDeliveryTypes,
             >::new(scope, limits);
             outbox
                 .resolve_submit(&fleet_sync_protocol::DeliveryItemRef { item: sdk, digest })
@@ -463,7 +485,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
         Some(original.as_str())
     );
     assert_eq!(body.text.as_str(), "reply body");
-    let projected = collaboration_service::received_mail_push(&item, chrono::Utc::now())?
+    let projected = collaboration_runtime::received_mail_push(&item, chrono::Utc::now())?
         .ok_or("received reply")?;
     assert_eq!(projected.reply_to_push_id.as_ref(), Some(&original));
     assert_eq!(projected.body.as_deref(), Some("reply body"));

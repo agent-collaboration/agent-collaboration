@@ -1,5 +1,9 @@
 //! Release write latency at the largest-board record counts, through real MCP admission.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[cfg(not(debug_assertions))]
 #[path = "support/write_family_timing.rs"]
@@ -19,7 +23,10 @@ fn p95(samples: &mut [u128]) -> Result<u128, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::indexing_slicing)] // Test-owned JSON construction; samples use checked access.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test-owned JSON construction; samples use checked access."
+)]
 async fn real_size_project_measures_admitted_posts_and_task_updates() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;

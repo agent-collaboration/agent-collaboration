@@ -1,6 +1,16 @@
-use super::board_inbox_arguments::*;
-use super::{board_arguments::*, board_preparation::CommandContext};
-use collaboration_client::board::*;
+use super::board_inbox_arguments::{InboxFetchArguments, InboxScopeKind};
+use super::{
+    board_arguments::{
+        CommonArguments, MutationIdentityArguments, PageArguments, PostListArguments,
+        PostScopeKind, PostSelectionKind, RepositorySelectorArguments,
+    },
+    board_preparation::CommandContext,
+};
+use collaboration_client::board::{
+    ActingForIdentity, BoardId, Identity, InboxScope, MAX_MESSAGE_TEXT_BYTES, NotifyTarget,
+    PageRequest, PostId, PostListScope, PostSelection, ProjectId, ReadActor, SubjectLine,
+    ThreadRef, ThreadSubject, WorkspaceId,
+};
 use collaboration_client::{BoardRepositoryError, BoardRepositoryLocation};
 use std::{fs::File, io::Read, path::Path};
 

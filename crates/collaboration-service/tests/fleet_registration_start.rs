@@ -1,7 +1,7 @@
 //! A fresh central decision starts registration within the request's settlement.
-use collaboration_service::{
-    ProjectRegistration, ProjectRegistrationFuture, ProjectRegistrationState,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use std::sync::{Arc, Mutex};
@@ -18,7 +18,10 @@ impl ProjectRegistration for RegistrationStarts {
         Box::pin(async { Ok(ProjectRegistrationState::Pending) })
     }
 
-    #[allow(clippy::expect_used)]
+    #[expect(
+        clippy::expect_used,
+        reason = "A malformed fixed fixture must fail its test."
+    )]
     fn start<'runtime>(
         &'runtime self,
         project: &'runtime ProjectId,
@@ -34,7 +37,10 @@ impl ProjectRegistration for RegistrationStarts {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn, clippy::expect_used)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn a_newly_decided_directory_starts_registration_without_another_recovery_pass() -> TestResult
 {
     let directory = tempfile::tempdir()?;

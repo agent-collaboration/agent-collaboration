@@ -1,7 +1,15 @@
 //! Hook context uses repository membership and its two fact kinds, not whole boards.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -29,7 +37,10 @@ async fn assignments(fixture: &BoardFixture) -> Result<Value, TestError> {
         .await?)
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn context_excludes_projects_outside_the_sessions_repository() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, lane) = fixture.project().await?;
@@ -57,7 +68,10 @@ async fn context_excludes_projects_outside_the_sessions_repository() -> Result<(
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn corrupt_unrelated_project_does_not_poison_a_healthy_session_context()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
@@ -93,7 +107,10 @@ async fn corrupt_unrelated_project_does_not_poison_a_healthy_session_context()
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn context_reads_roles_and_scope_facts_without_decoding_posts_or_feed()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
@@ -175,11 +192,14 @@ async fn context_reads_roles_and_scope_facts_without_decoding_posts_or_feed()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn provider_context_uses_existing_durable_session_worktrees() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, lane) = fixture.project().await?;
-    let mut providers = collaboration_service::ProviderOperationStore::open(
+    let mut providers = collaboration_runtime::ProviderOperationStore::open(
         &fixture._directory.path().join("context-providers.sqlite"),
     )
     .await?;
@@ -188,7 +208,7 @@ async fn provider_context_uses_existing_durable_session_worktrees() -> Result<()
             json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":endpoint},"sessionId":endpoint}),
         )?;
         providers
-            .record_session(&collaboration_service::ProviderSessionRecord {
+            .record_session(&collaboration_runtime::ProviderSessionRecord {
                 target: target.clone(),
                 working_directory: fixture
                     ._directory
@@ -228,7 +248,10 @@ async fn provider_context_uses_existing_durable_session_worktrees() -> Result<()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unresolved_session_metadata_never_invents_an_allowed_context() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     fixture.project().await?;

@@ -1,6 +1,9 @@
 //! Real public MCP and ACP pipes; only the external provider response is a stand-in.
 #[path = "../../codex-router-test-support/src/node_fixture.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This shared fixture module also exposes launch helpers used by other test suites."
+)]
 mod node_fixture;
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
@@ -22,6 +25,10 @@ const FULL_INPUT: &str = "Complete the SQLite proof.\nKeep this exact second lin
 #[derive(Clone, Default)]
 struct DiagnosticCapture(Arc<Mutex<Vec<u8>>>);
 impl Write for DiagnosticCapture {
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "A poisoned test capture must fail the test instead of silently losing evidence."
+    )]
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0
             .lock()

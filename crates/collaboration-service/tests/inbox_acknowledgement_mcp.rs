@@ -2,11 +2,18 @@
 use message_board::*;
 use serde_json::json;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn routed_refusals_keep_the_ledger_and_unreadable_retry_outcomes_stay_unknown()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -82,7 +89,10 @@ async fn routed_refusals_keep_the_ledger_and_unreadable_retry_outcomes_stay_unkn
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn batch_acknowledgements_keep_completed_outcomes_after_an_unavailable_scope()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

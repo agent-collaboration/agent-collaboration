@@ -1,7 +1,12 @@
 //! The operation's rules choose keys; native queries load and validate those operands.
 use super::{ProjectAdmission, ProjectAdmissionError, operation_context::OperationContext};
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    AuthorityRole, BoardOperation, BoardState, FeedCursor, LeaveFollowUp, ProjectRequest,
+    ReadScope, Record, RecordId, RecordKind, RecordRef, RecordedActor, RoleCardinality, RoleEnd,
+    RoleSubject, TaskAction, TaskLink, TaskLinkKind, ThreadId, ThreadSubject, TrailSubject,
+    work_rules,
+};
 use message_board_storage::ProjectWriteTransaction;
 use std::collections::BTreeMap;
 

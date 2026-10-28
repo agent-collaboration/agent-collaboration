@@ -1,6 +1,10 @@
 //! The public boundary signs raw receipt keysets and rechecks current decisions.
 use super::{BoardOperations, admission_error};
-use message_board::{public_replies as public, *};
+use message_board::{
+    BoardError, CanonicalHash, RequestDecision, RequestEffectsCursor, RequestEffectsRead,
+    RequestEffectsRefusal, RequestEffectsRequest, RequestEffectsScope, RequestId, RequestResult,
+    WriteReply, public_replies as public,
+};
 use message_board_storage::{decode_board_cursor, encode_board_cursor};
 use serde::{Deserialize, Serialize};
 
@@ -14,7 +18,7 @@ struct ReceiptContinuation {
     cursor: RequestEffectsCursor,
 }
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub async fn request_effects(
         &self,
         request: public::RequestEffectsRequest,

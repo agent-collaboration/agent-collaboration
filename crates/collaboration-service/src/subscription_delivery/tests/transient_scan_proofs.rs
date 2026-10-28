@@ -43,7 +43,7 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
             .to_string(),
     });
     let _trace = tracing::subscriber::set_default(subscriber);
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
     let runtime = fixture.native_runtime_with_clock(clock).await;
     runtime
@@ -108,11 +108,11 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
             fixture.clock.now(),
         )
         .await;
-    let application = crate::CollaborationApplication::new(
-        crate::ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+    let application =
+        (crate::ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
             .unwrap()
-            .with_project_admission(fixture.admission.clone()),
-    );
+            .with_project_admission(fixture.admission.clone()))
+        .build();
     let shown = application
         .board()
         .post_show(PostShowRequest {

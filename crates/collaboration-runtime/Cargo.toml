@@ -1,0 +1,57 @@
+[package]
+name = "collaboration-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+test-support = []
+runtime-test-support = ["interaction-storage/runtime-test-support"]
+
+[lints]
+workspace = true
+
+[dependencies]
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
+board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
+fleet-sync-tokio-runner.workspace = true
+board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
+durable-steps.workspace = true
+fleet-sync-delivery.workspace = true
+fleet-sync-lease.workspace = true
+fleet-sync-protocol.workspace = true
+fleet-sync-writer.workspace = true
+runtime-primitives = { workspace = true, features = ["tokio"] }
+collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
+message-board = { path = "../message-board", version = "0.1.20" }
+session-event-model = { path = "../session-event-model", version = "0.1.39" }
+message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
+fleet-admission = { path = "../fleet-admission", version = "0.1.93" }
+automation-storage = { path = "../automation-storage", version = "0.1.16" }
+interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
+agent-automation = { path = "../agent-automation", version = "0.1.16" }
+base64.workspace = true
+sqlx = { workspace = true, features = ["sqlite"] }
+codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
+codex-native-integration.workspace = true
+chrono.workspace = true
+lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
+getrandom = "0.3.4"
+futures-util.workspace = true
+tokio-tungstenite.workspace = true
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tokio-util.workspace = true
+uuid.workspace = true
+tracing.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
+fleet-sync-delivery = { workspace = true, features = ["test-support"] }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", tag = "v0.4.0" }
+tempfile = "3.27.0"
+tokio = { workspace = true, features = ["test-util"] }

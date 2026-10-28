@@ -1,6 +1,9 @@
 //! Reserved tags derive pending work; settlement authority comes from immutable role history.
 use super::ViewSnapshot;
-use message_board::*;
+use message_board::{
+    BoardError, EvidencePointer, FeedCursor, FeedPosition, LeadObligation, LeadOwed, OwnerWait,
+    Record, RecordKind, TaskStatus, WorkTrailRowId, WorkstreamState,
+};
 
 use message_board_storage::{PendingTrailInputs, TrailActivityMetadata};
 use std::collections::BTreeMap;

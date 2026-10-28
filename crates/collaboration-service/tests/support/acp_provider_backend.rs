@@ -1,10 +1,22 @@
 //! Test-only provider command and event stand-in for the ACP socket journey.
-use collaboration_service::{
-    CommandFailure, CommandFuture, CreateSessionCommand, HubEvent, HubFuture, HubSessionSummary,
-    PromptSessionCommand, QueueInputCommand, QueuedSessionInput, SessionCommandPort,
-    SessionEventAttachment, SessionEventHub, SessionEventHubError, SessionSteerOutcome,
-    SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand, SteerSessionCommand,
-};
+use collaboration_contracts::CommandFailure;
+use collaboration_contracts::CommandFuture;
+use collaboration_contracts::CreateSessionCommand;
+use collaboration_contracts::HubEvent;
+use collaboration_contracts::HubFuture;
+use collaboration_contracts::HubSessionSummary;
+use collaboration_contracts::PromptSessionCommand;
+use collaboration_contracts::QueueInputCommand;
+use collaboration_contracts::QueuedSessionInput;
+use collaboration_contracts::SessionCommandPort;
+use collaboration_contracts::SessionEventAttachment;
+use collaboration_contracts::SessionEventHub;
+use collaboration_contracts::SessionEventHubError;
+use collaboration_contracts::SessionSteerOutcome;
+use collaboration_contracts::SessionTargetCommand;
+use collaboration_contracts::SessionTurnHandle;
+use collaboration_contracts::SetSessionSettingCommand;
+use collaboration_contracts::SteerSessionCommand;
 use message_board::{Identity, SessionEndpointRef, SessionRef};
 use session_event_model::{
     CapabilityReport, QueueCapability, QueueSupport, SessionEvent, SessionItem, SessionItemKind,

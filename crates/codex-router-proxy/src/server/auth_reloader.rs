@@ -1,4 +1,7 @@
-use super::*;
+use super::{
+    Header, HeaderMap, LocalRouterAuth, LocalRouterTokenRecord, WebSocketHandshakeRequest,
+    WebSocketRevocationRegistry,
+};
 
 /// Thread-safe handle for replacing local auth without sharing the full runtime.
 #[derive(Clone, Debug)]

@@ -106,7 +106,10 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
     #[test]
-    #[allow(clippy::panic_in_result_fn)]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract assertions fail the test while fixture errors propagate."
+    )]
     fn debug_assertion_refuses_relative_and_shared_files_without_echoing_contents()
     -> Result<(), Box<dyn std::error::Error>> {
         assert!(matches!(

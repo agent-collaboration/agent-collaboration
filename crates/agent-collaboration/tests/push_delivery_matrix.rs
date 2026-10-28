@@ -1,13 +1,7 @@
-#![allow(
-    clippy::expect_used,
-    clippy::indexing_slicing,
-    clippy::panic_in_result_fn
-)]
 //! Recipient-observed push-format matrix on an isolated debug Host.
 #[path = "automation_live_support/debug_backend_restart.rs"]
 mod debug_backend_restart;
 #[path = "delivery_matrix/support.rs"]
-#[allow(dead_code)]
 mod delivery_matrix_support;
 #[path = "delivery_matrix/held_cells.rs"]
 mod held_cells;
@@ -17,8 +11,11 @@ mod held_subscription_producer;
 mod native_push_correlation;
 #[path = "delivery_matrix/native_push_receipt.rs"]
 mod native_push_receipt;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
 mod native_registry;
 #[path = "delivery_matrix/owned_resource_cleanup.rs"]
 mod owned_resource_cleanup;
@@ -26,8 +23,11 @@ mod owned_resource_cleanup;
 mod owned_resources;
 #[path = "delivery_matrix/peer_fixture.rs"]
 mod peer_fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "automation_live_support/proof_context.rs"]
-#[allow(dead_code)]
 mod proof_context;
 #[path = "delivery_matrix/public_push_receipt.rs"]
 mod public_push_receipt;
@@ -106,6 +106,10 @@ async fn push_delivery_matrix_covers_codex_and_claude_peer() -> ProofResult<()> 
     .await
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The fixture protocol and assertions use established positions in their prepared inputs."
+)]
 async fn exercise_push_delivery_matrix(
     config_guard: &delivery_matrix_support::ConfigHashGuard,
     peer_owner: &mut Option<delivery_matrix_support::PeerFixture>,

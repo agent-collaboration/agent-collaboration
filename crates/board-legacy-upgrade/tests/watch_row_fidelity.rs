@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 mod support;
 use fleet_sync_protocol::SqlValue;
 use message_board::*;
@@ -23,6 +22,10 @@ fn reader_key(actor: RecordedActor) -> TestResult<String> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_watch_rows_keep_exact_scopes_choices_and_starts_without_synthetic_opt_outs()
 -> TestResult {
     for name in [

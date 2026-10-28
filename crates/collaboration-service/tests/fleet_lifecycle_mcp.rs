@@ -1,7 +1,15 @@
 //! Workspace archival and initiative closure travel through fleet admission.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -9,7 +17,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn workspace_archive_cascades_atomically_and_retains_pending_project_reports()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -117,7 +128,10 @@ async fn workspace_archive_cascades_atomically_and_retains_pending_project_repor
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn board_close_accepts_only_initiatives_and_keeps_replay_and_noop_meaning()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -209,7 +223,10 @@ async fn fleet_ledger(fixture: &BoardFixture) -> Result<Vec<Record>, TestError> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn supplied_reports_finish_one_and_multiple_boards_in_the_same_fleet_decision()
 -> Result<(), TestError> {
     for multiple_boards in [false, true] {

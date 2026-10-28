@@ -1,5 +1,10 @@
 //! DM presence, submission and response handling inside the target's single delivery actor.
-use super::*;
+use super::{
+    BoardError, LoadPolicy, PRESENCE_INTERVAL, PushRecord, ReaderDeliveryOwner, TargetPresence,
+    target_session,
+};
+#[cfg(test)]
+use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_protocol::{MessageDelivery, PushDeliveryState};
 
 impl ReaderDeliveryOwner {
@@ -29,7 +34,7 @@ impl ReaderDeliveryOwner {
                 self.presence.presence(&target).await,
                 Ok(TargetPresence::Wakeable)
             );
-            let new_auto = crate::mail_push_preparation::direct_message_load_policy(
+            let new_auto = collaboration_runtime::mail_push_preparation::direct_message_load_policy(
                 record.mode,
                 record.guard.as_ref(),
                 record.delivery_state,

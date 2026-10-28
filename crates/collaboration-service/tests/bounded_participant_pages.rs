@@ -1,9 +1,21 @@
 //! A participant page and its holders never decode the rest of a thread's history.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{human_reader, keyed_call};
@@ -63,7 +75,6 @@ async fn populate(fixture: &BoardFixture, size: usize) -> Result<ThreadRef, Test
     Ok(thread)
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn reject_old_cursor(
     fixture: &BoardFixture,
     client: &CollaborationClient,
@@ -93,7 +104,6 @@ async fn reject_old_cursor(
     Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn selected_corruption(
     fixture: &BoardFixture,
     client: &CollaborationClient,
@@ -187,7 +197,6 @@ async fn selected_corruption(
     Ok(())
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn fixture_cost(size: usize) -> Result<(ReadCost, Vec<Participant>), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("bounded participant history").await?;
@@ -280,7 +289,10 @@ async fn fixture_cost(size: usize) -> Result<(ReadCost, Vec<Participant>), TestE
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn participant_page_work_stays_bounded_with_same_reader_history() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = fixture_cost(8).await?;

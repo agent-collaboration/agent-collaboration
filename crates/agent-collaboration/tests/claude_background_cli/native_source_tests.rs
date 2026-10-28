@@ -151,7 +151,7 @@ async fn source_native_observed_receipt_and_arguments_are_preserved_without_id_c
 async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_before_one_child() {
     use claude_code_peer_messaging::{ClaudeCodeSessionRegistry, NativeClaudeJobReader};
     use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
-    use collaboration_service::{CollaborationApplication, ServiceIdentity};
+    use collaboration_service::ApplicationFixture;
     const SESSION: &str = "00000000-0000-4000-8000-000000000042";
     for (action, state, captured_cwd, session, allowed) in [
         ("resume", "stopped", true, SESSION, true),
@@ -181,7 +181,7 @@ async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_bef
         .unwrap();
         fs::set_permissions(&reader, fs::Permissions::from_mode(0o700)).unwrap();
         let description=serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"label":"Native Claude","availability":{"state":"unavailable","observedAt":"2026-10-18T00:00:00Z","reason":"ACP unavailable"},"channels":[]})).unwrap();
-        let identity = ServiceIdentity::new(
+        let identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )
@@ -194,13 +194,12 @@ async fn terminal_native_job_restore_revalidates_real_api_uuid_and_directory_bef
         fs::set_permissions(&service_directory, fs::Permissions::from_mode(0o700)).unwrap();
         let api = ServedCollaborationApi::start_with(
             &service_directory,
-            CollaborationApplication::new(identity),
+            (identity).build(),
             TestServeOptions {
                 router_proxy_endpoint: Some(fixture.endpoint),
                 ..TestServeOptions::default()
             },
         )
-        .await
         .unwrap();
         let mut request = source_request(&fixture);
         let directory = if captured_cwd {

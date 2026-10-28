@@ -110,7 +110,7 @@
           "migrate",
           "run",
           "--source",
-          "crates/collaboration-service/migrations"
+          "crates/collaboration-runtime/migrations"
         ],
         "environment": {
           "DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite"
@@ -134,15 +134,15 @@
           "cargo",
           "clean",
           "--package",
-          "path+file://<root>/crates/collaboration-service"
+          "path+file://<root>/crates/collaboration-runtime"
         ],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "collaboration-service",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/collaboration-service",
+          "SQLX_PREPARE_PACKAGE": "collaboration-runtime",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/collaboration-runtime",
           "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-service-metadata"
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-runtime-metadata"
         }
       },
       {
@@ -151,16 +151,16 @@
           "check",
           "--locked",
           "--package",
-          "path+file://<root>/crates/collaboration-service",
+          "path+file://<root>/crates/collaboration-runtime",
           "--all-targets"
         ],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "collaboration-service",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/collaboration-service",
+          "SQLX_PREPARE_PACKAGE": "collaboration-runtime",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/collaboration-runtime",
           "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-service-metadata"
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-runtime-metadata"
         }
       }
     ],
@@ -168,7 +168,7 @@
       ".sqlx": {
         "query-automation-storage.json": "automation-storage",
         "query-codex-router-state.json": "codex-router-state",
-        "query-collaboration-service.json": "collaboration-service"
+        "query-collaboration-runtime.json": "collaboration-runtime"
       }
     },
     "stderr": ""

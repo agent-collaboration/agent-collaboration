@@ -33,7 +33,6 @@ const CREDENTIAL_SENTINEL: &str = "Bearer enrollment-credential-must-stay-privat
 const ACCESS_SENTINEL: &str = "enrollment-access-secret-must-stay-private";
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
 async fn production_host_discovers_enrollment_and_creates_a_central_project() -> TestResult {
     let fixture = ProductionEnrollmentFixture::start(EnrollmentLocation::RouterRoot).await?;
     fixture
@@ -72,7 +71,7 @@ async fn production_host_discovers_enrollment_and_creates_a_central_project() ->
                 "central did not accept a machine connection",
             )?;
             require(
-                collaboration_service::load_installation_peer(directory)? == peer,
+                collaboration_runtime::load_installation_peer(directory)? == peer,
                 "startup changed the persisted installation peer",
             )?;
             Ok::<_, Box<dyn Error>>(())
@@ -81,7 +80,6 @@ async fn production_host_discovers_enrollment_and_creates_a_central_project() ->
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
 async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable() -> TestResult {
     let fixture =
         ProductionEnrollmentFixture::start(EnrollmentLocation::CollaborationDirectory).await?;
@@ -103,7 +101,7 @@ async fn production_host_without_enrollment_keeps_ready_and_creation_unreachable
                 "Host read enrollment from the wrong root",
             )?;
             require(
-                collaboration_service::load_installation_peer(directory)? == peer,
+                collaboration_runtime::load_installation_peer(directory)? == peer,
                 "startup changed the persisted installation peer",
             )?;
             Ok::<_, Box<dyn Error>>(())
@@ -141,7 +139,7 @@ async fn production_host_refuses_dangling_enrollment_link_instead_of_falling_bac
 #[tokio::test]
 async fn production_host_preserves_the_installation_peer_mismatch_refusal() -> TestResult {
     let root = fixture_root()?;
-    collaboration_service::load_installation_peer(&root.path().join("collaboration"))?;
+    collaboration_runtime::load_installation_peer(&root.path().join("collaboration"))?;
     write_private_enrollment(root.path())?;
     require_startup_refusal(
         root.path(),
@@ -244,7 +242,7 @@ fn fixture_root() -> TestResult<tempfile::TempDir> {
 
 fn fixture_origin(directory: &Path) -> TestResult<message_board::ActorOrigin> {
     Ok(message_board::ActorOrigin {
-        installation: String::from(collaboration_service::load_service_identity(directory)?)
+        installation: String::from(collaboration_runtime::load_service_identity(directory)?)
             .try_into()?,
         machine: "production enrollment fixture".to_owned().try_into()?,
     })
@@ -445,14 +443,14 @@ async fn production_enrollment_host_child() -> TestResult {
     .with_collaboration_directory(root.join("collaboration"), root.join("fixture-codex-home"))
     .with_collaboration_peer_registry_directory(root.join("no-peer-registry"))
     .with_owner_human_id("enrollment-test-owner".to_owned().try_into()?);
-    HostRuntime::run(
+    Box::pin(HostRuntime::run(
         config,
         ManagedChildLaunchPlans::new(
             None,
             AppServerLaunchPlan::new(command, identity, "1.2.3".to_owned()),
         ),
         ManagedUpdateInputs::production(),
-    )
+    ))
     .await?;
     Ok(())
 }

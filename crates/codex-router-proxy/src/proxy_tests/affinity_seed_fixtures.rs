@@ -226,6 +226,10 @@ pub(super) fn persist_previous_response_owner(
     )
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 pub(super) fn persist_previous_response_owner_for_route(
     state: &SqliteStateStore,
     previous_response_id: &str,

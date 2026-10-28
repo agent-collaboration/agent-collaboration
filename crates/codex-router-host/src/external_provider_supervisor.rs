@@ -17,6 +17,10 @@ use crate::provider_operation_settlement::{
 };
 use crate::provider_queue_operation_registry::ProviderQueueOperationRegistry;
 use crate::{ExternalProviderRuntime, ExternalProviderRuntimeError};
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::ProviderConversationFuture;
+use collaboration_contracts::ProviderSessionInspectFuture;
+use collaboration_contracts::ProviderSettingsFuture;
 use collaboration_protocol::{
     ConversationAdmissionState, ConversationBindingIdentity, ConversationCancelRequest,
     ConversationCloseRequest, ConversationCreateRequest, ConversationLoadRequest,
@@ -32,12 +36,11 @@ use collaboration_protocol::{
     ProviderSessionInspectRequest, ProviderSettingsAcceptRequest, ProviderSettingsSetRequest,
     SessionId, SessionRef,
 };
-use collaboration_service::{
-    ProviderConversationBackend, ProviderConversationFuture, ProviderOperationAdmission,
-    ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,
-    ProviderSessionInspectFuture, ProviderSettingsFuture,
-    conversation_operation_snapshot as snapshot_from_record,
-};
+use collaboration_runtime::ProviderOperationAdmission;
+use collaboration_runtime::ProviderOperationAdmissionResult;
+use collaboration_runtime::ProviderOperationRecord;
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_service::conversation_operation_snapshot as snapshot_from_record;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
@@ -63,11 +66,11 @@ struct SupervisorInner {
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
     queued_operations: ProviderQueueOperationRegistry,
-    hub: Option<Arc<collaboration_service::ProviderSessionEventHub>>,
+    hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
     model_catalogs:
-        HashMap<EndpointRef, watch::Sender<Vec<collaboration_service::ProviderModelEntry>>>,
+        HashMap<EndpointRef, watch::Sender<Vec<collaboration_runtime::ProviderModelEntry>>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
     #[cfg(test)]
@@ -124,7 +127,7 @@ impl ExternalProviderSupervisor {
     pub fn provider_model_catalog(
         &self,
         endpoint: &EndpointRef,
-    ) -> Option<watch::Receiver<Vec<collaboration_service::ProviderModelEntry>>> {
+    ) -> Option<watch::Receiver<Vec<collaboration_runtime::ProviderModelEntry>>> {
         self.inner
             .model_catalogs
             .get(endpoint)
@@ -157,7 +160,7 @@ impl ExternalProviderSupervisor {
     pub(crate) fn new_with_hub(
         bindings: Vec<ExternalProviderBinding>,
         store: Arc<Mutex<ProviderOperationStore>>,
-        hub: Option<Arc<collaboration_service::ProviderSessionEventHub>>,
+        hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     ) -> Result<Self, &'static str> {
         let mut runtimes = HashMap::with_capacity(bindings.len());
         let mut model_catalogs = HashMap::with_capacity(bindings.len());
@@ -224,7 +227,7 @@ impl ExternalProviderSupervisor {
 
     pub async fn install_approval_broker(
         &self,
-        broker: Arc<collaboration_service::ServiceInteractionBroker>,
+        broker: Arc<collaboration_runtime::ServiceInteractionBroker>,
     ) {
         for binding in self.inner.bindings.values() {
             binding
@@ -234,7 +237,10 @@ impl ExternalProviderSupervisor {
         }
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     fn runtime_binding(
         &self,
         endpoint: &EndpointRef,
@@ -265,7 +271,10 @@ impl ExternalProviderSupervisor {
         Ok((binding.identity.clone(), Arc::clone(&binding.runtime)))
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     async fn prepare_operation(
         &self,
         operation_id: OperationId,
@@ -390,7 +399,10 @@ impl ExternalProviderSupervisor {
         });
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     async fn inspect_record(
         &self,
         operation_id: &OperationId,
@@ -589,7 +601,10 @@ impl SupervisorInner {
     }
 }
 
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The typed failure retains the full published operation payload."
+)]
 fn retain_operation<T, F>(
     operation_id: OperationId,
     target: Option<SessionRef>,
@@ -677,7 +692,10 @@ fn snapshot_failure(
     )
 }
 
-#[allow(clippy::expect_used)]
+#[expect(
+    clippy::expect_used,
+    reason = "A malformed fixed fixture must fail its test."
+)]
 fn failure(
     kind: ConversationOperationFailureKind,
     stage: ConversationOperationFailureStage,

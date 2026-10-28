@@ -254,7 +254,7 @@ impl GrantFixture {
 }
 
 /// Create genuine public Unheld state, without any central publication bookkeeping.
-#[allow(dead_code)] // This shared arranger is used by the ordinary-publication target.
+// This shared arranger is used by the ordinary-publication target.
 pub(super) async fn import_unheld(
     root: &Path,
     config: RegistryConfig,
@@ -294,7 +294,7 @@ pub(super) async fn import_unheld(
 
 /// Commit genuine public retirement and require the real Registry to refuse a new claim.
 /// The retirement admission gate is a setup stand-in; normal admin composition is separate.
-#[allow(dead_code)] // Shared by targets that arrange grants without retirement.
+// Shared by targets that arrange grants without retirement.
 pub(super) async fn retire_unheld(
     root: &Path,
     config: RegistryConfig,
@@ -375,7 +375,7 @@ pub(super) async fn retire_unheld(
 
 /// Arrange genuine imported state and publish its physical seed before the server owns it.
 /// The HTTP admin-import workflow is not exercised by this component arranger.
-#[allow(dead_code)] // This arranger is shared with targets that only need grants.
+// This arranger is shared with targets that only need grants.
 pub(super) async fn import_seeded(
     root: &Path,
     config: RegistryConfig,
@@ -390,7 +390,6 @@ pub(super) async fn import_seeded(
 }
 
 /// Seed the old normal-redeploy dataset through public ImportTask and Copy calls.
-#[allow(dead_code)]
 pub(super) async fn import_normal_rows(
     root: &Path,
     config: RegistryConfig,
@@ -407,7 +406,7 @@ pub(super) async fn import_normal_rows(
 
 /// Exercise the public retirement workflow with the real Copy, after its server closes.
 /// A deliberately wrong fence leaves a genuine Retiring seal via CopyMismatch.
-#[allow(dead_code)] // Only the lifecycle-precedence target needs this arranger.
+// Only the lifecycle-precedence target needs this arranger.
 pub(super) async fn retire_imported_copy(
     root: &Path,
     config: RegistryConfig,

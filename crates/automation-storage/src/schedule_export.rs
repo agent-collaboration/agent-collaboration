@@ -32,7 +32,9 @@ impl AutomationStore {
                                 source_target,
                             })
                         }
-                        _ => return Err(StorageError::InvalidRecord),
+                        agent_automation::SummarySource::Skipped { .. } => {
+                            return Err(StorageError::InvalidRecord);
+                        }
                     }
                 }
                 (None, _) => None,

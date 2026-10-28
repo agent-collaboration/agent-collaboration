@@ -10,7 +10,10 @@ use crate::quota_reset::reset_session_supervisor::WorkflowPhase;
 use crate::quota_reset::reset_session_supervisor::WorkflowResult;
 
 use super::quota_browse_rendering::fit_line;
-use super::quota_reset_detail_content::*;
+use super::quota_reset_detail_content::{
+    activity_field, credit_status_label, disabled_reason, format_credit_expiry,
+    format_credit_expiry_value, heading, muted_text, normal, saved_credit_count, warning_text,
+};
 use super::quota_reset_presentation_model::ResetPaneTarget;
 use super::responsive_quota_layout::quota_spinner_tick;
 
@@ -129,8 +132,8 @@ pub(super) fn render_reset_panel(
 
     element! {
         View(
-            width: width as u32,
-            height: height as u32,
+            width: u32::try_from(width).unwrap_or(u32::MAX),
+            height: u32::try_from(height).unwrap_or(u32::MAX),
             flex_direction: FlexDirection::Column,
             border_style: BorderStyle::Single,
             border_color: Color::DarkGrey,
@@ -184,7 +187,7 @@ pub(super) fn render_reset_panel_content(
         })
         .collect::<Vec<_>>();
     element! {
-        View(width: width as u32,max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
             #(title)
             #(sections)
         }
@@ -239,11 +242,11 @@ fn render_detail_row(
             value,
             value_color,
         } => {
-            if natural {return element!(codex_router_tui::FormField(label,label_width:DETAIL_LABEL_WIDTH as u16,stacked:width<52) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into_any();}
+            if natural {return element!(codex_router_tui::FormField(label,label_width:u16::try_from(DETAIL_LABEL_WIDTH).unwrap_or(u16::MAX),stacked:width<52) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into_any();}
             let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH);
             element! {
                 View(width: 100pct) {
-                    View(width: DETAIL_LABEL_WIDTH as u32) {
+                    View(width: u32::try_from(DETAIL_LABEL_WIDTH).unwrap_or(u32::MAX)) {
                         Text(content: fit_line(&label, DETAIL_LABEL_WIDTH), color: Color::Grey, wrap: TextWrap::NoWrap)
                     }
                     Text(content: fit_line(&value, value_width), color: value_color, wrap: TextWrap::NoWrap)
@@ -271,10 +274,10 @@ fn render_detail_row(
                 .saturating_sub(CREDIT_ID_WIDTH);
             element! {
                 View(width: 100pct,column_gap:if natural {2}else {0}) {
-                    View(width: CREDIT_MARKER_WIDTH as u32) {
+                    View(width: u32::try_from(CREDIT_MARKER_WIDTH).unwrap_or(u32::MAX)) {
                         Text(content: if natural {marker}else {fit_line(&marker, CREDIT_MARKER_WIDTH)}, color: marker_color, weight: Weight::Bold, wrap: TextWrap::NoWrap)
                     }
-                    View(width: CREDIT_ID_WIDTH as u32) {
+                    View(width: u32::try_from(CREDIT_ID_WIDTH).unwrap_or(u32::MAX)) {
                         Text(content: if natural {id_hint}else {fit_line(&id_hint, CREDIT_ID_WIDTH)}, color: Color::White, wrap: TextWrap::NoWrap)
                     }
                     View(flex_grow:1.0_f32,flex_shrink:1.0_f32,min_width:0) {Text(content: if natural {description}else {fit_line(&description, description_width)}, color: Color::White, wrap: if natural {TextWrap::Wrap}else {TextWrap::NoWrap})}

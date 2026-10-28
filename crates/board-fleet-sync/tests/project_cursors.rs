@@ -1,10 +1,16 @@
-#![allow(clippy::unwrap_used)]
-
 use message_board::*;
 use message_board_storage::{CursorValidity, ProjectStorageError};
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod project_storage_support;
 use project_storage_support::*;
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 fn cursor(epoch: u64, position: u64) -> FeedCursor {
     FeedCursor {
         epoch: EpochNumber::try_from(epoch).unwrap(),
@@ -12,6 +18,10 @@ fn cursor(epoch: u64, position: u64) -> FeedCursor {
     }
 }
 
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn arrange_accepted_prefix(
     database: &fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
     project: &ProjectId,

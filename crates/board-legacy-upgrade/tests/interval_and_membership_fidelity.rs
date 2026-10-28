@@ -1,9 +1,12 @@
-#![allow(clippy::panic_in_result_fn)]
 mod support;
 use message_board::*;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn joins_and_handover_keep_each_continuous_role_interval_without_posts() -> TestResult {
     let prepared = prepare("role-history.sqlite").await?;
     let project = prepared
@@ -72,6 +75,10 @@ async fn joins_and_handover_keep_each_continuous_role_interval_without_posts() -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn draining_membership_ends_at_the_last_recorded_event_even_after_reopen() -> TestResult {
     for name in ["legacy-complete.sqlite", "legacy-reopened.sqlite"] {
         let (_directory, path) = fixture_copy(name)?;

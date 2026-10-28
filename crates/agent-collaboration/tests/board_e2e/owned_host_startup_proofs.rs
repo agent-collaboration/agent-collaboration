@@ -35,6 +35,10 @@ fn a_port_report_cannot_permit_any_protected_actual_listener() {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 async fn a_protected_ready_port_is_joined_before_a_new_host_is_accepted() -> FixtureResult {
     let (_root, directory) = private_host_directory()?;
     let hold_marker = directory.join("fixture-hold-before-serve");
@@ -76,6 +80,10 @@ async fn a_protected_ready_port_is_joined_before_a_new_host_is_accepted() -> Fix
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 async fn repeated_protected_ready_ports_stop_after_three_joined_attempts() -> FixtureResult {
     let (_root, directory) = private_host_directory()?;
     run_scenario(

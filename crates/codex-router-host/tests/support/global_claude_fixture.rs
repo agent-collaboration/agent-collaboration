@@ -55,6 +55,7 @@ pub struct StartupObservation {
 }
 
 impl HarnessSelectionFixture {
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     pub fn create(include_global_executable: bool) -> Self {
         let private_root = tempfile::Builder::new()
             .prefix("global-harness-")
@@ -97,6 +98,7 @@ impl HarnessSelectionFixture {
         }
     }
 
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     fn write_native_executable(executable: &Path, identity: &str, version: &str) {
         codex_router_test_support::node_fixture::write_node_fixture(
             executable,
@@ -110,6 +112,7 @@ impl HarnessSelectionFixture {
         self.observe_startup_with_environment(Vec::new()).await
     }
 
+    #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     pub async fn observe_startup_with_environment(
         &self,
         additional_environment: Vec<(String, String)>,

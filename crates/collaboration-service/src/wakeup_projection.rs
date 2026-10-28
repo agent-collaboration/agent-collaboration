@@ -1,9 +1,9 @@
 //! Domain timestamps and records become the language-independent public wake snapshot here.
 use agent_automation::WakeRecord;
 use collaboration_protocol::{
-    FireKind, FireReceipt, ObservationTimestamp, SavedMessage, UuidIdentity, WakeDefinition,
-    WakeSnapshot, WakeState,
+    FireKind, FireReceipt, SavedMessage, UuidIdentity, WakeDefinition, WakeSnapshot, WakeState,
 };
+use collaboration_runtime::observation_timestamp::timestamp;
 
 pub(crate) fn snapshot(
     record: WakeRecord<SavedMessage, collaboration_protocol::WakeCreator>,
@@ -59,13 +59,6 @@ pub(crate) fn snapshot(
         pending_delivery_id: record.pending_delivery_id,
         latest_event_cursor: cursor,
     })
-}
-pub(crate) fn timestamp(value: i64) -> Result<ObservationTimestamp, ()> {
-    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(value)
-        .ok_or(())?
-        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-        .try_into()
-        .map_err(|_| ())
 }
 
 /// Projects a lifecycle mutation with the deliveries it retained or discarded.

@@ -1,9 +1,11 @@
 //! Only posts leave this Router; central supplies their verified provenance.
 use super::{BoardOperations, admission_error};
 use board_sync_protocol::{BoardPayload, ForwardOutcome, ForwardedPost, ForwardedPostKind};
-use message_board::{public_replies as public, *};
+use message_board::{
+    BoardError, BoardOperation, ProjectRequest, RequestEffectsScope, public_replies as public,
+};
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn forward_non_holder_post(
         &self,
         request: &ProjectRequest,
@@ -44,7 +46,7 @@ impl BoardOperations<'_> {
             .await
         {
             Ok(outcome) => outcome,
-            Err(crate::FleetClientError::Unavailable) => {
+            Err(collaboration_runtime::FleetClientError::Unavailable) => {
                 return Ok(Some(public::WriteReply {
                     result: public::RequestResult::PendingUnreachable,
                     reader: None,

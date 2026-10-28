@@ -1,6 +1,12 @@
 //! Managed-update preparation and shared Host replacement finalization.
 
-use super::*;
+use super::{
+    AppServerChild, AppServerCondition, ExecutableRelation, HostConfig, HostError, HostInstance,
+    HostOperation, HostPhase, LifecycleOutcome, LifecycleOutcomeClassification,
+    ManagedChildLaunchPlans, ManagedUpdateInputs, OperatorRequest, ProcessGroupChild, RouterChild,
+    RouterCondition, RuntimeState, TerminalClassification, lifecycle_convergence,
+    request_admission, retained_lifecycle,
+};
 
 pub(super) struct PreparationContext<'a> {
     pub(super) preparation: crate::codex_update_preparation::UpdatePreparation,

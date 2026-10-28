@@ -234,7 +234,7 @@ pub(super) struct HostProcess {
 }
 
 impl HostProcess {
-    pub(super) async fn start(root: &IsolatedAcceptanceRoot) -> io::Result<Self> {
+    pub(super) fn start(root: &IsolatedAcceptanceRoot) -> io::Result<Self> {
         let child = root.host_command()?.spawn()?;
         Ok(Self { child })
     }

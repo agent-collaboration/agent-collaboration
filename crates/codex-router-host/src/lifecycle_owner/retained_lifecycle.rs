@@ -1,6 +1,10 @@
 //! Lifecycle-owner retained handles and transition bookkeeping.
 
-use super::*;
+use super::{
+    AppServerCondition, AppServerReadiness, ExecutableRelation, HostOperation, HostPhase,
+    HostSnapshot, HostSnapshotDimensions, LifecycleOutcome, LifecycleOutcomeClassification,
+    RecoveryBudget, RemoteControlCondition, RouterCondition, RouterOwnership,
+};
 
 pub(super) const fn restart_lifecycle_classification(
     succeeded: bool,

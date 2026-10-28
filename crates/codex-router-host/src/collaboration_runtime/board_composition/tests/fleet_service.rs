@@ -335,11 +335,11 @@ impl PeerAuthenticator for Authenticator {
 
 pub(super) struct TestFleet {
     pub directory: Arc<DirectoryProbe>,
-    #[allow(dead_code)] // Read-copy observations run with runtime-test-support.
+    // Read-copy observations run with runtime-test-support.
     pub read_copy_entries: Arc<Mutex<Vec<fleet_admission::DirectoryEntry>>>,
-    #[allow(dead_code)] // Read-copy observations run with runtime-test-support.
+    // Read-copy observations run with runtime-test-support.
     pub read_copy_unavailable: Arc<AtomicBool>,
-    #[allow(dead_code)] // Read-copy observations run with runtime-test-support.
+    // Read-copy observations run with runtime-test-support.
     pub read_copy_requests: Arc<AtomicUsize>,
     pub notifications: Arc<NotificationProbe>,
     pub archive_reports: watch::Sender<Vec<board_sync_protocol::ArchiveSeen>>,

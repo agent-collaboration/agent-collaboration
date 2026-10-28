@@ -1,14 +1,30 @@
 //! CS-2: terminal non-project mail releases central custody through the real Host.
-#![allow(dead_code, clippy::panic_in_result_fn)]
+
 #![deny(clippy::too_many_lines)]
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/central_pair.rs"]
 mod central_pair;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture.rs"]
 mod fixture;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture_inputs.rs"]
 mod fixture_inputs;
 #[path = "mail_retirement/lost_answer.rs"]
 mod lost_answer;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
 #[path = "mail_retirement/project_requested.rs"]
@@ -55,6 +71,10 @@ async fn lost_retirement_answer_resumes_the_same_call_after_sender_host_restart(
     central_pair::scenario(lost_answer::run).await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn delivered_direct_mail_is_compacted_and_keeps_terminal_replay_after_host_restart()
 -> FixtureResult {

@@ -1,5 +1,9 @@
 //! V6's extracted histories run through the real MCP service and captured native stores.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "board_replay_support/replay_assertions.rs"]
 mod replay_assertions;
@@ -29,7 +33,7 @@ async fn lead_replacement_history_answers_before_and_after_succession() -> Resul
 async fn closed_work_keeps_late_evidence_and_conversation_answers() -> Result<(), TestError> {
     replay_history(LATE_FACTS, 36).await
 }
-#[allow(clippy::panic_in_result_fn)]
+
 async fn replay_history(source: &str, expected_events: usize) -> Result<(), TestError> {
     let case: ReplayCase = serde_json::from_str(source)?;
     case.validate_metadata()?;
@@ -69,7 +73,7 @@ async fn replaced_leads_and_used_grants_keep_their_refusals() -> Result<(), Test
 async fn closed_work_refuses_unanchored_facts_and_new_owner_rows() -> Result<(), TestError> {
     replay_probes(LATE_FACTS, 3).await
 }
-#[allow(clippy::panic_in_result_fn)]
+
 async fn replay_probes(source: &str, expected_probes: usize) -> Result<(), TestError> {
     let case: ReplayCase = serde_json::from_str(source)?;
     case.validate_metadata()?;

@@ -10,6 +10,10 @@ use serde_json::{Value, json};
 use std::path::Path;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_publishes_literal_history_and_selection_state() -> E2eResult {
     let fixture = CliImportFixture::new("legacy-complete.sqlite")?;
     let source = SourceSnapshot::capture(&fixture.source)?;
@@ -83,6 +87,10 @@ async fn actual_cli_publishes_literal_history_and_selection_state() -> E2eResult
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_router_lock_artifacts(router_root: &Path) -> E2eResult {
     let mut entries = std::fs::read_dir(router_root)?
         .map(|entry| entry.map(|entry| entry.file_name()))
@@ -98,6 +106,10 @@ fn assert_router_lock_artifacts(router_root: &Path) -> E2eResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_legacy_cutoffs(selections: &LegacySelections) -> E2eResult {
     assert_eq!(
         selections.cutoffs,
@@ -121,6 +133,10 @@ fn assert_legacy_cutoffs(selections: &LegacySelections) -> E2eResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_uploaded_report(report: &Value, count: usize, answer: &str) -> E2eResult {
     assert_eq!(report.get("kind").and_then(Value::as_str), Some("uploaded"));
     let projects = report
@@ -376,6 +392,10 @@ async fn assert_topic_15_cutoffs(root: &Path) -> E2eResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_participant_intervals(participants: &[Value]) -> E2eResult {
     let reviewer = expected_session_actor("reviewer");
     let reviewer_intervals = participants
@@ -463,6 +483,10 @@ async fn assert_topic_15_membership(root: &Path) -> E2eResult {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_timestamp(value: &Value, expected: &str) -> E2eResult {
     let actual = chrono::DateTime::parse_from_rfc3339(
         value.as_str().ok_or("membership timestamp missing")?,

@@ -3,9 +3,9 @@ use super::*;
 use crate::sessions::picker_runtime_inventory::native_inventory_binding::{
     NativeEndpointSelector, NativeInventoryContext, bind_native_inventory,
 };
-use collaboration_service::{
-    CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use std::{io::ErrorKind, os::unix::net::UnixListener, path::PathBuf};
 
 struct StoredServiceFixture {
@@ -55,7 +55,7 @@ impl StoredServiceFixture {
             "endpoint":endpoint,"label":"Source paging fixture","availability":{"state":"unprobed"},
             "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]
         })).unwrap();
-        let identity = ServiceIdentity::new(service_id, EPOCH)
+        let identity = ApplicationFixture::new(service_id, EPOCH)
             .unwrap()
             .with_endpoints(vec![description])
             .unwrap()
@@ -67,9 +67,8 @@ impl StoredServiceFixture {
             .unwrap();
         let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
             &directory,
-            CollaborationApplication::new(identity),
+            (identity).build(),
         )
-        .await
         .unwrap();
         let client = CollaborationClient::connect(&directory, "source-paging-test", "1")
             .await

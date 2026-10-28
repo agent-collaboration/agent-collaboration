@@ -1,7 +1,11 @@
 //! Scoped trail and historical-authority metadata for the view projection owner.
 use crate::project_record_io::validate_canonical_project_text;
 use crate::{ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{
+    AuthorityRole, EvidencePointer, FeedCursor, Identity, ProjectId, RecordId, RecordKind,
+    RecordPlacement, RecordRef, RecordedActor, RoleEnd, RoleSubject, TrailSubject, TrailTag,
+    WorkTrailRowId,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]

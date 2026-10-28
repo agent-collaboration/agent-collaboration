@@ -1,4 +1,24 @@
-use super::*;
+use super::{
+    Arc, ConversationBindingIdentity, ConversationCancelRequest, ConversationCloseRequest,
+    ConversationCreateRequest, ConversationLoadRequest, ConversationOperationFailureKind,
+    ConversationOperationFailureStage, ConversationOperationReconcileRequest,
+    ConversationOperationSettlement, ConversationOperationShowRequest,
+    ConversationOperationSnapshot, ConversationOperationSubmission,
+    ConversationOperationWaitOutput, ConversationOperationWaitRequest,
+    ConversationOperationWaitResult, ConversationOutputUnavailableReason,
+    ConversationPromptRequest, ConversationResumeRequest, Duration, EndpointRef,
+    ExternalProviderRuntimeError, ExternalProviderSupervisor, OperationId, PathBuf,
+    PreparedOperation, ProviderBindingIdentity, ProviderConversationBackend,
+    ProviderConversationFuture, ProviderOperationCompletion, ProviderOperationEffect,
+    ProviderOperationKind, ProviderOperationStage, ProviderPromptContentsRequest,
+    ProviderReconciliationState, ProviderSessionInspectFuture, ProviderSessionInspectRequest,
+    ProviderSettingsAcceptRequest, ProviderSettingsFuture, ProviderSettingsSetRequest, SessionId,
+    SessionRef, admitted_submission, effective_settings, existing_submission, failure,
+    invalid_setting_failure, now_ms, provider_applied_setting, provider_failed_setting,
+    provider_session_inspection, provider_session_lifecycle, provider_session_record,
+    provider_settings_control, retain_operation, runtime_failure, snapshot_failure,
+    snapshot_from_record, unavailable_failure,
+};
 
 impl ProviderConversationBackend for ExternalProviderSupervisor {
     fn resume(

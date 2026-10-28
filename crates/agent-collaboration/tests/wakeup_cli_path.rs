@@ -13,7 +13,7 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         .expect("generated operation id has an ASCII UUID suffix");
     let root = std::env::temp_dir().join(format!("wake-cli-{suffix}"));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let runtime = Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
@@ -23,7 +23,7 @@ async fn cli_creates_wakeup_with_harness_sender_and_reads_through_host()
         peer_registry_directory: None,
         remote_control_server_name: None,
         owner_human_id: None,
-    })
+    }))
     .await?;
     // Act: the documented CLI operation must reach Host-created persistent state.
     let target=serde_json::json!({"endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},"sessionId":"fixture-only-new-thread"}).to_string();

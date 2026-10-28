@@ -1,7 +1,15 @@
 //! Narrow views are not a corruption hunt through unrelated current records.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -10,7 +18,10 @@ use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn an_unassigned_task_card_does_not_read_an_unrelated_task_body() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -44,7 +55,10 @@ async fn an_unassigned_task_card_does_not_read_an_unrelated_task_body() -> Resul
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn owner_and_lead_load_do_not_load_an_irrelevant_projects_bodies() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;

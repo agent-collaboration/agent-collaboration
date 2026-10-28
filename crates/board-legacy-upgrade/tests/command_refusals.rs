@@ -1,5 +1,4 @@
-#![allow(clippy::panic_in_result_fn)]
-#[allow(
+#[expect(
     dead_code,
     reason = "The shared CLI owner is also used by the IB and BC05 integration targets."
 )]
@@ -16,6 +15,10 @@ use std::{
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn version_is_the_released_executable_name_and_workspace_version() -> TestResult {
     // Arrange
     let runner =
@@ -74,6 +77,10 @@ async fn run_many(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn dry_run_drives_the_binary_and_writes_only_the_report_with_resource_counts() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = identity(directory.path())?;
@@ -171,6 +178,10 @@ async fn dry_run_drives_the_binary_and_writes_only_the_report_with_resource_coun
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_collision_refuses_real_publication_and_reports_both_ids() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let (_collision_directory, collision) = fixture_copy("collision.sqlite")?;
@@ -194,6 +205,10 @@ async fn a_collision_refuses_real_publication_and_reports_both_ids() -> TestResu
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn collision_refusal_precedes_credentials_and_any_central_connection() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let (_collision_directory, collision) = fixture_copy("collision.sqlite")?;
@@ -253,6 +268,10 @@ async fn collision_refusal_precedes_credentials_and_any_central_connection() -> 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn offline_owner_and_machine_derivation_need_no_running_router() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = identity(directory.path())?;
@@ -285,6 +304,10 @@ async fn offline_owner_and_machine_derivation_need_no_running_router() -> TestRe
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn absent_router_identity_is_reported_without_minting_one() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = directory.path().join("router");
@@ -305,6 +328,10 @@ async fn absent_router_identity_is_reported_without_minting_one() -> TestResult 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn corrupt_router_identity_is_refused_without_replacing_its_bytes() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = identity(directory.path())?;
@@ -334,6 +361,10 @@ async fn corrupt_router_identity_is_refused_without_replacing_its_bytes() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn report_output_cannot_overwrite_or_hard_link_a_source_store() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = identity(directory.path())?;
@@ -350,6 +381,10 @@ async fn report_output_cannot_overwrite_or_hard_link_a_source_store() -> TestRes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn another_process_holding_the_legacy_file_refuses_the_run() -> TestResult {
     let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let root = identity(directory.path())?;
@@ -451,6 +486,10 @@ async fn wait_until_lsof_reports(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_collision_ids(report: &serde_json::Value) -> TestResult {
     let collisions = report
         .get("report")
@@ -495,6 +534,10 @@ fn promote_test_error(error: Box<dyn std::error::Error>) -> std::io::Error {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn invalid_legacy_description_reports_its_topic_through_the_real_cli() -> TestResult {
     let (directory, source) = fixture_copy("role-history.sqlite")?;
     let topic = "019a0000-0000-7000-8000-000000000016";

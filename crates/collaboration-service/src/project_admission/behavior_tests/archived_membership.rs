@@ -13,7 +13,10 @@ async fn archive(fixture: &SubscriptionFixture) -> Result<(), TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Archive exceptions are narrow; Result propagates native setup errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Archive exceptions are narrow; Result propagates native setup errors."
+)]
 async fn archived_reader_opt_out_and_keyed_marks_pass_while_work_and_new_interest_are_refused()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;

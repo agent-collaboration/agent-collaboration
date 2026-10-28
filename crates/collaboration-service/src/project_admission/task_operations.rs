@@ -2,7 +2,12 @@ use super::{
     operation_context::{OperationContext, OperationPlan},
     work_operations::next_revision,
 };
-use message_board::*;
+use message_board::{
+    BoardOperation, ChangeOutcome, EvidencePointer, LifecycleFact, LinkChange, Record, Refusal,
+    SubjectRevision, Subtask, SubtaskId, Task, TaskAction, TaskId, TaskLink, TaskLinkEvent,
+    TaskLinkEventId, TaskLinkEventKind, TaskLinkKind, TaskRefusal, TaskStatus, TaskStatusChange,
+    TrailRefusal, TrailSubject, TrailText, WorkTrailRow, WorkTrailRowId, work_rules,
+};
 use message_board_storage::LinkMutation;
 
 impl OperationContext<'_> {

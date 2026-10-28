@@ -1,16 +1,23 @@
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 #[path = "../../codex-acp-adapter/tests/support/native_permission_echo.rs"]
 mod native_permission_echo;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::ScheduledRunPayload;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
+use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
     CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, EndpointDescription, MessageDelivery,
     MessageText, PushId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, CodexAppServerDeliveryRoute, DeliveryClientReceipt, DeliveryFuture,
-    DeliveryPrecondition, EndpointDirectory, LoadPolicy, NativeControlBackend,
-    NativeGenerationGate, ScheduledRunPayload, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
 use futures_util::{SinkExt, StreamExt};
 use native_permission_echo::applied_router_sandbox;
 use serde_json::{Value, json};
@@ -22,6 +29,10 @@ use std::{
 };
 use tokio_tungstenite::tungstenite::Message;
 #[path = "support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod native_mail_owner;
 use collaboration_service as mail_service;
 #[path = "support/served_api.rs"]
@@ -73,7 +84,7 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
             .0
             .lock()
             .map(|mut records| records.push(evidence))
-            .map_err(|_| collaboration_service::DeliveryContractError::EvidencePersistence);
+            .map_err(|_| collaboration_contracts::DeliveryContractError::EvidencePersistence);
         Box::pin(async move { result })
     }
 }
@@ -81,55 +92,67 @@ impl AttemptEvidenceSink for RecordingEvidenceSink {
 #[tokio::test]
 async fn held_empty_codex_thread_rejects_steer_then_starts_first_message_on_its_connection()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(None).await
+    Box::pin(exercise_held_empty_thread(None)).await
 }
 
 #[tokio::test]
 async fn scheduled_run_uses_held_empty_thread_without_read_or_second_connection()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Started)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Started))).await
 }
 
 #[tokio::test]
 async fn scheduled_run_busy_binding_does_not_dispatch_and_restores_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Busy)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Busy))).await
 }
 
 #[tokio::test]
 async fn scheduled_run_native_rejection_restores_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Rejected)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::Rejected,
+    )))
+    .await
 }
 
 #[tokio::test]
 async fn scheduled_run_admission_refusal_restores_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::AdmissionRefused)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::AdmissionRefused,
+    )))
+    .await
 }
 
 #[tokio::test]
 async fn scheduled_run_stale_generation_rejects_and_finishes_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Stale)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Stale))).await
 }
 
 #[tokio::test]
 async fn scheduled_run_retired_generation_never_inputs_and_finishes_binding()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Retired)).await
+    Box::pin(exercise_held_empty_thread(Some(ScheduledScenario::Retired))).await
 }
 
 #[tokio::test]
 async fn codex_presence_reports_held_unmaterialized_thread_as_running()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::Presence)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::Presence,
+    )))
+    .await
 }
 
 #[tokio::test]
 async fn codex_presence_reports_busy_held_thread_as_running()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    exercise_held_empty_thread(Some(ScheduledScenario::PresenceBusy)).await
+    Box::pin(exercise_held_empty_thread(Some(
+        ScheduledScenario::PresenceBusy,
+    )))
+    .await
 }
 
 #[derive(Clone, Copy)]
@@ -212,7 +235,7 @@ async fn exercise_held_empty_thread(
         socket_path.clone(),
         Some(Arc::clone(&schemas)),
     )?;
-    let holder = Arc::new(collaboration_service::UnmaterializedThreadHolder::new());
+    let holder = Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new());
     let backend_config = NativeControlBackend {
         endpoint: target.endpoint.clone(),
         gate,
@@ -387,7 +410,7 @@ async fn exercise_held_empty_thread(
             None
         };
         let presence = route.presence(&target).await?;
-        if presence != collaboration_service::RoutePresence::Running
+        if presence != collaboration_contracts::RoutePresence::Running
             || !holder.contains("empty-thread")
         {
             return Err("held unmaterialized Codex thread was not reported as running".into());
@@ -404,9 +427,10 @@ async fn exercise_held_empty_thread(
         return Ok(());
     }
     if let Some(scenario) = scenario {
-        use collaboration_service::{
-            RunEvidenceDisposition, RunEvidenceSink, RunSubmission, ScheduledRunExecution,
-        };
+        use collaboration_contracts::RunEvidenceDisposition;
+        use collaboration_contracts::RunEvidenceSink;
+        use collaboration_contracts::RunSubmission;
+        use collaboration_contracts::ScheduledRunExecution;
         struct ScheduledEvidenceSink {
             records: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
             refuse_dispatch: bool,
@@ -424,7 +448,7 @@ async fn exercise_held_empty_thread(
                     .is_err()
                 {
                     return Box::pin(async {
-                        Err(collaboration_service::DeliveryContractError::EvidencePersistence)
+                        Err(collaboration_contracts::DeliveryContractError::EvidencePersistence)
                     });
                 }
                 if dispatching && self.refuse_dispatch {
@@ -447,7 +471,7 @@ async fn exercise_held_empty_thread(
             "executionConfiguration":{"destination":{"kind":"ownedThread","target":target,"cwd":"/work"},
                 "executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}
         }))?;
-        let route = collaboration_service::CodexAppServerScheduledRuns::new(
+        let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
             backend_config.clone(),
             Arc::clone(&holder),
         );
@@ -483,7 +507,7 @@ async fn exercise_held_empty_thread(
         };
         let submission_result = route
             .submit_run(
-                collaboration_service::ScheduledRunSubmission {
+                collaboration_contracts::ScheduledRunSubmission {
                     run_id,
                     target: target.clone(),
                     payload: ScheduledRunPayload::Existing {
@@ -503,7 +527,7 @@ async fn exercise_held_empty_thread(
         if matches!(scenario, ScheduledScenario::Retired) {
             if !matches!(
                 submission_result,
-                Err(collaboration_service::DeliveryContractError::ClientOperation)
+                Err(collaboration_contracts::DeliveryContractError::ClientOperation)
             ) || holder.contains("empty-thread")
             {
                 return Err(
@@ -617,15 +641,16 @@ async fn exercise_held_empty_thread(
         Some(&json!(["writableRoots"]))
     );
     let routed: Arc<dyn SessionDeliveryRoute> = route;
-    let delivery_router = Arc::new(collaboration_service::SessionDeliveryRouter::new(vec![
+    let delivery_router = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(vec![
         routed,
     ]));
-    let delivery: Arc<dyn collaboration_service::SessionMessageDelivery> = delivery_router.clone();
-    let presence: Arc<dyn collaboration_service::TargetPresenceProbe> = delivery_router;
+    let delivery: Arc<dyn collaboration_contracts::SessionMessageDelivery> =
+        delivery_router.clone();
+    let presence: Arc<dyn collaboration_contracts::TargetPresenceProbe> = delivery_router;
     let automation_store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
-    let machine_identity = collaboration_service::MachineIdentity::new(
+    let machine_identity = collaboration_contracts::MachineIdentity::new(
         service_id.clone(),
         Some("held-thread-route-test"),
     )?;
@@ -643,7 +668,7 @@ async fn exercise_held_empty_thread(
         },
     );
     subscription_delivery.start().await?;
-    let identity = collaboration_service::ServiceIdentity::new(
+    let identity = collaboration_service::ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000001",
     )
@@ -664,7 +689,7 @@ async fn exercise_held_empty_thread(
             clock: Arc::new(collaboration_service::SystemSubscriptionClock),
         },
     )?;
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let control = served.client("held-thread-message").await?;
     let started = control
         .send_message(collaboration_client::MessageSendRequest {

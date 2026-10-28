@@ -1,4 +1,4 @@
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 #[path = "../support/served_api.rs"]
 pub mod served_api;
@@ -6,10 +6,10 @@ pub mod served_api;
 /// Sends each `{"id", "method", "params"}` request as one call of the matching board tool and
 /// answers `{"id", "result"}` or `{"id", "error": {"code", "message", "data"}}` in order.
 pub async fn send_raw_board_requests(
-    identity: ServiceIdentity,
+    identity: ApplicationFixture,
     requests: Vec<Value>,
 ) -> Result<Vec<Value>, Box<dyn std::error::Error>> {
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let mut responses = Vec::with_capacity(requests.len());
     for request in requests {
         let method = request

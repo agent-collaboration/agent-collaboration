@@ -314,6 +314,10 @@ pub(crate) async fn run_component_failure_retention_control() -> TestResult<()> 
     run_component_capture(32, 24, ComponentCaptureJourney::FailureRetentionControl).await
 }
 
+#[expect(
+    clippy::unused_async,
+    reason = "The capture entry points defer fixture execution until their returned futures are polled."
+)]
 async fn run_component_capture(
     columns: u16,
     rows: u16,

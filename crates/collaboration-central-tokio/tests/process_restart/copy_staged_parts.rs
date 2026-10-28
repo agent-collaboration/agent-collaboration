@@ -283,7 +283,9 @@ async fn read_health(
         .await?
     {
         CopyHealth::Live(health) => Ok(*health),
-        other => Err(format!("staged Copy lost its live Health projection: {other:?}").into()),
+        other @ CopyHealth::Retired { .. } => {
+            Err(format!("staged Copy lost its live Health projection: {other:?}").into())
+        }
     }
 }
 
@@ -305,6 +307,10 @@ fn copy_status(health: &LiveCopyHealth) -> ConformanceResult<&CopyStatus> {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_original_part(health: &LiveCopyHealth, saved: &StagedCopy) -> ConformanceResult<()> {
     assert_eq!(copy_status(health)?, &saved.status);
     let [part] = staged_parts(health)? else {

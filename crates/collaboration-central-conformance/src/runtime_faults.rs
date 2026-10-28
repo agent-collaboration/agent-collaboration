@@ -1,6 +1,10 @@
 //! Ephemeral fault state belongs to one runtime object, never to the core rules.
 
-use crate::runtime_controls::*;
+use crate::runtime_controls::{
+    AnswerFaultObservation, ClockObservation, DispatchFaultObservation,
+    ObjectReplyFaultObservation, RuntimeControl, RuntimeControlFailure, RuntimeFaultObservation,
+    StorageFaultObservation,
+};
 use collaboration_central_core::{ObjectAddress, RegistryTime};
 use fleet_sync_protocol::FrameId;
 use std::{

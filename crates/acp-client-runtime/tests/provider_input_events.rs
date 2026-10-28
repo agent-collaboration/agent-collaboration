@@ -1,7 +1,5 @@
 //! Provider Input and Turn identity at the scripted ACP boundary.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
 use acp_client_runtime::{

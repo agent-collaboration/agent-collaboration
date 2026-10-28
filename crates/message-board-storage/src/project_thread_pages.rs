@@ -1,7 +1,10 @@
 //! Thread keys and watch starts are metadata; historical reply cursors keep their assigning epoch.
 use crate::project_participant_io::{cursor, invalid};
 use crate::{CursorValidity, ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    FeedCursor, FeedPosition, Identity, RecordId, RecordKind, RecordRef, RecordedActor, ThreadId,
+    ThreadSubject,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

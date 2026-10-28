@@ -1,5 +1,8 @@
 use crate::{FleetAdmissionError, FleetFeedEntry};
-use message_board::*;
+use message_board::{
+    BoardId, CanonicalHash, Description, HumanId, MachineLabel, ProjectId, Record, RecordRef,
+    RecordTime, RepositoryRef, ResourceName, ServiceId, WorkspaceId,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 

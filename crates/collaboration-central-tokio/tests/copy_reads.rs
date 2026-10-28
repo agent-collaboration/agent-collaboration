@@ -3,11 +3,11 @@ use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, fi
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 #[path = "native_http/support.rs"]
 mod configuration;
-#[path = "support/copy_wait_scenarios.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "The shared Copy fixture also owns the wait scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "support/copy_wait_scenarios.rs"]
 mod copy_wait_scenarios;
 #[path = "support/copy_read_scenarios.rs"]
 mod scenarios;

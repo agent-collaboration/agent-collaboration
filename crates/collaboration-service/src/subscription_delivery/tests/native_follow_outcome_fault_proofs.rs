@@ -5,7 +5,7 @@ use sqlx::Connection;
 
 #[tokio::test]
 async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_hint() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
     let mut observer = sqlx_turso::TursoConnection::connect_with(
@@ -198,7 +198,7 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
 #[tokio::test]
 async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
     // Arrange the real project producer, publisher, SDK and reader carrier.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
     let mut observer = sqlx_turso::TursoConnection::connect_with(

@@ -2,17 +2,21 @@
 use super::notification_owner::ProjectNotificationFixture;
 use super::*;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, ItemId, RecipientOutcome};
 use message_board::{HandoffSeq, MailItemRef};
 use message_board_storage::MailHandoffItem;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_retirement()
 -> Result<(), TestError> {
     // Arrange the actual default Host writer, receiver, mail owner and event loop.
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open_local(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open_local(directory.path())).await?;
     fixture.start().await?;
     let peer = fixture.harness.peer();
     let item = fixture.seed_item;
@@ -137,7 +141,12 @@ async fn local_custody_waits_for_the_real_frontier_ack_and_host_prompt_before_re
     };
     drop(store);
     let central = fixture.close_keeping_central().await?;
-    let reopened = ProjectNotificationFixture::resume(directory.path(), central, seed).await?;
+    let reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        seed,
+    ))
+    .await?;
     let restored_marks = reopened
         .harness
         .projects

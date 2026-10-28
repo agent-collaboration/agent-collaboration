@@ -1,6 +1,16 @@
 //! Public provider Session operations after connection admission.
+#[cfg(any(test, feature = "test-observation"))]
+use super::{
+    ExternalProviderApprovalRefusalWarning, ExternalProviderPermissionObservation,
+    ExternalProviderPermissionOutcome, ExternalProviderToolCall,
+};
 
-use super::*;
+use super::{
+    AgentSessionClient, Arc, CancellationToken, ExternalProviderAdmission,
+    ExternalProviderCreatedSession, ExternalProviderRuntimeError, InputId, InteractionPort,
+    Ordering, PathBuf, ProviderCapabilityReport, ProviderCommand, ProviderPromptContent,
+    ProviderSessionActivity, ProviderSteeringOutcome,
+};
 use crate::provider_prompt_content::acp_blocks_from_prompt_content;
 use agent_client_protocol::schema::v1::ContentBlock;
 use session_event_model::PromptContent;

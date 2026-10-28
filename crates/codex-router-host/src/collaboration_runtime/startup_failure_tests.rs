@@ -8,7 +8,7 @@ use std::{num::NonZeroU16, os::unix::fs::PermissionsExt as _};
 #[tokio::test]
 async fn exposure_startup_failure_preserves_the_primary_error_and_closes_constructor_owned_stores()
 {
-    assert_exposure_failure_cleanup(Vec::new()).await;
+    Box::pin(assert_exposure_failure_cleanup(Vec::new())).await;
 }
 
 #[tokio::test]
@@ -19,7 +19,7 @@ async fn exposure_failure_with_configured_provider_releases_constructor_delivery
         "enable fixture provider".to_owned(),
     )
     .expect("configured endpoint");
-    assert_exposure_failure_cleanup(vec![unavailable]).await;
+    Box::pin(assert_exposure_failure_cleanup(vec![unavailable])).await;
 }
 
 async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalProviderStartup>) {
@@ -42,24 +42,26 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
     .await
     .expect("preflight");
     let (_, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
-    let result = CollaborationRuntime::start_with_optional_router_proxy_endpoint(
-        CollaborationRuntimeInputs {
-            board_session: None,
-            directory: root.path().to_owned(),
-            codex_home: root.path().to_owned(),
-            backend_socket: root.path().join("missing-backend.sock"),
-            mcp_bind: "127.0.0.1:0".parse().expect("loopback"),
-            native_schema: None,
-            peer_registry_directory: Some(root.path().join("peers")),
-            remote_control_server_name: None,
-            owner_human_id: Some(
-                message_board::HumanId::try_from("fixture-owner".to_owned()).expect("owner"),
-            ),
-        },
-        provider_launches,
-        relation,
-        None,
-        prepared,
+    let result = Box::pin(
+        CollaborationRuntime::start_with_optional_router_proxy_endpoint(
+            CollaborationRuntimeInputs {
+                board_session: None,
+                directory: root.path().to_owned(),
+                codex_home: root.path().to_owned(),
+                backend_socket: root.path().join("missing-backend.sock"),
+                mcp_bind: "127.0.0.1:0".parse().expect("loopback"),
+                native_schema: None,
+                peer_registry_directory: Some(root.path().join("peers")),
+                remote_control_server_name: None,
+                owner_human_id: Some(
+                    message_board::HumanId::try_from("fixture-owner".to_owned()).expect("owner"),
+                ),
+            },
+            provider_launches,
+            relation,
+            None,
+            prepared,
+        ),
     )
     .await;
     let error = match result {

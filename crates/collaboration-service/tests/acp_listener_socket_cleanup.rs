@@ -1,6 +1,8 @@
 //! Owned ACP socket cleanup after listener shutdown.
 use codex_acp_adapter::NativeStoredSessions;
-use collaboration_service::{AcpChannelListener, NativeGenerationGate, UnmaterializedThreadHolder};
+use collaboration_runtime::AcpChannelListener;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::UnmaterializedThreadHolder;
 use std::{os::unix::fs::DirBuilderExt, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
@@ -49,7 +51,7 @@ async fn acp_listener_cleans_its_owned_socket_after_shutdown() {
         Arc::new(NativeStoredSessions::new(root.clone(), "fixture".into())),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )
     .unwrap();
     let stop = CancellationToken::new();

@@ -3,10 +3,10 @@ use super::*;
 
 impl OwnerFixture {
     pub async fn new() -> Self {
-        Self::with_reader(reader_identity()).await
+        Box::pin(Self::with_reader(reader_identity())).await
     }
     pub async fn with_reader(reader: Identity) -> Self {
-        super::owner_clock::complete_real_setup(async {
+        Box::pin(super::owner_clock::complete_real_setup(async {
             let directory = tempfile::tempdir().unwrap();
             let registry = crate::test_project_runtime::registry(directory.path()).unwrap();
             let origin = ActorOrigin {
@@ -29,7 +29,7 @@ impl OwnerFixture {
                         .await
                         .unwrap(),
                     ),
-                    identity: crate::MachineIdentity::new(
+                    identity: collaboration_contracts::MachineIdentity::new(
                         collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
                             .unwrap(),
                         Some("Owner-test-machine"),
@@ -56,11 +56,13 @@ impl OwnerFixture {
             let workspace = WorkspaceId::generate();
             let board = BoardId::generate();
             let project = ProjectId::generate();
-            let application = crate::CollaborationApplication::new(
-                crate::ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
-                    .unwrap()
-                    .with_project_admission(admission.clone()),
-            );
+            let application = (crate::ApplicationFixture::new(
+                SERVICE_ID,
+                "00000000-0000-4000-8000-000000000002",
+            )
+            .unwrap()
+            .with_project_admission(admission.clone()))
+            .build();
             let header = || {
                 json!({"requestId":RequestId::generate(),"protocolVersion":1,
                 "actingFor":null,"actor":human("board-owner")})
@@ -144,13 +146,13 @@ impl OwnerFixture {
                 .await;
             fleet_runtime.shutdown().await.unwrap();
             fixture
-        })
+        }))
         .await
     }
 
     /// Reopen the real setup owner only while arranging another native project.
     pub async fn prepare_additional_project(&self, request: &ProjectCreateRequest) {
-        super::owner_clock::complete_real_setup(async {
+        Box::pin(super::owner_clock::complete_real_setup(async {
             let (requests, runtime) = board_central_test_support::machine_session(
                 self.directory.path(),
                 &self.admission.record_origin(),
@@ -171,7 +173,7 @@ impl OwnerFixture {
             let admission = ProjectAdmission::new(ProjectAdmissionProps {
                 registry: self.registry.clone(),
                 fleet: fleet.clone(),
-                identity: crate::MachineIdentity::new(
+                identity: collaboration_contracts::MachineIdentity::new(
                     collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
                     Some("Owner-test-machine"),
                 )
@@ -187,7 +189,7 @@ impl OwnerFixture {
                 .unwrap_or_else(|_| panic!("additional-project setup still owns its Fleet client"))
                 .close()
                 .await;
-        })
+        }))
         .await;
     }
 }

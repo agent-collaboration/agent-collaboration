@@ -40,7 +40,7 @@ pub(in crate::presentation::quota) fn render_account_options_panel(
         || element!(UiHeading(content:"Credit usage".to_owned(),level:UiHeadingLevel::Section)),
     );
     let content = render_account_options_content(props, None);
-    element! {View(width:width as u32,height:height as u32,flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {#(editor_title) Text(content:identity,color:Color::White) View(height:1) {} #(content)}}.into_any()
+    element! {View(width:u32::try_from(width).unwrap_or(u32::MAX),height:u32::try_from(height).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {#(editor_title) Text(content:identity,color:Color::White) View(height:1) {} #(content)}}.into_any()
 }
 
 pub(in crate::presentation::quota) fn render_account_options_content(
@@ -75,7 +75,7 @@ pub(in crate::presentation::quota) fn render_account_options_content(
 
     element! {
         View(
-            width: width as u32,
+            width: u32::try_from(width).unwrap_or(u32::MAX),
             flex_direction: FlexDirection::Column,
             flex_shrink:0.0_f32,max_width:100pct,
         ) {
@@ -297,7 +297,7 @@ pub(super) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
     let has_notices = !notices.is_empty();
 
     element! {
-        View(width: width as u32,max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
             #(balance_heading)
             #(account_options_field_line(if form {"Balance"}else {"Status"}, &entitlement, width, Color::White))
             #((!form||usage.freshness!=crate::quota::CreditUsageFreshness::Fresh).then(||account_options_field_line("Freshness",freshness,width,freshness_color(usage.freshness))))
@@ -411,7 +411,7 @@ fn render_resets_tab_body(
         ));
     }
     Some(element! {
-        View(width:width as u32,max_width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
             #(explanation.map(|text|element!(codex_router_tui::UiText(content:text.to_owned(),role:codex_router_tui::UiTextRole::Secondary,wrap:TextWrap::Wrap))))
             #(options.message.map(|message|element!(codex_router_tui::UiText(content:account_options_message_text(message).to_owned(),role:account_options_message_role(message),wrap:TextWrap::Wrap))))
         }
@@ -479,7 +479,7 @@ fn account_options_field_line(
     value_color: Color,
 ) -> AnyElement<'static> {
     element! {
-        View(width:width as u32,max_width:100pct,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32) {
             codex_router_tui::FormField(label:label.to_owned(),label_width:14u16,stacked:width<52) {Text(content:value.to_owned(),color:value_color)}
         }
     }.into_any()

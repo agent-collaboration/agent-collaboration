@@ -9,7 +9,7 @@ pub async fn install(runtime: &CollaborationRuntime, directory: &Path) -> io::Re
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
         Err(error) => return Err(error),
     };
-    let fault: collaboration_service::MailStoreTestFault =
+    let fault: interaction_storage::MailStoreTestFault =
         serde_json::from_slice(&bytes).map_err(io::Error::other)?;
     runtime.runtime_test_install_mail_fault(fault).await
 }

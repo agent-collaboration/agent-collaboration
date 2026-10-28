@@ -1,6 +1,14 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -42,7 +50,10 @@ async fn run_serial_order(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Both ordered archive/post interleavings retain typed refusal, actual post presence and archive state.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Both ordered archive/post interleavings retain typed refusal, actual post presence and archive state."
+)]
 async fn archive_and_post_race_observes_both_valid_serial_orders() -> Result<(), TestError> {
     for archive_first in [true, false] {
         let fixture = BoardFixture::start().await?;
@@ -91,7 +102,10 @@ async fn archive_and_post_race_observes_both_valid_serial_orders() -> Result<(),
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Both ordered resolve/post interleavings retain typed refusal and immutable post presence.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Both ordered resolve/post interleavings retain typed refusal and immutable post presence."
+)]
 async fn resolve_and_thread_post_race_observes_both_valid_serial_orders() -> Result<(), TestError> {
     for resolve_first in [true, false] {
         let fixture = BoardFixture::start().await?;
@@ -148,7 +162,10 @@ async fn resolve_and_thread_post_race_observes_both_valid_serial_orders() -> Res
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Eight readers and sixteen writes preserve unread/summary equivalence at the same observation point.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Eight readers and sixteen writes preserve unread/summary equivalence at the same observation point."
+)]
 async fn concurrent_inbox_reads_preserve_summaries_and_report_latency() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (_, _, project) = create_location(&fixture, "inbox latency").await?;

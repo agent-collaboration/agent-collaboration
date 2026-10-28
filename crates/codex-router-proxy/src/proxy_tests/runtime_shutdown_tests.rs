@@ -55,7 +55,10 @@ fn loopback_router_runtime_cancels_unbounded_websocket_before_first_frame_timeou
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
     let temp_dir = ProxyTestTempDir::new("runtime_shutdown_drains_websocket");
     let database_path = temp_dir.path().join("state.sqlite");
@@ -181,7 +184,10 @@ fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_continues_after_rejected_connection() {
     let temp_dir = ProxyTestTempDir::new("runtime_rejected_then_websocket");
     let database_path = temp_dir.path().join("state.sqlite");

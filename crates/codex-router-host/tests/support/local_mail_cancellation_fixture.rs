@@ -2,11 +2,12 @@
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderStartup,
 };
+use collaboration_contracts::RouterConsumerProtocol;
+use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::MailSender;
 use collaboration_protocol::{
     EndpointId, EndpointRef, MailItemId, PushRecord, SessionId, SessionRef,
 };
-use collaboration_service::{RouterConsumerProtocol, RouterDeliveryTypes};
 use durable_steps::{
     AtomicStore, CallFailure, CallId, NotSentReason, StoreError, turso_store::TursoScope,
 };
@@ -106,8 +107,8 @@ impl PendingLocalCancelFixture {
             .prefix("crlc-")
             .tempdir_in("/tmp")?;
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-        let service = collaboration_service::load_service_identity(directory.path())?;
-        let peer = collaboration_service::load_installation_peer(directory.path())?;
+        let service = collaboration_runtime::load_service_identity(directory.path())?;
+        let peer = collaboration_runtime::load_installation_peer(directory.path())?;
         let registry = directory.path().join("peer-registry");
         std::fs::create_dir(&registry)?;
         let socket = registry.join("peer.sock");

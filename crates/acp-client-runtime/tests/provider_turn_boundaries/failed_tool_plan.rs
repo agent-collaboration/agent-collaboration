@@ -8,6 +8,10 @@ const FAILED_TOOL_PLAN_FIXTURE: &str = concat!(
     "/../../verification/fixtures/provider-failed-turn-agent.ts"
 );
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn collect_until(
     events: &mut tokio::sync::mpsc::UnboundedReceiver<SessionEvent>,
     observed: &mut Vec<SessionEvent>,

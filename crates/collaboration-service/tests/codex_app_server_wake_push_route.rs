@@ -1,17 +1,24 @@
 use agent_automation::{ExpiryRule, RouteEffectEvidence, SubmissionEffect, TimingRule};
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
+use collaboration_protocol::DeliveryClientReceipt;
 use collaboration_protocol::{
     AcceptedResumeEffect, CodexGeneration, DeliveryCorrelationId, DeliveryOutcome, MachineId,
     MachineLabel, MessageDelivery, MessageInputKind, MessageRepresentation, PushDeliveryState,
     PushKind, PushLineInput, RouterLink, RouterOriginRef, SessionRef, UuidIdentity,
     render_push_line,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, CodexAppServerDeliveryRoute, DeliveryClientReceipt, DeliveryContractError,
-    DeliveryFuture, DeliveryPrecondition, EndpointDirectory, LoadPolicy, NativeControlBackend,
-    NativeGenerationGate, SessionDeliveryRoute,
-    layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -90,7 +97,7 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
     let interactions = Arc::new(
         interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite")).await?,
     );
-    let mut handoff = collaboration_service::PushHandoffWorker::new(
+    let mut handoff = collaboration_runtime::PushHandoffWorker::new(
         Arc::clone(&automation),
         Arc::clone(&interactions),
     );
@@ -163,7 +170,7 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
             gate,
             codex_home: root.path().to_owned(),
         },
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let observed_evidence = Arc::new(RecordingEvidenceSink(Mutex::new(Vec::new())));
     let server = tokio::spawn(async move {

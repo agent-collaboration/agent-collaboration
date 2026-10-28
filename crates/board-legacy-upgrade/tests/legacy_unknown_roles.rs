@@ -1,9 +1,12 @@
-#![allow(clippy::panic_in_result_fn)]
 mod support;
 use message_board::*;
 use support::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn shipped_history_with_an_unrecoverable_earlier_join_role_is_importable() -> TestResult {
     // Arrange: synthetic actor B joined as advisor, then reviewer. The shipped
     // 202610020001 migration's Step 3 can recover only the surviving join at 4;
@@ -67,6 +70,10 @@ async fn shipped_history_with_an_unrecoverable_earlier_join_role_is_importable()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn open_interval_uses_only_its_current_participant_rows_role() -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
     let source = rusqlite::Connection::open(&path)?;
@@ -97,6 +104,10 @@ async fn open_interval_uses_only_its_current_participant_rows_role() -> TestResu
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn open_interval_without_a_current_role_is_refused_without_source_repair() -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
     let source = rusqlite::Connection::open(&path)?;

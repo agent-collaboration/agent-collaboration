@@ -3,9 +3,24 @@ mod participant_history;
 mod participant_intervals;
 use participant_intervals::PendingParticipant;
 mod reader_translation;
-use crate::{DerivedImportKeys, UpgradeError, import_error::invalid, legacy_rows::*};
+use crate::{
+    DerivedImportKeys, UpgradeError,
+    import_error::invalid,
+    legacy_rows::{
+        ActivityKind, LegacyActivity, LegacyPost, LegacyProject, LegacyStore, MembershipState,
+    },
+};
 use fleet_admission::ImportProvenance;
-use message_board::*;
+use message_board::{
+    ActingForIdentity, ActorOrigin, BatchTiming, EndReason, EpochNumber, FeedCursor, FeedPosition,
+    HumanId, Identity, ImplementerHolder, MembershipEnd, OrchestratorHolder, Participant,
+    ParticipantClosedReason, ParticipantNote, ParticipantProps, ParticipantRole, Placement, Post,
+    PostReferences, PostText, ProjectFeedEntry, ProjectState, ReadMark, ReadScope, Record,
+    RecordEnvelope, RecordId, RecordPlacement, RecordScope, RecordTime, RecordedActor,
+    RecordedParticipantRole, SubjectLine, SubjectRevision, SubscriptionLifetime,
+    SubscriptionMembership, SubscriptionMembershipProps, SubscriptionPolicy, SubscriptionScope,
+    Thread, ThreadId, ThreadState, ThreadSubject,
+};
 use message_board_storage::{ImportRecord, ImportWatch, ProjectImportBatch};
 use std::collections::{BTreeMap, BTreeSet};
 

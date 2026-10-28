@@ -1,13 +1,17 @@
 //! Conformance-only import of genuine consumer snapshots through the owning engines.
 use super::imported_unheld_fixture::{fixture_fleet, fixture_seed};
-use super::*;
+use super::{IdSource, PlatformIo};
 use crate::{
     ConformanceBoardState, ObjectHost, ObjectRuntime, OwnerIdentity, RegistryKind,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
 use durable_steps::{AtomicStore, OperationState, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::*;
+use fleet_sync_protocol::{
+    Import, ImportAnswer, ImportDigest, PageDigest, ReplicationAnswer, ReplicationPosition,
+    RequestId, SeedAnswer, SeedAttemptId, SeedComplete, SeedPage, SeedPageAnswer, SnapshotManifest,
+    SnapshotPage,
+};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,

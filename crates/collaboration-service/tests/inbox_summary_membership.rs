@@ -1,12 +1,19 @@
 //! PD1 E17 rebinding: marks count as membership; an unwatch alone creates no interest.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn acknowledgement_counts_but_unwatch_alone_does_not_create_summary_membership()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

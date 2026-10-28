@@ -3,9 +3,9 @@ use super::router_connection_registry::RouterConnectionRegistry;
 use crate::presentation::session_picker::{PickerSourceContext, SourceInventoryRequest};
 use crate::sessions::*;
 use collaboration_client::protocol::{EndpointRef, RouterExecutableRelation};
-use collaboration_service::{
-    CollaborationApplication, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
 use std::{
     io::ErrorKind,
     os::unix::{fs::PermissionsExt, net::UnixListener},
@@ -14,6 +14,10 @@ use std::{
 };
 use tokio_util::sync::CancellationToken;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 mod recorded_api_listener;
 
 pub(crate) struct SourceApiFixture {
@@ -105,7 +109,7 @@ impl SourceApiFixture {
             "endpoint":endpoint,"label":"Source fixture","availability":{"state":"unprobed"},
             "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"native.sock","schemaDigest":null,"generation":null}]
         })).unwrap();
-        let mut identity = ServiceIdentity::new(service, "00000000-0000-4000-8000-000000000009")
+        let mut identity = ApplicationFixture::new(service, "00000000-0000-4000-8000-000000000009")
             .unwrap()
             .with_endpoints(vec![description])
             .unwrap()
@@ -119,9 +123,9 @@ impl SourceApiFixture {
             use collaboration_client::protocol::{
                 ProviderRequestedPolicy, RouterAccess, SessionRef,
             };
-            use collaboration_service::{
-                ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord,
-            };
+            use collaboration_runtime::ProviderOperationStore;
+            use collaboration_runtime::ProviderSessionEventHub;
+            use collaboration_runtime::ProviderSessionRecord;
             let target: SessionRef = serde_json::from_value(serde_json::json!({
                 "endpoint":{"serviceId":service,"endpointId":"claude-local"},"sessionId":"shared-source-id"
             })).unwrap();
@@ -190,7 +194,7 @@ impl SourceApiFixture {
         let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         let api = collaboration_mcp::collaboration_api_router(
             &collaboration_mcp::CollaborationApiConfig {
-                application: CollaborationApplication::new(identity),
+                application: (identity).build(),
                 service_directory: directory,
                 native_definitions: None,
                 router_executable_relation: relation,

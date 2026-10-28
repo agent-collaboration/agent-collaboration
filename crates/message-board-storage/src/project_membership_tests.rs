@@ -2,6 +2,10 @@ use crate::ProjectStore;
 use message_board::*;
 use sqlx::{ConnectOptions, Connection};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn router_expiry_membership_reopens_and_a_non_expiry_router_row_is_refused()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -104,6 +108,10 @@ async fn router_expiry_membership_reopens_and_a_non_expiry_router_row_is_refused
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn native_membership_survives_reopen_without_local_delivery_fields()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -182,6 +190,10 @@ async fn native_membership_survives_reopen_without_local_delivery_fields()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn membership_keyset_pages_keep_reader_scope_and_validate_only_selected_bodies()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

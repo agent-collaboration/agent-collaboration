@@ -1,7 +1,15 @@
 //! Every distinct join retains its interval, including role changes without posts or leaves.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{human_reader, keyed_call};
@@ -50,7 +58,10 @@ async fn actor_history(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn role_change_without_a_leave_or_post_retains_each_join_interval() -> Result<(), TestError> {
     // Arrange: the first interval's note and position must remain historical.
     let fixture = BoardFixture::start().await?;
@@ -180,7 +191,10 @@ async fn role_change_without_a_leave_or_post_retains_each_join_interval() -> Res
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn handover_without_a_post_retains_the_advisor_and_promoted_intervals()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

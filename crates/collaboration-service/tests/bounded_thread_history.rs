@@ -1,16 +1,28 @@
 //! Thread history guidance uses a scoped metadata maximum, not all project posts.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use board_read_setup::*;
 use message_board::*;
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::json;
-#[allow(clippy::panic_in_result_fn)]
+
 async fn thread_cost(size: usize) -> Result<ReadCost, TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("thread metadata maximum").await?;
@@ -80,7 +92,10 @@ async fn thread_cost(size: usize) -> Result<ReadCost, TestError> {
     Ok(cost)
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn thread_show_does_not_decode_unrelated_project_posts() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = thread_cost(8).await?;

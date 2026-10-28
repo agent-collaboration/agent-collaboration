@@ -7,7 +7,6 @@ use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
 use message_board::{ActorOrigin, MachineLabel, ProjectId, RecordPlacement, ServiceId};
 use std::{path::Path, sync::Arc, time::Duration};
 
-#[allow(clippy::unwrap_used)]
 pub(crate) fn origin() -> ActorOrigin {
     ActorOrigin {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())

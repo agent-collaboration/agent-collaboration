@@ -1,5 +1,4 @@
 //! The record choice survives reload, contention and corrupt native inputs.
-#![allow(clippy::panic_in_result_fn)]
 use super::*;
 use std::{
     collections::BTreeSet,
@@ -8,6 +7,10 @@ use std::{
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn install_attempt_reloads_the_same_choice_and_uses_a_fresh_choice_for_another_epoch() -> TestResult
 {
     let root = tempfile::tempdir()?;
@@ -33,6 +36,10 @@ fn install_attempt_reloads_the_same_choice_and_uses_a_fresh_choice_for_another_e
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn concurrent_install_attempt_creators_all_observe_the_same_published_choice() -> TestResult {
     let root = tempfile::tempdir()?;
     let project = ProjectId::generate();
@@ -69,6 +76,10 @@ fn concurrent_install_attempt_creators_all_observe_the_same_published_choice() -
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn invalid_install_attempt_records_are_refused_without_replacement() -> TestResult {
     let root = tempfile::tempdir()?;
     let project = ProjectId::generate();

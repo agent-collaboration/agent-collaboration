@@ -1,7 +1,5 @@
 //! Scripted ACP permission exchanges over a real stdio subprocess.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -37,6 +35,10 @@ impl InteractionPort for CaptureInteractionPort {
         CancellationToken::new()
     }
 
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn request_approval(
         &self,
         _context: Self::Context,
@@ -62,6 +64,11 @@ impl InteractionPort for CaptureInteractionPort {
     ) -> InteractionFuture<'_, session_event_model::QuestionResponse> {
         Box::pin(async { session_event_model::QuestionResponse::Cancelled })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
     fn record_refusal(
         &self,
         _context: Self::Context,
@@ -96,6 +103,10 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_permission_fixture(mode: &str) -> (Arc<CaptureInteractionPort>, serde_json::Value) {
     let root = tempfile::tempdir().expect("fixture root");
     let receipt = root.path().join("agent-answer.json");

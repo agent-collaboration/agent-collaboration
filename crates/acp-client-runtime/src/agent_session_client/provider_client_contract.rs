@@ -1,6 +1,8 @@
 //! Provider admission, prompt result, and safe ACP error contracts.
+#[cfg(any(test, feature = "test-observation"))]
+use super::ToolKind;
 
-use super::*;
+use super::{AcpAgentConfig, AcpProtocolVersion, PathBuf, ProviderPromptStopReason};
 use std::fmt::{Display, Formatter};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

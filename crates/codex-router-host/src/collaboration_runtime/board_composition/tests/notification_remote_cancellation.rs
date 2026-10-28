@@ -5,7 +5,7 @@ use crate::collaboration_runtime::board_composition::tests::notification_publish
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange};
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_delivery::OutboxStatusState;
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
 use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
@@ -17,10 +17,14 @@ mod frozen_rows;
 use super::split_transport;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_frozen_envelope()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let seed = NotificationSeed {
         project: fixture.project.clone(),
         item: fixture.seed_item,
@@ -267,7 +271,12 @@ async fn remote_children_wait_for_their_own_final_ack_and_reopen_reuses_every_fr
     drop(database);
     drop(writer);
     let central = fixture.close_keeping_central().await?;
-    let mut reopened = ProjectNotificationFixture::resume(directory.path(), central, seed).await?;
+    let mut reopened = Box::pin(ProjectNotificationFixture::resume(
+        directory.path(),
+        central,
+        seed,
+    ))
+    .await?;
     assert_eq!(
         reopened
             .harness

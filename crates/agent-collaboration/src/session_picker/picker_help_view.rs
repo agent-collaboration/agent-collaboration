@@ -1,5 +1,6 @@
 //! Shortcut content and caller-owned Help action; shared chrome owns visual hierarchy.
 use super::picker_model::SessionsPickerModel;
+use crate::presentation::session_picker::picker_rendering::iocraft_cell_count;
 use codex_router_tui::{
     DialogAction, DialogActionEmphasis, ShortcutEntry, ShortcutHelp, ShortcutSection,
 };
@@ -226,7 +227,7 @@ pub(super) fn render_choice_surface(
             .map(|pending| super::source_action_view::checking_dialog(pending, state, height))
     };
     Some(element! {
-        View(width: model.width as u32, height: height as u32) {
+        View(width: iocraft_cell_count(model.width), height: iocraft_cell_count(height)) {
             codex_router_tui::DialogHost(width: u16::try_from(model.width).unwrap_or(u16::MAX), height: u16::try_from(height).unwrap_or(u16::MAX), background: vec![background, element!(View(position: Position::Absolute, bottom: 2, left: 2) { #(super::source_action_view::source_error(model)) }).into_any()], dialog)
         }
     })

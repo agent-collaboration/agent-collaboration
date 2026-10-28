@@ -1,0 +1,665 @@
+//! Native message composition with explicit delivery and retained partial effects.
+use crate::NativeControlBackend;
+use crate::message_effect_state::MessageEffects;
+use crate::message_effect_state::NativeFailureKind;
+use crate::message_effect_state::NativeMessageAttemptEvidence;
+use crate::message_effect_state::NativeMessageFailure;
+use codex_native_integration::{
+    NativeConnectionError, NativeOperation, NativePayloadSchemas, NativeProtocolConnection,
+};
+use collaboration_contracts::LoadPolicy;
+use collaboration_protocol::{
+    AcceptedResumeEffect, ChannelDescription, CodexGeneration, EndpointDescription,
+    MessageDelivery, MessageInputKind, MessageRepresentation, MessageText,
+    NativeDeliveryFailureCause, NativeInputDisposition, NativeInputOperation, NativeSendAcceptance,
+    NativeSendReceipt, NonEmptyText, RenderedMessage, SessionRef, UuidIdentity,
+};
+use serde_json::{Value, json};
+use std::sync::Arc;
+use tokio_util::sync::CancellationToken;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum NativeThreadStatus {
+    NotLoaded,
+    Idle,
+    Active,
+    Other,
+}
+
+pub(crate) struct NativeThreadSnapshot {
+    pub status: NativeThreadStatus,
+    pub working_directory: Option<String>,
+}
+
+pub(crate) enum NativeThreadStatusReadError {
+    Missing,
+    Rejected { code: i64, native: Option<Value> },
+    LocalRejection(NativeDeliveryFailureCause),
+    Unavailable,
+    InvalidResponse,
+}
+
+pub(crate) async fn read_native_thread_status(
+    connection: &mut NativeProtocolConnection,
+    schemas: &NativePayloadSchemas,
+    thread_id: &str,
+    deadline: tokio::time::Instant,
+    retired: &CancellationToken,
+) -> Result<NativeThreadSnapshot, NativeThreadStatusReadError> {
+    if retired.is_cancelled() || tokio::time::Instant::now() >= deadline {
+        return Err(NativeThreadStatusReadError::Unavailable);
+    }
+    let response = tokio::select! {
+        biased;
+        () = retired.cancelled() => {
+            return Err(NativeThreadStatusReadError::Unavailable);
+        }
+        response = tokio::time::timeout_at(
+            deadline,
+            connection.request_validated(
+                schemas,
+                NativeOperation::ReadThread,
+                json!({"threadId":thread_id,"includeTurns":false}),
+            ),
+        ) => match response {
+            Ok(response) => response,
+            Err(_) => return Err(NativeThreadStatusReadError::Unavailable),
+        }
+    };
+
+    let response = match response {
+        Ok(response) => response,
+        Err(NativeConnectionError::Rejected { code }) => {
+            let native = connection.take_last_rejection();
+            if code == -32600
+                && native
+                    .as_ref()
+                    .and_then(|error| error.get("message"))
+                    .and_then(Value::as_str)
+                    == Some(format!("thread not loaded: {thread_id}").as_str())
+            {
+                return Err(NativeThreadStatusReadError::Missing);
+            }
+            return Err(NativeThreadStatusReadError::Rejected { code, native });
+        }
+        Err(NativeConnectionError::InvalidInput) => {
+            return Err(NativeThreadStatusReadError::LocalRejection(
+                NativeDeliveryFailureCause::InvalidNativeRequest,
+            ));
+        }
+        Err(
+            NativeConnectionError::Unavailable | NativeConnectionError::UnavailableWithCause(_),
+        ) => {
+            return Err(NativeThreadStatusReadError::LocalRejection(
+                NativeDeliveryFailureCause::NativeRequestUnavailable,
+            ));
+        }
+        Err(_) => return Err(NativeThreadStatusReadError::Unavailable),
+    };
+
+    if response.pointer("/thread/id").and_then(Value::as_str) != Some(thread_id) {
+        return Err(NativeThreadStatusReadError::InvalidResponse);
+    }
+    let Some(thread) = response.get("thread").cloned() else {
+        return Err(NativeThreadStatusReadError::InvalidResponse);
+    };
+    let status = match thread.pointer("/status/type").and_then(Value::as_str) {
+        Some("notLoaded") => NativeThreadStatus::NotLoaded,
+        Some("idle") => NativeThreadStatus::Idle,
+        Some("active") => NativeThreadStatus::Active,
+        Some(_) => NativeThreadStatus::Other,
+        None => return Err(NativeThreadStatusReadError::InvalidResponse),
+    };
+    Ok(NativeThreadSnapshot {
+        status,
+        working_directory: thread.get("cwd").and_then(Value::as_str).map(str::to_owned),
+    })
+}
+
+pub struct NativeMessageRequest<'a> {
+    pub attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
+    pub params: NativeMessageParams,
+    pub id: Value,
+    pub service_id: &'a UuidIdentity,
+    pub backend: &'a NativeControlBackend,
+    pub endpoints: &'a [EndpointDescription],
+    pub held_connection: Option<&'a mut NativeProtocolConnection>,
+    pub load_policy: LoadPolicy,
+    pub approval_broker: Option<&'a std::sync::Weak<dyn codex_acp_adapter::ApprovalBroker>>,
+    pub recorded_route:
+        Option<&'a crate::native_recorded_policy::RecordedNativeRouteClassification>,
+    pub attempt_deadline: Option<tokio::time::Instant>,
+}
+
+pub struct NativeMessageParams {
+    pub target: SessionRef,
+    pub generation: CodexGeneration,
+    pub body: NativeMessageBody,
+    pub delivery: MessageDelivery,
+    pub client_user_message_id: Option<NonEmptyText>,
+}
+
+pub enum NativeMessageBody {
+    PreparedPush(MessageText),
+}
+
+fn render_native_message(body: &NativeMessageBody) -> RenderedMessage {
+    match body {
+        NativeMessageBody::PreparedPush(line) => RenderedMessage {
+            text: line.as_str().to_owned(),
+            kind: MessageInputKind::Agent,
+            representation: MessageRepresentation::DeclaredAgentText,
+        },
+    }
+}
+
+pub enum NativeMessageOutcome {
+    Accepted(NativeSendReceipt),
+    Failed(NativeMessageFailure),
+}
+
+pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMessageOutcome {
+    let deadline = request
+        .attempt_deadline
+        .unwrap_or_else(|| tokio::time::Instant::now() + std::time::Duration::from_secs(30));
+    let mut effects = MessageEffects::new(request.id);
+    let load_policy = request.load_policy;
+    let params = request.params;
+    if &params.target.endpoint.service_id != request.service_id {
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::WrongService, "inspect"),
+        );
+    }
+    let Some(endpoint) = request
+        .endpoints
+        .iter()
+        .find(|e| e.endpoint == params.target.endpoint)
+    else {
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::EndpointNotFound, "inspect"),
+        );
+    };
+    let backend = request.backend;
+    if backend.endpoint != params.target.endpoint {
+        return NativeMessageOutcome::Failed(effects.local_rejection(
+            "nativeAdmission",
+            "inspect",
+            NativeDeliveryFailureCause::BackendEndpointMismatch,
+            collaboration_contracts::UnsentCause::for_rejection(
+                collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+            ),
+        ));
+    }
+    let Ok(admission) = backend.gate.acquire() else {
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::Unavailable, "inspect"),
+        );
+    };
+    if admission.generation() != &params.generation {
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::StaleGeneration, "inspect"),
+        );
+    }
+    let Some(schemas) = admission.schemas() else {
+        return NativeMessageOutcome::Failed(effects.local_rejection(
+            "nativeAdmission",
+            "inspect",
+            NativeDeliveryFailureCause::NativeSchemaUnavailable,
+            collaboration_contracts::UnsentCause::for_rejection(
+                collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+            ),
+        ));
+    };
+    let advertised = endpoint.channels.iter().any(|c| matches!(c, ChannelDescription::NativeCodex { schema_digest: Some(d), generation: Some(g), .. } if g == admission.generation() && String::from(d.clone()) == schemas.schema_digest()));
+    if !advertised {
+        return NativeMessageOutcome::Failed(effects.local_rejection(
+            "nativeAdmission",
+            "inspect",
+            NativeDeliveryFailureCause::NativeSchemaMismatch,
+            collaboration_contracts::UnsentCause::for_rejection(
+                collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+            ),
+        ));
+    }
+    if params.delivery == MessageDelivery::Queue
+        && !schemas.supports_operation(NativeOperation::QueueAdd)
+    {
+        return NativeMessageOutcome::Failed(
+            effects.unsupported_method("thread/queue/add", "queue"),
+        );
+    }
+    let rendered = render_native_message(&params.body);
+    let correlation = match &params.client_user_message_id {
+        Some(id) => String::from(id.clone()),
+        None => match crate::new_service_uuid() {
+            Ok(id) => String::from(id),
+            Err(_) => {
+                return NativeMessageOutcome::Failed(
+                    effects.failure(NativeFailureKind::Unavailable, "inspect"),
+                );
+            }
+        },
+    };
+    effects.correlation = Some(correlation.clone());
+    let retired = admission.retirement();
+    let recorded_route = match request.recorded_route {
+        Some(classification) => classification.clone(),
+        None => tokio::select! {
+            biased;
+            () = retired.cancelled() => crate::native_recorded_policy::RecordedNativeRouteClassification::UnresolvedAuthority,
+            result = tokio::time::timeout_at(deadline, crate::native_recorded_policy::classify_recorded_native_route(request.approval_broker, &params.target)) => {
+                result.unwrap_or(crate::native_recorded_policy::RecordedNativeRouteClassification::UnresolvedAuthority)
+            }
+        },
+    };
+    if retired.is_cancelled() || tokio::time::Instant::now() >= deadline {
+        return NativeMessageOutcome::Failed(
+            effects.failure(NativeFailureKind::Unavailable, "inspect"),
+        );
+    }
+    let held = request.held_connection.is_some();
+    let mut opened_connection = None;
+    if !held {
+        let connection = tokio::time::timeout_at(deadline, async {
+            tokio::select! {
+                biased;
+                _ = retired.cancelled() => Err(NativeConnectionError::Unavailable),
+                result = NativeProtocolConnection::connect(admission.backend_path()) => result,
+            }
+        })
+        .await
+        .unwrap_or(Err(NativeConnectionError::Unavailable));
+        let Ok(connection) = connection else {
+            return NativeMessageOutcome::Failed(
+                effects.failure(NativeFailureKind::Unavailable, "inspect"),
+            );
+        };
+        opened_connection = Some(connection);
+    }
+    let connection = match request.held_connection.take() {
+        Some(connection) => connection,
+        None => match opened_connection.as_mut() {
+            Some(connection) => connection,
+            None => {
+                return NativeMessageOutcome::Failed(
+                    effects.failure(NativeFailureKind::Unavailable, "inspect"),
+                );
+            }
+        },
+    };
+    let mut session = MessageSession {
+        attempt_evidence: request.attempt_evidence,
+        deadline,
+        connection,
+        schemas,
+        retired,
+        effects,
+        permission_differences: Vec::new(),
+    };
+    let target_id = String::from(params.target.session_id.clone());
+    let delivery_context = NativeMessageDeliveryContext {
+        thread_id: &target_id,
+        params: &params,
+        correlation: &correlation,
+        held_unmaterialized: held,
+        load_policy,
+        recorded_route: &recorded_route,
+    };
+    let result = session.deliver(&delivery_context).await;
+    let acceptance = match result {
+        Ok(value) => value,
+        Err(value) => return NativeMessageOutcome::Failed(value),
+    };
+    let Ok(correlation) = NonEmptyText::try_from(correlation) else {
+        return NativeMessageOutcome::Failed(
+            session
+                .effects
+                .failure(NativeFailureKind::OutcomeUnknown, "start"),
+        );
+    };
+    let receipt = NativeSendReceipt {
+        target: params.target,
+        generation: params.generation,
+        input_kind: rendered.kind,
+        representation: rendered.representation,
+        client_user_message_id: correlation,
+        resume_effect: if session.effects.resume == "accepted" {
+            AcceptedResumeEffect::Accepted
+        } else {
+            AcceptedResumeEffect::NotRequested
+        },
+        permission_differences: session.permission_differences,
+        acceptance,
+    };
+    NativeMessageOutcome::Accepted(receipt)
+}
+
+struct MessageSession<'a> {
+    attempt_evidence: Option<NativeMessageAttemptEvidence<'a>>,
+    deadline: tokio::time::Instant,
+    connection: &'a mut NativeProtocolConnection,
+    schemas: Arc<NativePayloadSchemas>,
+    retired: CancellationToken,
+    effects: MessageEffects,
+    permission_differences: Vec<collaboration_protocol::PermissionDifference>,
+}
+
+struct NativeMessageDeliveryContext<'a> {
+    thread_id: &'a str,
+    params: &'a NativeMessageParams,
+    correlation: &'a str,
+    held_unmaterialized: bool,
+    load_policy: LoadPolicy,
+    recorded_route: &'a crate::native_recorded_policy::RecordedNativeRouteClassification,
+}
+
+impl MessageSession<'_> {
+    async fn call(
+        &mut self,
+        operation: NativeOperation,
+        params: Value,
+        stage: &'static str,
+    ) -> Result<Value, NativeMessageFailure> {
+        if self.retired.is_cancelled() || tokio::time::Instant::now() >= self.deadline {
+            return Err(self.effects.failure(NativeFailureKind::Unavailable, stage));
+        }
+        let mutation = matches!(stage, "resume" | "start" | "steer" | "queue");
+        if stage == "resume" {
+            self.effects.resume = "unknown";
+        } else if mutation {
+            self.effects.submission = "unknown";
+        }
+        let result = tokio::time::timeout_at(self.deadline, async { tokio::select! {
+            biased;
+            result = self.connection.request_validated(&self.schemas, operation, params) => result,
+            _ = self.retired.cancelled() => Err(NativeConnectionError::OutcomeUnknown),
+        }}).await.unwrap_or(Err(NativeConnectionError::OutcomeUnknown));
+        match result {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                let kind = match error {
+                    NativeConnectionError::Rejected { code } => {
+                        if stage == "resume" {
+                            self.effects.resume = "rejected";
+                        } else if mutation {
+                            self.effects.submission = "rejected";
+                        }
+                        let native = self.connection.take_last_rejection();
+                        return Err(self.effects.native_rejection(
+                            operation.method_name(),
+                            stage,
+                            code,
+                            native.as_ref(),
+                        ));
+                    }
+                    NativeConnectionError::InvalidInput
+                    | NativeConnectionError::Unavailable
+                    | NativeConnectionError::UnavailableWithCause(_) => {
+                        if stage == "resume" {
+                            self.effects.resume = "notRequested";
+                        } else if mutation {
+                            self.effects.submission = "notDispatched";
+                        }
+                        let cause = if matches!(error, NativeConnectionError::InvalidInput) {
+                            NativeDeliveryFailureCause::InvalidNativeRequest
+                        } else {
+                            NativeDeliveryFailureCause::NativeRequestUnavailable
+                        };
+                        return Err(self.effects.local_rejection(operation.method_name(), stage, cause, collaboration_contracts::UnsentCause::for_rejection(collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability)));
+                    }
+                    _ if mutation => NativeFailureKind::OutcomeUnknown,
+                    _ => NativeFailureKind::Unavailable,
+                };
+                Err(self.effects.failure(kind, stage))
+            }
+        }
+    }
+    async fn read_thread_status(
+        &mut self,
+        id: &str,
+    ) -> Result<NativeThreadSnapshot, NativeMessageFailure> {
+        match read_native_thread_status(
+            self.connection,
+            self.schemas.as_ref(),
+            id,
+            self.deadline,
+            &self.retired,
+        )
+        .await
+        {
+            Ok(snapshot) => Ok(snapshot),
+            Err(NativeThreadStatusReadError::Missing) => Err(self
+                .effects
+                .failure(NativeFailureKind::ThreadMissingOrUnmaterialized, "inspect")),
+            Err(NativeThreadStatusReadError::Rejected { code, native }) => Err(self
+                .effects
+                .native_rejection("thread/read", "inspect", code, native.as_ref())),
+            Err(NativeThreadStatusReadError::LocalRejection(cause)) => {
+                Err(self.effects.local_rejection(
+                    "thread/read",
+                    "inspect",
+                    cause,
+                    collaboration_contracts::UnsentCause::for_rejection(
+                        collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+                    ),
+                ))
+            }
+            Err(NativeThreadStatusReadError::Unavailable) => Err(self
+                .effects
+                .failure(NativeFailureKind::Unavailable, "inspect")),
+            Err(NativeThreadStatusReadError::InvalidResponse) => Err(self.effects.local_rejection(
+                "thread/read",
+                "inspect",
+                NativeDeliveryFailureCause::InvalidThreadResponse,
+                collaboration_contracts::UnsentCause::ProcessingFailure,
+            )),
+        }
+    }
+    async fn read_active_turn_id(&mut self, id: &str) -> Result<String, NativeMessageFailure> {
+        let result = self
+            .call(
+                NativeOperation::ListTurns,
+                json!({
+                    "threadId":id,
+                    "limit":1,
+                    "sortDirection":"desc",
+                    "itemsView":"notLoaded"
+                }),
+                "inspect",
+            )
+            .await?;
+        result
+            .get("data")
+            .and_then(Value::as_array)
+            .and_then(|turns| turns.first())
+            .filter(|turn| turn.get("status").and_then(Value::as_str) == Some("inProgress"))
+            .and_then(|turn| turn.get("id"))
+            .and_then(Value::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                self.effects.local_rejection(
+                    "thread/turns/list",
+                    "steer",
+                    NativeDeliveryFailureCause::MissingActiveTurn,
+                    collaboration_contracts::UnsentCause::for_rejection(
+                        collaboration_protocol::DeliveryRejectionReason::UnsupportedCapability,
+                    ),
+                )
+            })
+    }
+    async fn deliver(
+        &mut self,
+        request: &NativeMessageDeliveryContext<'_>,
+    ) -> Result<NativeSendAcceptance, NativeMessageFailure> {
+        let thread_snapshot = if request.held_unmaterialized {
+            None
+        } else {
+            Some(self.read_thread_status(request.thread_id).await?)
+        };
+        let rendered = render_native_message(&request.params.body);
+        let input = json!([{"type":"text","text":rendered.text}]);
+        let status = thread_snapshot
+            .as_ref()
+            .map_or(NativeThreadStatus::Idle, |snapshot| snapshot.status);
+        if status == NativeThreadStatus::NotLoaded && request.load_policy == LoadPolicy::LoadedOnly
+        {
+            return Err(self.effects.failure(NativeFailureKind::NotLoaded, "start"));
+        }
+        if request.params.delivery == MessageDelivery::Queue
+            && status == NativeThreadStatus::NotLoaded
+        {
+            return Err(self
+                .effects
+                .failure(NativeFailureKind::ThreadNotLoaded, "queue"));
+        }
+        if request.params.delivery == MessageDelivery::Steer && status != NativeThreadStatus::Active
+        {
+            return Err(self
+                .effects
+                .failure(NativeFailureKind::NoActiveTurn, "steer"));
+        }
+        let prepared = if request.held_unmaterialized {
+            None
+        } else {
+            self.prepare_recorded_resume(request, thread_snapshot.as_ref())
+                .await?
+        };
+        if status == NativeThreadStatus::NotLoaded || prepared.is_some() {
+            let parameters = prepared.as_ref().map_or_else(
+                || json!({"threadId":request.thread_id,"excludeTurns":true}),
+                |prepared| {
+                    if status == NativeThreadStatus::NotLoaded {
+                        prepared.native_parameters()
+                    } else {
+                        prepared.native_parameters_for_loaded_thread()
+                    }
+                },
+            );
+            let resumed = self
+                .call(NativeOperation::ResumeThread, parameters, "resume")
+                .await?;
+            self.effects.resume = "accepted";
+            if resumed.pointer("/thread/id").and_then(Value::as_str) != Some(request.thread_id) {
+                return Err(self
+                    .effects
+                    .failure(NativeFailureKind::OutcomeUnknown, "resume"));
+            }
+            if let Some(prepared) = prepared {
+                let validation = tokio::select! {
+                    biased;
+                    () = self.retired.cancelled() => return Err(self.effects.failure(NativeFailureKind::Unavailable, "resume")),
+                    result = tokio::time::timeout_at(self.deadline, prepared.validate_response(&resumed)) => result,
+                };
+                match validation {
+                    Ok(Ok(differences)) => {
+                        if let Some(attempt) = &mut self.attempt_evidence
+                            && attempt
+                                .observe_permission_differences(&differences)
+                                .await
+                                .is_err()
+                        {
+                            return Err(self
+                                .effects
+                                .failure(NativeFailureKind::Unavailable, "resume"));
+                        }
+                        self.permission_differences = differences;
+                    }
+                    Ok(Err(codex_acp_adapter::SessionSetupError::OutcomeUnknown)) => {
+                        return Err(self
+                            .effects
+                            .failure(NativeFailureKind::OutcomeUnknown, "resume"));
+                    }
+                    Ok(Err(error)) => {
+                        return Err(self.effects.recorded_policy_failure(
+                            &error,
+                            "resume",
+                            NativeDeliveryFailureCause::InvalidResumeResponse,
+                        ));
+                    }
+                    Err(_) => {
+                        return Err(self
+                            .effects
+                            .failure(NativeFailureKind::Unavailable, "resume"));
+                    }
+                }
+            }
+        }
+        if request.params.delivery == MessageDelivery::Queue {
+            let result = self
+                .call(
+                    NativeOperation::QueueAdd,
+                    json!({"threadId":request.thread_id,"input":input,"clientUserMessageId":request.correlation}),
+                    "queue",
+                )
+                .await?;
+            let submission_id = self.receipt_id(&result, "/queuedSubmission/id", "queue")?;
+            return Ok(NativeSendAcceptance::QueueAccepted { submission_id });
+        }
+        if status == NativeThreadStatus::Active {
+            let turn = self.read_active_turn_id(request.thread_id).await?;
+            let result = self.call(NativeOperation::SteerTurn, json!({"threadId":request.thread_id,"expectedTurnId":turn,"input":input,"clientUserMessageId":request.correlation}), "steer").await?;
+            let turn_id = self.receipt_id(&result, "/turnId", "steer")?;
+            if String::from(turn_id.clone()) != turn {
+                return Err(self
+                    .effects
+                    .failure(NativeFailureKind::OutcomeUnknown, "steer"));
+            }
+            return Ok(NativeSendAcceptance::SteerAccepted {
+                turn_id,
+                submission_id: None,
+            });
+        }
+        let result = self
+            .call(
+                NativeOperation::StartTurn,
+                json!({"threadId":request.thread_id,"input":input,"clientUserMessageId":request.correlation}),
+                "start",
+            )
+            .await?;
+        Ok(NativeSendAcceptance::NativeInputAccepted {
+            operation: NativeInputOperation::TurnStart,
+            disposition: NativeInputDisposition::StartedOrSteered,
+            turn_id: self.receipt_id(&result, "/turn/id", "start")?,
+        })
+    }
+
+    async fn prepare_recorded_resume(
+        &self,
+        request: &NativeMessageDeliveryContext<'_>,
+        snapshot: Option<&NativeThreadSnapshot>,
+    ) -> Result<Option<codex_acp_adapter::RecordedSessionResume>, NativeMessageFailure> {
+        let preparation = crate::native_recorded_policy::prepare_classified_native_policy(
+            request.recorded_route,
+            &request.params.target,
+            snapshot.and_then(|snapshot| snapshot.working_directory.as_deref()),
+        );
+        tokio::select! {
+            biased;
+            () = self.retired.cancelled() => Err(self.effects.failure(NativeFailureKind::Unavailable, "resume")),
+            result = tokio::time::timeout_at(self.deadline, preparation) => {
+                match result {
+                    Ok(Ok(prepared)) => Ok(prepared),
+                    Ok(Err(codex_acp_adapter::SessionSetupError::Unavailable)) | Err(_) => {
+                        Err(self.effects.failure(NativeFailureKind::Unavailable, "resume"))
+                    }
+                    Ok(Err(error)) => Err(self.effects.recorded_policy_failure(&error, "resume", NativeDeliveryFailureCause::RecordedResumePreparationFailed)),
+                }
+            }
+        }
+    }
+    fn receipt_id(
+        &self,
+        result: &Value,
+        pointer: &str,
+        stage: &str,
+    ) -> Result<NonEmptyText, NativeMessageFailure> {
+        result
+            .pointer(pointer)
+            .and_then(Value::as_str)
+            .and_then(|id| NonEmptyText::try_from(id.to_owned()).ok())
+            .ok_or_else(|| {
+                self.effects
+                    .failure(NativeFailureKind::OutcomeUnknown, stage)
+            })
+    }
+}

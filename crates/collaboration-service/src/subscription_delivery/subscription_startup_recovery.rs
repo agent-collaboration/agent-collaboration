@@ -3,7 +3,10 @@ use super::super::{
     ProjectSubscriptionRecord, SubscriptionWindowStore, subscription_facts::STORAGE_RETRY_INTERVAL,
     subscription_windows::StartupProjectDiscovery,
 };
-use super::*;
+use super::{
+    BoardError, HashMap, Identity, ProjectId, ReaderReconcilePurpose, ReaderScanScope,
+    ServiceHandleLifetime, SubscriptionDeliveryService,
+};
 use std::collections::BTreeSet;
 
 pub(super) enum StartupProjectOutcome {

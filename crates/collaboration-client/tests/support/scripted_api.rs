@@ -5,7 +5,7 @@
 //! [`ScriptedCall`] the test answers, fails, or abandons. A version 3 manifest names the socket,
 //! so the client connects exactly as it does to a Host.
 // Each test crate that includes this module uses only part of it.
-#![allow(dead_code)]
+
 use serde_json::{Value, json};
 use std::{io, path::Path, time::Duration};
 use tokio::{
@@ -47,7 +47,7 @@ enum ScriptedAnswer {
 }
 
 impl ScriptedApi {
-    pub async fn start() -> io::Result<(Self, ScriptedCalls)> {
+    pub fn start() -> io::Result<(Self, ScriptedCalls)> {
         let directory = tempfile::tempdir()?;
         let listener = UnixListener::bind(directory.path().join("control.sock"))?;
         let manifest = json!({

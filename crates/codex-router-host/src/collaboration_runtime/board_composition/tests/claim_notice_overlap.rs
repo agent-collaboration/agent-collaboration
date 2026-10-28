@@ -1,5 +1,4 @@
 //! The real tool reply and its own grant notice join one held native install.
-#![allow(clippy::panic_in_result_fn)]
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
@@ -23,6 +22,10 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(30);
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is_held() -> TestResult
 {
     let directory = tempfile::tempdir()?;
@@ -53,7 +56,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     fleet.synchronize().await?;
     let second_board = open_board_admission(
         &directory.path().join("second-router"),
-        collaboration_service::MachineIdentity::new(
+        collaboration_contracts::MachineIdentity::new(
             collaboration_protocol::UuidIdentity::try_from(
                 second_origin.installation.as_str().to_owned(),
             )?,
@@ -143,16 +146,14 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     let api_directory = directory.path().join("api");
     std::fs::create_dir(&api_directory)?;
     std::fs::set_permissions(&api_directory, std::fs::Permissions::from_mode(0o700))?;
-    let app = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone())
-        .with_project_claim(projects.clone()),
-    );
-    let api =
-        collaboration_mcp::test_support::ServedCollaborationApi::start(&api_directory, app).await?;
+    let app = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone())
+    .with_project_claim(projects.clone()))
+    .build();
+    let api = collaboration_mcp::test_support::ServedCollaborationApi::start(&api_directory, app)?;
     let client = Arc::new(api.client("claim-own-notice-overlap").await?);
     let claiming = client.clone();
     let input = request.clone();
@@ -175,7 +176,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         assert_eq!(original.install_id, InstallId::new(selected.as_uuid())?);
         let record_path = root.join("snapshot-install-attempts").join(format!("{}-e{}.json", project.as_str(), epoch.value()));
         let record_bytes = std::fs::read(&record_path)?;
-        assert!(matches!(registry.existing_project(&project).await, Err(collaboration_service::ProjectRegistryError::Installing { .. })));
+        assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         gate.release()?;
         let session_store = board_fleet_sync::MachineSessionStore::open(&root).await?;
         timeout(BOUND, async {

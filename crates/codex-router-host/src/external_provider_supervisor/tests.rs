@@ -161,7 +161,7 @@ impl crate::LiveSessionOwnershipCheck for NoLivePeer {
     fn check<'a>(
         &'a self,
         _target: &'a SessionRef,
-    ) -> collaboration_service::DeliveryFuture<'a, crate::LiveSessionOwnership> {
+    ) -> collaboration_contracts::DeliveryFuture<'a, crate::LiveSessionOwnership> {
         Box::pin(async { Ok(crate::LiveSessionOwnership::NotLive) })
     }
 }
@@ -263,7 +263,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         .await
         .expect("operation store opens");
     let store = Arc::new(Mutex::new(store));
-    let hub = Arc::new(collaboration_service::ProviderSessionEventHub::new(
+    let hub = Arc::new(collaboration_runtime::ProviderSessionEventHub::new(
         Arc::clone(&store),
     ));
     let hub_endpoint: message_board::SessionEndpointRef =
@@ -338,7 +338,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
         permit.send(
             crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
                 request: contents,
-                load_policy: collaboration_service::LoadPolicy::MayLoad,
+                load_policy: collaboration_contracts::LoadPolicy::MayLoad,
             },
         );
     }
@@ -359,7 +359,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
     let hub_target: message_board::SessionRef =
         serde_json::from_value(serde_json::to_value(target).expect("target JSON"))
             .expect("hub target");
-    let attached = collaboration_service::SessionEventHub::attach(hub.as_ref(), hub_target)
+    let attached = collaboration_contracts::SessionEventHub::attach(hub.as_ref(), hub_target)
         .await
         .expect("hub history");
     let started = attached
@@ -452,7 +452,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
     queue.reserve(&target).expect("queue capacity").send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
     );
 
@@ -549,7 +549,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
     permit.send(
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
     );
     backend

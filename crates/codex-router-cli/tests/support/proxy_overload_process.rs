@@ -213,7 +213,10 @@ impl RouterTestProcess {
         self.upstream_listener.take();
     }
 
-    #[allow(clippy::result_large_err)]
+    #[expect(
+        clippy::result_large_err,
+        reason = "The existing callback contract requires the unboxed error value."
+    )]
     pub(crate) async fn accept_upstream(&mut self) -> Result<ProviderConnection, String> {
         let listener = self
             .upstream_listener

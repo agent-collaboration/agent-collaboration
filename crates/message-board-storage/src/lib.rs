@@ -1,5 +1,4 @@
 //! Per-project native Turso stores and the Router's fleet/local storage.
-#![cfg_attr(test, allow(clippy::panic, clippy::panic_in_result_fn))]
 mod cursor_store;
 mod fleet_cache;
 mod fleet_outbox;

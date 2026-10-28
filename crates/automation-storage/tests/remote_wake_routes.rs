@@ -3,7 +3,10 @@ use automation_storage::{AutomationStore, RemoteWakeMail, WakeCreate};
 use collaboration_protocol::{OperationId, SavedMessage, WakeSnapshot};
 use serde_json::json;
 
-#[allow(clippy::unwrap_used)] // Fixed fixture literal, independent of storage.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Fixed fixture literal, independent of storage.
 fn snapshot(id: &str, created: &str) -> WakeSnapshot {
     serde_json::from_value(json!({
         "definition":{"wakeupId":id,"changeId":"019f0000-0000-7000-8000-000000000009","createdBy":{"kind":"owner"},
@@ -12,7 +15,10 @@ fn snapshot(id: &str, created: &str) -> WakeSnapshot {
         "state":"active","nextDueAt":"1970-01-01T00:01:00.000Z","firstFire":null,"pendingDeliveryId":null,"latestEventCursor":"owning cursor"
     })).unwrap()
 }
-#[allow(clippy::unwrap_used)] // Fixed closed request shape.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Fixed closed request shape.
 fn request(snapshot: &WakeSnapshot) -> RemoteWakeMail {
     let operation_id = OperationId::generate();
     RemoteWakeMail{
@@ -21,7 +27,10 @@ fn request(snapshot: &WakeSnapshot) -> RemoteWakeMail {
     }
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions are the regression oracle; Result propagates setup errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions are the regression oracle; Result propagates setup errors.
 async fn route_reopen_replays_frozen_bytes_and_combined_pages_keep_membership()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

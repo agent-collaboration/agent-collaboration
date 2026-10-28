@@ -1,11 +1,18 @@
 //! Reserved pending tags use current workstream authority and explicit blocked-record links.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
 use serde_json::{Value, json};
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove admission; Result propagates fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove admission; Result propagates fixture failures."
+)]
 async fn handbacks_require_the_workstream_pair_and_owner_questions_name_a_blocked_record()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

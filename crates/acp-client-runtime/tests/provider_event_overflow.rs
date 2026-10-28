@@ -1,7 +1,5 @@
 //! Output byte limits and event-consumer shutdown have different outcomes.
 
-#![allow(clippy::expect_used)]
-
 use std::{
     path::PathBuf,
     sync::{
@@ -96,6 +94,15 @@ impl SessionEventSink for CaptureEventSink {
     fn begin_history_replay(&self, _session_id: &str) -> HistoryReplayFuture<'_> {
         Box::pin(async { Ok(()) })
     }
+
+    #[expect(
+        clippy::expect_used,
+        reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+    )]
+    #[expect(
+        clippy::unwrap_in_result,
+        reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+    )]
     fn publish(&self, _session_id: &str, event: SessionEvent) -> Result<(), EventSinkClosed> {
         if self.closed.load(Ordering::SeqCst) {
             return Err(EventSinkClosed);
@@ -112,6 +119,10 @@ impl SessionEventSink for CaptureEventSink {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn run_fixture(
     fixture: &str,
     sink: Arc<CaptureEventSink>,

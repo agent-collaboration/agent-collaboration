@@ -1,9 +1,8 @@
 //! Native outbox/port proof; the recording port stands in for A3c's Host runtime.
-#![allow(clippy::panic_in_result_fn)]
-use collaboration_service::{
-    ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
-    ProjectRegistrationState,
-};
+use collaboration_contracts::ProjectRegistration;
+use collaboration_contracts::ProjectRegistrationError;
+use collaboration_contracts::ProjectRegistrationFuture;
+use collaboration_contracts::ProjectRegistrationState;
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use message_board_storage::{FleetOutbox, FleetOutboxState};
@@ -70,6 +69,10 @@ impl ProjectRegistration for RecordingRegistration {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn settled_directory_requests_are_durable_before_registration_and_recovered_after_reopen()
 -> TestResult {
     let directory = tempfile::tempdir()?;
@@ -141,7 +144,7 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
                 &origin
             )
             .await,
-        Err(collaboration_service::FleetClientError::Registration(_))
+        Err(collaboration_runtime::FleetClientError::Registration(_))
     ));
     let accepted = port
         .outbox

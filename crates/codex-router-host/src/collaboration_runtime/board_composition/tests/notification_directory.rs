@@ -5,10 +5,14 @@ use board_sync_protocol::InstallationPeerLookup;
 use message_board::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_live_installation_lookup_freezes_its_peer_outside_the_project_lock_and_then_uses_the_cache()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let service: ServiceId = "00000000-0000-4000-8000-000000000111"
         .to_owned()
         .try_into()?;
@@ -87,10 +91,14 @@ async fn a_live_installation_lookup_freezes_its_peer_outside_the_project_lock_an
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn an_unknown_installation_lookup_refuses_the_actual_intent_without_freezing_mail()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let service: ServiceId = "00000000-0000-4000-8000-000000000112"
         .to_owned()
         .try_into()?;

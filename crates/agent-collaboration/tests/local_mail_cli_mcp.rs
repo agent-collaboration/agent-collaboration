@@ -1,11 +1,25 @@
 //! Real CLI/MCP Local mail observations, sharing only the isolated surface fixture.
 use collaboration_service as mail_service;
+
 #[path = "support/local_mail_surfaces.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 mod local_mail_surfaces;
+
 #[path = "../../collaboration-service/tests/support/native_mail_owner.rs"]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_mail_owner;
+#[expect(
+    dead_code,
+    reason = "Shared native SQL fixture helpers serve different integration targets."
+)]
 #[path = "support/local_mail_native_sql.rs"]
-#[allow(dead_code)] // Companion failure tests use the shared fault helpers.
+// Companion failure tests use the shared fault helpers.
 mod native_sql;
 use collaboration_protocol::MailItemId;
 use local_mail_surfaces::{Surfaces, TestResult};

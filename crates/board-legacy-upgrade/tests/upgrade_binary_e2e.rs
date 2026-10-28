@@ -1,5 +1,4 @@
 #![deny(clippy::too_many_lines)]
-#![allow(clippy::panic_in_result_fn)]
 
 #[path = "upload_support/central_fixture.rs"]
 mod central_fixture;
@@ -7,23 +6,35 @@ mod central_fixture;
 mod e2e_support;
 #[path = "support/mod.rs"]
 mod fixture_support;
-#[allow(
+#[expect(
     dead_code,
     reason = "Upload helpers are shared with sibling integration targets."
 )]
 #[path = "upload_support/mod.rs"]
 mod upload_support;
 
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 #[path = "../examples/legacy_selection_oracle/oracle_errors.rs"]
 mod oracle_errors;
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 #[path = "../examples/legacy_selection_oracle/oracle_hashes.rs"]
 mod oracle_hashes;
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 #[path = "../examples/legacy_selection_oracle/post_selection.rs"]
 mod post_selection;
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 #[path = "../examples/legacy_selection_oracle/sealed_source.rs"]
 mod sealed_source;
 

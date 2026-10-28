@@ -5,13 +5,14 @@ use crate::{
     external_provider_supervisor::ProviderPromptDispatch,
     provider_acp_session_loading::{ProviderSessionLoadOutcome, ensure_provider_session_loaded},
 };
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::NOT_LOADED_REASON;
+use collaboration_contracts::ProviderConversationBackend;
 use collaboration_protocol::{
     ConversationOperationFailureKind, ConversationOperationWaitOutput,
     ConversationOperationWaitRequest, PositiveSeconds, ProviderOperationStage, SessionRef,
 };
-use collaboration_service::{
-    LoadPolicy, NOT_LOADED_REASON, ProviderConversationBackend, ProviderOperationStore,
-};
+use collaboration_runtime::ProviderOperationStore;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex as StdMutex},

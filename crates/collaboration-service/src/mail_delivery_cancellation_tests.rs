@@ -1,6 +1,6 @@
 //! Real Local control custody projects only cancellation metadata onto terminal mail.
 use super::fixture::{Fixture, ProjectionTask, recorded_at};
-use crate::RouterDeliveryTypes;
+use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::CarrierAcceptance;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushRecordDraft, SessionReachability,

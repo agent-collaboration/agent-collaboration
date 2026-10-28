@@ -129,7 +129,7 @@ pub(crate) async fn project(
             },
         )
         .map_err(|_| StorageError::InvalidRecord)?,
-        recorded_at: crate::wakeup_projection::timestamp(event.recorded_at_ms)
+        recorded_at: collaboration_runtime::observation_timestamp::timestamp(event.recorded_at_ms)
             .map_err(|_| StorageError::InvalidRecord)?,
         subject: AutomationEventSubject {
             kind: subject_kind,

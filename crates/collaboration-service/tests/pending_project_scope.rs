@@ -1,10 +1,22 @@
 //! Empty refused registrations leave aggregate scope without discarding healthy context.
-#![allow(clippy::indexing_slicing)] // Exact test fixture arrays/JSON; no production access.
+
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{initialized_request, keyed_call, post_at_placement};
@@ -17,8 +29,12 @@ async fn reject_and_move_creation(
     request: Value,
 ) -> Result<Value, TestError> {
     let creation: ProjectCreateRequest = serde_json::from_value(request.clone())?;
-    board_fixture::settle_accepted_creation(&fixture._fleet, &creation, &fixture.record_origin()?)
-        .await?;
+    board_fixture::registered_project::settle_accepted_creation(
+        &fixture._fleet,
+        &creation,
+        &fixture.record_origin()?,
+    )
+    .await?;
     // The directory policy and this native gate refusal are controlled inputs.
     // No application row is written before the empty database is moved aside.
     let store = fixture._registry.open_project(project).await?;
@@ -39,7 +55,6 @@ async fn reject_and_move_creation(
     Ok(fixture.api.call("project_create", request).await?)
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn reject_registration_fixture(fixture: &BoardFixture) -> Result<ProjectId, TestError> {
     let rejected = ProjectId::generate();
     let mut request = fixture.header();
@@ -76,7 +91,10 @@ fn search(scope: PostListScope, archived: bool) -> Result<PostSearchRequest, Tes
     })
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn rejected_creations_leave_every_search_scope_and_archive_mode() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("pending scopes").await?;
@@ -132,7 +150,10 @@ async fn rejected_creations_leave_every_search_scope_and_archive_mode() -> Resul
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn rejected_creation_keeps_initialized_workspace_summary() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("pending summary").await?;
@@ -159,7 +180,10 @@ async fn rejected_creation_keeps_initialized_workspace_summary() -> Result<(), T
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn rejected_creation_preserves_nonempty_repository_context() -> Result<(), TestError> {
     let fixture = BoardFixture::start_context().await?;
     let (project, workstream) = fixture.project().await?;
@@ -227,7 +251,10 @@ async fn rejected_creation_preserves_nonempty_repository_context() -> Result<(),
     fixture.stop().await
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn cold_corrupt_rejected_file_is_excluded_without_reading_it() -> Result<(), TestError> {
     read_cost_counter::install();
     let fixture = BoardFixture::start_context().await?;

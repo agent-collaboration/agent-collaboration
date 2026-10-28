@@ -29,7 +29,9 @@ use super::{
     subscription_push::{SubscriptionPushStore, SubscriptionPushStoreProps},
     subscription_wait::SubscriptionWaitFilter,
 };
-use crate::{MachineIdentity, SessionMessageDelivery, TargetPresenceProbe};
+use collaboration_contracts::MachineIdentity;
+use collaboration_contracts::SessionMessageDelivery;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{PushId, PushRecord, SessionRef};
 use message_board::{BoardError, Identity, ProjectId};
 use std::{collections::HashMap, sync::Arc};
@@ -313,8 +315,8 @@ impl SubscriptionDeliveryService {
     pub async fn attempt_mail_once(
         &self,
         kind: collaboration_protocol::PushKind,
-        request: crate::layer_zero::DeliveryRequest,
-    ) -> crate::NativeDeliveryResult {
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
+    ) -> collaboration_contracts::NativeDeliveryResult {
         self.attempt_checked_mail(
             kind,
             request,
@@ -327,8 +329,8 @@ impl SubscriptionDeliveryService {
         &self,
         project: ProjectId,
         reference: fleet_sync_protocol::DeliveryItemRef,
-        request: crate::layer_zero::DeliveryRequest,
-    ) -> crate::NativeDeliveryResult {
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
+    ) -> collaboration_contracts::NativeDeliveryResult {
         self.attempt_checked_mail(
             collaboration_protocol::PushKind::SubscriptionActivity,
             request,
@@ -340,10 +342,12 @@ impl SubscriptionDeliveryService {
     async fn attempt_checked_mail(
         &self,
         kind: collaboration_protocol::PushKind,
-        request: crate::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         check: super::reader_delivery_owner::MailAttemptCheck,
-    ) -> crate::NativeDeliveryResult {
-        use crate::{NativeDeliveryResult, NativeRefusalCode, UnsentCause};
+    ) -> collaboration_contracts::NativeDeliveryResult {
+        use collaboration_contracts::NativeDeliveryResult;
+        use collaboration_contracts::NativeRefusalCode;
+        use collaboration_contracts::UnsentCause;
         use collaboration_protocol::PushKind;
         let not_started = |retryable, reason: &str, cause| {
             NativeDeliveryResult::not_submitted(reason, retryable, cause)
@@ -560,7 +564,7 @@ impl SubscriptionDeliveryService {
             let owner_sender = sender.clone();
             self.inner.tasks.spawn(
                 async move {
-                    owner.run().await;
+                    Box::pin(owner.run()).await;
                     let mut owners = inner.owners.lock().await;
                     if owners
                         .get(&reader)

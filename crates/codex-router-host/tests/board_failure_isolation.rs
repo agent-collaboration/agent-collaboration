@@ -4,8 +4,11 @@ use message_board::{BoardFailureKind, PageLimit, PageRequest, WorkspaceListReque
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
-#[allow(dead_code)]
 // This Host restart proof uses the shared board setup, not every fixture journey.
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 mod board_fixture;
 #[path = "support/native_project_fixture.rs"]
 mod native_project_fixture;
@@ -78,7 +81,7 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     std::fs::set_permissions(root, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
-    let fleet = collaboration_service::FleetClient::open(
+    let fleet = collaboration_runtime::FleetClient::open(
         root,
         std::sync::Arc::new(native_project_fixture::UnsettledRegistration),
         None,
@@ -94,7 +97,7 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: Some(native_project_fixture::offline_inputs(
             offline_endpoint.local_addr()?,
-            collaboration_service::load_installation_peer(root)?,
+            collaboration_runtime::load_installation_peer(root)?,
         )?),
         directory: root.to_path_buf(),
         codex_home: root.to_path_buf(),
@@ -122,16 +125,21 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
 }
 
 #[tokio::test]
-#[allow(clippy::indexing_slicing, clippy::panic_in_result_fn)]
 async fn pending_corrupt_feed_is_contained_during_subscription_restart()
 -> Result<(), board_fixture::TestError> {
-    subscription_restart_contains_project_failure(RestartFault::PendingFeed).await
+    Box::pin(subscription_restart_contains_project_failure(
+        RestartFault::PendingFeed,
+    ))
+    .await
 }
 
 #[tokio::test]
 async fn same_readers_corrupt_membership_is_contained_during_subscription_restart()
 -> Result<(), board_fixture::TestError> {
-    subscription_restart_contains_project_failure(RestartFault::Membership).await
+    Box::pin(subscription_restart_contains_project_failure(
+        RestartFault::Membership,
+    ))
+    .await
 }
 
 #[derive(Clone, Copy)]
@@ -140,7 +148,10 @@ enum RestartFault {
     Membership,
 }
 
-#[allow(clippy::indexing_slicing, clippy::panic_in_result_fn)]
+#[expect(
+    clippy::indexing_slicing,
+    reason = "The test keeps its existing explicit assertion and failure contract."
+)]
 async fn subscription_restart_contains_project_failure(
     fault: RestartFault,
 ) -> Result<(), board_fixture::TestError> {
@@ -161,7 +172,7 @@ async fn subscription_restart_contains_project_failure(
     identity_file.sync_all()?;
     drop(identity_file);
     assert_eq!(
-        collaboration_service::load_installation_peer(fixture._directory.path())?,
+        collaboration_runtime::load_installation_peer(fixture._directory.path())?,
         fixture_peer
     );
     let (healthy, _) = fixture.project().await?;
@@ -281,7 +292,7 @@ async fn subscription_restart_contains_project_failure(
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: Some(native_project_fixture::offline_inputs(
             offline_endpoint.local_addr()?,
-            collaboration_service::load_installation_peer(&root)?,
+            collaboration_runtime::load_installation_peer(&root)?,
         )?),
         directory: root.clone(),
         codex_home: root.clone(),

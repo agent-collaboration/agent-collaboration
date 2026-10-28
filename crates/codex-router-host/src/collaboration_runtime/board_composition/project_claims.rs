@@ -1,7 +1,9 @@
 //! The holder's claim uses the machine session and publishes only a verified, renewed seed.
 use super::project_writers::ProjectWriters;
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::{ProjectClaim, ProjectClaimError, ProjectClaimFuture};
+use collaboration_contracts::ProjectClaim;
+use collaboration_contracts::ProjectClaimError;
+use collaboration_contracts::ProjectClaimFuture;
 use fleet_sync_protocol::{
     DatabaseId, HolderChangeAnswer, HolderChangeRefusal, LeaseAnswer, LeaseRequest,
     OperationAnswer, OperationRequest,
@@ -114,11 +116,14 @@ fn claim_refusal(reason: HolderChangeRefusal) -> io::Result<ProjectClaimRefusal>
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod refusal_tests {
     use super::*;
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn claim_refusals_preserve_frozen_native_details_and_name_only_the_archive_gate() -> TestResult
     {
         let id = "019f0000-0000-7000-8000-000000009710";

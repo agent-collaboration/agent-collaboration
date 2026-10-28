@@ -239,9 +239,9 @@ async fn credit_backed_turn_makes_later_unknown_authority_fail_closed() {
             "Unknown turn 3 must not reach upstream: {upstream_end:?}"
         );
     };
-    let (router_result, ()) = tokio::time::timeout(Duration::from_secs(8), async {
+    let (router_result, ()) = Box::pin(tokio::time::timeout(Duration::from_secs(8), async {
         tokio::join!(router_future, peer_future)
-    })
+    }))
     .await
     .expect("credit-backed-to-Unknown WebSocket transition should finish");
     assert!(

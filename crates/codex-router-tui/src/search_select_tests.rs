@@ -87,7 +87,7 @@ async fn real_inline_component_pointer_and_keyboard_select_the_same_key() {
                         TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
                             7,
-                            row as u16,
+                            u16::try_from(row).expect("fixture coordinates fit terminal cells"),
                         ))
                     } else {
                         TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter))
@@ -422,7 +422,7 @@ async fn unavailable_choice_rejects_pointer_and_enter_after_readable_paint() {
                 TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                     MouseEventKind::Down(MouseButton::Left),
                     7,
-                    row as u16,
+                    u16::try_from(row).expect("fixture coordinates fit terminal cells"),
                 ))
             } else {
                 TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter))
@@ -491,7 +491,7 @@ async fn compact_unavailable_reason_wraps_without_enabling_keyboard_or_pointer_s
                         TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
                             7,
-                            row as u16,
+                            u16::try_from(row).expect("fixture coordinates fit terminal cells"),
                         ))
                     } else {
                         TerminalEvent::Key(KeyEvent::new(KeyEventKind::Press, KeyCode::Enter))

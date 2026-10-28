@@ -2,6 +2,10 @@
 use super::*;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn typed_non_success_never_changes_existing_or_absent_enrollment() -> TestResult {
     for existing in [false, true] {
         let fixture = ProducerFixture::start().await?;
@@ -60,6 +64,10 @@ async fn typed_non_success_never_changes_existing_or_absent_enrollment() -> Test
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn invalid_expiry_or_owner_environment_fails_before_http_or_storage() -> TestResult {
     let fixture = ProducerFixture::start().await?;
     fixture
@@ -100,6 +108,10 @@ async fn invalid_expiry_or_owner_environment_fails_before_http_or_storage() -> T
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn malformed_redirect_and_mismatched_success_keep_old_state() -> TestResult {
     let fixture = ProducerFixture::start().await?;
     fixture
@@ -190,6 +202,10 @@ async fn malformed_redirect_and_mismatched_success_keep_old_state() -> TestResul
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn publication_failure_removes_only_staged_generation_and_keeps_old_secrets() -> TestResult {
     use std::os::unix::fs::PermissionsExt;
     let fixture = ProducerFixture::start().await?;

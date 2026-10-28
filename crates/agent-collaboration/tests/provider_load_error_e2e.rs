@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing, clippy::panic)]
 //! A real ACP load failure keeps its trace reference through CLI show and the stored push.
 
 use codex_router_host::{
@@ -9,7 +8,8 @@ use collaboration_protocol::{
     EndpointId, EndpointRef, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionId, SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
 use serde_json::{Value, json};
 use sqlx::Connection;
 use sqlx_turso::{TursoConnectOptions, TursoConnection};
@@ -82,7 +82,7 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     let root = tempfile::tempdir().expect("Host root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host root");
-    let runtime = CollaborationRuntime::start_with_external_providers(
+    let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
             board_session: None,
             directory: root.path().to_owned(),
@@ -108,7 +108,7 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
             )
             .expect("Cursor ACP binding"),
         )],
-    )
+    ))
     .await
     .expect("real Host startup");
 
@@ -304,6 +304,10 @@ async fn acp_load_failure_correlation_matches_cli_show_and_stored_outcome() {
     runtime.shutdown().await.expect("Host shutdown");
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 async fn record_unloaded_provider_session(
     directory: &Path,
     target: &SessionRef,

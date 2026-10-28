@@ -1,5 +1,4 @@
 //! Real ACP decoding/projection retains metadata without making it Codex prose.
-#![allow(clippy::expect_used)]
 
 use std::{path::PathBuf, sync::Arc, time::Duration};
 
@@ -8,7 +7,8 @@ use acp_client_runtime::{
     HistoryReplayFuture, InteractionFuture, InteractionPort, ProviderPersistenceTarget,
     RefusedApprovalOffer, SessionEventSink,
 };
-use collaboration_service::{HistoricalTurn, render_historical_turn};
+use collaboration_runtime::HistoricalTurn;
+use collaboration_runtime::render_historical_turn;
 use serde_json::{Value, json};
 use session_event_model::{
     ApprovalRequest, SessionEvent, SessionItemKind, StopReason, TurnOutcome,
@@ -76,6 +76,7 @@ impl SessionEventSink for MetadataCapture {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn check_metadata_projection(replay: bool) {
     // Arrange: actual ACP subprocess and runtime projection, with literal payloads.
     let root = tempfile::tempdir().expect("provider working directory");

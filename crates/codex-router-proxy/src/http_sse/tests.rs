@@ -4,7 +4,7 @@ use super::AuthenticatedHttpProxyService;
 use super::HttpAffinitySecretProvider;
 use super::HttpProxyError;
 use super::HttpProxyRequest;
-use super::audit_route_kind_for_route_kind;
+use super::http_affinity::audit_route_kind_for_route_kind;
 use codex_router_auth::resolver::CredentialResolverError;
 use codex_router_auth::resolver::ResolvedProviderCredential;
 use codex_router_core::affinity::RouterAffinityHashSecret;
@@ -126,6 +126,10 @@ impl AsyncAccountDecisionSelector for FixedAsyncSelector {
 struct FixedAffinitySecretProvider;
 
 impl HttpAffinitySecretProvider for FixedAffinitySecretProvider {
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     fn load_or_create_affinity_secret(&self) -> Result<RouterAffinityHashSecret, HttpProxyError> {
         Ok(RouterAffinityHashSecret::new(
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",

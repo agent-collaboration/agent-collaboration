@@ -1,5 +1,10 @@
 //! Private source shapes retain the legacy schema's names; domain parsing is explicit.
-use message_board::*;
+use message_board::{
+    BoardId, CommonDirectory, Description, EndReason, EndpointId, HumanId, Identity,
+    NormalizedOrigin, ParticipantClosedReason, ParticipantNote, ParticipantRole, PostId, ProjectId,
+    ReferenceTarget, ResourceName, ServiceId, SessionId, SubscriptionGeneration, SubscriptionMode,
+    ThreadId, ThreadState, WhenIdle, WorkspaceId,
+};
 use serde::Deserialize;
 use std::collections::BTreeMap;
 

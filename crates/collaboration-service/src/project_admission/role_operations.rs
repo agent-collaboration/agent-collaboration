@@ -2,7 +2,12 @@ use super::{
     ProjectAdmissionError,
     operation_context::{OperationContext, OperationPlan},
 };
-use message_board::*;
+use message_board::{
+    AssignmentRevision, AuthorityRole, BoardOperation, GrantKind, NotifyTarget, OwnerGrant,
+    OwnerGrantId, OwnerWordsProvenance, Record, RecordId, RecordedActor, Refusal, ResourceName,
+    RoleAssignment, RoleAssignmentId, RoleAssignmentProps, RoleCardinality, RoleEnd, RoleRefusal,
+    RoleSubject, StandDownAcknowledgement, SubjectRevision, work_rules,
+};
 use message_board_storage::ProjectWriteTransaction;
 
 impl OperationContext<'_> {

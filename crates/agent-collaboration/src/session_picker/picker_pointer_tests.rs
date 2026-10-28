@@ -36,8 +36,10 @@ async fn observe_session_pointer(
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             kind,
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column)
+                                .expect("captured fixture coordinates fit terminal cells"),
+                            u16::try_from(row)
+                                .expect("captured fixture coordinates fit terminal cells"),
                         )))
                         .unwrap();
                     phase = 1;
@@ -139,8 +141,10 @@ async fn sessions_picker_start_new_click_opens_form_and_start_is_explicit() {
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column)
+                                .expect("captured fixture coordinates fit terminal cells"),
+                            u16::try_from(row)
+                                .expect("captured fixture coordinates fit terminal cells"),
                         )))
                         .unwrap();
                     phase = 1;
@@ -235,11 +239,13 @@ async fn sessions_picker_hover_keeps_scrolled_row_under_pointer_until_click_and_
                         phase = 1;
                     }
                     1 if frame.contains("❯ Follow-up implementation lane 7") => {
-                        pointer_row = frame
-                            .lines()
-                            .position(|line| line.contains("Follow-up implementation lane 5"))
-                            .expect("literal row must be visible after End")
-                            as u16;
+                        pointer_row = u16::try_from(
+                            frame
+                                .lines()
+                                .position(|line| line.contains("Follow-up implementation lane 5"))
+                                .expect("literal row must be visible after End"),
+                        )
+                        .expect("captured fixture coordinates fit terminal cells");
                         sender
                             .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                                 MouseEventKind::Moved,

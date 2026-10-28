@@ -1,5 +1,9 @@
 //! Forward slots are reserved and retired in the owning session transaction.
-use super::*;
+use super::{
+    AtomicStore, ColumnIndex, CoreSessionScope, Database, Decode, Encode, IntoArguments,
+    JournalScope, ObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect, StoreError,
+    SyncTime, TransactionScope, Type,
+};
 use crate::{
     forward_calls::{ForwardAnswerRequest, ForwardDeliveryRequest, ForwardRouteResult},
     forward_store::{self, ForwardPhase, PendingForward},

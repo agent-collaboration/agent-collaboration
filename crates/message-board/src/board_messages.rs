@@ -18,7 +18,10 @@ pub struct PostReferences(Vec<ReferenceTarget>);
 
 #[derive(JsonSchema)]
 #[schemars(transparent)]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "The derive reads this field's schema; no schema-carrier value is constructed."
+)]
 struct PostReferencesSchema(#[schemars(length(max = 64))] Vec<ReferenceTarget>);
 
 impl JsonSchema for PostReferences {

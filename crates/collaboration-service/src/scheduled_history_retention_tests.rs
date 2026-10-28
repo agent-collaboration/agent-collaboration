@@ -1,8 +1,10 @@
 //! U66: schedules retain the long-lived occurrence property retired from wakes.
-use super::fixture::{FixtureTiming, provider_worker_fixture_at};
 use super::*;
-use crate::collaboration_application::CollaborationRejection;
+use crate::collaboration_rejection::CollaborationRejection;
 use collaboration_protocol::{MachineId, PushRecordDraft, PushRecordShowParams, RouterOriginRef};
+use collaboration_runtime::test_support::scheduled_route_fixture::fixture::{
+    FixtureTiming, provider_worker_fixture_at,
+};
 
 macro_rules! ensure {
     ($condition:expr $(,)?) => { ensure!($condition, "assertion failed: {}", stringify!($condition)); };
@@ -38,7 +40,7 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     )
     .await?;
     let interactions = Arc::clone(&worker.interactions);
-    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
+    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
     let inputs = first.inputs.as_ref().ok_or("captured schedule inputs")?;
     let ExecutionDestination::OwnedThread { target, .. } =
         &inputs.execution_configuration.destination
@@ -81,10 +83,10 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         })
         .await?;
     for _ in 0..4 {
-        worker.step(first_run.clone()).await?;
+        Box::pin(worker.step(first_run.clone())).await?;
         apply_push_handoff(&worker).await?;
     }
-    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
+    let first = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&first_run).await?;
     ensure_eq!(first.phase, agent_automation::RunPhase::Finished);
     let old = interactions
         .get_push_record(&first_push_id)
@@ -105,10 +107,10 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
     );
     let service_id = target.endpoint.service_id.clone();
     let service = String::from(service_id.clone());
-    let identity = crate::ServiceIdentity::new(&service, &service)?
+    let identity = crate::ApplicationFixture::new(&service, &service)?
         .with_automation_store(Arc::clone(&store))
         .with_interaction_store(Arc::clone(&interactions));
-    let application = crate::CollaborationApplication::new(identity);
+    let application = (identity).build();
     let old_link = RouterLink::new(MachineId::from(service_id.clone()), first_push_id.clone());
     let error = application
         .messages()
@@ -140,10 +142,10 @@ async fn same_schedule_delivers_a_fresh_occurrence_after_its_old_push_is_age_pru
         matches!(store.lock().await.admit_waiting_run::<SessionRef, EndpointRef>(&schedule_id, now.timestamp_millis()).await?, automation_storage::RunAdmission::Admitted { run_id, .. } if run_id == second_run)
     );
     for _ in 0..4 {
-        worker.step(second_run.clone()).await?;
+        Box::pin(worker.step(second_run.clone())).await?;
         apply_push_handoff(&worker).await?;
     }
-    let second = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&second_run).await?;
+    let second = store.lock().await.read_run::<SessionRef, EndpointRef, CodexGeneration, collaboration_runtime::stored_run_receipt::StoredRunReceipt>(&second_run).await?;
     ensure_eq!(second.phase, agent_automation::RunPhase::Finished);
     ensure!(second.due_at_ms - first.due_at_ms >= interval.num_milliseconds());
     let new_origin = RouterOriginRef::ScheduleRun {

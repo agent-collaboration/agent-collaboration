@@ -403,6 +403,10 @@ mod tests {
     }
 
     impl KeychainAccess for MemoryKeychainAccess {
+        #[expect(
+            clippy::unwrap_in_result,
+            reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+        )]
         fn read_secret(
             &self,
             service: &str,
@@ -418,6 +422,10 @@ mod tests {
                 .cloned())
         }
 
+        #[expect(
+            clippy::unwrap_in_result,
+            reason = "This test double must fail on broken fixture invariants instead of reporting a product error."
+        )]
         fn add_secret(
             &self,
             service: &str,

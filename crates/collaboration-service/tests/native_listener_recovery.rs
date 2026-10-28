@@ -1,4 +1,5 @@
-use collaboration_service::{NativeGenerationGate, NativeRelayListener};
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::NativeRelayListener;
 use futures_util::{SinkExt, StreamExt};
 use std::{os::unix::fs::DirBuilderExt, time::Duration};
 use tokio::net::{UnixListener, UnixStream};

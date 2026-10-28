@@ -127,7 +127,7 @@ async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
                 );
                 snapshot.finish().await?;
             }
-            Err(collaboration_service::ProjectRegistryError::Unavailable { .. }) => {}
+            Err(collaboration_runtime::ProjectRegistryError::Unavailable { .. }) => {}
             _ => return Err("unexpected moved-pull outcome".into()),
         }
         head
@@ -192,6 +192,10 @@ async fn an_interrupted_native_page_install_is_refetched_after_owning_reopen() -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_from_central()
 -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
@@ -240,13 +244,12 @@ async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_fro
         fleet: runtime.fleet.clone(),
         identity: identity()?,
     })?);
-    let application = CollaborationApplication::new(
-        ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     assert!(!root.join("projects").exists());
     let view = timeout(
         BOUND,

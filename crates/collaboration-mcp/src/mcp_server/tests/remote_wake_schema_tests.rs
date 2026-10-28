@@ -17,9 +17,8 @@ async fn remote_wake_history_and_show_schemas_accept_cancelled_nullable_snapshot
             .await
             .expect("automation store"),
     ));
-    let application = collaboration_service::CollaborationApplication::new(
-        crate::api_test_harness::test_identity().with_automation_store(store),
-    );
+    let application =
+        (crate::api_test_harness::test_identity().with_automation_store(store)).build();
     let created = application
         .wakes()
         .wake_send(

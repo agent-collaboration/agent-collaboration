@@ -80,6 +80,10 @@ pub(crate) use router_connection_registry::{RouterRegistryError, RouterRegistryR
 mod picker_runtime_inventory;
 
 #[cfg(test)]
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "../tests/fake_api_support/mod.rs"]
 pub(crate) mod fake_api_support;
 

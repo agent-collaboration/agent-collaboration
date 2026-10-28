@@ -48,6 +48,10 @@ async fn directory_lease(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> TestResult {
     // Arrange an actual native Copy and committed Registry grant through Claim.
     let fixture = claim_fixture::ClaimFixture::start().await?;
@@ -73,7 +77,7 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
         .central
         .additional_machine(
             &reader_origin,
-            collaboration_service::load_installation_peer(&root)?,
+            collaboration_runtime::load_installation_peer(&root)?,
         )
         .await?;
     let reader_identity = MachineIdentity::new(
@@ -89,13 +93,12 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
     let admission = board.admission.clone();
     let running = board.start().ok_or("reader session not started")?;
     wait_welcome(ready).await?;
-    let application = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            reader_origin.installation.as_str(),
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (collaboration_service::ApplicationFixture::new(
+        reader_origin.installation.as_str(),
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     let proof = async {
         let original = directory_lease(&requests, &project).await?;
         let DirectoryLease::Held {

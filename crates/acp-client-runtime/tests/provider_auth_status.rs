@@ -1,7 +1,5 @@
 //! Claude's connection auth update is private to the ACP back door.
 
-#![allow(clippy::expect_used)]
-
 use std::{path::PathBuf, sync::Arc};
 
 use acp_client_runtime::{

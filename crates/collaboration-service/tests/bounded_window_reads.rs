@@ -1,12 +1,21 @@
 //! Window scans ignore non-post bodies; feed pages batch their redaction projection.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use collaboration_service::SubscriptionWindowStore;
 use message_board::*;
-use read_cost_counter::{DataStatementCounts, ReadCost, ReadCostObservation};
+use read_cost_counter::sql_cost_classification::DataStatementCounts;
+use read_cost_counter::{ReadCost, ReadCostObservation};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
 use std::sync::Arc;
@@ -33,7 +42,6 @@ impl PageReadCost {
     }
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn window_cost(size: usize) -> Result<PageReadCost, TestError> {
     let mut fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -176,9 +184,9 @@ async fn window_cost(size: usize) -> Result<PageReadCost, TestError> {
     fixture._fleet_runtime.disconnect().await?;
     let now = chrono::Utc::now();
     let observation = ReadCostObservation::default();
-    let added = observation
-        .observe(windows.rescan_missing_subscription_windows(&reader, now))
-        .await?;
+    let added =
+        Box::pin(observation.observe(windows.rescan_missing_subscription_windows(&reader, now)))
+            .await?;
     let data_statements = observation.data_statement_counts();
     let mut cost = observation.cost();
     cost.statements = data_statements.total();
@@ -205,7 +213,6 @@ async fn window_cost(size: usize) -> Result<PageReadCost, TestError> {
     })
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn feed_cost(size: usize) -> Result<PageReadCost, TestError> {
     let mut fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
@@ -271,12 +278,15 @@ async fn feed_cost(size: usize) -> Result<PageReadCost, TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn subscription_and_content_pages_bound_their_body_and_followup_reads()
 -> Result<(), TestError> {
     read_cost_counter::install();
-    let small = window_cost(8).await?;
-    let large = window_cost(80).await?;
+    let small = Box::pin(window_cost(8)).await?;
+    let large = Box::pin(window_cost(80)).await?;
     eprintln!(
         "window page costs: small={:?}; large={:?}",
         small.cost, large.cost
@@ -286,8 +296,8 @@ async fn subscription_and_content_pages_bound_their_body_and_followup_reads()
         large.cost.feed_entries, 5,
         "only the watched posts are bodies"
     );
-    let small = feed_cost(8).await?;
-    let large = feed_cost(80).await?;
+    let small = Box::pin(feed_cost(8)).await?;
+    let large = Box::pin(feed_cost(80)).await?;
     eprintln!(
         "content page costs: small={:?}; large={:?}",
         small.cost, large.cost

@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::indexing_slicing)]
 //! Fail-fast fixture assertions at the Host endpoint boundary.
 
 use codex_router_host::{
@@ -23,6 +22,7 @@ fn runtime_inputs(directory: &Path) -> CollaborationRuntimeInputs {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn fixture_provider(directory: &Path) -> std::path::PathBuf {
     let executable = directory.join("fixture-provider.ts");
     codex_router_test_support::node_fixture::write_node_fixture(
@@ -36,6 +36,7 @@ fn fixture_provider(directory: &Path) -> std::path::PathBuf {
     executable
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn endpoint<'a>(endpoints: &'a [EndpointDescription], id: &str) -> &'a EndpointDescription {
     endpoints
         .iter()

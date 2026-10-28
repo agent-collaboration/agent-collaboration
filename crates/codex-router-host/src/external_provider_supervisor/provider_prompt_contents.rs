@@ -1,6 +1,14 @@
 //! Provider-neutral prompt admission and API task-input projection.
 
-use super::*;
+use super::{
+    ConversationOperationFailure, ConversationOperationFailureKind,
+    ConversationOperationFailureStage, ConversationOperationSettlement,
+    ConversationOperationSubmission, ConversationPromptRequest, ExternalProviderSupervisor,
+    OperationId, PreparedOperation, ProviderConversationFuture, ProviderIdentity,
+    ProviderOperationCompletion, ProviderOperationEffect, ProviderOperationKind, SessionRef,
+    admitted_submission, existing_submission, failure, optional_message_text,
+    prompt_runtime_failure, retain_operation,
+};
 
 /// Host-internal prompt admission. Public API requests keep their prompt
 /// text as task input before reaching this boundary.
@@ -22,9 +30,9 @@ impl ProviderPromptContentsRequest {
         requested_by: ProviderIdentity,
         approver: ProviderIdentity,
         line: &collaboration_protocol::MessageText,
-    ) -> Result<Self, collaboration_service::DeliveryContractError> {
+    ) -> Result<Self, collaboration_contracts::DeliveryContractError> {
         let content = session_event_model::PromptContent::text(line.as_str().to_owned())
-            .map_err(|_| collaboration_service::DeliveryContractError::ClientOperation)?;
+            .map_err(|_| collaboration_contracts::DeliveryContractError::ClientOperation)?;
         Ok(Self {
             operation_id,
             input_id,

@@ -6,6 +6,10 @@ use fleet_sync_protocol::{
 };
 use futures_util::SinkExt;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn registration_replays_the_committed_answer_after_the_server_process_dies()
 -> ConformanceResult<()> {
@@ -214,6 +218,10 @@ where
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 async fn reopened_welcome_accepts_notice_before_its_exact_session() -> ConformanceResult<()> {
     // Attached sessions may receive a notice while Welcome gathers Registry/Copy state.
     let session = fleet_sync_protocol::SessionId::new(Uuid::now_v7())?;
@@ -252,6 +260,10 @@ async fn reopened_welcome_accepts_notice_before_its_exact_session() -> Conforman
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 async fn reopened_welcome_notices_do_not_restart_the_total_deadline() -> ConformanceResult<()> {
     let session = Uuid::now_v7();
     let notice = serde_json::to_string(&ServerFrame::<BoardConsumerProtocol>::Notice {
@@ -281,6 +293,10 @@ async fn reopened_welcome_notices_do_not_restart_the_total_deadline() -> Conform
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 async fn reopened_welcome_rejects_a_changed_session_or_another_frame() -> ConformanceResult<()> {
     let session = Uuid::now_v7();
     for frame in [

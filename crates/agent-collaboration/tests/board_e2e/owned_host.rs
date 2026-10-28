@@ -66,7 +66,7 @@ impl StoppedHost {
     }
 
     // SIGKILL skips listener Drop; only this joined child's three paths qualify.
-    #[allow(dead_code)] // Shared by targets that exercise joined SIGKILL readback.
+    // Shared by targets that exercise joined SIGKILL readback.
     async fn remove_listener_residue(&self) -> FixtureResult {
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
@@ -281,7 +281,7 @@ impl BoardHost {
         Ok(())
     }
 
-    #[allow(dead_code)] // Only takeover targets need the private replay observation.
+    // Only takeover targets need the private replay observation.
     pub async fn local_cancel_delivery_recorded(
         &mut self,
         cancel: fleet_sync_protocol::ItemId,
@@ -300,7 +300,6 @@ impl BoardHost {
             .ok_or_else(|| "owned Host omitted Local cancel observation".into())
     }
 
-    #[allow(dead_code)] // Only takeover targets drive the private project sender.
     pub async fn replicate_project(&mut self, project: &str) -> FixtureResult {
         let reply = self
             .query_project(json!({"kind":"replicateProject", "project":project}))
@@ -311,7 +310,6 @@ impl BoardHost {
         Ok(())
     }
 
-    #[allow(dead_code)] // Only the settled takeover branch needs the absence barrier.
     pub async fn drain_project_publisher(&mut self, project: &str) -> FixtureResult {
         let reply = self
             .query_project(json!({"kind":"drainProjectPublisher","project":project}))
@@ -322,7 +320,6 @@ impl BoardHost {
         Ok(())
     }
 
-    #[allow(dead_code)] // Only retained takeover cases inspect the verified seed floor.
     pub async fn seeded_handoff_frontier(&mut self, project: &str) -> FixtureResult<Value> {
         let reply = self
             .query_project(json!({"kind":"seededHandoffFrontier","project":project}))
@@ -464,7 +461,7 @@ impl BoardHost {
     }
 
     /// Readback begins only after this owned child is killed, reaped and drained.
-    #[allow(dead_code)] // Some process-test roots only need graceful readback.
+    // Some process-test roots only need graceful readback.
     pub async fn crash_for_readback(mut self) -> FixtureResult<StoppedHost> {
         use std::os::unix::process::ExitStatusExt;
 

@@ -1,7 +1,13 @@
 //! The import identity describes logical content; seed manifests cover physical integrity.
 use crate::{UpgradeError, import_error::invalid, legacy_rows::LegacyProject};
 use fleet_sync_protocol::ImportDigest;
-use message_board::*;
+use message_board::{
+    ActingForIdentity, BoardId, Description, FeedCursor, Identity, ImplementerHolder,
+    MembershipEnd, OrchestratorHolder, Participant, ParticipantRole, Placement, PostId,
+    PostReferences, PostText, ProjectId, ReadScope, Record, RecordId, RecordScope, RecordTime,
+    RecordedActor, RequestId, ResourceName, SubjectRevision, SubscriptionGeneration,
+    SubscriptionPolicy, SubscriptionScope, ThreadId, ThreadState, ThreadSubject,
+};
 use message_board_storage::ProjectImportBatch;
 use serde::Serialize;
 

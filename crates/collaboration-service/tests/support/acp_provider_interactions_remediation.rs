@@ -3,7 +3,10 @@ use super::*;
 /// A resolved historical request may remain in the hub snapshot, but a new
 /// ACP connection must not present it as a live permission request.
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -49,7 +52,7 @@ async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestRes
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),
@@ -90,7 +93,10 @@ async fn acp_attach_does_not_represent_resolved_historical_approval() -> TestRes
 /// acknowledgement. That rejection keeps the approval pending and re-presents
 /// the exact offered options with a fresh request ID.
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -119,7 +125,7 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),
@@ -234,7 +240,7 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
         .decide_typed_interaction(
             "persistent-retry",
             &owner,
-            collaboration_service::TypedInteractionDecision::SelectApproval {
+            collaboration_runtime::TypedInteractionDecision::SelectApproval {
                 option_id: "reject-once".into(),
                 acknowledge_persistent: false,
                 note: None,
@@ -252,7 +258,10 @@ async fn rejected_persistent_acp_choice_is_visible_and_retryable() -> TestResult
 
 /// Busy is decided from the hub before the command port can submit an input.
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn busy_acp_prompt_does_not_reach_provider_command_port() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -267,7 +276,7 @@ async fn busy_acp_prompt_does_not_reach_provider_command_port() -> TestResult {
         )),
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
-        Arc::new(collaboration_service::UnavailableConversationOperationRecorder),
+        Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),

@@ -3,6 +3,10 @@ use crate::{FeedPageBounds, FeedPageDirection, ProjectStore};
 use message_board::*;
 use sqlx::{ConnectOptions, Connection};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn post_scope_cannot_hide_corrupt_placement_and_ignores_a_foreign_thread_body()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

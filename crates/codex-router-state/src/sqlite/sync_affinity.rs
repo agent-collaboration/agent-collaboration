@@ -1,6 +1,10 @@
 //! SQLite sync affinity responsibilities.
 use super::affinity_store::parse_previous_response_owner_row;
-use super::*;
+use super::{
+    AccountId, AffinityKey, AffinityKeyHash, AffinityRepository, OptionalExtension,
+    PreviousResponseAffinityOwnerLookup, PreviousResponseAffinityOwnerRecord, SqliteStateStore,
+    StateStoreError, params, sqlite_error, u64_to_i64,
+};
 
 #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
 impl AffinityRepository for SqliteStateStore {

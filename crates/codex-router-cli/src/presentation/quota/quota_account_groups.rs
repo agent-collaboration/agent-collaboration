@@ -31,7 +31,7 @@ pub(super) fn render_group_headers(width: usize) -> Option<AnyElement<'static>> 
     Some(element! {
         View(column_gap:1,flex_shrink:0.0_f32) {
             #(["Account","Quota left · reset in","Weekly pace","Extra"].into_iter().zip(widths).map(|(content,width)|element! {
-                View(width:width as u32,flex_shrink:0.0_f32) {UiColumnHeading(content)}
+                View(width:u32::try_from(width).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {UiColumnHeading(content)}
             }))
         }
     }.into_any())
@@ -149,11 +149,11 @@ pub(super) fn render_interactive_account(
         ("Extra",extra_group(row)),
     ];
     element! {
-        View(width:width as u32,flex_shrink:0.0_f32) {
+        View(width:u32::try_from(width).unwrap_or(u32::MAX),flex_shrink:0.0_f32) {
             SelectableRow(selected:focused,marker_offset:if widths.is_some() {0u16}else {2u16}) {
                 View(flex_direction:if widths.is_some() {FlexDirection::Row}else {FlexDirection::Column},column_gap:1,flex_shrink:0.0_f32) {
                     #(groups.into_iter().enumerate().map(|(index,(label,group))|element! {
-                        View(width:widths.and_then(|widths|widths.get(index).copied()).unwrap_or(width.saturating_sub(2)) as u32,min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
+                        View(width:u32::try_from(widths.and_then(|widths|widths.get(index).copied()).unwrap_or(width.saturating_sub(2))).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                             #(widths.is_none().then(||element!(UiColumnHeading(content:label))))
                             #(group)
                         }

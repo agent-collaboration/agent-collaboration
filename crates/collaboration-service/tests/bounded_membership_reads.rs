@@ -1,11 +1,20 @@
 //! Per-write reconciliation stays local; reader-wide discovery probes other stores once.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
-use read_cost_counter::{DataStatementCounts, ReadCost, ReadCostObservation};
+use read_cost_counter::sql_cost_classification::DataStatementCounts;
+use read_cost_counter::{ReadCost, ReadCostObservation};
 use serde_json::json;
 use std::sync::Arc;
 
@@ -39,22 +48,22 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
     }
     // Arrange the reader owner only after setup, so no earlier request can
     // retain a different observation. Native admission and reconciliation stay real.
-    let board_fixture::FixturePollServices {
+    let board_fixture::board_poll_services::FixturePollServices {
         identity,
         delivery,
         native,
         publisher,
-    } = board_fixture::fixture_poll_services(
+    } = board_fixture::board_poll_services::fixture_poll_services(
         fixture._directory.path(),
         &fixture._admission,
-        collaboration_service::ServiceIdentity::new(
+        collaboration_service::ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
         .with_project_admission(fixture._admission.clone()),
     )
     .await?;
-    let application = collaboration_service::CollaborationApplication::new(identity);
+    let application = (identity).build();
     publisher.shutdown().await;
     native.begin_shutdown();
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
@@ -67,19 +76,18 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
     // Count the typed application handler and its owned reader task; the
     // transport carries no part of this native-storage cost claim.
     let request = serde_json::from_value(fixture.request(&project, json!({"kind":"workstreamRename","workstreamId":workstream,"name":"changed","expectedRevision":0})))?;
-    observation
-        .observe(async {
-            let reply = application.board().workstream_rename(request).await?;
-            assert!(matches!(
-                reply.result,
-                message_board::public_replies::RequestResult::Decided(
-                    message_board::public_replies::RequestDecision::Accepted { .. }
-                )
-            ));
-            delivery.shutdown().await;
-            Ok::<_, TestError>(())
-        })
-        .await?;
+    Box::pin(observation.observe(async {
+        let reply = application.board().workstream_rename(request).await?;
+        assert!(matches!(
+            reply.result,
+            message_board::public_replies::RequestResult::Decided(
+                message_board::public_replies::RequestDecision::Accepted { .. }
+            )
+        ));
+        delivery.shutdown().await;
+        Ok::<_, TestError>(())
+    }))
+    .await?;
     let data_statements = observation.data_statement_counts();
     let mut write_cost = observation.cost();
     write_cost.statements = data_statements.total();
@@ -114,9 +122,10 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
         human_id: HumanId::try_from("absent-reader".to_owned())?,
     };
     let observation = ReadCostObservation::default();
-    let records = observation
-        .observe(windows.list_reader_subscriptions(&reader, chrono::Utc::now()))
-        .await?;
+    let records = Box::pin(
+        observation.observe(windows.list_reader_subscriptions(&reader, chrono::Utc::now())),
+    )
+    .await?;
     if !records.records.is_empty() || !records.unavailable.is_empty() {
         return Err("unexpected reader memberships".into());
     }
@@ -135,12 +144,15 @@ async fn scope_cost(other_projects: usize) -> Result<MembershipScopeCost, TestEr
     })
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture and transport failures."
+)]
 async fn writes_reconcile_only_their_project_and_reader_wide_reads_probe_once()
 -> Result<(), TestError> {
     read_cost_counter::install();
-    let small = scope_cost(1).await?;
-    let large = scope_cost(8).await?;
+    let small = Box::pin(scope_cost(1)).await?;
+    let large = Box::pin(scope_cost(8)).await?;
     eprintln!("membership scope costs: small={small:?}, large={large:?}");
     if small.write_cost != large.write_cost {
         for (scope, cost) in [("small", &small), ("large", &large)] {

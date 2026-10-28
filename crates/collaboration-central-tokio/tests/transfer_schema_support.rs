@@ -2,17 +2,29 @@
 #![cfg(feature = "conformance")]
 #[path = "native_http/support.rs"]
 mod configuration;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/creation_scenarios.rs"]
 mod creation_scenarios;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "transfer_boundaries/fixture.rs"]
 mod fixture;
 #[path = "transfer_boundaries/grant_readback.rs"]
 mod grant_readback;
 #[path = "transfer_missing_copy/mod.rs"]
 mod missing_copy;
-#[allow(dead_code)]
+
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/owner_registry_scenarios.rs"]
 mod owner_registry_scenarios;
 

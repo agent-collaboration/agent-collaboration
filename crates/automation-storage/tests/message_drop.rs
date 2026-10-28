@@ -145,7 +145,10 @@ fn retained_rows(snapshot: Snapshot) -> Vec<(String, Vec<Vec<String>>)> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn normal_startup_refuses_each_populated_message_table_without_changing_rows_or_ledger()
 -> Result<(), TestError> {
     for table in MOVED {
@@ -172,7 +175,10 @@ async fn normal_startup_refuses_each_populated_message_table_without_changing_ro
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn pre_release_mail_refuses_startup_and_maintenance_and_keeps_every_row()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -206,7 +212,10 @@ async fn pre_release_mail_refuses_startup_and_maintenance_and_keeps_every_row()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn an_empty_store_migrates_and_reopens_without_a_second_ledger_entry() -> Result<(), TestError>
 {
     let directory = tempfile::tempdir()?;
@@ -220,7 +229,10 @@ async fn an_empty_store_migrates_and_reopens_without_a_second_ledger_entry() -> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn verified_copy_entry_drops_once_and_preserves_all_retained_automation_rows()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -246,7 +258,10 @@ async fn verified_copy_entry_drops_once_and_preserves_all_retained_automation_ro
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
 async fn a_failed_drop_ledger_write_rolls_back_all_five_drops_and_every_source_row()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

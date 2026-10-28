@@ -1,14 +1,14 @@
 //! Weak paired ports keep the reader's windows separate from allocation and publication.
-use super::*;
+use super::SubscriptionDeliveryService;
 use crate::{NotificationPublisher, ProjectAdmission};
 use std::sync::{Arc, RwLock, Weak};
 
 #[derive(Clone)]
-pub(in crate::service_identity::subscription_delivery) struct FollowAdmissionPort {
-    pub(in crate::service_identity::subscription_delivery) admission: Weak<ProjectAdmission>,
-    pub(in crate::service_identity::subscription_delivery) publisher: Weak<NotificationPublisher>,
+pub(in crate::subscription_delivery) struct FollowAdmissionPort {
+    pub(in crate::subscription_delivery) admission: Weak<ProjectAdmission>,
+    pub(in crate::subscription_delivery) publisher: Weak<NotificationPublisher>,
 }
-pub(in crate::service_identity::subscription_delivery) type FollowAdmissionSlot =
+pub(in crate::subscription_delivery) type FollowAdmissionSlot =
     Arc<RwLock<Option<FollowAdmissionPort>>>;
 
 impl SubscriptionDeliveryService {
@@ -26,7 +26,7 @@ impl SubscriptionDeliveryService {
         }
     }
 
-    pub(crate) fn attach_follow_admission(
+    pub fn attach_follow_admission(
         &self,
         admission: Weak<ProjectAdmission>,
         publisher: Weak<NotificationPublisher>,

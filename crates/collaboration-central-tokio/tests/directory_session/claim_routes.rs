@@ -6,6 +6,10 @@ use sqlx_core::{query::query, row::Row};
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::num::NonZeroU64;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn imported_claim_grants_once_and_the_normal_alarm_acknowledges_its_publication()
 -> ConformanceResult<()> {
@@ -101,6 +105,10 @@ async fn imported_claim_grants_once_and_the_normal_alarm_acknowledges_its_public
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn new_registration_is_published_without_reopening_or_forcing_an_alarm()
 -> ConformanceResult<()> {

@@ -36,11 +36,11 @@ async fn a_missing_committed_holder_mapping_never_dispatches_to_an_object() -> C
     fixture?;
     result
 }
-#[path = "support/copy_wait_scenarios.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "The Copy scenarios also run as their own native test."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "support/copy_wait_scenarios.rs"]
 mod copy_wait_scenarios;
 #[path = "support/holder_full_wait.rs"]
 mod holder_full_wait;

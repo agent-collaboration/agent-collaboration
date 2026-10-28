@@ -12,17 +12,17 @@ use relay_transport::{operation, relay_request};
 
 #[tokio::test]
 async fn unreplicated_subscription_end_never_sends_its_cancel_after_takeover() -> TestResult {
-    prove_remote_cancel(CancelPrefix::Discarded).await
+    Box::pin(prove_remote_cancel(CancelPrefix::Discarded)).await
 }
 #[tokio::test]
 async fn replicated_subscription_end_publishes_the_same_frozen_cancel_after_takeover() -> TestResult
 {
-    prove_remote_cancel(CancelPrefix::Retained).await
+    Box::pin(prove_remote_cancel(CancelPrefix::Retained)).await
 }
 #[tokio::test]
 async fn lost_custody_receipt_then_takeover_replays_the_batch_and_cancel_without_new_effects()
 -> TestResult {
-    prove_remote_cancel(CancelPrefix::LostReceipt).await
+    Box::pin(prove_remote_cancel(CancelPrefix::LostReceipt)).await
 }
 
 #[path = "messaging_cancel_fault_cases.rs"]
@@ -55,9 +55,9 @@ enum CancelPrefix {
 }
 
 async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
-    let mut fixture = RuleFixture::open(true).await?;
-    let proof = async {
-        let seed = arrange_sent_follow(&mut fixture).await?;
+    let mut fixture = Box::pin(RuleFixture::open(true)).await?;
+    let proof = Box::pin(async {
+        let seed = Box::pin(arrange_sent_follow(&mut fixture)).await?;
         let connection = ObjectAddress::Connection(origin()?.installation);
         let (group, cancel) = arrange_remote_end(&fixture, &seed, case).await?;
         let mailbox = ObjectAddress::Mailbox(rule_fixture::RECIPIENT.to_owned().try_into()?);
@@ -93,7 +93,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         assert_eq!(read.mail_cancel_expansion_for_target(&group.id, &seed.item.id().as_uuid().to_string().try_into()?).await?.is_some(), !matches!(case, CancelPrefix::Discarded));
         read.finish().await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }.await;
+    }).await;
     let _ = fixture
         .holder
         .central
@@ -114,7 +114,7 @@ async fn arrange_sent_follow(
         .ok_or("old publisher")?
         .hold_progress_writer()
         .await?;
-    let seed = fixture.seed_follow(false).await?;
+    let seed = Box::pin(fixture.seed_follow(false)).await?;
     fixture.confirm_prefix(fixture.head().await?).await?;
     release.send(()).map_err(|_| "old publication hold ended")?;
     task.await??;

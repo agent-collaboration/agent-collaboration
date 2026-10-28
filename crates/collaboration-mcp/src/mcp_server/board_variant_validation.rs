@@ -1,6 +1,10 @@
 //! Classify malformed closed-union request fields without echoing untrusted input.
 use super::invalid_field;
-use message_board::*;
+use message_board::{
+    BoardError, DiscoveryKind, DiscoveryScope, InboxReadMode, InboxScope, PostListScope,
+    PostReferences, PostSelection, PostTarget, ReadScopeRef, SearchPostKind, SearchQuery,
+    SubscriptionPolicyPatch, SubscriptionTarget,
+};
 use serde_json::{Map, Value};
 
 pub(super) fn validate_closed_variants(

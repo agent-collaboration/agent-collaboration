@@ -1,7 +1,7 @@
 //! A creation refusal names the library's durable registration outcome.
 use fleet_sync_protocol::RegistrationRefusal;
 use fleet_sync_writer::WriterRegistrationOutcome;
-use message_board::*;
+use message_board::ProjectRegistrationRejection;
 
 pub(super) fn registration_rejection(
     outcome: &WriterRegistrationOutcome,

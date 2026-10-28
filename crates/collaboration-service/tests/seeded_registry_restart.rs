@@ -1,11 +1,16 @@
 //! A start-epoch filename supplies identity, while native restore retains every authority gate.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "support/accepted_snapshot.rs"]
 pub mod accepted_snapshot;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
-use collaboration_service::{NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry};
+use collaboration_runtime::NativeProjectStore;
+use collaboration_runtime::ProjectRegistryError;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_lease::WriterState;
 use fleet_sync_protocol::{
     DatabaseId, Epoch, LeaseRefusal, LeaseState, LeaseStatus, PeerId, RenewAnswer, RenewResult,
@@ -39,6 +44,10 @@ async fn assert_write_refused(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_pending_seed_stays_unpublished_after_registry_reopen() -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
     let (project, _) = source.project().await?;
@@ -53,6 +62,10 @@ async fn a_pending_seed_stays_unpublished_after_registry_reopen() -> Result<(), 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn persisted_expiry_is_not_revived_by_the_start_epoch_filename() -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
     let (project, _) = source.project().await?;
@@ -106,6 +119,10 @@ async fn persisted_expiry_is_not_revived_by_the_start_epoch_filename() -> Result
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn persisted_supersession_survives_the_registry_reopen() -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
     let (project, _) = source.project().await?;
@@ -148,6 +165,10 @@ async fn persisted_supersession_survives_the_registry_reopen() -> Result<(), Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_seeded_file_cannot_be_opened_by_another_enrolled_peer() -> Result<(), TestError> {
     let source = BoardFixture::start().await?;
     let (project, _) = source.project().await?;

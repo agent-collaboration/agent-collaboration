@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use super::{
     arguments::{CredentialKind, MintArguments, ServeArguments},
     configuration, mint,
@@ -16,6 +15,10 @@ struct AssertionLifetime {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn reported_credential_expiry_matches_the_signed_jwt_and_its_adopted_lifetime()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

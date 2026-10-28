@@ -1,6 +1,6 @@
 //! Current plan selection uses metadata without decoding unrelated revisions.
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{RecordId, RecordKind, RecordRef};
 
 fn reference(kind: RecordKind, id: String) -> Result<RecordRef, ProjectStorageError> {
     Ok(RecordRef {

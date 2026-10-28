@@ -6,7 +6,10 @@ use collaboration_protocol::{
 };
 use serde_json::json;
 
-#[allow(clippy::unwrap_used)] // Fixed native test literals fail at fixture construction.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // Fixed native test literals fail at fixture construction.
 fn activity_range(thread: u64, from: u64, through: u64) -> PushActivityRange {
     serde_json::from_value(json!({
         "threadId":format!("01900000-0000-7000-8000-{thread:012x}"),
@@ -17,7 +20,10 @@ fn activity_range(thread: u64, from: u64, through: u64) -> PushActivityRange {
     .unwrap()
 }
 
-#[allow(clippy::unwrap_used)] // This helper only constructs the permanent protocol fixtures.
+#[expect(
+    clippy::unwrap_used,
+    reason = "Invalid test fixtures must fail the test immediately."
+)] // This helper only constructs the permanent protocol fixtures.
 fn draft(ranges: Vec<PushActivityRange>, root_count: u8) -> PushRecordDraft {
     let target: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},

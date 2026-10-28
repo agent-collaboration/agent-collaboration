@@ -3,7 +3,7 @@ use super::*;
 
 #[tokio::test]
 async fn restart_after_reinstatement_commit_does_not_lose_an_already_consumed_identity() {
-    let mut fixture = OwnerFixture::new().await;
+    let mut fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime_without_board().await;
     let owner = human("board-owner");
     for operation in [

@@ -116,12 +116,14 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                         {
                             let line = frame.lines().nth(row).unwrap();
                             let offset = line.find("Filters").unwrap();
-                            UnicodeWidthStr::width(
+                            u16::try_from(UnicodeWidthStr::width(
                                 line.get(..offset)
                                     .expect("ASCII label starts at a UTF-8 boundary"),
-                            ) as u16
+                            ))
+                            .expect("captured fixture coordinates fit terminal cells")
                         },
-                        row as u16,
+                        u16::try_from(row)
+                            .expect("captured fixture coordinates fit terminal cells"),
                     )))
                     .unwrap();
                 phase = 1;
@@ -140,16 +142,22 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),
-                        frame
-                            .lines()
-                            .nth(row)
-                            .unwrap()
-                            .chars()
-                            .enumerate()
-                            .find(|(column, character)| *column > bounds.left && *character == 'C')
-                            .map(|(column, _)| column)
-                            .unwrap() as u16,
-                        row as u16,
+                        u16::try_from(
+                            frame
+                                .lines()
+                                .nth(row)
+                                .unwrap()
+                                .chars()
+                                .enumerate()
+                                .find(|(column, character)| {
+                                    *column > bounds.left && *character == 'C'
+                                })
+                                .map(|(column, _)| column)
+                                .unwrap(),
+                        )
+                        .expect("captured fixture coordinates fit terminal cells"),
+                        u16::try_from(row)
+                            .expect("captured fixture coordinates fit terminal cells"),
                     )))
                     .unwrap();
                 phase = 2;
@@ -171,14 +179,18 @@ async fn sessions_provider_filter_mouse_uses_same_draft_and_apply_path() {
                 sender
                     .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                         MouseEventKind::Down(MouseButton::Left),
-                        frame
-                            .lines()
-                            .nth(row)
-                            .unwrap()
-                            .chars()
-                            .position(|character| character == 'A')
-                            .unwrap() as u16,
-                        row as u16,
+                        u16::try_from(
+                            frame
+                                .lines()
+                                .nth(row)
+                                .unwrap()
+                                .chars()
+                                .position(|character| character == 'A')
+                                .unwrap(),
+                        )
+                        .expect("captured fixture coordinates fit terminal cells"),
+                        u16::try_from(row)
+                            .expect("captured fixture coordinates fit terminal cells"),
                     )))
                     .unwrap();
                 phase = 3;
@@ -413,8 +425,8 @@ async fn compact_folder_checkout_explains_refusal_and_cancel_preserves_folder() 
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column).expect("fixture column fits terminal cells"),
+                            u16::try_from(row).expect("fixture row fits terminal cells"),
                         )))
                         .unwrap();
                     sender.send(key(KeyCode::Esc)).unwrap();
@@ -434,8 +446,8 @@ async fn compact_folder_checkout_explains_refusal_and_cancel_preserves_folder() 
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Down(MouseButton::Left),
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column).expect("fixture column fits terminal cells"),
+                            u16::try_from(row).expect("fixture row fits terminal cells"),
                         )))
                         .unwrap();
                     phase = 4;

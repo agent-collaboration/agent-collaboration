@@ -1,6 +1,9 @@
 //! Exact descriptions use project admission, current/feed decoding and public reads.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/project_description.rs"]
 mod project_description;
@@ -27,6 +30,10 @@ fn editor() -> Result<Identity, TestError> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn descriptions_round_trip_through_create_describe_show_title_update_and_reopen()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -146,6 +153,10 @@ async fn descriptions_round_trip_through_create_describe_show_title_update_and_r
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn omitted_and_explicit_empty_descriptions_share_the_creation_retry_hash()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -189,6 +200,10 @@ async fn omitted_and_explicit_empty_descriptions_share_the_creation_retry_hash()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn a_directory_only_project_is_not_local_and_show_creates_no_file() -> Result<(), TestError> {
     use fleet_admission::{FleetOperation, FleetRequest};
     let fixture = BoardFixture::start().await?;
@@ -236,6 +251,10 @@ async fn a_directory_only_project_is_not_local_and_show_creates_no_file() -> Res
     fixture.stop().await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_invalid<T>(
     result: Result<T, ProjectStorageError>,
     project: &ProjectId,
@@ -255,6 +274,10 @@ fn assert_invalid<T>(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn current_and_feed_descriptions_are_strict_and_never_silently_truncated()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

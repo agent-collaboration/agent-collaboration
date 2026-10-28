@@ -1,6 +1,8 @@
 //! A non-lead subject card needs its tasks and their direct blockers, not sibling bodies.
 use crate::{ProjectSnapshot, ProjectStorageError};
-use message_board::*;
+use message_board::{
+    Identity, RecordRef, RoleSubject, TaskId, TaskLink, TaskLinkKind, TrailSubject, WorkstreamId,
+};
 use std::collections::BTreeSet;
 pub struct CardWorkOperands {
     pub workstream: Option<WorkstreamId>,

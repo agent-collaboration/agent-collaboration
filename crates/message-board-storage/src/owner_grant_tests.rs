@@ -1,6 +1,10 @@
 use crate::ProjectStore;
 use message_board::*;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn replacement_advances_one_subject_assignment_revision()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -75,6 +79,10 @@ async fn replacement_advances_one_subject_assignment_revision()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn owner_grant_cannot_be_reused_after_the_previous_assignment_ended()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

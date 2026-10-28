@@ -1,12 +1,19 @@
 //! Caller limits are terminal keyed refusals through real MCP and native admission.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted, refusal_kind};
 use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn trail_limits_preserve_maximum_values_and_replay_field_refusals() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;

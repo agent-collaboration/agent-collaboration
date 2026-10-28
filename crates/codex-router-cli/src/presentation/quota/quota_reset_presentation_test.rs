@@ -233,7 +233,10 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
         });
         let (events, expected_frame, frame_acknowledgements) = acknowledged_quota_events(vec![
             (
-                TerminalEvent::Resize(width as u16, height as u16),
+                TerminalEvent::Resize(
+                    u16::try_from(width).unwrap_or(u16::MAX),
+                    u16::try_from(height).unwrap_or(u16::MAX),
+                ),
                 Some("declared initial viewport"),
             ),
             (
@@ -241,11 +244,17 @@ async fn account_options_reset_inspection_resize_and_cancel_restore_resets_tab()
                 Some("Checking live eligibility"),
             ),
             (
-                TerminalEvent::Resize(width.saturating_sub(1) as u16, height as u16),
+                TerminalEvent::Resize(
+                    u16::try_from(width.saturating_sub(1)).expect("fixture width fits u16"),
+                    u16::try_from(height).unwrap_or(u16::MAX),
+                ),
                 Some("narrow inspection frame"),
             ),
             (
-                TerminalEvent::Resize(width as u16, height as u16),
+                TerminalEvent::Resize(
+                    u16::try_from(width).unwrap_or(u16::MAX),
+                    u16::try_from(height).unwrap_or(u16::MAX),
+                ),
                 Some("wide inspection frame"),
             ),
             (

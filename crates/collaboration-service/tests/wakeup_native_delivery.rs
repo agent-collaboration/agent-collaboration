@@ -1,14 +1,19 @@
 //! Real SQLite and WebSocket protocol fixture; this does not invoke Codex or a model.
 use agent_automation::{ExpiryRule, TimingRule};
 use automation_storage::{AutomationStore, WakeCreate, WakeEvaluation};
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     CodexGeneration, EndpointDescription, OperationId, PushId, RouterOriginRef, SavedMessage,
     SessionRef,
 };
-use collaboration_service::{
-    CodexAppServerDeliveryRoute, NativeControlBackend, NativeGenerationGate, ServiceIdentity,
-    SessionDeliveryRoute, SessionDeliveryRouter, SessionMessageDelivery,
-};
+use collaboration_runtime::CodexAppServerDeliveryRoute;
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_service::ApplicationFixture;
+
+use collaboration_runtime::SessionDeliveryRouter;
+
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions as _, Connection as _};
@@ -143,7 +148,7 @@ async fn exercise_delivery(
         wakeup_id: fire.wakeup_id.clone(),
         occurrence_id: fire.occurrence_id.clone(),
     };
-    let mut handoff = collaboration_service::PushHandoffWorker::new(
+    let mut handoff = collaboration_runtime::PushHandoffWorker::new(
         Arc::clone(&store),
         Arc::clone(&interactions),
     );
@@ -181,7 +186,7 @@ async fn exercise_delivery(
     if !recovered_delivery_ids.contains(&delivery_id) {
         return Err("restart did not expose the committed wake for dispatch".into());
     }
-    let identity = ServiceIdentity::new(service_id, service_id)?
+    let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_interaction_store(interactions.clone())
@@ -190,7 +195,7 @@ async fn exercise_delivery(
         service_id.to_owned().try_into()?,
         identity.endpoint_directory(),
         native_backend,
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
@@ -445,7 +450,7 @@ async fn exercise_delivery(
             | NativeOutcome::ReconcileAbsent
             | NativeOutcome::ReconcileWrongPushId
     ) {
-        let served = served_api::ServedApi::start(identity).await?;
+        let served = served_api::ServedApi::start(identity)?;
         let client = served.client("reconcile-fixture").await?;
         let result = client
             .reconcile_delivery(collaboration_protocol::DeliveryShowRequest {

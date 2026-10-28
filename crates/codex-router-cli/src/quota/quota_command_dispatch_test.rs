@@ -1,3 +1,5 @@
+#[cfg(test)]
+use crate::quota::quota_status_command::await_reset_session_task;
 use std::ffi::OsString;
 use std::fs;
 use std::path::Path;
@@ -297,6 +299,10 @@ async fn non_interactive_dispatch_never_constructs_an_injected_reset_session() {
     struct RejectingResetSessionFactory;
 
     impl crate::quota_reset::InteractiveResetSessionFactory for RejectingResetSessionFactory {
+        #[expect(
+            clippy::panic_in_result_fn,
+            reason = "Contract asserts; setup may fail."
+        )]
         fn create(
             &self,
             _router_root: &Path,

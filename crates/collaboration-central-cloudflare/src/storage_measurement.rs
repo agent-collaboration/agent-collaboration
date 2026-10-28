@@ -13,7 +13,13 @@ fn checked_storage_bytes(value: f64) -> Result<u64> {
         ));
     }
     // Validated non-negative safe integers are represented exactly in u64.
-    Ok(value as u64)
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "The finite integral measurement is checked within 0..=2^53-1 above."
+    )]
+    let byte_count = value as u64;
+    Ok(byte_count)
 }
 
 #[cfg(test)]

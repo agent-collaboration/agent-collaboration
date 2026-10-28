@@ -19,7 +19,10 @@ fn poll_patch() -> SubscriptionPolicyPatch {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn join_watch_creates_default_subscription_and_no_watch_does_not() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     let scope = SubscriptionScope::thread(fixture.root.clone());
@@ -70,7 +73,10 @@ async fn join_watch_creates_default_subscription_and_no_watch_does_not() -> Resu
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn create_with_role_subscribes_the_session_creator() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
     let creator = session("creator")?;
@@ -122,7 +128,10 @@ async fn create_with_role_subscribes_the_session_creator() -> Result<(), TestErr
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn rejoin_reactivates_ended_subscription_and_keeps_policy() -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
     let scope = SubscriptionScope::thread(fixture.root.clone());
@@ -188,7 +197,10 @@ async fn rejoin_reactivates_ended_subscription_and_keeps_policy() -> Result<(), 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn thread_subscribe_checks_participant_validates_patch_and_activates_watch()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -305,7 +317,10 @@ async fn thread_subscribe_checks_participant_validates_patch_and_activates_watch
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn unsubscribe_keeps_watch_but_unwatch_ends_without_post_reactivation()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;

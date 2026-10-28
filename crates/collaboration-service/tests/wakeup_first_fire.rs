@@ -1,6 +1,6 @@
 use collaboration_client::WakeWaitError;
 use collaboration_protocol::{OperationId, WakeMutationRequest, WakeSendRequest, WakeShowRequest};
-use collaboration_service::ServiceIdentity;
+use collaboration_service::ApplicationFixture;
 use serde_json::json;
 use std::sync::Arc;
 #[path = "support/served_api.rs"]
@@ -17,13 +17,13 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
     let store = Arc::new(tokio::sync::Mutex::new(
         automation_storage::AutomationStore::open(&path).await?,
     ));
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(store.clone());
-    let served = served_api::ServedApi::start(identity).await?;
+    let served = served_api::ServedApi::start(identity)?;
     let client = served.client("wake-control").await?;
     let request: WakeSendRequest = serde_json::from_value(
         json!({"operationId":OperationId::generate(),"message":{"target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only"},"content":{"kind":"humanUser","text":"Check"},"delivery":"auto","generationGuard":null},"timing":{"kind":"interval","seconds":300},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"after","seconds":7200}}),

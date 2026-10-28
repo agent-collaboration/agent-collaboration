@@ -1,18 +1,20 @@
 //! Owns disposable native stores until their readback and snapshot work is closed.
 use crate::{
-    UpgradeError,
+    CollisionLocation, DerivedImportKeys, MessageActivityMap, NameCollision, ProjectImportReport,
+    UpgradeError, UpgradeReport,
     import_error::invalid,
     legacy_reader::read_legacy,
     legacy_rows::{LegacyProject, LegacyStore},
     project_transform::transform,
-    *,
 };
 use board_fleet_sync::BoardProjectSchema;
 use fleet_admission::{FleetImportBundle, FleetImportRecord, ImportProvenance};
 use fleet_sync_lease::{LeaseHolder, LeasePolicy};
 use fleet_sync_protocol::{DatabaseId, PeerId};
 use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
-use message_board::*;
+use message_board::{HumanId, RecordId, RecordTime, RepositoryRef, ResourceName};
+#[cfg(test)]
+use message_board::{MachineLabel, Record, RecordKind, RecordedActor, ServiceId};
 use message_board_storage::{ProjectStore, apply_project_import};
 use std::{
     collections::BTreeMap,
@@ -352,6 +354,10 @@ mod preparation_tests {
     use super::*;
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn empty_legacy_project_roundtrips_unknown_metadata_without_a_creation_fact()
     -> Result<(), Box<dyn std::error::Error>> {
         let source = read_legacy(
@@ -413,6 +419,10 @@ mod preparation_tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn collision_detection_keeps_both_ids_and_never_renames()
     -> Result<(), Box<dyn std::error::Error>> {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");

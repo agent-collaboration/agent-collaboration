@@ -180,10 +180,15 @@ mod holder_refusal_value {
 
 #[cfg(test)]
 mod integrity_refusal_tests {
-    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     #[derive(Serialize, Deserialize)]
     struct Refusal(#[serde(with = "PieceRefusalCodec")] wire::PieceRefusal);
+
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn integrity_refusal_surface_preserves_the_typed_relationship()
     -> Result<(), Box<dyn std::error::Error>> {

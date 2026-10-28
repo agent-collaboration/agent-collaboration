@@ -2,9 +2,15 @@
 use super::{BoardOperations, admission_error};
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::public_replies::WriteReply;
-use message_board::*;
+use message_board::{
+    ActingForIdentity, BoardArchiveRequest, BoardCloseRequest, BoardCreateRequest, BoardError,
+    BoardUpdateRequest, Identity, ProjectCreateRequest, ProjectUpdateRequest, ProtocolVersion,
+    Record, RecordRef, RecordedActor, RepositoryAttachRequest, RepositoryDetachRequest,
+    RepositoryRef, RequestEffectsScope, RequestId, WorkspaceArchiveRequest, WorkspaceCreateRequest,
+    WorkspaceId, WorkspaceUpdateRequest,
+};
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn fleet_write(
         &self,
         request: FleetRequest,
@@ -148,7 +154,7 @@ impl BoardOperations<'_> {
         repository: &RepositoryRef,
     ) -> Result<(), BoardError> {
         if let RepositoryRef::Local { service_id, .. } = repository
-            && service_id.as_str() != String::from(self.identity.service_id.clone())
+            && service_id.as_str() != String::from(self.identity.service_id().clone())
         {
             return Err(BoardError::invalid_field(
                 "repository.serviceId",

@@ -1,7 +1,6 @@
 use super::*;
 
 #[test]
-#[allow(clippy::result_large_err)]
 fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));
@@ -147,7 +146,10 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-websocket-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));

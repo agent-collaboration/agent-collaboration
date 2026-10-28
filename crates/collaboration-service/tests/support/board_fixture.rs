@@ -1,41 +1,46 @@
-#![allow(clippy::indexing_slicing)] // Test-only JSON fixture construction; behavior assertions remain strict.
 //! Shared real MCP/native composition, without replacing admission rules.
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::ServedCollaborationApi;
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_service as mail_service;
-use collaboration_service::{
-    CollaborationApplication, FleetClient, MachineIdentity, ProjectAdmission,
-    ProjectAdmissionProps, ProjectStoreRegistry, ServiceIdentity,
-};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
+
 use message_board::*;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, sync::Arc};
 #[path = "board_context_backend.rs"]
 mod board_context_backend;
 #[path = "board_poll_services.rs"]
-mod board_poll_services;
-#[allow(unused_imports)] // Only the membership cost proof names the composed-owner type.
-pub use board_poll_services::{FixturePollServices, fixture_poll_services};
+pub(crate) mod board_poll_services;
+use board_poll_services::fixture_poll_services;
+// Only the membership cost proof names the composed-owner type.
+
 #[path = "native_mail_owner.rs"]
 pub mod native_mail_owner;
 use board_context_backend::BoardContextBackend;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 
 #[path = "controlled_clock.rs"]
-mod controlled_clock;
+pub(crate) mod controlled_clock;
 #[path = "registered_project.rs"]
-mod registered_project;
-#[allow(unused_imports)] // Shared fixture exports are consumed by different test binaries.
-pub use registered_project::{prepare_registered_creation, settle_accepted_creation};
+pub(crate) mod registered_project;
+use registered_project::prepare_registered_creation;
+// Shared fixture exports are consumed by different test binaries.
+
 #[path = "native_registry.rs"]
-mod native_registry;
-#[allow(unused_imports)] // Shared fixture exports are consumed by different test binaries.
-pub use controlled_clock::ControlledClock;
-#[allow(unused_imports)] // Shared fixture exports are consumed by different test binaries.
-pub use native_registry::{PendingRegistration, new_registry};
+pub(crate) mod native_registry;
+use native_registry::PendingRegistration;
+// Shared fixture exports are consumed by different test binaries.
+// Shared fixture exports are consumed by different test binaries.
+
 pub fn fixture_peer() -> Result<fleet_sync_protocol::PeerId, TestError> {
     native_registry::fixture_peer()
 }
-#[allow(dead_code)] // The shared claim fixtures supply a trusted enrollment, not a directory implementation.
+// The shared claim fixtures supply a trusted enrollment, not a directory implementation.
 pub fn intent_handoff_input() -> Result<Option<collaboration_service::IntentHandoffInput>, TestError>
 {
     Ok(Some(collaboration_service::IntentHandoffInput {
@@ -87,7 +92,7 @@ impl BoardFixture {
         Ok(fixture)
     }
     pub async fn start_with_project_replication(
-        replication: Arc<dyn collaboration_service::ProjectReplicationPosition>,
+        replication: Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
     ) -> Result<Self, TestError> {
         let fixture = Self::compose_with_ports(false, false, Some(replication)).await?;
         fixture.create_default_scope().await?;
@@ -137,7 +142,7 @@ impl BoardFixture {
     async fn compose_with_ports(
         with_poll: bool,
         with_context: bool,
-        replication: Option<Arc<dyn collaboration_service::ProjectReplicationPosition>>,
+        replication: Option<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>,
     ) -> Result<Self, TestError> {
         Self::compose_with_clock(
             with_poll,
@@ -150,7 +155,7 @@ impl BoardFixture {
     async fn compose_with_clock(
         with_poll: bool,
         with_context: bool,
-        replication: Option<Arc<dyn collaboration_service::ProjectReplicationPosition>>,
+        replication: Option<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>,
         clock: Arc<dyn runtime_primitives::Clock>,
     ) -> Result<Self, TestError> {
         let directory = tempfile::tempdir()?;
@@ -168,7 +173,7 @@ impl BoardFixture {
             fleet: fleet.clone(),
             identity: fixture_machine_identity()?,
         })?);
-        let mut identity = ServiceIdentity::new(
+        let mut identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
@@ -195,11 +200,7 @@ impl BoardFixture {
         } else {
             None
         };
-        let api = ServedCollaborationApi::start(
-            directory.path(),
-            CollaborationApplication::new(identity),
-        )
-        .await?;
+        let api = ServedCollaborationApi::start(directory.path(), (identity).build())?;
         Ok(Self {
             api,
             _delivery: delivery,
@@ -218,18 +219,23 @@ impl BoardFixture {
         })
     }
     async fn create_default_scope(&self) -> Result<(), TestError> {
-        let mut create = self.header();
-        create["workspaceId"] = json!(self.workspace);
-        create["name"] = json!("test workspace");
-        create["description"] = json!("");
-        accepted(&self.api.call("workspace_create", create).await?);
-        let mut create = self.header();
-        create["workspaceId"] = json!(self.workspace);
-        create["boardId"] = json!(self.board);
-        create["name"] = json!("test board");
-        create["description"] = json!("");
-        create["kind"] = json!({"kind":"area"});
-        accepted(&self.api.call("board_create", create).await?);
+        let mut create = self.header_fields();
+        create.insert("workspaceId".to_owned(), json!(self.workspace));
+        create.insert("name".to_owned(), json!("test workspace"));
+        create.insert("description".to_owned(), json!(""));
+        accepted(
+            &self
+                .api
+                .call("workspace_create", Value::Object(create))
+                .await?,
+        );
+        let mut create = self.header_fields();
+        create.insert("workspaceId".to_owned(), json!(self.workspace));
+        create.insert("boardId".to_owned(), json!(self.board));
+        create.insert("name".to_owned(), json!("test board"));
+        create.insert("description".to_owned(), json!(""));
+        create.insert("kind".to_owned(), json!({"kind":"area"}));
+        accepted(&self.api.call("board_create", Value::Object(create)).await?);
         Ok(())
     }
     pub async fn stop(self) -> Result<(), TestError> {
@@ -257,7 +263,7 @@ impl BoardFixture {
         Ok(())
     }
     /// Keep publication runners quiet while a cost proof drives real reader reconciliation.
-    #[allow(dead_code)] // Only operation-cost proofs need an exclusive SQL window.
+    // Only operation-cost proofs need an exclusive SQL window.
     pub async fn quiesce_mail_publication(&self) -> Result<(), TestError> {
         if let Some(publisher) = &self.publisher {
             tokio::time::timeout(std::time::Duration::from_secs(10), publisher.shutdown())
@@ -314,7 +320,6 @@ impl BoardFixture {
         Ok(_directory)
     }
     /// Reopen the same isolated read fixture through the actual store/API startup path.
-    #[allow(clippy::panic_in_result_fn)] // This seam is deliberately limited to fixtures without delivery workers.
     pub async fn restart_read_fixture(self) -> Result<Self, TestError> {
         self.restart_read_fixture_after_close(|_| Ok(())).await
     }
@@ -323,14 +328,13 @@ impl BoardFixture {
         self.reopen_with_transport(|_| Ok(()), true).await
     }
     /// Faults are injected only after the real stores and listeners have closed.
-    #[allow(clippy::panic_in_result_fn)]
     pub async fn restart_read_fixture_after_close(
         self,
         after_close: impl FnOnce(&std::path::Path) -> Result<(), TestError>,
     ) -> Result<Self, TestError> {
         self.reopen_with_transport(after_close, false).await
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn reopen_with_transport(
         self,
         after_close: impl FnOnce(&std::path::Path) -> Result<(), TestError>,
@@ -399,7 +403,7 @@ impl BoardFixture {
             fleet: fleet.clone(),
             identity: fixture_machine_identity()?,
         })?);
-        let identity = ServiceIdentity::new(
+        let identity = ApplicationFixture::new(
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
@@ -411,11 +415,7 @@ impl BoardFixture {
         } else {
             (identity, None)
         };
-        let api = ServedCollaborationApi::start(
-            _directory.path(),
-            CollaborationApplication::new(identity),
-        )
-        .await?;
+        let api = ServedCollaborationApi::start(_directory.path(), (identity).build())?;
         Ok(Self {
             api,
             _registry: registry,
@@ -434,27 +434,40 @@ impl BoardFixture {
         })
     }
     pub fn header(&self) -> Value {
-        json!({"requestId":RequestId::generate(),"protocolVersion":1,"actingFor":null,"actor":self.actor})
+        Value::Object(self.header_fields())
+    }
+    fn header_fields(&self) -> serde_json::Map<String, Value> {
+        serde_json::Map::from_iter([
+            ("requestId".to_owned(), json!(RequestId::generate())),
+            ("protocolVersion".to_owned(), json!(1)),
+            ("actingFor".to_owned(), Value::Null),
+            ("actor".to_owned(), self.actor.clone()),
+        ])
     }
     pub fn record_origin(&self) -> Result<ActorOrigin, TestError> {
         fixture_record_origin()
     }
     pub fn request(&self, project: &ProjectId, operation: Value) -> Value {
-        let mut request = self.header();
-        request["projectId"] = json!(project);
-        request["operation"] = operation;
-        request
+        let mut request = self.header_fields();
+        request.insert("projectId".to_owned(), json!(project));
+        request.insert("operation".to_owned(), operation);
+        Value::Object(request)
     }
     pub async fn project(&self) -> Result<(ProjectId, WorkstreamId), TestError> {
         let project = ProjectId::generate();
         let workstream = WorkstreamId::generate();
-        let mut create = self.header();
-        create["boardId"] = json!(self.board);
-        create["projectId"] = json!(project);
-        create["title"] = json!(project.as_str());
-        self.prepare_registered_creation(&serde_json::from_value(create.clone())?)
+        let mut create = self.header_fields();
+        create.insert("boardId".to_owned(), json!(self.board));
+        create.insert("projectId".to_owned(), json!(project));
+        create.insert("title".to_owned(), json!(project.as_str()));
+        self.prepare_registered_creation(&serde_json::from_value(Value::Object(create.clone()))?)
             .await?;
-        accepted(&self.api.call("project_create", create).await?);
+        accepted(
+            &self
+                .api
+                .call("project_create", Value::Object(create))
+                .await?,
+        );
         accepted(&self.api.call("role_grant",self.request(&project,json!({"kind":"roleGrant","subject":{"kind":"project","subject":project},"role":"lead","holder":self.actor,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null}))).await?);
         accepted(&self.api.call("workstream_create",self.request(&project,json!({"kind":"workstreamCreate","workstreamId":workstream,"name":"work","goal":"proof"}))).await?);
         Ok((project, workstream))
@@ -589,7 +602,7 @@ fn fixture_machine_identity() -> Result<MachineIdentity, TestError> {
 fn fixture_subscription_service(
     admission: &ProjectAdmission,
     interactions: &Arc<interaction_storage::InteractionStore>,
-    routes: &Arc<collaboration_service::SessionDeliveryRouter>,
+    routes: &Arc<collaboration_runtime::SessionDeliveryRouter>,
 ) -> Result<collaboration_service::SubscriptionDeliveryService, TestError> {
     Ok(collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {

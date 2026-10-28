@@ -1,15 +1,20 @@
 //! VD §0/OB1 and §5a board contracts through real Host/CLI/MCP listeners.
-#![allow(clippy::panic_in_result_fn)]
+
 #![deny(clippy::too_many_lines)]
 #[path = "board_e2e/complete_pages.rs"]
 mod complete_pages;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/fixture.rs"]
 mod fixture;
 #[path = "board_e2e/fixture_inputs.rs"]
 mod fixture_inputs;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Shared follow fixture also serves takeover cancellation and sender-status cases."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "board_e2e/follow_fixture.rs"]
 mod follow_fixture;
@@ -21,6 +26,10 @@ mod list_subjects;
 mod membership_restart;
 #[path = "board_e2e/notification_peer.rs"]
 mod notification_peer;
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "board_e2e/owned_host.rs"]
 mod owned_host;
 #[path = "board_e2e/page_recovery.rs"]
@@ -53,9 +62,10 @@ mod role_notifications;
 mod scope_inbox;
 #[path = "board_e2e/stopped_faults.rs"]
 mod stopped_faults;
-#[allow(
+
+#[expect(
     dead_code,
-    reason = "Shared stopped-owner readbacks also serve the takeover capture and cancel scenarios."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
 #[path = "board_e2e/takeover_readbacks.rs"]
 mod takeover_readbacks;
@@ -63,6 +73,10 @@ use codex_router_test_support::FixtureResult;
 use fixture::scenario;
 use serde_json::json;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn real_host_central_and_cli_mcp_share_the_persisted_installation() -> FixtureResult {
     // Wrong builds: either listener returns an empty list, or owning restart loses records/identity.

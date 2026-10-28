@@ -6,8 +6,10 @@ use collaboration_protocol::{
     ThreadUnsubscribeRequest,
 };
 use message_board::public_replies::WriteReply;
-use message_board::*;
-impl BoardOperations<'_> {
+use message_board::{
+    BoardError, BoardOperation, ProjectId, ProjectRequest, SubscriptionTarget, ThreadRenewRequest,
+};
+impl BoardOperations {
     pub(super) async fn subscription_project(
         &self,
         scope: &SubscriptionTarget,
@@ -74,11 +76,10 @@ impl BoardOperations<'_> {
         request: ThreadSubscriptionsRequest,
     ) -> Result<ThreadSubscriptionsResult, BoardError> {
         // The owner returns the snapshot from the same pass that reconciled the reader.
-        let records = if let Some(delivery) = &self.identity.subscription_delivery {
+        let records = if let Some(delivery) = &self.subscription_delivery {
             delivery.reader_subscriptions(request.actor.clone()).await?
         } else {
             let interactions = self
-                .identity
                 .interaction_store
                 .as_ref()
                 .ok_or_else(BoardError::board_unavailable)?;
@@ -87,10 +88,10 @@ impl BoardOperations<'_> {
                 interactions.clone(),
             );
             windows
-                .list_reader_subscriptions(&request.actor, self.identity.subscription_clock.now())
+                .list_reader_subscriptions(&request.actor, self.subscription_clock.now())
                 .await?
         };
-        let presence = match &self.identity.subscription_presence {
+        let presence = match &self.subscription_presence {
             Some(probe) => presence_for_reader(&request.actor, probe).await,
             None => collaboration_protocol::ThreadSubscriptionPresence::Unreachable {
                 reason: "presence unavailable".to_owned(),
@@ -174,7 +175,7 @@ impl BoardOperations<'_> {
                 crate::SubscriptionWaitFilter::Project(project_id)
             }
         };
-        let outcome = match &self.identity.subscription_delivery {
+        let outcome = match &self.subscription_delivery {
             Some(delivery) => match delivery
                 .wait(
                     request.actor,

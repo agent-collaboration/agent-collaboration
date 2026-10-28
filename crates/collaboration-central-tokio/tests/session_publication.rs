@@ -1,6 +1,9 @@
-#![allow(clippy::panic_in_result_fn)]
 #![cfg(feature = "conformance")]
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "session_publication/support.rs"]
 mod support;
 use collaboration_central_core::ObjectHost;
@@ -10,6 +13,10 @@ use fleet_sync_session::ConnectionRegistration;
 use std::{future::Future, sync::atomic::Ordering, task::Poll, time::Duration};
 use support::{Fixture, TestError};
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn register_refuses_another_peer_before_dispatch_and_keeps_the_socket_usable()
 -> Result<(), TestError> {
@@ -77,6 +84,10 @@ async fn register_refuses_another_peer_before_dispatch_and_keeps_the_socket_usab
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn hello_commits_attaching_before_engine_publication_then_welcomes_once()
 -> Result<(), TestError> {
@@ -181,6 +192,10 @@ async fn rollback_case(fault: u8) -> Result<(), TestError> {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn publication_failure_quarantines_only_the_failed_connection_after_commit()
 -> Result<(), TestError> {
@@ -247,6 +262,10 @@ async fn publication_failure_quarantines_only_the_failed_connection_after_commit
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn local_section_excludes_a_second_snapshot_until_committed_publication()
 -> Result<(), TestError> {
@@ -288,6 +307,10 @@ async fn local_section_excludes_a_second_snapshot_until_committed_publication()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn interruption_after_commit_does_not_undo_the_receipt_or_emit_welcome()
 -> Result<(), TestError> {
@@ -321,6 +344,10 @@ async fn interruption_after_commit_does_not_undo_the_receipt_or_emit_welcome()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn welcome_gather_releases_local_exclusion_before_the_network_wait() -> Result<(), TestError>
 {
@@ -359,6 +386,10 @@ async fn welcome_gather_releases_local_exclusion_before_the_network_wait() -> Re
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_reopened_native_host_starts_with_no_transport_registrations() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;

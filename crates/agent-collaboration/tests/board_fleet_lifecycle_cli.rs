@@ -1,7 +1,12 @@
 //! Fleet lifecycle commands mutate the real stand-in through SDK/MCP admission.
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
+
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli};
 use board_fixture::{BoardFixture, TestError};
@@ -9,7 +14,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn initiative_close_and_workspace_archive_reach_the_fleet_owner() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     fixture.project().await?;

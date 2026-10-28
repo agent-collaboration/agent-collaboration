@@ -1,7 +1,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn post_windows_exclude_author_and_project_roots_keep_independent_timing()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -97,7 +100,10 @@ async fn post_windows_exclude_author_and_project_roots_keep_independent_timing()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn residual_arrival_opens_at_first_arrival_while_batch_is_in_flight() -> Result<(), TestError>
 {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -154,7 +160,10 @@ async fn residual_arrival_opens_at_first_arrival_while_batch_is_in_flight() -> R
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove behavior; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove behavior; Result propagates fixture errors."
+)]
 async fn residual_window_that_reaches_its_cap_is_due_immediately_after_settlement()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;

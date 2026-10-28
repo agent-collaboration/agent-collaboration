@@ -1,5 +1,4 @@
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 use collaboration_central_core::{
     BootstrapCommand, BootstrapProbe, BootstrapProbeReply, BootstrapReply, CopyKind, CoreHost,
@@ -89,6 +88,10 @@ impl Fixture {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_the_alter()
 -> Result<(), TestError> {
@@ -169,6 +172,10 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
 -> Result<(), TestError> {
@@ -295,6 +302,10 @@ async fn corrupt_history(sql: &'static str) -> Result<(), TestError> {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn receiver_rollback_is_unavailable_but_a_failed_store_boundary_is_unknown()
 -> Result<(), TestError> {
@@ -351,6 +362,10 @@ async fn receiver_rollback_is_unavailable_but_a_failed_store_boundary_is_unknown
 #[path = "object_bootstrap/owner_migrate.rs"]
 mod owner_migrate;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(), TestError> {
     let root = tempfile::tempdir()?;
@@ -430,6 +445,10 @@ async fn failure_id(fixture: &Fixture) -> Result<String, TestError> {
         })
         .await?)
 }
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn repeated_migration_failure_upsert_preserves_its_uuid_across_reopen()
 -> Result<(), TestError> {

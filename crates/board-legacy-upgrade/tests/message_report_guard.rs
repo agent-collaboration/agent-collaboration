@@ -1,5 +1,4 @@
 //! Report aliases must refuse before any legacy source or message store is opened.
-#![allow(clippy::panic_in_result_fn)]
 mod support;
 use std::{path::Path, process::Output, time::Duration};
 
@@ -37,6 +36,10 @@ async fn run(root: &Path, report: &Path) -> TestResult<Output> {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn report_cannot_overwrite_or_hard_link_the_hosts_service_identity() -> TestResult {
     // Arrange: the identity was created by the same owner as the real Host.
     let directory = router_directory()?;
@@ -59,6 +62,10 @@ async fn report_cannot_overwrite_or_hard_link_the_hosts_service_identity() -> Te
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn report_cannot_overwrite_or_hard_link_either_message_store() -> TestResult {
     // Arrange: sentinels deliberately need no valid SQLite schema. No store
     // admission or migration may occur before the output alias is refused.
@@ -88,6 +95,10 @@ async fn report_cannot_overwrite_or_hard_link_either_message_store() -> TestResu
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn report_cannot_name_a_message_destination_that_does_not_exist_yet() -> TestResult {
     // Arrange: D4 may create the destination later; inode-only checks cannot
     // protect its reserved pathname before that first owning open.
@@ -109,6 +120,10 @@ async fn report_cannot_name_a_message_destination_that_does_not_exist_yet() -> T
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn dangling_report_symlink_refuses_before_creating_the_message_destination() -> TestResult {
     // Arrange: a final-component link targets the store that an upgrade would create.
     let directory = router_directory()?;

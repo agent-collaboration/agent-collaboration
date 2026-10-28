@@ -1,7 +1,7 @@
 //! Real project/native-message interaction for C5's derived scan position.
-#![allow(clippy::unwrap_used, clippy::panic_in_result_fn)]
+
 use super::*;
-use crate::service_identity::subscription_delivery::tests::owner_fixture::{OwnerFixture, human};
+use crate::subscription_delivery::tests::owner_fixture::{OwnerFixture, human};
 use message_board::*;
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
@@ -54,15 +54,17 @@ async fn measured_pass(
 ) -> IntentReadCost {
     let counter = IntentReadCounter::default();
     let subscriber = tracing_subscriber::registry().with(counter.clone());
-    service
-        .consume_project_intents(&fixture.project)
-        .with_subscriber(subscriber)
-        .await
-        .unwrap();
+    Box::pin(
+        service
+            .consume_project_intents(&fixture.project)
+            .with_subscriber(subscriber),
+    )
+    .await
+    .unwrap();
     counter.cost()
 }
 async fn deferred_history_cost(size: usize, counter: &IntentReadCounter) -> IntentReadCost {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime_without_board().await;
     for _ in 0..size {
         addressed_post(&fixture, human("attention")).await;
@@ -113,8 +115,8 @@ async fn deferred_history_does_not_grow_the_next_intent_pass() {
     }
     let counter = IntentReadCounter::default();
     counter.install_global();
-    let small = deferred_history_cost(8, &counter).await;
-    let large = deferred_history_cost(180, &counter).await;
+    let small = Box::pin(deferred_history_cost(8, &counter)).await;
+    let large = Box::pin(deferred_history_cost(180, &counter)).await;
     eprintln!("intent pass costs: small={small:?}, large={large:?}");
     assert!(
         small.statements > 0 && small.records > 0,
@@ -125,7 +127,7 @@ async fn deferred_history_does_not_grow_the_next_intent_pass() {
 
 #[tokio::test]
 async fn restart_skips_consumed_history_even_when_its_body_is_corrupt() {
-    let mut fixture = OwnerFixture::new().await;
+    let mut fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime_without_board().await;
     let old_intent = addressed_post(&fixture, human("attention")).await;
     runtime
@@ -157,7 +159,7 @@ async fn restart_skips_consumed_history_even_when_its_body_is_corrupt() {
     connection.close().await.unwrap();
     fixture = fixture.reopen_messages().await;
     let restarted = fixture.runtime_without_board().await;
-    let cost = measured_pass(&restarted.publisher, &fixture).await;
+    let cost = Box::pin(measured_pass(&restarted.publisher, &fixture)).await;
     assert_eq!(
         cost.records, 0,
         "restart decoded history behind the saved cursor"
@@ -181,7 +183,7 @@ async fn native_sql(fixture: &OwnerFixture, statement: &'static str) {
 
 #[tokio::test]
 async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime_without_board().await;
     for _ in 0..3 {
         addressed_post(&fixture, human("attention")).await;
@@ -252,7 +254,12 @@ async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
     // Revisit the already delivered local versions, so the consumed-version probe
     // rather than the saved scan cursor must suppress both decode and delivery.
     native_sql(&fixture, "DELETE FROM board_intent_scan_cursors").await;
-    assert_eq!(measured_pass(&runtime.publisher, &fixture).await.records, 0);
+    assert_eq!(
+        Box::pin(measured_pass(&runtime.publisher, &fixture))
+            .await
+            .records,
+        0
+    );
     assert!(
         runtime.requests.lock().await.try_recv().is_err(),
         "old delivered version repeated after cursor loss"
@@ -270,7 +277,7 @@ async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
 
 #[tokio::test]
 async fn failed_push_preparation_holds_the_contiguous_prefix_and_retries_the_claim() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime_without_board().await;
     let first = addressed_post(&fixture, human("attention")).await;
     let second = addressed_post(&fixture, fixture.reader.clone()).await;
@@ -365,7 +372,7 @@ async fn failed_push_preparation_holds_the_contiguous_prefix_and_retries_the_cla
 
 #[tokio::test]
 async fn a_recorded_push_refusal_is_settled_after_a_transient_lease_failure() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime_without_board().await;
     let intent_id = addressed_post(&fixture, fixture.reader.clone()).await;
     let service = runtime.publisher.clone();

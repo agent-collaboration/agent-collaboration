@@ -4,11 +4,11 @@ use super::*;
 
 #[tokio::test]
 async fn held_native_mail_uses_the_reader_presence_cadence_without_reinjecting_blocked_input() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    let (app, native) = native_application(&fixture, &runtime, peer).await;
+    let (app, native) = native_application(&fixture, &runtime, peer);
     let target = target_session(&fixture.reader).unwrap();
     let input = SessionMessageSendParams {
         item_id: Some(MailItemId::generate()),
@@ -107,11 +107,11 @@ async fn held_native_mail_uses_the_reader_presence_cadence_without_reinjecting_b
 
 #[tokio::test]
 async fn explicit_reader_reconcile_releases_native_held_mail_before_the_next_presence_tick() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-    let (app, native) = native_application(&fixture, &runtime, peer).await;
+    let (app, native) = native_application(&fixture, &runtime, peer);
     let target = target_session(&fixture.reader).unwrap();
     let input = SessionMessageSendParams {
         item_id: Some(MailItemId::generate()),

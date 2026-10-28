@@ -1,10 +1,10 @@
 //! Measure accepted mail in the exact envelope the relay budgets, including JSON escaping.
 use board_sync_protocol::BoardDeliveryBody;
+use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{
     FollowDeliveryPolicy, GenerationGuard, MailDeliveryMode, MailSender, MessageBody,
     NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use collaboration_service::RouterDeliveryTypes;
 use fleet_sync_protocol::{DeliveryItem, DeliveryTypes, ItemId, PeerId, Recipient};
 use message_board::{
     BatchTiming, FeedCursor, Identity, MAX_SUBSCRIPTION_CAP_SECONDS,

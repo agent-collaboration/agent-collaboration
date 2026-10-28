@@ -1,7 +1,15 @@
 //! Membership commands and poll filters retain each ThreadRef's project qualification.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::{create_registered_project, keyed_call, post_at_placement};
@@ -9,7 +17,10 @@ use message_board::*;
 use serde_json::{Value, json};
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn subscriptions_label_projects_and_qualified_roots_do_not_escape_them()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start_poll().await?;

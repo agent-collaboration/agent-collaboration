@@ -3,7 +3,7 @@ use super::*;
 
 #[tokio::test]
 async fn handed_off_role_intent_delivers_to_the_frozen_recipient_after_holders_change() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let owner = human("board-owner");
     let stream = WorkstreamId::generate();
     let replacement: Identity = serde_json::from_value(json!({"kind":"session","session":{
@@ -134,7 +134,7 @@ async fn handed_off_role_intent_delivers_to_the_frozen_recipient_after_holders_c
 
 #[tokio::test]
 async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer_pass() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let owner = human("board-owner");
     let deferred = human("deferred-reviewer");
     let stream = WorkstreamId::generate();
@@ -229,7 +229,7 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
 
 #[tokio::test]
 async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_the_same_pass() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let owner = human("board-owner");
     let returning = fixture.reader.clone();
     let mut retained = returning.clone();
@@ -460,11 +460,10 @@ fn intent_handoff_input() -> Option<crate::IntentHandoffInput> {
     Some(crate::IntentHandoffInput {
         item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
         enrollment: crate::IntentRecipientEnrollment {
-            service:
-                crate::service_identity::subscription_delivery::tests::owner_fixture::SERVICE_ID
-                    .to_owned()
-                    .try_into()
-                    .unwrap(),
+            service: crate::subscription_delivery::tests::owner_fixture::SERVICE_ID
+                .to_owned()
+                .try_into()
+                .unwrap(),
             peer: fleet_sync_protocol::PeerId::new(
                 uuid::Uuid::parse_str("0192a1b2-c3d4-7000-8000-000000000001").unwrap(),
             )

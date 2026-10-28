@@ -1,6 +1,9 @@
 //! Measure the actual single-request Fleet boundary without weakening its limit.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 mod central_fixture;
 
 use collaboration_central_conformance::JwksFixtureServer;
@@ -13,6 +16,10 @@ use sqlx_turso::sqlx::{ConnectOptions, Connection, Row};
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn oversized_valid_fleet_bundle_refuses_before_partial_writes_and_a_small_control_imports()
 -> TestResult {
     // Arrange: valid public domain records exceed the route's existing 2 MiB

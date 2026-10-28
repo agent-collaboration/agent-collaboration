@@ -1,5 +1,4 @@
 //! Decision 1050: the old canonical expiry key carries a retired board scope.
-#![allow(clippy::panic_in_result_fn)]
 mod message_support;
 mod support;
 use board_legacy_upgrade::{MessageUpgrade, MessageUpgradeError};
@@ -88,6 +87,10 @@ async fn shipped_topic_expiry_origin_reads_current_scope() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn missing_scope_identities_refuse_with_counts_without_creating_a_destination() -> TestResult
 {
     let directory = tempfile::tempdir()?;
@@ -117,6 +120,10 @@ async fn missing_scope_identities_refuse_with_counts_without_creating_a_destinat
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn origin_translation_keeps_strict_legacy_shape_and_canonical_identity_admission()
 -> TestResult {
     let directory = tempfile::tempdir()?;

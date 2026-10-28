@@ -1,6 +1,9 @@
 //! Subject bodies stay opaque until output selection, including its one byte-boundary candidate.
 use super::{BoardOperations, admission_error};
-use message_board::*;
+use message_board::{
+    BoardError, Record, RecordId, RecordKind, RecordRef, SubjectTitle, Thread, ThreadId,
+    ThreadSubject, ThreadSubjectView,
+};
 use message_board_storage::{ProjectSnapshot, StoredFleetRecord, StoredProjectRecord};
 use std::collections::BTreeMap;
 
@@ -91,7 +94,7 @@ impl ThreadSubjectBatch {
         })
     }
 }
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn thread_subject_batch(
         &self,
         snapshot: &mut ProjectSnapshot,

@@ -3,14 +3,16 @@
 use super::*;
 use crate::collaboration_runtime::board_composition::archive_observation as archive;
 use board_central_test_support::{EnrolledTestMachine, ObjectAddress, RuntimeControl, TestCentral};
-use collaboration_service::{NativeProjectStore, ProjectArchiveObservation, ProjectClaim};
+use collaboration_contracts::ProjectClaim;
+use collaboration_runtime::NativeProjectStore;
+use collaboration_service::ProjectArchiveObservation;
 use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, TransferId};
 
 struct ArchiveOwner {
     projects: Arc<project_writers::ProjectWriters>,
     registry: Arc<ProjectStoreRegistry>,
     admission: Arc<ProjectAdmission>,
-    fleet: Weak<collaboration_service::FleetClient>,
+    fleet: Weak<collaboration_runtime::FleetClient>,
     running: super::super::machine_session::RunningMachineSession,
 }
 impl ArchiveOwner {
@@ -88,11 +90,11 @@ impl ReplacementFixture {
             Some(TestCentral::start(&self.directory.path().join("central"), &origin()?).await?);
         let central = self.central.as_ref().ok_or("central")?;
         self.first = Some(
-            ArchiveOwner::start(
+            Box::pin(ArchiveOwner::start(
                 &self.directory.path().join("first"),
                 identity()?,
                 central.session_inputs()?,
-            )
+            ))
             .await?,
         );
         wait_welcome(
@@ -114,14 +116,14 @@ impl ReplacementFixture {
         );
         let enrollment = self.enrollment.as_ref().ok_or("second enrollment")?;
         self.second = Some(
-            ArchiveOwner::start(
+            Box::pin(ArchiveOwner::start(
                 &self.directory.path().join("second"),
                 MachineIdentity::new(
                     UuidIdentity::try_from(self.second_origin.installation.as_str().to_owned())?,
                     Some("archive replacement successor"),
                 )?,
                 enrollment.session_inputs()?,
-            )
+            ))
             .await?,
         );
         wait_welcome(
@@ -228,7 +230,9 @@ async fn claim_initial_project(first: &ArchiveOwner, project: &ProjectId) -> Tes
                 board_sync_protocol::ProjectClaimReply::Pending { .. } => {
                     tokio::task::yield_now().await
                 }
-                refused => return Err(format!("archive setup claim refused: {refused:?}").into()),
+                refused @ board_sync_protocol::ProjectClaimReply::Refused(_) => {
+                    return Err(format!("archive setup claim refused: {refused:?}").into());
+                }
             }
         }
     })
@@ -271,13 +275,12 @@ async fn record_unacknowledged(
     read.finish().await?;
     await_copy(first, &project, before).await?;
     let board = state.envelope.scope.board.ok_or("project board")?;
-    let application = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            origin()?.installation.as_str(),
-            &uuid::Uuid::now_v7().to_string(),
-        )?
-        .with_project_admission(first.admission.clone()),
-    );
+    let application = (collaboration_service::ApplicationFixture::new(
+        origin()?.installation.as_str(),
+        &uuid::Uuid::now_v7().to_string(),
+    )?
+    .with_project_admission(first.admission.clone()))
+    .build();
     let reply = application
         .board()
         .board_archive(serde_json::from_value(serde_json::json!({
@@ -457,7 +460,7 @@ async fn delayed_archive_observation_cannot_borrow_a_replacement_files_copied_pr
     codex_router_test_support::scenario_finalization::run_scenario(
         ReplacementFixture::new()?,
         async |fixture: &mut ReplacementFixture| {
-            fixture.open().await?;
+            Box::pin(fixture.open()).await?;
             let observed = record_unacknowledged(fixture).await?;
             replace_owner(fixture, &observed).await?;
             reject_old_then_finish_current(fixture, observed).await

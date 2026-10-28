@@ -58,7 +58,10 @@ mod schema_binding;
 mod session_tools;
 mod tool_output_contract;
 mod wait_tools;
-use application_tool_results::*;
+use application_tool_results::{
+    application_result, call_abandoned_at_shutdown, caller_cancelled, domain_result,
+    operation_failure_result, rejection_failure, success_result, typed_failure_result,
+};
 use catalog_descriptions::operation_description;
 use catalog_tools::{
     EmptyToolInput, register_automation_inspection_tools, register_automation_mutation_tools,
@@ -77,7 +80,11 @@ use conversation_tool_results::{
 #[cfg(test)]
 use message_tools::message_failure_result;
 pub(crate) use result_converters::structured_tool_error;
-use result_converters::*;
+use result_converters::{
+    failure, failure_naming, message_receipt_result, message_reply_receipt_result,
+    operation_error_result, structured_argument_refusal, structured_result,
+    thread_wait_outcome_unknown, validation_failure, wake_wait_failure,
+};
 use schema_binding::bind_native_schema_refs;
 use tool_output_contract::{McpToolError, McpToolOutput};
 
@@ -161,7 +168,7 @@ impl CollaborationMcpServer {
     #[cfg(test)]
     pub(crate) fn catalog_only() -> Self {
         Self::for_application(
-            CollaborationApplication::new(crate::api_test_harness::test_identity()),
+            (crate::api_test_harness::test_identity()).build(),
             std::env::temp_dir(),
         )
     }

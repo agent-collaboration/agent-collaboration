@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use codex_router_tailnet_verification_host::host_plan::HttpsEndpoint;
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -9,6 +8,10 @@ struct UrlCase {
     expected: Value,
 }
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 fn https_urls_match_the_original_literal_path_and_authority_contract()
 -> Result<(), Box<dyn std::error::Error>> {
     let cases: Vec<UrlCase> = serde_json::from_str(include_str!(

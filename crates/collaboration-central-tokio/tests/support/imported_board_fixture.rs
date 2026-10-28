@@ -32,10 +32,6 @@ pub(super) async fn arrange_imported_unheld_board(
     Ok(database)
 }
 
-#[allow(
-    dead_code,
-    reason = "Only the normal-redeploy target selects this dataset."
-)]
 pub(super) async fn arrange_normal_redeploy_boards(
     root: &std::path::Path,
 ) -> ConformanceResult<[DatabaseId; 2]> {
@@ -45,10 +41,6 @@ pub(super) async fn arrange_normal_redeploy_boards(
     Ok([first, second])
 }
 
-#[allow(
-    dead_code,
-    reason = "Only the complete normal-redeploy target needs the preludes."
-)]
 pub(super) async fn arrange_normal_redeploy_corpus(
     root: &std::path::Path,
 ) -> ConformanceResult<[DatabaseId; 7]> {

@@ -1,5 +1,9 @@
 //! Saved decisions survive unrelated body corruption while subject metadata stays validated.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
@@ -17,7 +21,6 @@ struct ReplayOperand {
     reference: RecordRef,
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn replay_after_corruption(case: ReplaySubjectCase) -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -218,9 +221,9 @@ async fn replay_after_corruption(case: ReplaySubjectCase) -> Result<(), TestErro
 
 #[tokio::test]
 async fn subtask_saved_decision_replays_after_text_body_corruption() -> Result<(), TestError> {
-    replay_after_corruption(ReplaySubjectCase::Subtask).await
+    Box::pin(replay_after_corruption(ReplaySubjectCase::Subtask)).await
 }
 #[tokio::test]
 async fn trail_saved_decision_replays_after_text_body_corruption() -> Result<(), TestError> {
-    replay_after_corruption(ReplaySubjectCase::Trail).await
+    Box::pin(replay_after_corruption(ReplaySubjectCase::Trail)).await
 }

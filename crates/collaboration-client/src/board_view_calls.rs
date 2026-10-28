@@ -1,6 +1,9 @@
 //! Views and hooks use the same typed tools as every other board surface.
 use super::{BoardClientError, CollaborationClient};
-use message_board::*;
+use message_board::{
+    ContinuationCard, ContinuationCardRequest, LeadLoad, LeadLoadRequest, OwnerView,
+    OwnerViewRequest, ProjectViewRequest, SessionContext, SessionContextRequest, WorkView,
+};
 impl CollaborationClient {
     pub async fn view_work(
         &self,

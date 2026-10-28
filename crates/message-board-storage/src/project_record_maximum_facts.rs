@@ -36,6 +36,10 @@ fn maximum_project_created(state: &ProjectState) -> TestResult<FactKind> {
     }))
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn maximum_non_tail_fact_variants_fit_native_storage_without_truncation() -> TestResult {
     let state = project_state()?;

@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used, clippy::panic)]
 //! The client waits the requested server window plus a transport allowance, no longer.
 
 use collaboration_client::CollaborationClient;
@@ -6,10 +5,18 @@ use collaboration_protocol::*;
 use serde_json::{Value, json};
 use std::time::Duration;
 
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "support/scripted_api.rs"]
 mod scripted_api;
 use scripted_api::{SCRIPTED_SERVICE_EPOCH, SCRIPTED_SERVICE_ID, ScriptedApi};
 
+#[expect(
+    clippy::expect_used,
+    reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
+)]
 /// A pending wait result for `operation_id`, as the Router answers an unsettled operation.
 fn pending_wait_result(operation_id: &Value) -> Value {
     let operation: ConversationOperationSnapshot = serde_json::from_value(json!({
@@ -36,7 +43,7 @@ fn pending_wait_result(operation_id: &Value) -> Value {
 
 #[tokio::test(start_paused = true)]
 async fn provider_wait_uses_requested_server_window_plus_transport_allowance() {
-    let (api, mut calls) = ScriptedApi::start().await.expect("scripted API");
+    let (api, mut calls) = ScriptedApi::start().expect("scripted API");
     let client = CollaborationClient::connect(api.directory(), "wait-proof", "1")
         .await
         .expect("connect");
@@ -67,7 +74,7 @@ async fn provider_wait_uses_requested_server_window_plus_transport_allowance() {
 
 #[tokio::test(start_paused = true)]
 async fn provider_wait_reports_true_transport_timeout_after_allowance() {
-    let (api, mut calls) = ScriptedApi::start().await.expect("scripted API");
+    let (api, mut calls) = ScriptedApi::start().expect("scripted API");
     let client = CollaborationClient::connect(api.directory(), "timeout-proof", "1")
         .await
         .expect("connect");

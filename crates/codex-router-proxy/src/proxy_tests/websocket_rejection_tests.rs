@@ -237,7 +237,10 @@ fn loopback_router_runtime_keeps_websocket_preconnect_open_until_client_close() 
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 fn loopback_router_runtime_drains_affinity_tasks_after_handler_error() {
     let temp_dir = ProxyTestTempDir::new("runtime_error_drains_affinity_tasks");
     let database_path = temp_dir.path().join("state.sqlite");

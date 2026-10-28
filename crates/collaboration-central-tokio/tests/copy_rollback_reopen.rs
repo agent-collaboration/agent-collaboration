@@ -1,12 +1,11 @@
 //! Late row failure cannot publish an acknowledgement or survive as a partial copy.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
-#[path = "copy_receiver/mod.rs"]
-#[allow(
+#[expect(
     dead_code,
-    reason = "Only the real copy fixture is reused for this reopen case."
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
 )]
+#[path = "copy_receiver/mod.rs"]
 mod support;
 
 use board_sync_protocol::BoardAnnotation;

@@ -1,7 +1,7 @@
 //! A missing delivery is named, with the command that shows a push record instead.
 use automation_storage::AutomationStore;
 use collaboration_protocol::{DeliveryShowRequest, WakeFailureReason};
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
 use std::sync::Arc;
 
 #[tokio::test]
@@ -11,13 +11,13 @@ async fn missing_delivery_show_names_the_id_and_push_show_command() {
     let store = AutomationStore::open(&directory.path().join("automation.sqlite"))
         .await
         .expect("automation store");
-    let identity = ServiceIdentity::new(
+    let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
         "00000000-0000-4000-8000-000000000002",
     )
     .expect("service identity")
     .with_automation_store(Arc::new(tokio::sync::Mutex::new(store)));
-    let application = CollaborationApplication::new(identity);
+    let application = (identity).build();
     let delivery_id = agent_automation::DeliveryId::generate();
 
     // Act

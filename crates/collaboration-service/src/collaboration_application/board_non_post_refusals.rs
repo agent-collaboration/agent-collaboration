@@ -1,8 +1,11 @@
 //! Missing writers are classified from retained directory and read-copy authority.
 use super::{BoardOperations, admission_error};
-use message_board::{public_replies as public, *};
+use message_board::{
+    BoardError, BoardOperation, CurrentWriter, ProjectRequest, Record, ScopeRefusal,
+    public_replies as public,
+};
 
-impl BoardOperations<'_> {
+impl BoardOperations {
     pub(super) async fn cached_non_post_refusal(
         &self,
         request: &ProjectRequest,

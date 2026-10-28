@@ -45,7 +45,7 @@ async fn stored_push(fixture: &OwnerFixture, push_id: &PushId) -> PushRecord {
 
 #[tokio::test]
 async fn shared_progress_store_failure_is_not_contained_as_a_project_failure() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let mut observer = sqlx_turso::TursoConnection::connect_with(
         &sqlx_turso::TursoConnectOptions::new()
             .filename(fixture.directory.path().join("interaction.sqlite")),
@@ -79,7 +79,7 @@ async fn shared_progress_store_failure_is_not_contained_as_a_project_failure() {
 #[tokio::test]
 async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_delivers() {
     tokio::time::timeout(Duration::from_secs(30), async {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let corrupt_reader = human("corrupt-reader");
     fixture
         .join_request(
@@ -237,11 +237,11 @@ async fn bounded_stage<TValue>(
 
 #[tokio::test]
 async fn failed_direct_message_recovery_query_does_not_stop_valid_subscription_reader() {
-    let fixture = bounded_stage("create fixture", OwnerFixture::new()).await;
-    bounded_stage(
+    let fixture = Box::pin(bounded_stage("create fixture", OwnerFixture::new())).await;
+    Box::pin(bounded_stage(
         "post healthy subscription activity",
         fixture.post(&fixture.root, "Healthy reader despite DM query failure"),
-    )
+    ))
     .await;
     let mut observer = bounded_stage(
         "open native message observer",
@@ -271,10 +271,10 @@ async fn failed_direct_message_recovery_query_does_not_stop_valid_subscription_r
             if error.code().as_deref() == Some("SQLITE_ERROR") && error.message().contains("no such column")),
         "injection must fail the repository query without converting it to a successful empty result"
     );
-    let runtime = bounded_stage(
+    let runtime = Box::pin(bounded_stage(
         "start service with unavailable creation-age kind column",
         fixture.native_runtime(),
-    )
+    ))
     .await;
     bounded_stage(
         "observe owner query-failure retry boundary",
@@ -323,7 +323,7 @@ async fn failed_direct_message_recovery_query_does_not_stop_valid_subscription_r
 
 #[tokio::test]
 async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let target = target_session(&fixture.reader).unwrap();
     let held_draft = direct_message_draft(&target, "held DM survives restart", fixture.clock.now());
     let held_push_id = held_draft.push_id.clone();
@@ -347,7 +347,7 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
         )
         .await
         .unwrap();
-    *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Wakeable;
+    *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Wakeable;
     let first_runtime = fixture.runtime_without_board().await;
     bounded_stage(
         "observe previously held Auto before corruption",
@@ -389,7 +389,7 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
         .unwrap();
     assert_eq!(recovery_targets, vec![target.clone()]);
 
-    *fixture.presence.0.lock().unwrap() = crate::TargetPresence::Running;
+    *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Running;
     let recovered_runtime = fixture.runtime_without_board().await;
     let request = tokio::time::timeout(Duration::from_secs(5), async {
         recovered_runtime

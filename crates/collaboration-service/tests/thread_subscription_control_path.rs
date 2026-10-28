@@ -10,6 +10,10 @@ use message_board::*;
 use serde_json::json;
 use std::time::Duration;
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::{BoardFixture, TestError};
 fn request<TRequest: serde::de::DeserializeOwned>(
@@ -54,7 +58,10 @@ async fn wait(
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn subscription_methods_roundtrip_through_the_api_and_sqlite() -> Result<(), TestError> {
     let fixture = BoardFixture::start_poll().await?;
     let (project, workstream) = fixture.project().await?;

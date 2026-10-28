@@ -44,13 +44,17 @@ async fn invoke_claim(
 
 #[tokio::test]
 #[ignore = "requires an explicitly prebuilt absolute BOARD_CLAIM_CLI_BINARY; run this journey explicitly"]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn claim_cli_installs_the_imported_prefix_and_reports_native_not_found() -> TestResult {
     let binary = std::path::PathBuf::from(std::env::var("BOARD_CLAIM_CLI_BINARY")?);
     assert!(
         binary.is_absolute() && binary.is_file(),
         "prebuild agent-collaboration and supply its absolute path"
     );
-    let fixture = ClaimFixture::start().await?;
+    let fixture = Box::pin(ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     let (prefix, expected) = project_claim::imported_snapshot(
         &fixture.central,
@@ -61,16 +65,14 @@ async fn claim_cli_installs_the_imported_prefix_and_reports_native_not_found() -
     let directory = fixture.directory.path().join("api");
     std::fs::create_dir(&directory)?;
     std::fs::set_permissions(&directory, std::fs::Permissions::from_mode(0o700))?;
-    let app = collaboration_service::CollaborationApplication::new(
-        collaboration_service::ServiceIdentity::new(
-            "550e8400-e29b-41d4-a716-446655440000",
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(fixture.admission.clone())
-        .with_project_claim(fixture.projects.clone()),
-    );
-    let api =
-        collaboration_mcp::test_support::ServedCollaborationApi::start(&directory, app).await?;
+    let app = (collaboration_service::ApplicationFixture::new(
+        "550e8400-e29b-41d4-a716-446655440000",
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(fixture.admission.clone())
+    .with_project_claim(fixture.projects.clone()))
+    .build();
+    let api = collaboration_mcp::test_support::ServedCollaborationApi::start(&directory, app)?;
     let attempt = RequestId::generate();
     let claimed = timeout(BOUND, async {
         loop {

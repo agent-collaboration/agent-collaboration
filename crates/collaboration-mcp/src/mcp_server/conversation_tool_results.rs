@@ -1,5 +1,11 @@
 //! Structured results and caller-detach evidence for the shared conversation tools.
-use super::*;
+#[cfg(test)]
+use super::ConversationOperationResult;
+use super::{
+    CallToolResult, ClientError, ConversationClientError, ConversationCreateOutcome,
+    OperationEffect, OperationId, failure, operation_error_result, structured_result,
+    structured_tool_error, validation_failure,
+};
 use serde::Serialize;
 
 pub(super) fn conversation_call_cancelled(

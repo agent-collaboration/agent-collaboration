@@ -42,7 +42,7 @@ impl QuotaDialogIdentity {
             }
             prefix
         };
-        element! {View(width:width as u32,max_width:100pct,column_gap:1,flex_shrink:0.0_f32) {
+        element! {View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,column_gap:1,flex_shrink:0.0_f32) {
             View(min_width:0,flex_grow:1.0_f32,flex_shrink:1.0_f32,overflow:Overflow::Hidden) {Text(content:label,color:Color::White,wrap:TextWrap::NoWrap)}
             #(tag.map(|content|element!(View(flex_shrink:0.0_f32) {Text(content,color:Color::Grey,wrap:TextWrap::NoWrap)})))
         }}.into_any()

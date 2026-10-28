@@ -2,10 +2,11 @@
 
 use crate::{ExternalProviderLaunch, ExternalProviderRuntime};
 use acp_client_runtime::{ProviderPersistenceTarget, ProviderSettingKind};
+use collaboration_contracts::SessionEventHub;
 use collaboration_protocol::{ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess};
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, SessionEventHub,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
 use message_board::{EndpointId, ServiceId, SessionEndpointRef, SessionId, SessionRef};
 use session_event_model::{SessionEvent, SessionState};
 use std::{path::PathBuf, sync::Arc};

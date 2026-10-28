@@ -560,6 +560,10 @@ async fn await_pending(fixture: &BoardFixture, follow: &FollowMembership) -> Fix
     .await?
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn assert_end_groups(
     handoffs: &[message_board_storage::MailHandoffItem],
     follow: &FollowMembership,

@@ -1,10 +1,13 @@
 //! Actual owner import status/body failures preserve retained workflow identity.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "upload_support/central_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 mod central_fixture;
 mod support;
 #[path = "upload_support/mod.rs"]
-#[allow(
+#[expect(
     dead_code,
     reason = "Sibling publication tests use the remaining helpers."
 )]
@@ -90,6 +93,10 @@ async fn arm_full(server: &TokioServer, header: &AdminImportHeader) -> TestResul
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn retired_import_returns_gone_with_the_owner_body() -> TestResult {
     let (_source_directory, source) = fixture_copy("legacy-complete.sqlite")?;
     let legacy = rusqlite::Connection::open(&source)?;
@@ -131,6 +138,10 @@ async fn retired_import_returns_gone_with_the_owner_body() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn full_copy_import_returns_typed_503_and_keeps_the_same_seed() -> TestResult {
     let prepared = prepare("legacy-complete.sqlite").await?;
     let root = tempfile::tempdir()?;
@@ -169,6 +180,10 @@ async fn full_copy_import_returns_typed_503_and_keeps_the_same_seed() -> TestRes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResult {
     let prepared = prepare("legacy-complete.sqlite").await?;
     let root = tempfile::tempdir()?;

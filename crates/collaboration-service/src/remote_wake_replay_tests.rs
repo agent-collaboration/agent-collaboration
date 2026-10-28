@@ -1,9 +1,10 @@
 //! Late replay reads actual SDK custody; the owning automation store supplies the answer.
 //! No session is attached: observing an old answer must not need a new remote dispatch.
 use super::native::Runtime;
+use crate::MailDeliveryRuntime;
 use crate::collaboration_application::WakeOperations;
-use crate::{MailDeliveryRuntime, RouterDeliveryTypes};
 use automation_storage::RemoteWakeMail;
+use collaboration_contracts::RouterDeliveryTypes;
 use collaboration_mail_protocol::{CarrierAcceptance, RemoteWakeResult, WakeBody};
 use collaboration_protocol::{
     LocalMutationEvidence, LocalMutationState, OperationId, WakeMutationRequest, WakeSendRequest,
@@ -265,13 +266,14 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     let frozen = pause_mail(&request, &snapshot, deadline);
     freeze(&source, &frozen).await;
     let paused = owner_ops.wake_pause_local(request.clone()).await.unwrap();
+    drop(owner_ops);
     assert_eq!(paused.wakeup.state, WakeState::Paused);
     let result = retain_result
         .then(|| serde_json::from_value(json!({"kind":"mutation","value":paused})).unwrap());
     publish_recorded_status(&source, &owner, frozen.clone(), result).await;
     after_deadline(&source, deadline).await;
     if let Some(age) = retention_age {
-        crate::AutomationRetentionWorker::new(source.automation.clone())
+        collaboration_runtime::AutomationRetentionWorker::new(source.automation.clone())
             .prune_batch((deadline + age).timestamp_millis())
             .await
             .unwrap();

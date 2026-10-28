@@ -1,6 +1,5 @@
 //! Startup rejects waiting/observation controls before opening any object store.
 #![cfg(feature = "conformance")]
-#![allow(clippy::panic_in_result_fn)]
 
 #[path = "native_http/support.rs"]
 mod configuration;
@@ -11,6 +10,10 @@ use collaboration_central_core::ObjectAddress;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use std::time::Duration;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;

@@ -6,6 +6,10 @@ use codex_router_test_support::scenario_finalization::run_scenario;
 use collaboration_central_core::{AdminImportPhase, CopyDirectorySummary};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn actual_cli_retries_published_copy_after_completion_receipt_failure() -> E2eResult {
     let fixture = InterruptedImport::start("ib04-owner", "ib04-machine").await?;
     let source = SourceSnapshot::capture(&fixture.fixture.source)?;
@@ -139,6 +143,10 @@ async fn retry_published_import(
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_retry_answers(report: &serde_json::Value) -> E2eResult {
     let publications = report
         .get("publication")

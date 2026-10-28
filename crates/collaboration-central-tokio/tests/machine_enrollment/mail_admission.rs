@@ -5,6 +5,10 @@ use board_sync_protocol::BoardDeliveryTypes;
 use fleet_sync_protocol::{DatabaseId, DeliveryEnvelope, DeliveryItem, Epoch, ItemId};
 use serde_json::json;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult {
     let directory = tempfile::tempdir()?;

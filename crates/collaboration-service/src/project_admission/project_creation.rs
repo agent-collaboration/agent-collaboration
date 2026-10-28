@@ -1,9 +1,18 @@
 //! Central accepts the directory, native registration completes, then the first write initializes it.
-use super::{ProjectAdmission, ProjectAdmissionError, request_gate::*};
+use super::{
+    ProjectAdmission, ProjectAdmissionError,
+    request_gate::{ReadyRequest, RequestGate, RequestGateInput},
+};
 use chrono::Utc;
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::request_canonical::creation_hash;
-use message_board::*;
+use message_board::{
+    Board, CanonicalHash, ChangeOutcome, Description, Fact, FactId, FactKind, FleetFeedEntry,
+    FleetPosition, LifecycleFact, ProjectCreateRequest, ProjectDirectoryEntry, ProjectId,
+    ProjectRejection, ProjectState, Record, RecordEnvelope, RecordPlacement, RecordScope,
+    RecordTime, RecordedActor, Refusal, RequestDecision, RequestLedgerEntry, RequestResult,
+    ScopeRefusal, StoredDecision, SubjectRevision, WriteReply,
+};
 
 // The caller waits briefly; the durable Ready recovery owns eventual completion.
 const PROJECT_CREATION_READY_WAIT: std::time::Duration = std::time::Duration::from_secs(2);

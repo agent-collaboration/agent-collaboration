@@ -1,12 +1,19 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 use board_fixture::fixture_peer;
-use collaboration_service::ProjectStoreRegistry;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::ProjectId;
 use std::sync::Arc;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn empty_registration_refusals_reopen_for_metadata_and_cannot_be_opened_for_writing()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
@@ -46,7 +53,10 @@ async fn empty_registration_refusals_reopen_for_metadata_and_cannot_be_opened_fo
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the test contract; Result propagates fixture errors.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the test contract; Result propagates fixture errors."
+)]
 async fn registry_opens_one_native_handle_per_project_and_isolates_writer_locks()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;

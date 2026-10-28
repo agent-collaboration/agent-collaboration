@@ -1,6 +1,11 @@
 use super::provider_fixture_launch;
 use agent_automation::RouteEffectEvidence;
 use codex_router_host::{ExternalProviderLaunch, LiveSessionOwnership, LiveSessionOwnershipCheck};
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::DeliveryPrecondition;
+use collaboration_contracts::layer_zero::DeliveryRequest;
+use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
     AttemptId, ChannelDescription, CodexGeneration, DeliveryCorrelationId, EndpointAvailability,
     EndpointDescription, EndpointId, EndpointRef, GenerationNumber, MessageDelivery, MessageText,
@@ -9,10 +14,7 @@ use collaboration_protocol::{
     ProviderCapabilityStatus, ProviderKind, ProviderRuntimeIdentity, ProviderTransport, PushId,
     SessionId, SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryFuture, DeliveryPrecondition, EndpointDirectory,
-    layer_zero::{DeliveryRequest, PreparedPush},
-};
+use collaboration_runtime::EndpointDirectory;
 use std::path::Path;
 
 pub(super) struct NoLivePeer;
@@ -39,6 +41,7 @@ impl AttemptEvidenceSink for RecordedEvidence {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -50,6 +53,7 @@ pub(super) fn target() -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
@@ -77,6 +81,7 @@ pub(super) fn provider_binding(target: &SessionRef) -> ProviderBindingIdentity {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn available_directory(
     target: &SessionRef,
     binding: &ProviderBindingIdentity,
@@ -142,6 +147,7 @@ pub(super) fn first_prompt_refusal_fixture(event_socket: &Path) -> ExternalProvi
     )
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 pub(super) fn request(target: SessionRef, text: &str) -> DeliveryRequest {
     let push_id =
         PushId::try_from(AttemptId::generate().as_str().to_owned()).expect("UUIDv7 push id");
@@ -157,7 +163,7 @@ pub(super) fn request(target: SessionRef, text: &str) -> DeliveryRequest {
         payload: PreparedPush {
             push_id,
             line,
-            load_policy: collaboration_service::LoadPolicy::MayLoad,
+            load_policy: collaboration_contracts::LoadPolicy::MayLoad,
         },
         target,
         mode: MessageDelivery::Auto,

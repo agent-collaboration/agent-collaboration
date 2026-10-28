@@ -1,6 +1,7 @@
 //! Explicit accepted-directory and persisted native-grant inputs for board CRUD fixtures.
 use super::{TestError, fixture_peer};
-use collaboration_service::{FleetClient, ProjectStoreRegistry};
+use collaboration_runtime::FleetClient;
+use collaboration_runtime::ProjectStoreRegistry;
 use message_board::*;
 use runtime_primitives::Clock;
 

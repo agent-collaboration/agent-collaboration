@@ -225,7 +225,10 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
 }
 
 #[test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing callback contract requires the unboxed error value."
+)]
 fn serve_command_reloads_token_rotation_without_restart() {
     let test_root = TestRoot::new("serve-command-token-rotation");
     must_ok(fs::create_dir(test_root.path()));

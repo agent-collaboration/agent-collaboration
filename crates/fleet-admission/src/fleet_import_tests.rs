@@ -1,4 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
 use crate::FleetFeedEntry;
 use crate::*;
 use message_board::*;
@@ -60,6 +59,10 @@ fn bundle() -> TestResult<FleetImportBundle> {
     })
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn imported_unknown_time_is_preserved_and_is_content_while_provenance_is_not() -> TestResult {
     let offered = serde_json::json!({
@@ -208,6 +211,10 @@ fn expected_imported_records(board_state: BoardState) -> TestResult<Vec<Record>>
     ])
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_import_preserves_legacy_fields_and_first_provenance_across_other_machine_replay()
 -> TestResult {
@@ -272,6 +279,10 @@ fn fleet_import_preserves_legacy_fields_and_first_provenance_across_other_machin
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_import_changed_description_state_and_time_are_digest_conflicts_without_writes()
 -> TestResult {
@@ -320,6 +331,10 @@ fn fleet_import_changed_description_state_and_time_are_digest_conflicts_without_
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_import_ordinary_record_missing_parents_and_name_conflicts_are_atomic_refusals()
 -> TestResult {
@@ -381,6 +396,10 @@ fn fleet_import_ordinary_record_missing_parents_and_name_conflicts_are_atomic_re
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_import_read_set_names_records_parents_names_and_digest_keys() -> TestResult {
     let offered = bundle()?;
@@ -401,6 +420,10 @@ fn fleet_import_read_set_names_records_parents_names_and_digest_keys() -> TestRe
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn fleet_import_in_bundle_scoped_name_collisions_refuse_every_write() -> TestResult {
     let mut offered = bundle()?;

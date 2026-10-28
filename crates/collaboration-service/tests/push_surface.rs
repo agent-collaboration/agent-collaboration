@@ -1,18 +1,23 @@
-#![allow(clippy::expect_used)]
 #[path = "support/native_delivery.rs"]
 mod native_delivery;
 
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 
 use automation_storage::AutomationStore;
+use collaboration_contracts::DeliveryPrecondition;
 use collaboration_protocol::{
     DeliveryOutcome, EndpointId, EndpointRef, MessageContent, MessageDelivery, PushActivityRange,
     PushActivitySnapshot, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin,
     PushRecordDraft, RouterOriginRef, SessionId, SessionMessageSendParams, SessionRef,
     UuidIdentity,
 };
-use collaboration_service::{DeliveryPrecondition, ServiceIdentity};
+use collaboration_service::ApplicationFixture;
+
 use serde_json::{Value, json};
 use std::sync::{Arc, atomic::Ordering};
 use tokio::sync::Mutex as TokioMutex;
@@ -36,6 +41,7 @@ use native_push_fixture::{
     setup_without_push_store,
 };
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
@@ -46,6 +52,7 @@ fn session(endpoint_id: &str, session_id: &str) -> SessionRef {
     }
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn send_params(target: &SessionRef, sender: &SessionRef, text: &str) -> Value {
     serde_json::to_value(SessionMessageSendParams {
         item_id: None,
@@ -107,7 +114,7 @@ async fn message_send_persists_before_delivery_and_submits_one_linked_line() {
         assert_eq!(prepared.payload.push_id, push_id);
         assert_eq!(
             prepared.payload.load_policy,
-            collaboration_service::LoadPolicy::MayLoad
+            collaboration_contracts::LoadPolicy::MayLoad
         );
         assert_eq!(prepared.correlation.as_str(), push_id.as_str());
         let text = &prepared.payload.line;

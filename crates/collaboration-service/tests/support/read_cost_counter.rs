@@ -1,5 +1,4 @@
 //! Observe real SQLx statements and storage decodes without replacing either path.
-#![allow(clippy::unwrap_used, clippy::panic)] // A broken test counter must fail the proof.
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, OnceLock},
@@ -8,14 +7,14 @@ use tracing::field::{Field, Visit};
 use tracing::instrument::WithSubscriber;
 use tracing_subscriber::{Layer, layer::Context, prelude::*};
 #[path = "sql_cost_classification.rs"]
-mod sql_cost_classification;
-#[allow(unused_imports)] // Only the two data-budget proofs use per-kind equality.
-pub use sql_cost_classification::DataStatementCounts;
+pub(crate) mod sql_cost_classification;
+use sql_cost_classification::DataStatementCounts;
+// Only the two data-budget proofs use per-kind equality.
+
 use sql_cost_classification::StatementTables;
 #[path = "alarm_read_costs.rs"]
-mod alarm_read_costs;
-#[allow(unused_imports)] // Only operation-cost proof targets consume observations.
-pub use alarm_read_costs::{AlarmRunCosts, observe_alarm_costs};
+pub(crate) mod alarm_read_costs;
+// Only operation-cost proof targets consume observations.
 
 const CORE_CANONICAL_INPUT: &str =
     include_str!("../../../collaboration-central-core/sql/fleet/read_canonical_fleet_record.sql");
@@ -36,7 +35,7 @@ pub struct ReadCost {
     pub core_feed_input_bodies: u64,
 }
 impl ReadCost {
-    #[allow(dead_code)] // Scoped observations read their complete cost rather than a global delta.
+    // Scoped observations read their complete cost rather than a global delta.
     pub fn since(self, before: Self) -> Self {
         Self {
             statements: self.statements - before.statements,
@@ -55,7 +54,8 @@ fn counter() -> &'static Mutex<ReadCostState> {
     static COUNTER: OnceLock<Mutex<ReadCostState>> = OnceLock::new();
     COUNTER.get_or_init(|| Mutex::new(ReadCostState::default()))
 }
-#[allow(dead_code)] // Legacy process-wide proof targets still use a before/after delta.
+// Legacy process-wide proof targets still use a before/after delta.
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn current_cost() -> ReadCost {
     counter().lock().unwrap().cost
 }
@@ -81,6 +81,7 @@ impl Visit for ObservedSqlQuery {
     }
     fn record_debug(&mut self, _: &Field, _: &dyn std::fmt::Debug) {}
 }
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 fn only_library_bookkeeping(statement: &str) -> bool {
     static CLASSIFIED: OnceLock<Mutex<BTreeMap<String, bool>>> = OnceLock::new();
     *CLASSIFIED
@@ -93,7 +94,8 @@ fn only_library_bookkeeping(statement: &str) -> bool {
                 .is_some_and(|tables| tables.only_library_bookkeeping())
         })
 }
-#[allow(dead_code)] // Only query-plan proof targets consume the captured SQL.
+// Only query-plan proof targets consume the captured SQL.
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn observed_statements() -> Vec<String> {
     counter().lock().unwrap().statements.clone()
 }
@@ -106,7 +108,8 @@ impl Visit for DecodeKind {
     }
     fn record_debug(&mut self, _field: &Field, _value: &dyn std::fmt::Debug) {}
 }
-#[allow(dead_code)]
+
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn project_open_attempts(project: &str) -> u64 {
     counter()
         .lock()
@@ -116,7 +119,8 @@ pub fn project_open_attempts(project: &str) -> u64 {
         .copied()
         .unwrap_or(0)
 }
-#[allow(dead_code)]
+
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn project_statements(project: &str) -> u64 {
     counter()
         .lock()
@@ -148,14 +152,15 @@ struct ReadCostState {
 }
 
 #[derive(Clone, Default)]
-#[allow(dead_code)] // Only scoped cost proofs use the per-operation recorder.
+// Only scoped cost proofs use the per-operation recorder.
 pub struct ReadCostObservation(Arc<Mutex<ReadCostState>>);
 
-#[allow(dead_code)]
 impl ReadCostObservation {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn cost(&self) -> ReadCost {
         self.0.lock().unwrap().cost
     }
+    #[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
     pub fn data_statement_counts(&self) -> DataStatementCounts {
         let mut data = DataStatementCounts::default();
         let mut other = Vec::new();
@@ -170,6 +175,7 @@ impl ReadCostObservation {
         eprintln!("informational non-data SQL: {other:?}");
         data
     }
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn project_statements(&self, project: &str) -> u64 {
         self.0
             .lock()
@@ -179,6 +185,7 @@ impl ReadCostObservation {
             .copied()
             .unwrap_or(0)
     }
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     pub fn statements(&self) -> Vec<String> {
         self.0.lock().unwrap().statements.clone()
     }
@@ -200,6 +207,7 @@ where
     TSubscriber:
         tracing::Subscriber + for<'lookup> tracing_subscriber::registry::LookupSpan<'lookup>,
 {
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_new_span(
         &self,
         attributes: &tracing::span::Attributes<'_>,
@@ -212,6 +220,8 @@ where
             context.span(id).unwrap().extensions_mut().insert(project);
         }
     }
+    #[expect(clippy::panic, reason = "Fail an unexpected test outcome.")]
+    #[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
     fn on_event(&self, event: &tracing::Event<'_>, context: Context<'_, TSubscriber>) {
         let mut state = self.0.as_ref().map_or_else(
             || counter().lock().unwrap(),
@@ -278,6 +288,7 @@ where
         }
     }
 }
+#[expect(clippy::unwrap_used, reason = "Fail malformed fixed fixtures.")]
 pub fn install() {
     tracing_subscriber::registry()
         .with(

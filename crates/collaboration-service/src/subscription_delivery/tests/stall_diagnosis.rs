@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 #[tokio::test]
 async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
     let runtime = fixture.runtime_with_clock(clock).await;
     let mut observer = sqlx_turso::TursoConnection::connect_with(
@@ -45,7 +45,7 @@ async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline
 #[tokio::test]
 async fn runtime_timer_clock_reaches_due_selection_and_prepared_delivery() {
     tokio::time::timeout(std::time::Duration::from_secs(30), async {
-        let fixture = OwnerFixture::new().await;
+        let fixture = Box::pin(OwnerFixture::new()).await;
         let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
         let runtime = fixture.native_runtime_with_clock(clock.clone()).await;
         fixture
@@ -86,7 +86,7 @@ async fn runtime_timer_clock_reaches_due_selection_and_prepared_delivery() {
 
 #[tokio::test(start_paused = true)]
 async fn virtual_timeout_can_expire_while_the_due_query_waits_for_a_native_project_reader() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     fixture.post(&fixture.root, "Due before query").await;
     fixture
         .store

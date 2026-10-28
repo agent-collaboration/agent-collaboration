@@ -2,7 +2,7 @@
 use super::*;
 use board_central_test_support::TestCentral;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::ProjectClaim;
+use collaboration_contracts::ProjectClaim;
 
 pub(super) struct ClaimFixture {
     pub directory: tempfile::TempDir,
@@ -10,7 +10,7 @@ pub(super) struct ClaimFixture {
     pub projects: Arc<project_writers::ProjectWriters>,
     pub registry: Arc<ProjectStoreRegistry>,
     pub admission: Arc<ProjectAdmission>,
-    pub fleet: Weak<collaboration_service::FleetClient>,
+    pub fleet: Weak<collaboration_runtime::FleetClient>,
     #[cfg(feature = "runtime-test-support")]
     pub notifications: Option<super::forwarded_notification_fixture::HolderNotifications>,
     running: Option<super::super::machine_session::RunningMachineSession>,
@@ -18,25 +18,27 @@ pub(super) struct ClaimFixture {
 
 impl ClaimFixture {
     pub async fn start() -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        Self::start_configured(false).await
+        Box::pin(Self::start_configured(false)).await
     }
 
     #[cfg(feature = "runtime-test-support")]
     pub async fn start_with_notifications() -> TestResultFixture {
-        Self::start_configured(true).await
+        Box::pin(Self::start_configured(true)).await
     }
 
     async fn start_configured(with_notifications: bool) -> TestResultFixture {
         let directory = tempfile::tempdir()?;
         let central =
             Arc::new(TestCentral::start(&directory.path().join("central"), &origin()?).await?);
-        #[allow(unused_mut)] // Notification tests attach existing mail owners before activation.
-        let mut board = open_board_admission(
+
+        let board = open_board_admission(
             &directory.path().join("router"),
             identity()?,
             Some(central.session_inputs()?),
         )
         .await?;
+        #[cfg(feature = "runtime-test-support")]
+        let mut board = board;
         let session = board.session.as_ref().ok_or("session")?;
         let projects = session.projects.clone();
         let welcomed = session.welcomed.subscribe();

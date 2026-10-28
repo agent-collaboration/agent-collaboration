@@ -1,5 +1,8 @@
 //! Public fleet writes carry declared identities; the Router adds recorded provenance.
-use crate::*;
+use crate::{
+    ActingForIdentity, AdrId, AdrTransition, ArtifactRef, Identity, MarkdownText, ProtocolVersion,
+    RecordRef, RequestId, ResourceName, SubjectRevision, WorkspaceId,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]

@@ -2,7 +2,10 @@
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions pin the real public snapshot and alarm lifecycle.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)] // Assertions pin the real public snapshot and alarm lifecycle.
 async fn retiring_snapshot_reopens_and_publishes_without_a_grant_or_idle_alarm() -> TestResult {
     let RegistryFixture {
         root,

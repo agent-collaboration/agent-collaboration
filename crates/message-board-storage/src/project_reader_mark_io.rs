@@ -2,7 +2,11 @@
 use crate::project_actor_rows::{actor_id, decode_actor};
 use crate::project_record_codec::{decode_record_time, encode_record_time, require_one_row};
 use crate::{ProjectSnapshot, ProjectStorageError, ProjectWriteTransaction};
-use message_board::*;
+use message_board::{
+    BoardId, FeedCursor, Identity, ProjectId, ReadMark, ReadScope, Record, RecordEnvelope,
+    RecordId, RecordKind, RecordPlacement, RecordRef, RecordScope, RecordTime, RecordedActor,
+    RequestId, ThreadId, WorkspaceId,
+};
 use sqlx::Executor;
 use sqlx_turso::Turso;
 

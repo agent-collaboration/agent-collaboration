@@ -3,7 +3,10 @@ use crate::{
     fleet_rules::OperationPlan,
 };
 use chrono::{DateTime, Utc};
-use message_board::*;
+use message_board::{
+    ActorOrigin, Adr, AdrId, AdrStatus, AdrTransition, FleetPosition, Record, Refusal,
+    SubjectRevision,
+};
 
 fn adr<'snapshot>(
     snapshot: &'snapshot FleetSnapshot,

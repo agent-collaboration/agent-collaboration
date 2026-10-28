@@ -406,6 +406,10 @@ mod tests {
     use super::*;
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn host_status_is_deterministic_complete_and_canary_free() -> std::io::Result<()> {
         let snapshot = HostSnapshot::new(HostSnapshotDimensions {
             phase: HostPhase::Steady,
@@ -452,6 +456,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn router_drift_status_names_both_versions_and_restart_action() -> std::io::Result<()> {
         let snapshot = HostSnapshot::new(HostSnapshotDimensions {
             phase: HostPhase::Steady,
@@ -483,6 +491,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn replacement_failure_renders_the_required_manual_recovery_action() -> std::io::Result<()> {
         let mut output = Vec::new();
         render_update_result(
@@ -503,6 +515,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn presenter_renders_forced_shutdown_as_warning_and_failure_as_error() -> std::io::Result<()> {
         let mut presenter = HostProgressPresenter::new(false);
         let mut output = Vec::new();
@@ -525,6 +541,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn presenter_completes_delayed_phases_in_tty_and_plain_modes() -> std::io::Result<()> {
         for tty in [false, true] {
             let mut presenter = HostProgressPresenter::new(tty);
@@ -548,6 +568,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     fn streamed_progress_and_terminal_render_each_phase_once() -> std::io::Result<()> {
         let mut presenter = HostProgressPresenter::new(false);
         let mut output = Vec::new();

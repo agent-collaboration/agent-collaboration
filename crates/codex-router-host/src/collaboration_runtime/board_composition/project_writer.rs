@@ -2,7 +2,8 @@
 use super::project_writers::ProjectLifecycleSignal;
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation, BoardProjectSchema};
 use board_sync_protocol::BoardConsumerProtocol;
-use collaboration_service::{NativeProjectStore, ProjectStoreRegistry};
+use collaboration_runtime::NativeProjectStore;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_lease::{HolderError, WriterState};
 use fleet_sync_protocol::{PieceRefusal, ReceiverId};
 use fleet_sync_tokio_runner::{NativeWriterRuntime, SessionRequests, WriterSessionCalls};
@@ -320,7 +321,7 @@ async fn stop_writer_tasks(
 
 #[cfg(test)]
 mod stop_tests {
-    #![allow(clippy::panic_in_result_fn)]
+
     use super::*;
     use std::task::Poll;
     use tokio::sync::oneshot;
@@ -328,6 +329,10 @@ mod stop_tests {
     type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn overlapping_stops_both_wait_for_the_owned_task_to_finish() -> TestResult {
         let (release, held) = oneshot::channel::<()>();
         let mut children = JoinSet::new();
@@ -352,6 +357,10 @@ mod stop_tests {
     }
 
     #[tokio::test]
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Contract asserts; setup may fail."
+    )]
     async fn cancelled_stop_leaves_the_same_owned_task_for_the_next_drain() -> TestResult {
         let (release, held) = oneshot::channel::<()>();
         let mut children = JoinSet::new();

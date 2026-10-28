@@ -8,7 +8,7 @@ mod tests {
         AddressPage, CoverageState, EndpointRef, JournalPosition, LifecycleChange,
         LifecycleObservation,
     };
-    use collaboration_service::ServiceIdentity;
+    use collaboration_service::ApplicationFixture;
     use lifecycle_observation::{LifecycleStore, ObservationJournal};
     use serde_json::json;
     use std::{
@@ -175,12 +175,12 @@ mod tests {
         store: Arc<LifecycleStore>,
         epoch: &str,
     ) -> (CollaborationClient, crate::served_api::ServedApi) {
-        let identity = ServiceIdentity::new(SERVICE, epoch).unwrap()
+        let identity = ApplicationFixture::new(SERVICE, epoch).unwrap()
             .with_endpoints(vec![serde_json::from_value(json!({"endpoint":endpoint(),"label":"Fixture Codex",
                 "availability":{"state":"unprobed"},"channels":[{"kind":"nativeCodex","transport":"unixWebSocket",
                 "path":"native.sock","schemaDigest":null,"generation":null}]})).unwrap()]).unwrap()
             .with_journal(store);
-        let served = crate::served_api::ServedApi::start(identity).await.unwrap();
+        let served = crate::served_api::ServedApi::start(identity).unwrap();
         (
             served.client("process-recovery-proof").await.unwrap(),
             served,

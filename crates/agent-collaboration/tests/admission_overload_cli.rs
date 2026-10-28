@@ -2,14 +2,21 @@
 //! `overloaded` failure to retry later: a board command in the board's typed refusal, and an
 //! untyped command as the retryable overload, never as a connection failure or protocol
 //! violation.
+
 #[path = "../../collaboration-service/tests/support/native_registry.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This test consumes a subset of the shared fixture and retains its fixed JSON construction."
+)]
 mod native_registry;
 use automation_storage::AutomationStore;
+use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
 use collaboration_protocol::OperationId;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
-use collaboration_service::{MachineIdentity, ProjectAdmission, ProjectAdmissionProps};
+use collaboration_service::ApplicationFixture;
+
+use collaboration_service::ProjectAdmission;
+use collaboration_service::ProjectAdmissionProps;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
@@ -68,20 +75,19 @@ async fn shed_commands_report_an_overload_to_retry() {
     let automation = AutomationStore::open(&directory.path().join("automation.sqlite"))
         .await
         .expect("automation store");
-    let identity = ServiceIdentity::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+    let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
         .expect("service identity")
         .with_project_admission(admission)
         .with_automation_store(Arc::new(Mutex::new(automation)));
     let served = Arc::new(
         ServedCollaborationApi::start_with(
             directory.path(),
-            CollaborationApplication::new(identity),
+            (identity).build(),
             TestServeOptions {
                 concurrent_requests: Some(1),
                 ..TestServeOptions::default()
             },
         )
-        .await
         .expect("served API"),
     );
     let wake = served

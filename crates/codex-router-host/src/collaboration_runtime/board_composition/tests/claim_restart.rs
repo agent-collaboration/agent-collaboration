@@ -1,7 +1,7 @@
 //! A real process dies after snapshot rename and before Ready; the same attempt resumes.
 use super::*;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use collaboration_service::ProjectClaim;
+use collaboration_contracts::ProjectClaim;
 use fleet_sync_protocol::{
     DatabaseId, Epoch, HolderChangeAnswer, LeaseAnswer, LeaseRequest, LeaseState, LeaseStatus,
     OperationAnswer, OperationRequest, PeerId, ReceiverId, ReplicationPosition,
@@ -332,8 +332,12 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn requested_stop_preserves_a_failed_owned_operation() -> TestResult {
-    let mut fixture = super::claim_fixture::ClaimFixture::start().await?;
+    let mut fixture = Box::pin(super::claim_fixture::ClaimFixture::start()).await?;
     let (failed, observed) = tokio::sync::oneshot::channel();
     fixture.projects.operations.lock().await.spawn(async move {
         let _ = failed.send(());
@@ -361,7 +365,7 @@ async fn claim_restart_child() -> TestResult {
         serde_json::from_slice(&std::fs::read(std::env::var(CHILD_CONFIG)?)?)?;
     let phase = std::env::var(CHILD_PHASE)?;
     if phase.starts_with("receive-graceful-") {
-        return snapshot_install_graceful::run(inputs, &phase).await;
+        return Box::pin(snapshot_install_graceful::run(inputs, &phase)).await;
     }
     // These are the fixture's synthetic Access inputs, never production credentials.
     let session = board_fleet_sync::BoardSessionInputs {

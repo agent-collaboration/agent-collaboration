@@ -1,6 +1,6 @@
 //! A real renewal restores quiet publication; typed NotWriter keeps SDK custody.
 use super::*;
-use collaboration_service::ProjectReplicationPosition;
+use collaboration_contracts::ProjectReplicationPosition;
 use fleet_sync_delivery::OutboxStatusState;
 use fleet_sync_protocol::{
     CommitSequence, DeliveryStatus, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer,
@@ -90,6 +90,10 @@ async fn wait_diagnostic(
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn real_renewal_republishes_after_paused_pass_and_not_writer_reports_confirmed_and_lost_authority()
 -> Result<(), TestError> {
     // A separate exact-case process gives log capture its own global subscriber,
@@ -134,7 +138,7 @@ async fn assert_recovery() -> Result<(), TestError> {
         })
         .try_init()?;
     let directory = tempfile::tempdir()?;
-    let mut fixture = ProjectNotificationFixture::open(directory.path()).await?;
+    let mut fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let writer = fixture.harness.projects.ensure(&fixture.project).await?;
     // Real replication makes the frozen item eligible. Discard only its returned
     // prompt while the actual Welcome is still held before the Host event loop.

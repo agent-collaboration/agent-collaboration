@@ -108,13 +108,11 @@ async fn assert_startup_refuses(source: SourceRow) -> Result<(), TestError> {
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
 async fn startup_refuses_uncopied_messages_before_publishing_the_host() -> Result<(), TestError> {
     assert_startup_refuses(SourceRow::ShippedPush).await
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
 async fn startup_refuses_pre_release_mail_without_discarding_its_original_bytes()
 -> Result<(), TestError> {
     assert_startup_refuses(SourceRow::PreReleaseMail).await

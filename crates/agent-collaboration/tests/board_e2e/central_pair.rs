@@ -82,7 +82,7 @@ impl SecondHost {
             .ok_or_else(|| "second Host is stopped".into())
     }
 
-    #[allow(dead_code)] // Private observation requests are needed only by takeover targets.
+    // Private observation requests are needed only by takeover targets.
     pub fn host_mut(&mut self) -> FixtureResult<&mut BoardHost> {
         self.host
             .as_mut()
@@ -152,7 +152,7 @@ where
     fixture::scenario(async move |fixture| with_second_host(fixture, case).await).await
 }
 
-#[allow(dead_code)] // Shared roots choose the Router layout or mailbox-capacity entry.
+// Shared roots choose the Router layout or mailbox-capacity entry.
 pub async fn router_root_scenario<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
@@ -160,7 +160,7 @@ where
     fixture::router_root_scenario(async move |fixture| with_second_host(fixture, case).await).await
 }
 
-#[allow(dead_code)] // Only retirement cases configure the real mailbox capacity.
+// Only retirement cases configure the real mailbox capacity.
 pub async fn scenario_with_small_mailbox<F>(case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture, &'a mut SecondHost) -> FixtureResult,
@@ -195,6 +195,10 @@ pub async fn work_view(host: &BoardHost, project: &str) -> FixtureResult<Value> 
     checked_work_view(reply, project)
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 fn checked_work_view(reply: Value, project: &str) -> FixtureResult<Value> {
     let view: message_board::WorkView = serde_json::from_value(reply)?;
     assert_eq!(view.project.as_str(), project);

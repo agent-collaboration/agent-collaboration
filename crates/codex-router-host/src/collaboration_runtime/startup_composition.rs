@@ -1,5 +1,12 @@
 //! Bind listeners, prepare service owners and start the Host runtime.
-use super::*;
+use super::{
+    BackendPublication, BoundCollaborationApi, CancellationToken, CollaborationRuntime,
+    CollaborationRuntimeInputs, EndpointAvailability, EndpointId, EndpointRef,
+    HostCollaborationInputs, JoinSet, NativeRelayListener, NonEmptyText, RemoteControlServerName,
+    RouterExecutableRelation, SchemaDigest, SocketAddr, board_composition,
+    create_private_socket_directory, current_observation_timestamp, io, load_installation_peer,
+    load_service_identity, new_service_uuid, unix_seconds,
+};
 
 impl CollaborationRuntime {
     /// Binds both private listeners before spawning tasks. No native process is started.
@@ -26,13 +33,13 @@ impl CollaborationRuntime {
         provider_launches: Vec<crate::ExternalProviderStartup>,
         relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
     ) -> io::Result<Self> {
-        Self::start_with_optional_router_proxy_endpoint(
+        Box::pin(Self::start_with_optional_router_proxy_endpoint(
             inputs,
             provider_launches,
             relation_receiver,
             None,
             None,
-        )
+        ))
         .await
     }
 
@@ -45,13 +52,13 @@ impl CollaborationRuntime {
             host_inputs.remote_access,
         )
         .await?;
-        Self::start_with_optional_router_proxy_endpoint(
+        Box::pin(Self::start_with_optional_router_proxy_endpoint(
             host_inputs.collaboration_runtime,
             provider_launches,
             relation_receiver,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
-        )
+        ))
         .await
     }
 
@@ -76,7 +83,7 @@ impl CollaborationRuntime {
             ));
         }
         let service_epoch = new_service_uuid()?;
-        let machine_identity = collaboration_service::MachineIdentity::new(
+        let machine_identity = collaboration_contracts::MachineIdentity::new(
             service_id.clone(),
             inputs
                 .remote_control_server_name
@@ -127,18 +134,21 @@ impl CollaborationRuntime {
                 None
             }
         };
-        let mut identity = ServiceIdentity::new(
-            &String::from(service_id.clone()),
-            &String::from(service_epoch.clone()),
+        let identity = collaboration_contracts::RouterIdentity::new(
+            service_id.clone(),
+            service_epoch.clone(),
+            Some(installation_peer),
+            machine_identity.clone(),
         )
-        .map_err(io::Error::other)?
-        .with_installation_peer(installation_peer)
-        .map_err(io::Error::other)?
-        .with_machine_identity(machine_identity.clone())
         .map_err(io::Error::other)?;
-        if let Some(journal) = &journal {
-            identity = identity.with_journal(std::sync::Arc::clone(journal));
-        }
+        let endpoint_directory = collaboration_runtime::EndpointDirectory::new(service_id.clone());
+        let display_names = collaboration_runtime::SessionDisplayNameCache::default();
+        let wake_wait_permits = std::sync::Arc::new(tokio::sync::Semaphore::new(16));
+        let mut project_claim = None;
+        let mut project_replication: std::sync::Arc<
+            dyn collaboration_contracts::ProjectReplicationPosition,
+        > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
+        let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
         let opened_board = board_composition::open_board_admission(
             &inputs.directory,
             machine_identity.clone(),
@@ -150,11 +160,10 @@ impl CollaborationRuntime {
             Ok(board) => {
                 let admission = board.admission.clone();
                 if let Some(claim) = &board.claim {
-                    identity = identity.with_project_claim(claim.clone());
+                    project_claim = Some(claim.clone());
                 }
-                identity = identity.with_project_admission(admission.clone());
                 if let Some(replication) = &board.replication {
-                    identity = identity.with_project_replication(replication.clone());
+                    project_replication = replication.clone();
                 }
                 prepared_board = Some(board);
                 Some(admission)
@@ -172,16 +181,14 @@ impl CollaborationRuntime {
             Ok(store) => {
                 let store = std::sync::Arc::new(tokio::sync::Mutex::new(store));
                 automation_store = Some(std::sync::Arc::clone(&store));
-                let handle = collaboration_service::AutomationConfigurationHandle::default();
+                let handle = collaboration_runtime::AutomationConfigurationHandle::default();
                 handle.suspend().await;
                 let backend = std::sync::Arc::new(crate::AutomationSettingsFile::new(
                     &inputs.directory,
                     std::sync::Arc::clone(&store),
                     handle.clone(),
                 ));
-                identity = identity
-                    .with_automation_store(store)
-                    .with_automation_configuration(handle, backend.clone());
+                configuration = handle;
                 settings_backend = Some(backend);
             }
             Err(
@@ -194,14 +201,13 @@ impl CollaborationRuntime {
                 tracing::warn!("automation storage unavailable; collaboration remains independent")
             }
         }
-        let provider_store = match collaboration_service::ProviderOperationStore::open(
+        let provider_store = match collaboration_runtime::ProviderOperationStore::open(
             &inputs.directory.join("provider-operations.sqlite"),
         )
         .await
         {
             Ok(store) => {
                 let store = std::sync::Arc::new(tokio::sync::Mutex::new(store));
-                identity = identity.with_provider_operation_store(std::sync::Arc::clone(&store));
                 Some(store)
             }
             Err(_) => {
@@ -235,37 +241,28 @@ impl CollaborationRuntime {
             .iter()
             .map(|description| description.endpoint.clone())
             .collect();
-        if !startup.endpoints.is_empty() {
-            identity = identity
-                .with_endpoints(startup.endpoints)
-                .map_err(io::Error::other)?;
-        }
-        if let Some(supervisor) = &external_provider_supervisor {
-            let provider_backend: std::sync::Arc<
-                dyn collaboration_service::ProviderConversationBackend,
-            > = supervisor.clone();
-            identity = identity.with_provider_conversation_backend(provider_backend);
-        }
-        if let Some(hub) = provider_session_hub.clone() {
-            identity = identity.with_provider_session_hub(hub);
-        }
+        endpoint_directory.publish_inventory(startup.endpoints)?;
+        let provider_conversations = external_provider_supervisor.as_ref().map(|supervisor| {
+            supervisor.clone()
+                as std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>
+        });
         let endpoint = EndpointRef {
             service_id: service_id.clone(),
             endpoint_id: EndpointId::try_from("codex-local".to_owned())
                 .map_err(io::Error::other)?,
         };
         let publication = BackendPublication::new(
-            identity.endpoint_directory(),
+            endpoint_directory.clone(),
             endpoint.clone(),
             service_epoch.clone(),
             inputs.backend_socket,
         )?;
-        let native_backend = collaboration_service::NativeControlBackend {
+        let native_backend = collaboration_runtime::NativeControlBackend {
             codex_home: inputs.codex_home.clone(),
             endpoint,
             gate: publication.admission_gate(),
         };
-        let approval_broker = collaboration_service::ServiceInteractionBroker::load(
+        let approval_broker = collaboration_runtime::ServiceInteractionBroker::load(
             service_id.clone(),
             native_backend.clone(),
             inputs.directory.join("approval-routes.json"),
@@ -273,25 +270,22 @@ impl CollaborationRuntime {
         .await
         .map_err(io::Error::other)?;
         let unmaterialized_threads =
-            std::sync::Arc::new(collaboration_service::UnmaterializedThreadHolder::new());
+            std::sync::Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new());
         let peer_registry_directory = inputs.peer_registry_directory.clone().map_or_else(
             crate::session_message_route_composition::default_peer_registry_directory,
             Ok,
         )?;
-        let identity = identity
-            .with_claude_background_jobs(std::sync::Arc::new(
-                claude_code_peer_messaging::NativeClaudeJobReader::default(),
-            ))
-            .with_claude_code_sessions(std::sync::Arc::new(
-                claude_code_peer_messaging::ClaudeCodeSessionRegistry::new(
-                    peer_registry_directory.clone(),
-                ),
+        let claude_background_jobs =
+            std::sync::Arc::new(claude_code_peer_messaging::NativeClaudeJobReader::default());
+        let claude_code_sessions =
+            std::sync::Arc::new(claude_code_peer_messaging::ClaudeCodeSessionRegistry::new(
+                peer_registry_directory.clone(),
             ));
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {
                     provider_endpoints,
-                    directory: identity.endpoint_directory(),
+                    directory: endpoint_directory.clone(),
                     native_backend: native_backend.clone(),
                     approval_broker: approval_broker.clone(),
                     unmaterialized_threads: std::sync::Arc::clone(&unmaterialized_threads),
@@ -300,12 +294,13 @@ impl CollaborationRuntime {
                     peer_registry_directory,
                 },
             )?;
-        let session_delivery: std::sync::Arc<dyn collaboration_service::SessionMessageDelivery> =
+        let session_delivery: std::sync::Arc<dyn collaboration_contracts::SessionMessageDelivery> =
             message_routes.router.clone();
-        let subscription_presence: std::sync::Arc<dyn collaboration_service::TargetPresenceProbe> =
-            message_routes.router.clone();
+        let subscription_presence: std::sync::Arc<
+            dyn collaboration_contracts::TargetPresenceProbe,
+        > = message_routes.router.clone();
         let scheduled_run_execution: std::sync::Arc<
-            dyn collaboration_service::ScheduledRunExecution,
+            dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
         let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
@@ -336,26 +331,11 @@ impl CollaborationRuntime {
                 .install_approval_broker(std::sync::Arc::clone(&approval_broker))
                 .await;
         }
-        let identity = identity
-            .with_session_delivery(session_delivery)
-            .with_scheduled_run_execution(scheduled_run_execution)
-            .with_native_backend(native_backend)
-            .map_err(io::Error::other)?;
-        let identity = if let Some(service) = &subscription_delivery {
-            identity.with_subscription_delivery_service(
-                service.clone(),
-                std::sync::Arc::clone(&subscription_presence),
-            )
-        } else {
-            identity
-        };
-        let delivery_for_approvals = identity
-            .session_message_delivery()
-            .ok_or_else(|| io::Error::other("session delivery unavailable"))?;
         approval_broker
-            .install_session_delivery(delivery_for_approvals)
+            .install_session_delivery(session_delivery.clone())
             .map_err(io::Error::other)?;
-        let identity = identity.with_approval_broker(std::sync::Arc::clone(&approval_broker));
+        approval_broker.install_display_names(display_names.clone());
+        approval_broker.install_push_context(interactions.clone(), machine_identity.clone());
         let mail_session = prepared_board
             .as_ref()
             .and_then(|board| board.mail_session());
@@ -380,12 +360,21 @@ impl CollaborationRuntime {
         if let (Some(board), Some(mail)) = (&mut prepared_board, &mail_delivery) {
             board.attach_mail(mail);
         }
-        let identity = match &mail_delivery {
-            Some(mail) => identity
-                .with_mail_delivery_runtime(mail.clone())
-                .map_err(io::Error::other)?,
-            None => identity,
-        };
+        if let Some(mail) = &mail_delivery {
+            mail.validate_owner(&identity, Some(&interactions))
+                .map_err(io::Error::other)?;
+            if let Some(store) = &automation_store {
+                mail.attach_wake_owner(
+                    service_id.clone(),
+                    store.clone(),
+                    wake_wait_permits.clone(),
+                )
+                .map_err(io::Error::other)?;
+            }
+            mail.attach_reader_readiness().map_err(io::Error::other)?;
+            mail.attach_project_replication(project_replication.clone())
+                .map_err(io::Error::other)?;
+        }
         let notification_publisher =
             project_admission
                 .as_ref()
@@ -400,27 +389,178 @@ impl CollaborationRuntime {
         if let (Some(board), Some(publisher)) = (&mut prepared_board, &notification_publisher) {
             board.attach_publisher(publisher);
         }
-        let identity = match &notification_publisher {
-            Some(publisher) => identity.with_notification_publisher(publisher.clone()),
-            None => identity,
-        };
-        let endpoint_directory = identity.endpoint_directory();
-        let wake_worker = identity.wake_timing_worker();
-        let push_handoff_worker = identity.push_handoff_worker();
-        let schedule_worker = identity.schedule_timing_worker();
-        let retention_worker = identity.automation_retention_worker();
+        if let (Some(service), Some(admission), Some(publisher)) = (
+            &subscription_delivery,
+            &project_admission,
+            &notification_publisher,
+        ) {
+            service.attach_follow_admission(
+                std::sync::Arc::downgrade(admission),
+                std::sync::Arc::downgrade(publisher),
+            );
+        }
+        let wake_worker = automation_store.as_ref().map(|store| {
+            collaboration_runtime::WakeTimingWorker::new(
+                store.clone(),
+                session_delivery.clone(),
+                configuration.clone(),
+                machine_identity.clone(),
+                interactions.clone(),
+            )
+        });
+        let push_handoff_worker = automation_store.as_ref().map(|store| {
+            collaboration_runtime::PushHandoffWorker::new(store.clone(), interactions.clone())
+        });
+        let schedule_worker = automation_store.as_ref().map(|store| {
+            collaboration_runtime::ScheduleTimingWorker::new(
+                store.clone(),
+                interactions.clone(),
+                scheduled_run_execution.clone(),
+                Some(native_backend.clone()),
+                configuration.clone(),
+                machine_identity.clone(),
+            )
+        });
+        let retention_worker = automation_store.as_ref().map(|store| {
+            collaboration_runtime::AutomationRetentionWorker::new(store.clone())
+                .with_native_push_store(interactions.clone())
+                .with_interaction_broker(approval_broker.clone())
+        });
         let codex_recorder = crate::codex_conversation_recording_composition::recording_for_store(
             provider_store.as_ref(),
             &inputs.directory,
             &service_id,
         )?;
-        let identity = if let Some(recorder) = &codex_recorder {
-            identity.with_codex_conversation_recorder(std::sync::Arc::clone(recorder))
-        } else {
-            identity
-        };
         let permits = std::sync::Arc::new(tokio::sync::Semaphore::new(32));
-        let application = collaboration_service::CollaborationApplication::new(identity);
+        let application = {
+            let native_control =
+                collaboration_service::collaboration_application::NativeSessionControl::new(
+                    identity.clone(),
+                    endpoint_directory.clone(),
+                    Some(native_backend.clone()),
+                    Some(approval_broker.clone()),
+                    display_names.clone(),
+                );
+            let session_context =
+                collaboration_service::collaboration_application::SessionContextReader::new(
+                    identity.clone(),
+                    native_control.clone(),
+                    provider_store.clone(),
+                    Some(claude_code_sessions.clone()),
+                );
+            let codex_inventory = collaboration_service::CodexSessionInventory::new(
+                identity.clone(),
+                endpoint_directory.clone(),
+                Some(native_backend.clone()),
+                display_names.clone(),
+                journal.clone(),
+            );
+            let provider_inventory = collaboration_service::ProviderSessionInventory::new(
+                identity.clone(),
+                endpoint_directory.clone(),
+                provider_store.clone(),
+                provider_session_hub
+                    .clone()
+                    .map(|hub| hub as std::sync::Arc<dyn collaboration_contracts::SessionEventHub>),
+                display_names.clone(),
+                Some(claude_code_sessions.clone()),
+                Some(claude_background_jobs.clone()),
+            );
+            let journal_operations =
+                collaboration_service::collaboration_application::JournalOperations::new(
+                    identity.clone(),
+                    endpoint_directory.clone(),
+                    journal.clone(),
+                );
+            let sessions = collaboration_service::collaboration_application::SessionOperations::new(
+                identity.clone(),
+                endpoint_directory.clone(),
+                native_control,
+                codex_inventory,
+                provider_inventory,
+                journal_operations,
+            );
+            let board = collaboration_service::collaboration_application::BoardOperations::new(
+                identity.clone(),
+                project_admission.clone(),
+                project_claim,
+                notification_publisher.clone(),
+                subscription_delivery.clone(),
+                subscription_delivery
+                    .as_ref()
+                    .map(|_| subscription_presence.clone()),
+                subscription_clock.clone(),
+                Some(interactions.clone()),
+                mail_delivery.clone(),
+                project_replication,
+                session_context,
+                project_admission
+                    .as_ref()
+                    .map(|admission| admission.project_registry()),
+            );
+            let messages = collaboration_service::collaboration_application::MessageOperations::new(
+                identity.clone(),
+                Some(interactions.clone()),
+                mail_delivery.clone(),
+                display_names.clone(),
+                project_admission
+                    .as_ref()
+                    .map(|admission| admission.project_registry()),
+            );
+            let conversations =
+                collaboration_service::collaboration_application::ConversationOperations::new(
+                    identity.clone(),
+                    provider_conversations,
+                    provider_store.clone(),
+                    codex_recorder.clone(),
+                    endpoint_directory.clone(),
+                );
+            let observation =
+                collaboration_service::collaboration_application::ObservationOperations::new(
+                    identity.clone(),
+                    provider_session_hub.clone().map(|hub| {
+                        hub as std::sync::Arc<dyn collaboration_contracts::SessionEventHub>
+                    }),
+                    endpoint_directory.clone(),
+                );
+            let automation =
+                collaboration_service::collaboration_application::AutomationOperations::new(
+                    identity.clone(),
+                    automation_store.clone(),
+                    configuration.clone(),
+                    settings_backend.as_ref().map(|backend| {
+                        backend.clone()
+                            as std::sync::Arc<
+                                dyn collaboration_runtime::AutomationConfigurationBackend,
+                            >
+                    }),
+                    Some(session_delivery),
+                    Some(interactions.clone()),
+                    Some(scheduled_run_execution),
+                    Some(native_backend.clone()),
+                );
+            let interactions =
+                collaboration_service::collaboration_application::InteractionOperations::new(Some(
+                    approval_broker.clone(),
+                ));
+            let wakes = collaboration_service::collaboration_application::WakeOperations::new(
+                &service_id.clone(),
+                automation_store.clone().as_ref(),
+            )
+            .with_wait_capacity(&wake_wait_permits.clone())
+            .with_remote(mail_delivery.clone().as_ref());
+            collaboration_service::CollaborationApplication::new(
+                identity.clone(),
+                board,
+                conversations,
+                messages,
+                observation,
+                sessions,
+                automation,
+                wakes,
+                interactions,
+            )
+        };
         let collaboration_api =
             collaboration_api.with_service_socket(&inputs.directory.join("control.sock"))?;
         let native = NativeRelayListener::bind(
@@ -428,11 +568,11 @@ impl CollaborationRuntime {
             publication.admission_gate(),
         )?
         .with_connection_budget(std::sync::Arc::clone(&permits));
-        let stored = std::sync::Arc::new(collaboration_service::NativeStoredSessions::new(
+        let stored = std::sync::Arc::new(codex_acp_adapter::NativeStoredSessions::new(
             inputs.codex_home.clone(),
             String::from(service_id.clone()),
         ));
-        let mut acp = collaboration_service::AcpChannelListener::bind(
+        let mut acp = collaboration_runtime::AcpChannelListener::bind(
             &inputs.directory.join("codex-acp.sock"),
             publication.admission_gate(),
             stored,
@@ -459,14 +599,14 @@ impl CollaborationRuntime {
             &provider_session_hub,
             &provider_store,
         ) {
-            let commands: std::sync::Arc<dyn collaboration_service::SessionCommandPort> =
+            let commands: std::sync::Arc<dyn collaboration_contracts::SessionCommandPort> =
                 std::sync::Arc::new(crate::HostSessionCommandPort::new(
                     std::sync::Arc::clone(supervisor),
                     std::sync::Arc::clone(delivery),
                     std::sync::Arc::clone(hub),
                     std::sync::Arc::clone(store),
                 ));
-            let events: std::sync::Arc<dyn collaboration_service::SessionEventHub> =
+            let events: std::sync::Arc<dyn collaboration_contracts::SessionEventHub> =
                 std::sync::Arc::clone(hub) as _;
             let socket_directory = inputs.directory.join("router-sessions");
             if owner_human_id.is_some() {
@@ -494,7 +634,7 @@ impl CollaborationRuntime {
                 let Some(owner_human_id) = owner_human_id.as_ref() else {
                     continue;
                 };
-                let context = collaboration_service::RouterSessionAppServerContext::new(
+                let context = collaboration_runtime::RouterSessionAppServerContext::new(
                     endpoint,
                     message_board::Identity::Human {
                         human_id: owner_human_id.clone(),
@@ -512,7 +652,7 @@ impl CollaborationRuntime {
                     String::from(description.endpoint.endpoint_id.clone())
                 ));
                 provider_app_servers.push(
-                    collaboration_service::RouterSessionAppServerListener::bind(
+                    collaboration_runtime::RouterSessionAppServerListener::bind(
                         &socket_path,
                         std::sync::Arc::new(context),
                     )?,
@@ -522,10 +662,14 @@ impl CollaborationRuntime {
         // Runtime listeners now own these dependencies. Constructor-local hub,
         // router, presence and broker references can retain provider storage
         // transitively and must be gone before exposure-startup cleanup runs.
+        #[cfg(test)]
+        let startup_test_broker = std::sync::Arc::downgrade(&approval_broker);
         drop(provider_session_hub);
         drop(message_routes.router);
         drop(subscription_presence);
         drop(approval_broker);
+        drop(automation_store);
+        drop(interactions);
         let publication = publication.with_acp_listener()?;
         if let Some(settings) = settings_backend
             && settings.recover().await.is_err()
@@ -534,7 +678,7 @@ impl CollaborationRuntime {
                 "automation configuration recovery unavailable; new automation admission is paused"
             );
         }
-        let manifest = collaboration_service::ManifestPublication::publish(
+        let manifest = collaboration_runtime::ManifestPublication::publish(
             &inputs.directory,
             &collaboration_protocol::ServiceManifest {
                 version: collaboration_protocol::SERVICE_MANIFEST_VERSION,
@@ -587,6 +731,8 @@ impl CollaborationRuntime {
                 shutdown: shutdown.clone(),
             });
         let mut tasks = JoinSet::new();
+        #[cfg(test)]
+        let startup_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         #[cfg(feature = "runtime-test-support")]
         let runtime_test_mail = mail_delivery.as_ref().map(std::sync::Arc::downgrade);
         if let Some(mail) = mail_delivery {
@@ -630,6 +776,12 @@ impl CollaborationRuntime {
             tokio::spawn(async move { maintenance_store.run_maintenance(maintenance_stop).await })
         });
         let mut runtime = Self {
+            #[cfg(test)]
+            startup_test_mail,
+            #[cfg(test)]
+            startup_test_broker,
+            #[cfg(test)]
+            startup_test_display_names: display_names.clone(),
             #[cfg(feature = "runtime-test-support")]
             runtime_test_mail,
             notification_publisher,

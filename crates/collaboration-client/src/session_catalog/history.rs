@@ -108,7 +108,8 @@ fn read_history_tail(path: &Path) -> std::io::Result<String> {
     let start = file_len.saturating_sub(SESSION_CONVERSATION_MAX_READ_BYTES);
     file.seek(SeekFrom::Start(start))?;
     let tail_len = file_len - start;
-    let mut bytes = Vec::with_capacity(tail_len as usize);
+    let tail_capacity = usize::try_from(tail_len).map_err(std::io::Error::other)?;
+    let mut bytes = Vec::with_capacity(tail_capacity);
     file.take(SESSION_CONVERSATION_MAX_READ_BYTES)
         .read_to_end(&mut bytes)?;
     let text = String::from_utf8_lossy(&bytes);

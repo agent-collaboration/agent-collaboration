@@ -193,14 +193,14 @@ async fn host_child() -> TestResult {
     )
     .with_collaboration_peer_registry_directory(root.join("no-peer-registry"))
     .with_owner_human_id("enrollment-test-owner".to_owned().try_into()?);
-    HostRuntime::run(
+    Box::pin(HostRuntime::run(
         config,
         ManagedChildLaunchPlans::new(
             None,
             AppServerLaunchPlan::new(command, identity, "1.2.3".to_owned()),
         ),
         ManagedUpdateInputs::production(),
-    )
+    ))
     .await?;
     Ok(())
 }

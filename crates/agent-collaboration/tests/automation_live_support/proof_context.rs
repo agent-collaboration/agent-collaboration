@@ -35,7 +35,6 @@ impl ProofContext {
         Self::connect_with_prior_host(None).await
     }
 
-    #[allow(dead_code)]
     pub async fn reconnect_after_owned_host_restart(prior_host_pid: u64) -> ProofResult<Self> {
         Self::connect_with_prior_host(Some(prior_host_pid)).await
     }
@@ -179,7 +178,7 @@ impl ProofContext {
     }
 
     // Shared helper is also compiled by scripted acceptance binaries without DX tasks.
-    #[allow(dead_code)]
+
     pub async fn start_skill_thread(&mut self, role: &str) -> ProofResult<SessionRef> {
         self.start_thread_with_instructions(
             role,
@@ -190,7 +189,6 @@ impl ProofContext {
         .await
     }
 
-    #[allow(dead_code)]
     pub async fn start_messaging_skill_thread(
         &mut self,
         role: &str,

@@ -2,7 +2,10 @@ use super::membership_completion::join_operation;
 use super::*;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Session participation and conversation leadership are independent gates.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Session participation and conversation leadership are independent gates."
+)]
 async fn session_thread_subscriptions_require_join_while_project_humans_remain_exempt()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::start().await?;
@@ -96,7 +99,10 @@ async fn session_thread_subscriptions_require_join_while_project_humans_remain_e
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Each scope's refusal identifies that scope and creates no watch or membership.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each scope's refusal identifies that scope and creates no watch or membership."
+)]
 async fn thread_subscriptions_refuse_each_missing_session_participant_without_creating_watches()
 -> Result<(), TestError> {
     let fixture = SubscriptionFixture::start().await?;
@@ -133,7 +139,10 @@ async fn thread_subscriptions_refuse_each_missing_session_participant_without_cr
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Competing requests cross the actual per-project writer lock.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Competing requests cross the actual per-project writer lock."
+)]
 async fn concurrent_orchestrator_joins_commit_one_holder_and_report_the_winner()
 -> Result<(), TestError> {
     let fixture = SubscriptionFixture::start().await?;

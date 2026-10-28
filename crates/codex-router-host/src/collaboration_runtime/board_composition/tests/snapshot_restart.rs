@@ -8,14 +8,26 @@ use message_board::*;
 use std::{io, sync::Arc};
 
 // The shared harness also contains unrelated journey helpers.
-#[allow(dead_code)]
+
 #[path = "../../../../../collaboration-service/tests/support/accepted_snapshot.rs"]
+#[expect(
+    dead_code,
+    reason = "Sibling snapshot tests use the other shared bootstrap helpers."
+)]
 mod accepted_snapshot;
-#[allow(dead_code)]
+
 #[path = "../../../../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Other integration targets use the remaining shared board fixture helpers."
+)]
 pub(super) mod board_fixture;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn snapshot_baseline_is_repaired_before_offline_admission_without_waiting_for_welcome()
 -> TestResult {
     let source = board_fixture::BoardFixture::start().await?;

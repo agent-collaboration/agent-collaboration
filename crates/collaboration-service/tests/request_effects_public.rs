@@ -1,6 +1,9 @@
-#![allow(clippy::indexing_slicing)] // Strict JSON assertions exercise the real public carrier.
-#[allow(dead_code)] // This scenario uses only the Fleet portion of the shared real fixture.
+// This scenario uses only the Fleet portion of the shared real fixture.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 mod board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use collaboration_client::board::{
@@ -10,7 +13,10 @@ use collaboration_client::board::{
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the public contract; Result propagates fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the public contract; Result propagates fixture failures."
+)]
 async fn a_large_fleet_write_returns_a_signed_public_continuation() -> Result<(), TestError> {
     // Arrange real Fleet history through the same tools as the caller.
     let fixture = BoardFixture::start().await?;
@@ -159,7 +165,10 @@ async fn a_large_fleet_write_returns_a_signed_public_continuation() -> Result<()
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Assertions prove the public contract; Result propagates fixture failures.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions prove the public contract; Result propagates fixture failures."
+)]
 async fn one_creating_request_has_distinct_project_and_fleet_receipts() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let project = message_board::ProjectId::generate();

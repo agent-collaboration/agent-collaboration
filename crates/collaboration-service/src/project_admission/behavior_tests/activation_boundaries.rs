@@ -16,7 +16,10 @@ async fn membership(fixture: &SubscriptionFixture) -> Result<SubscriptionMembers
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn activation_is_the_request_position_and_reactivation_changes_the_local_key()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;
@@ -111,7 +114,10 @@ async fn activation_is_the_request_position_and_reactivation_changes_the_local_k
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn policy_change_preserves_backlog_releases_old_selection_and_fences_late_settlement()
 -> Result<(), TestError> {
     let mut fixture = SubscriptionFixture::joined().await?;

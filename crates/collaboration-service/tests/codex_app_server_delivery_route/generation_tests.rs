@@ -28,15 +28,15 @@ async fn stale_strict_generation_stops_before_evidence_or_native_io()
             gate,
             codex_home: std::path::PathBuf::from("/tmp"),
         },
-        std::sync::Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        std::sync::Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let sink = Arc::new(CountingEvidenceSink(AtomicUsize::new(0)));
     let mut request = prepared_request(target, "hello", MessageDelivery::Auto)?;
     request.precondition = DeliveryPrecondition::EndpointGeneration { expected: stale };
     let receipt = route.deliver(request, sink.as_ref()).await?;
     if receipt.unsent_cause()
-        != Some(collaboration_service::UnsentCause::Refused(
-            collaboration_service::NativeRefusalCode::Rejection(
+        != Some(collaboration_contracts::UnsentCause::Refused(
+            collaboration_contracts::NativeRefusalCode::Rejection(
                 collaboration_protocol::DeliveryRejectionReason::StaleGeneration,
             ),
         ))
@@ -149,7 +149,7 @@ async fn exercise_prepared_push_route(
             gate: NativeGenerationGate::default(),
             codex_home: root.path().to_path_buf(),
         },
-        std::sync::Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        std::sync::Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let mismatched_sink = RecordingEvidenceSink(Mutex::new(Vec::new()));
     let mismatched_request = PreparedDeliveryRequest {
@@ -221,7 +221,7 @@ async fn exercise_prepared_push_route(
             gate,
             codex_home: root.path().to_path_buf(),
         },
-        std::sync::Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        std::sync::Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let sink = Arc::new(RecordingEvidenceSink(Mutex::new(Vec::new())));
     let observed = Arc::clone(&sink);
@@ -581,7 +581,7 @@ async fn retiring_during_thread_read_returns_retryable_unavailable()
             gate: gate.clone(),
             codex_home: root.path().to_owned(),
         },
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     ));
     let (read_seen_tx, read_seen_rx) = tokio::sync::oneshot::channel();
     let (release_server_tx, release_server_rx) = tokio::sync::oneshot::channel();
@@ -686,7 +686,7 @@ async fn malformed_prepared_push_suffixes_stop_before_evidence_or_native_io()
             gate,
             codex_home: root.path().to_owned(),
         },
-        Arc::new(collaboration_service::UnmaterializedThreadHolder::new()),
+        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
     );
     let invalid_lines = [
         "✉️ sender · \"preview\"".to_owned(),

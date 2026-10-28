@@ -8,7 +8,7 @@ use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
 
 #[tokio::test]
 async fn committed_handoff_recovers_the_same_item_after_reopen_before_outbox_admission() {
-    let mut fixture = OwnerFixture::new().await;
+    let mut fixture = Box::pin(OwnerFixture::new()).await;
     let intent = create_addressed_intent(&fixture).await;
     let item =
         fleet_sync_protocol::ItemId::try_from("019f0000-0000-7000-8000-000000041081".to_owned())
@@ -52,8 +52,7 @@ async fn committed_handoff_recovers_the_same_item_after_reopen_before_outbox_adm
         &fixture,
         &runtime,
         PeerId::try_from("0192a1b2-c3d4-7000-8000-000000000001".to_owned()).unwrap(),
-    )
-    .await;
+    );
     let publisher = crate::NotificationPublisher::new(
         fixture.admission.clone(),
         fixture.interactions.clone(),
@@ -111,7 +110,7 @@ impl CallRouter for NoRecoveryObservationCalls {
 
 async fn assert_recovered_custody(
     native: &NativeMailOwner,
-    original: &DeliveryItem<crate::RouterDeliveryTypes>,
+    original: &DeliveryItem<collaboration_contracts::RouterDeliveryTypes>,
 ) {
     let observer = interaction_storage::InteractionAtomicStore::new(
         native.interactions.clone(),

@@ -1,6 +1,7 @@
 //! The selected fault remains armed when another call uses the same destination.
-#![allow(clippy::panic_in_result_fn)]
+
 use super::*;
+use crate::DispatchCallSelector;
 use serde_json::json;
 use std::time::Duration;
 
@@ -132,6 +133,10 @@ async fn installation_peer_hold_ignores_other_outer_kinds_and_releases_only_the_
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn copy_write_hold_ignores_status_and_unknown_calls_without_freezing_later_writes()
 -> TestResult {
@@ -220,6 +225,10 @@ async fn copy_write_reply_drop_selects_only_the_outer_write_kind_once() -> TestR
     .await
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_next_hold()
 -> TestResult {
@@ -277,6 +286,10 @@ fn mailbox_submit_identity(origin: &str, item: &str, operation: &str) -> serde_j
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries() -> TestResult {
     let origin = "019f0000-0000-7000-8000-000000000810";
     let item = "019f0000-0000-7000-8000-000000000811";
@@ -337,6 +350,10 @@ async fn mailbox_item_selection_ignores_other_origins_items_cancels_and_queries(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault() -> TestResult {
     let faults = RuntimeFaults::default();
     let destination = ObjectAddress::Registry;
@@ -382,6 +399,10 @@ async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions fail the test while fixture errors propagate."
+)]
 async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_call_bytes()
 -> TestResult {
     let faults = RuntimeFaults::default();

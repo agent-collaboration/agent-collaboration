@@ -4,7 +4,7 @@ use super::*;
 
 #[tokio::test]
 async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_backoff() {
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let peer = PeerId::new(uuid::Uuid::parse_str("0192a1b2-c3d4-7000-8000-000000000001").unwrap())
@@ -18,7 +18,7 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
                 interactions: fixture.interactions.clone(),
                 actors: runtime.service.clone(),
                 presence: fixture.presence.clone(),
-                machine: crate::MachineIdentity::new(
+                machine: collaboration_contracts::MachineIdentity::new(
                     SERVICE_ID.to_owned().try_into().unwrap(),
                     None,
                 )
@@ -34,19 +34,18 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
         fixture.interactions.clone(),
         Arc::downgrade(&mail),
     ));
-    let app = CollaborationApplication::new(
-        ServiceIdentity::new(SERVICE_ID, SERVICE_ID)
-            .unwrap()
-            .with_automation_store(fixture.automation.clone())
-            .with_project_admission(fixture.admission.clone())
-            .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone())
-            .with_interaction_store(fixture.interactions.clone())
-            .with_installation_peer(peer)
-            .unwrap()
-            .with_mail_delivery_runtime(mail.clone())
-            .unwrap()
-            .with_notification_publisher(publisher.clone()),
-    );
+    let app = (ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
+        .unwrap()
+        .with_automation_store(fixture.automation.clone())
+        .with_project_admission(fixture.admission.clone())
+        .with_subscription_delivery_service(runtime.service.clone(), fixture.presence.clone())
+        .with_interaction_store(fixture.interactions.clone())
+        .with_installation_peer(peer)
+        .unwrap()
+        .with_mail_delivery_runtime(mail.clone())
+        .unwrap()
+        .with_notification_publisher(publisher.clone()))
+    .build();
     fixture
         .post(
             &fixture.root,

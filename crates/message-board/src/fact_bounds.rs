@@ -1,6 +1,9 @@
 //! Fact payload limits keep producer evidence within one replicated record.
 use crate::record_bounds::{count_bound, text_bound};
-use crate::*;
+use crate::{
+    ArtifactRef, EvidenceRef, FactKind, LifecycleFact, MAX_EVIDENCE_PATH_BYTES,
+    MAX_MESSAGE_TEXT_BYTES, TextValidationError,
+};
 
 impl ArtifactRef {
     pub fn validate_bounds(&self) -> Result<(), TextValidationError> {

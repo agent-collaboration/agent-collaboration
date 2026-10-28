@@ -1,5 +1,9 @@
 //! A single owner HTTP call. Pending and uncertain outcomes remain visible to callers.
-use collaboration_central_admin_protocol::*;
+use collaboration_central_admin_protocol::{
+    CopyDirectoryPage, CopyHealth, CopyMigrationPage, CopyPageQuery, CopyRepairAnswer, DatabaseId,
+    OwnerMove, OwnerOperationFailure, OwnerPreviewResponse, OwnerRetirement, OwnerRetirementAnswer,
+    OwnerTakeover, OwnerTransferAnswer,
+};
 use reqwest::{Client, Method, Request, Url, header::HeaderValue};
 use serde::{Deserialize, de::DeserializeOwned};
 
@@ -216,7 +220,6 @@ fn decode<Answer: DeserializeOwned>(
 }
 
 #[cfg(test)]
-#[allow(clippy::panic_in_result_fn)]
 mod tests {
     use super::*;
     #[test]
@@ -235,6 +238,10 @@ mod tests {
             &CentralAdminAnswer::Failure(OwnerOperationFailure::ObjectUnavailable)
         ));
     }
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "Assertions must fail this test while fixture errors propagate through Result."
+    )]
     #[test]
     fn typed_unavailable_keeps_its_subject_and_reason() -> Result<(), Box<dyn std::error::Error>> {
         let response=br#"{"kind":"unavailable","value":{"subject":{"kind":"transfer","transfer":"019f0000-0000-7000-8000-000000005881"},"reason":{"kind":"migrationPending","value":{"version":3}}}}"#;

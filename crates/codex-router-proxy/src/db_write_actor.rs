@@ -37,7 +37,7 @@ use codex_router_state::sqlite::AsyncSqliteStateStore;
 use codex_router_state::sqlite::StateStoreError;
 
 mod session_affinity_scheduler;
-use session_affinity_scheduler::*;
+use session_affinity_scheduler::{await_db_write_task_shutdown, run_session_affinity_scheduler};
 
 /// Default bounded capacity for durable provider exhaustion writes.
 pub const PROVIDER_EXHAUSTION_QUEUE_CAPACITY: usize = 128;

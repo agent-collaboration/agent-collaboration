@@ -435,8 +435,10 @@ async fn actual_native_partial_and_invalid_publications_keep_captured_details_an
                     sender
                         .send(TerminalEvent::FullscreenMouse(FullscreenMouseEvent::new(
                             MouseEventKind::Moved,
-                            column as u16,
-                            row as u16,
+                            u16::try_from(column)
+                                .expect("captured fixture coordinates fit terminal cells"),
+                            u16::try_from(row)
+                                .expect("captured fixture coordinates fit terminal cells"),
                         )))
                         .unwrap();
                     phase = 3;

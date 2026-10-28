@@ -1,4 +1,3 @@
-#![allow(clippy::expect_used)]
 //! Real-provider races where LoadedOnly must refuse a newly unloaded session.
 
 #[path = "support/provider_fixture_launch.rs"]
@@ -11,17 +10,25 @@ use codex_router_host::{
     ExternalProviderRuntime, ExternalProviderSupervisor, LiveSessionOwnership,
     LiveSessionOwnershipCheck, ProviderAcpDeliveryRoute,
 };
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::DeliveryContractError;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::LoadPolicy;
+use collaboration_contracts::NOT_LOADED_REASON;
+use collaboration_contracts::ProviderConversationBackend;
+use collaboration_contracts::RoutePresence;
+use collaboration_contracts::SessionDeliveryRoute;
+use collaboration_contracts::TargetPresence;
+use collaboration_contracts::TargetPresenceProbe;
 use collaboration_protocol::{
     CodexGeneration, ConversationCloseRequest, ConversationOperationSettlement,
     ConversationOperationWaitOutput, ConversationOperationWaitRequest, DeliveryOutcome, EndpointId,
     MessageDelivery, OperationId, PositiveSeconds, ProviderRequestedPolicy,
     ProviderWorkingDirectory, RouterAccess, SessionRef,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, DeliveryContractError, DeliveryFuture, LoadPolicy, NOT_LOADED_REASON,
-    ProviderConversationBackend, ProviderOperationStore, ProviderSessionRecord, RoutePresence,
-    SessionDeliveryRoute, SessionDeliveryRouter, TargetPresence, TargetPresenceProbe,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_runtime::SessionDeliveryRouter;
 use sqlx::Connection as _;
 use std::{
     path::{Path, PathBuf},
@@ -29,7 +36,10 @@ use std::{
 };
 
 #[path = "support/provider_acp_message_fifo_support.rs"]
-#[allow(dead_code)]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod provider_acp_message_fifo_support;
 use provider_acp_message_fifo_support::{
     NoLivePeer, RecordedEvidence, available_directory, provider_binding, refusing_load_fixture,
@@ -48,6 +58,7 @@ fn no_load_fixture() -> ExternalProviderLaunch {
     provider_fixture_launch::launch("provider-loaded-route-agent.ts", vec!["idle".to_owned()])
 }
 
+#[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 async fn store_with_session_record(
     root: &Path,
     target: &SessionRef,

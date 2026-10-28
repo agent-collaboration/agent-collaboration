@@ -2,7 +2,7 @@ use super::board_arguments::ThreadListArguments;
 use super::board_preparation::PreparedBoardCommand;
 use super::board_value_parsing::{parse_identity, parse_uuid_v7, prepare_page_request};
 use collaboration_client::BoardRepositoryLocation;
-use collaboration_client::board::*;
+use collaboration_client::board::{PageRequest, ThreadListRequest};
 use std::path::Path;
 
 pub(super) fn prepare_thread_list(

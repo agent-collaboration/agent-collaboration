@@ -1,6 +1,12 @@
 //! Revocation admission and readmission share the enrollment's journal reference.
 
-use super::*;
+use super::{
+    AtomicStore, BoxFuture, Clock, ColumnIndex, Database, Decode, Encode, EnrollmentState,
+    IdSource, Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, OwnerIdentity,
+    PeerId, PlatformIo, RegistryKind, RevocationDecision, ServiceId, StepCallback, StepDriver,
+    StepResult, StoreError, StoredMachine, SyncTime, TransactionScope, Type, corrupt,
+    operation_pending, queries, readmission, wrong_face,
+};
 use durable_steps::{
     CallTarget, JournalScope, OperationContext, OperationFailure, OperationId, RequestKey, Task,
     storage::JournalStorage,

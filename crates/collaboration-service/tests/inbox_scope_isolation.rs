@@ -1,7 +1,15 @@
 //! Watched context follows the reader; unreadable siblings remain explicit metadata.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -10,7 +18,10 @@ use serde_json::json;
 use sqlx::Connection;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions must fail the test; Result propagates fixture failures."
+)]
 async fn a_project_subscription_adds_foreign_context_after_a_plain_watch_leaves_it_uncovered()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -139,7 +150,7 @@ async fn a_project_subscription_adds_foreign_context_after_a_plain_watch_leaves_
                 state,
                 ..
             } => Some((workspace_id, board_id, thread_id, project_id, state)),
-            _ => None,
+            InboxActivity::PostCreated { .. } => None,
         })
         .collect();
     assert_eq!(
@@ -179,7 +190,6 @@ enum SiblingFault {
     WatchReal,
 }
 
-#[allow(clippy::panic_in_result_fn)]
 async fn healthy_inbox_reports_sibling(fault: SiblingFault) -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
     let client = fixture.api.client("sibling failure inbox").await?;

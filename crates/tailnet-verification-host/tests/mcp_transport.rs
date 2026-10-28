@@ -1,5 +1,3 @@
-#![allow(clippy::panic_in_result_fn)]
-
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},
@@ -129,6 +127,10 @@ async fn real_tcp_authority_and_origin_probes_match_original_fixture_contract()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assert the contract; propagate fixture errors."
+)]
 async fn real_unix_transport_reaches_literal_mcp_response()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let parent = if cfg!(target_os = "macos") {

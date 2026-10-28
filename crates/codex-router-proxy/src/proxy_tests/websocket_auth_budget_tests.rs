@@ -62,7 +62,10 @@ impl AsyncProviderCredentialResolver for AlternatingCredentialResolver {
 }
 
 #[tokio::test]
-#[allow(clippy::result_large_err)]
+#[expect(
+    clippy::result_large_err,
+    reason = "The existing error contract preserves the complete diagnostic payload."
+)]
 async fn websocket_auth_rejection_shares_one_budget_with_credential_failures() {
     let fixture = AuthRejectionFixture::new("websocket_shared_auth_budget");
     let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
@@ -163,11 +166,12 @@ async fn websocket_auth_rejection_shares_one_budget_with_credential_failures() {
             .expect("first frame should send");
         client.next().await
     };
-    let (router_result, (), _client_result) = tokio::time::timeout(Duration::from_secs(5), async {
-        tokio::join!(router_future, server_future, client_future)
-    })
-    .await
-    .expect("shared budget must terminate");
+    let (router_result, (), _client_result) =
+        Box::pin(tokio::time::timeout(Duration::from_secs(5), async {
+            tokio::join!(router_future, server_future, client_future)
+        }))
+        .await
+        .expect("shared budget must terminate");
     assert!(matches!(
         router_result,
         Err(crate::websocket::WebSocketTunnelError::CloseReason(

@@ -25,8 +25,8 @@ async fn project_admission(
     directory: &std::path::Path,
 ) -> (
     Arc<collaboration_service::ProjectAdmission>,
-    Arc<collaboration_service::ProjectStoreRegistry>,
-    Arc<collaboration_service::FleetClient>,
+    Arc<collaboration_runtime::ProjectStoreRegistry>,
+    Arc<collaboration_runtime::FleetClient>,
     board_central_test_support::FleetTestRuntime,
 ) {
     let registry =
@@ -51,7 +51,7 @@ async fn project_admission(
             collaboration_service::ProjectAdmissionProps {
                 registry: registry.clone(),
                 fleet: fleet.clone(),
-                identity: collaboration_service::MachineIdentity::new(
+                identity: collaboration_contracts::MachineIdentity::new(
                     collaboration_protocol::UuidIdentity::try_from(TEST_SERVICE_ID.to_owned())
                         .expect("service"),
                     Some("API proof"),
@@ -71,7 +71,7 @@ async fn board_application(
 ) {
     let (admission, _, _, runtime) = project_admission(directory).await;
     (
-        CollaborationApplication::new(test_identity().with_project_admission(admission)),
+        (test_identity().with_project_admission(admission)).build(),
         runtime,
     )
 }
@@ -114,9 +114,7 @@ async fn automation_store(
 }
 
 async fn wake_application(directory: &std::path::Path) -> CollaborationApplication {
-    CollaborationApplication::new(
-        test_identity().with_automation_store(automation_store(directory).await),
-    )
+    (test_identity().with_automation_store(automation_store(directory).await)).build()
 }
 
 fn project_create_arguments(name: &str, board: &BoardId, project: ProjectId) -> Value {
@@ -164,11 +162,11 @@ async fn the_same_call_returns_the_same_structured_result_on_tcp_and_unix() {
     let directory = private_directory();
     let (admission, registry, fleet, fleet_runtime) = project_admission(directory.path()).await;
     let config = api_config(
-        CollaborationApplication::new(test_identity().with_project_admission(admission.clone())),
+        (test_identity().with_project_admission(admission.clone())).build(),
         directory.path(),
     );
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let board = board_scope(&tcp).await;
     let create = project_create_arguments("API listeners", &board, ProjectId::generate());
     let project_id = create["projectId"].clone();
@@ -241,7 +239,7 @@ async fn a_wake_wait_returns_a_cursor_and_the_next_wait_from_it_misses_no_change
     // Arrange
     let directory = private_directory();
     let config = api_config(wake_application(directory.path()).await, directory.path());
-    let api = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let api = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let wake = api.call_tool("wake_send", wake_send_arguments()).await;
     let wakeup_id = structured(&wake)["definition"]["wakeupId"].clone();
     let first = api
@@ -298,7 +296,7 @@ async fn arguments_that_do_not_decode_get_a_structured_validation_failure_on_bot
     let directory = private_directory();
     let config = api_config(wake_application(directory.path()).await, directory.path());
     let tcp = ServedApi::tcp(&config).await;
-    let unix = ServedApi::unix(&config, &directory.path().join("api.sock")).await;
+    let unix = ServedApi::unix(&config, &directory.path().join("api.sock"));
     let target = json!({
         "endpoint": {"serviceId": TEST_SERVICE_ID, "endpointId": "codex-local"},
         "sessionId": "rename-target"

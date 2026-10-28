@@ -55,7 +55,7 @@ impl ReplayBoard {
         }
         .map_err(|error| format!("{} question {}: {error}", case.case, question.via).into())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn assert_decisions(
         &mut self,
         case: &ReplayCase,
@@ -106,7 +106,7 @@ impl ReplayBoard {
         }
         Ok(())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn assert_evidence(
         &mut self,
         case: &ReplayCase,
@@ -181,7 +181,7 @@ impl ReplayBoard {
         }
         Ok(())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn assert_state(&mut self, case: &ReplayCase, expected: &Value) -> Result<(), TestError> {
         assert!(
             !field(expected, "state")?
@@ -202,7 +202,7 @@ impl ReplayBoard {
                     Record::Project(state) => Some(state),
                     _ => None,
                 },
-                _ => None,
+                FeedContent::Redacted => None,
             })
             .ok_or("public project state in feed")?;
         if let Some(closed) = expected.get("projectClosed") {
@@ -478,7 +478,11 @@ impl ReplayBoard {
         }
         Ok(())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
+    #[expect(
+        clippy::panic_in_result_fn,
+        reason = "These assertions prove the replay contract; Result propagates malformed fixture input."
+    )]
     fn assert_lanes(
         &self,
         case: &ReplayCase,
@@ -527,7 +531,7 @@ impl ReplayBoard {
         }
         Ok(())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn assert_owed(
         &self,
         case: &ReplayCase,
@@ -548,7 +552,7 @@ impl ReplayBoard {
         }
         Ok(())
     }
-    #[allow(clippy::panic_in_result_fn)]
+
     async fn assert_late_facts(
         &self,
         case: &ReplayCase,

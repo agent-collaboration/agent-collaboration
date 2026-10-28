@@ -1,15 +1,17 @@
-#![allow(clippy::panic_in_result_fn)]
-
 use super::*;
+use collaboration_contracts::AttemptEvidenceSink;
+use collaboration_contracts::AttemptReconciliation;
+use collaboration_contracts::AttemptReconciliationContext;
+use collaboration_contracts::DeliveryFuture;
+use collaboration_contracts::SessionMessageDelivery;
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecision, CodexGeneration, DeliveryOutcome, DeliveryReceipt,
     EndpointId, EndpointRef, GenerationNumber, OperationId, SessionId, SessionReachability,
     SessionRef, UuidIdentity,
 };
-use collaboration_service::{
-    AttemptEvidenceSink, AttemptReconciliation, AttemptReconciliationContext, DeliveryFuture,
-    NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker, SessionMessageDelivery,
-};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
 use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc, time::Duration};
 use tokio::io::AsyncWriteExt as _;
 use tokio::sync::Notify;
@@ -34,14 +36,14 @@ struct AcceptedApprovalNoticeDelivery {
 impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
     fn deliver<'a>(
         &'a self,
-        request: collaboration_service::layer_zero::DeliveryRequest,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
         _: &'a dyn AttemptEvidenceSink,
-    ) -> DeliveryFuture<'a, collaboration_service::NativeDeliveryResult> {
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         Box::pin(async move {
             self.push_fixture
                 .captured_approval(request.payload.line.as_str(), &request.target)
                 .await
-                .map_err(|_| collaboration_service::DeliveryContractError::InvalidEvidence)?;
+                .map_err(|_| collaboration_contracts::DeliveryContractError::InvalidEvidence)?;
             self.notice_delivered.notify_one();
             Ok({
                 let receipt = DeliveryReceipt {
@@ -49,8 +51,8 @@ impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
                     reachability: Some(SessionReachability::ProviderAcp),
                     client: None,
                 };
-                collaboration_service::NativeDeliveryResult::observed(
-                    collaboration_service::NativeObservedOutcome::Started,
+                collaboration_contracts::NativeDeliveryResult::observed(
+                    collaboration_contracts::NativeObservedOutcome::Started,
                     receipt.reachability,
                     receipt.client,
                 )
@@ -173,21 +175,21 @@ async fn observed_typed_approvals(
         .await
         .into_iter()
         .filter_map(|record| {
-            let collaboration_service::InteractionHistoryRecord::Approval {
+            let collaboration_runtime::InteractionHistoryRecord::Approval {
                 request, state, ..
             } = record
             else {
                 return None;
             };
             let (state, reason) = match state {
-                collaboration_service::InteractionHistoryState::Pending => (
+                collaboration_runtime::InteractionHistoryState::Pending => (
                     collaboration_protocol::ApprovalState::PendingClientDecision,
                     None,
                 ),
-                collaboration_service::InteractionHistoryState::Decided { .. } => {
+                collaboration_runtime::InteractionHistoryState::Decided { .. } => {
                     (collaboration_protocol::ApprovalState::Decided, None)
                 }
-                collaboration_service::InteractionHistoryState::Cancelled { reason } => (
+                collaboration_runtime::InteractionHistoryState::Cancelled { reason } => (
                     collaboration_protocol::ApprovalState::Cancelled,
                     Some(reason.as_str().to_owned()),
                 ),
@@ -256,6 +258,10 @@ async fn approval_broker_fixture(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
@@ -319,6 +325,10 @@ async fn external_approval_timeout_is_recorded_in_history() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn self_approver_offer_records_actionable_refusal() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
@@ -369,6 +379,10 @@ async fn self_approver_offer_records_actionable_refusal() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
     use acp_client_runtime::InteractionPort as _;
     let root = tempfile::tempdir()?;
@@ -408,13 +422,17 @@ async fn question_after_turn_cancel_is_recorded_as_cancelled() -> TestResult {
         .find(|row| row.request_id() == "late-question")
         .ok_or("late question history missing")?;
     assert!(matches!(row,
-        collaboration_service::InteractionHistoryRecord::Question {
-            state: collaboration_service::QuestionHistoryState::Cancelled { reason }, ..
+        collaboration_runtime::InteractionHistoryRecord::Question {
+            state: collaboration_runtime::QuestionHistoryState::Cancelled { reason }, ..
         } if reason.as_str() == "turnCancelled"));
     Ok(())
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progresses() -> TestResult
 {
     let root = tempfile::tempdir()?;
@@ -488,6 +506,10 @@ async fn permission_decision_survives_late_agent_withdrawal_and_peer_turn_progre
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> TestResult {
     let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
     let generation = CodexGeneration {
@@ -538,6 +560,10 @@ async fn expired_approval_broker_refusal_carries_typed_operation_reason() -> Tes
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn peer_cancellation_and_binding_retirement_settle_permission_history_once() -> TestResult {
     for cancellation_source in ["peer", "retirement"] {
         let root = tempfile::tempdir()?;
@@ -598,6 +624,10 @@ async fn peer_cancellation_and_binding_retirement_settle_permission_history_once
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult {
     let root = tempfile::tempdir()?;
     let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
@@ -660,6 +690,10 @@ async fn permission_wait_does_not_block_steering_reply_dispatch() -> TestResult 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestResult {
     let root = tempfile::tempdir()?;
     let service_id = UuidIdentity::try_from("0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89".to_owned())?;
@@ -705,6 +739,10 @@ async fn permission_wait_observes_cancellation_during_provider_cancel() -> TestR
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn permission_arriving_after_router_cancel_is_answered_cancelled() -> TestResult {
     // ACP v1 prompt-turn.mdx:336-350: a request received after session/cancel
     // still needs its cancelled answer before the agent ends the Turn.

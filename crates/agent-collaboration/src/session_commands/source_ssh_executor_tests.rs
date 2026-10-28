@@ -2,10 +2,11 @@
 //! Backend protocol payloads are fixed literals; no Codex or model is launched.
 use super::*;
 use collaboration_client::protocol::{CodexGeneration, ServiceManifest};
-use collaboration_service::{
-    CollaborationApplication, EndpointDirectory, ManifestPublication, NativeGenerationGate,
-    NativeRelayListener, ServiceIdentity,
-};
+use collaboration_runtime::EndpointDirectory;
+use collaboration_runtime::ManifestPublication;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::NativeRelayListener;
+use collaboration_service::ApplicationFixture;
 use futures_util::{SinkExt, StreamExt};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf, task::Poll};
 use tokio::net::{UnixListener, UnixStream};
@@ -40,7 +41,7 @@ fn generation(number: u64) -> CodexGeneration {
 }
 
 impl SourceNativeFixture {
-    async fn start() -> Self {
+    fn start() -> Self {
         let root = tempfile::Builder::new()
             .prefix("source-pin-")
             .permissions(std::fs::Permissions::from_mode(0o700))
@@ -64,7 +65,7 @@ impl SourceNativeFixture {
             "CODEX_HOME".to_owned(),
             codex_home.to_str().unwrap().to_owned(),
         )]);
-        let identity = ServiceIdentity::new(SOURCE_SERVICE, SOURCE_EPOCH).unwrap();
+        let identity = ApplicationFixture::new(SOURCE_SERVICE, SOURCE_EPOCH).unwrap();
         let directory = identity.endpoint_directory();
         let gate = NativeGenerationGate::default();
         let first_backend = UnixListener::bind(service_root.join("first.sock")).unwrap();
@@ -76,9 +77,8 @@ impl SourceNativeFixture {
         let relay = tokio::spawn(listener.run(shutdown.clone()));
         let api = collaboration_mcp::test_support::ServedCollaborationApi::start(
             &service_root,
-            CollaborationApplication::new(identity),
+            (identity).build(),
         )
-        .await
         .unwrap();
         let mut manifest: ServiceManifest =
             serde_json::from_slice(&std::fs::read(service_root.join("service.json")).unwrap())
@@ -182,7 +182,7 @@ impl SourceNativeFixture {
 
 #[tokio::test]
 async fn source_native_prepare_reads_actual_api_source_directory_and_rejects_wrong_service() {
-    let fixture = SourceNativeFixture::start().await;
+    let fixture = SourceNativeFixture::start();
     let prepared = fixture.prepare().await;
     assert_eq!(
         prepared.working_directory.as_str(),
@@ -211,7 +211,7 @@ async fn source_native_prepare_reads_actual_api_source_directory_and_rejects_wro
 
 #[tokio::test]
 async fn source_native_postcheck_rejects_replacement_after_preflight_without_application_frames() {
-    let fixture = SourceNativeFixture::start().await;
+    let fixture = SourceNativeFixture::start();
     let prepared = fixture.prepare().await;
     let (reached, reached_receiver) = tokio::sync::oneshot::channel();
     let (release, released) = tokio::sync::oneshot::channel();
@@ -269,7 +269,7 @@ async fn source_native_postcheck_rejects_replacement_after_preflight_without_app
 
 #[tokio::test]
 async fn source_native_retirement_after_postcheck_cannot_reopen_replacement() {
-    let fixture = SourceNativeFixture::start().await;
+    let fixture = SourceNativeFixture::start();
     let prepared = fixture.prepare().await;
     let (mut connection, mut backend) = fixture.connect(&prepared).await;
     fixture.publish_generation(2);
@@ -305,7 +305,7 @@ async fn source_native_retirement_after_postcheck_cannot_reopen_replacement() {
 
 #[tokio::test]
 async fn source_native_verified_connection_forwards_only_the_consumers_literal_request() {
-    let fixture = SourceNativeFixture::start().await;
+    let fixture = SourceNativeFixture::start();
     let prepared = fixture.prepare().await;
     let (mut connection, mut backend) = fixture.connect(&prepared).await;
     // Real upgrade/postcheck send no native initialization before the consumer.

@@ -1,6 +1,6 @@
 //! Literal canonical outcomes challenge lossy booleans and human-reason inference.
 use super::*;
-use crate::NativeObservedOutcome;
+use collaboration_contracts::NativeObservedOutcome;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, SessionReachability,
 };

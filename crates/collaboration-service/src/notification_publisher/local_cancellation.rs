@@ -1,5 +1,5 @@
 //! The publisher freezes local child controls; the native owner only asks before injection.
-use super::*;
+use super::{BoardError, NotificationPublisher, ProjectId, PublisherInner};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{CancelCause, NotificationSource};
 use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef};

@@ -18,7 +18,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn seed_unacknowle
             .try_into()?,
         peer: PeerId::new(durable_steps::Uuid::now_v7())?,
     };
-    seed_notification_for_recipient(root, central, enrollment).await
+    Box::pin(seed_notification_for_recipient(root, central, enrollment)).await
 }
 
 pub(in crate::collaboration_runtime::board_composition) async fn seed_unacknowledged_local_notification(
@@ -31,7 +31,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn seed_unacknowle
             .try_into()?,
         peer: central.peer,
     };
-    seed_notification_for_recipient(root, central, enrollment).await
+    Box::pin(seed_notification_for_recipient(root, central, enrollment)).await
 }
 
 async fn seed_notification_for_recipient(

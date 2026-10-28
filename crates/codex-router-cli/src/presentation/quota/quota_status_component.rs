@@ -1,8 +1,14 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use super::quota_dialog_actions::*;
-use super::quota_help_rendering::*;
+use super::quota_dialog_actions::{
+    QuotaDialogActionContext, quota_confirmation_choices, quota_dialog_actions,
+};
+use super::quota_help_rendering::{
+    QuotaFooterPresentation, QuotaHeaderProps, QuotaHelpMode, QuotaScreenChromeProps,
+    quota_help_action, quota_help_key, quota_legacy_footer, render_quota_browse_footer,
+    render_quota_header, render_quota_help, render_quota_route, render_quota_screen,
+};
 use codex_router_tui::DialogHost;
 use iocraft::prelude::*;
 use tokio::sync::watch;
@@ -13,18 +19,43 @@ use crate::quota_reset::reset_session_supervisor::ResetSessionIntent;
 use crate::quota_reset::reset_session_supervisor::ResetWorkflowSnapshot;
 use crate::quota_reset::reset_session_supervisor::WorkflowPhase;
 
-use super::quota_account_options::*;
-use super::quota_browse_rendering::*;
-use super::quota_detail_panel::*;
-use super::quota_dialog_rendering::*;
-use super::quota_floor_editor::*;
-use super::quota_provider_filter_rendering::*;
-use super::quota_provider_filters::*;
-use super::quota_reset_component_input::*;
-use super::quota_reset_detail_rendering::*;
-use super::quota_reset_presentation_model::*;
-use super::quota_status_view_model::*;
-use super::responsive_quota_layout::*;
+use super::quota_account_options::{
+    AccountOptionsCommandContext, AccountOptionsCommandPort, AccountOptionsKeyEventContext,
+    AccountOptionsState, CreditUsagePolicySaver, CreditUsageRefresher,
+    account_options_content_height, credit_policy_choices, handle_account_options_key_event,
+    open_account_options_for_account, run_account_options_commands,
+};
+use super::quota_browse_rendering::{QuotaAccountListProps, fit_line};
+use super::quota_detail_panel::QuotaDetailPanelProps;
+use super::quota_dialog_rendering::{
+    QuotaDetailsDialog, QuotaDialogViewProps, render_quota_dialog,
+};
+use super::quota_floor_editor::{
+    WeeklyFloorEditorCommandPort, WeeklyFloorEditorState, WeeklyQuotaFloorSaver,
+    run_weekly_floor_editor_commands, weekly_floor_editor_content_height,
+    weekly_floor_editor_key_command, weekly_floor_editor_send_failed,
+};
+use super::quota_provider_filter_rendering::{
+    quota_filter_controls_height, render_quota_details_button, render_quota_filter_toolbar,
+};
+use super::quota_provider_filters::{
+    QuotaAccountFilters, QuotaFilterAction, QuotaFilterController, QuotaFilterState,
+    QuotaInteractionMode, opens_quota_filters, quota_filter_choices, quota_filter_modal_owns_input,
+    reconcile_quota_filter_focus,
+};
+use super::quota_reset_component_input::{
+    QuotaResetKeyContext, current_unix_seconds, forced_quota_exit_key, handle_quota_reset_key,
+    try_send_reset_intent,
+};
+use super::quota_reset_detail_rendering::reset_panel_content_height;
+use super::quota_reset_presentation_model::{ResetPaneTarget, reset_mode};
+use super::quota_status_view_model::{QuotaStatusViewModel, QuotaStatusViewModelLoader};
+use super::responsive_quota_layout::{
+    QuotaBodyLayoutMode, QuotaFocusMove, apply_live_terminal_width_sample, current_terminal_width,
+    focused_row_index_for_account, moved_quota_focus_index, quota_body_budget, quota_body_layout,
+    quota_status_height, selected_detail_height, truncate_quota_header_text,
+    use_live_terminal_width, use_quota_status_spinner,
+};
 
 pub(super) const MIN_QUOTA_WIDTH: usize = 32;
 pub(super) const MIN_RENDER_HEIGHT: usize = 24;
@@ -204,7 +235,7 @@ pub(super) fn QuotaStatusComponent(
                             return;
                         }
                         // Preserve reset/floor/options forced-exit ownership below.
-                        if !forced_quota_exit_key(&code, modifiers) {
+                        if !forced_quota_exit_key(code, modifiers) {
                             return;
                         }
                     }
@@ -230,7 +261,7 @@ pub(super) fn QuotaStatusComponent(
                     .map_or(WorkflowPhase::Browse, ResetWorkflowSnapshot::phase);
                 if phase == WorkflowPhase::Browse
                     && weekly_floor_editor.read().is_some()
-                    && forced_quota_exit_key(&code, modifiers)
+                    && forced_quota_exit_key(code, modifiers)
                 {
                     should_exit.set(true);
                     return;
@@ -285,7 +316,7 @@ pub(super) fn QuotaStatusComponent(
                     });
                     return;
                 }
-                if forced_quota_exit_key(&code, modifiers) {
+                if forced_quota_exit_key(code, modifiers) {
                     should_exit.set(true);
                     return;
                 }
@@ -934,7 +965,7 @@ pub(super) fn QuotaStatusComponent(
         return background;
     }
     element! {
-        View(width: width as u32, height: component_height as u32) {
+        View(width: u32::try_from(width).unwrap_or(u32::MAX), height: u32::try_from(component_height).unwrap_or(u32::MAX)) {
             DialogHost(width: viewport_width, height: viewport_height, background: vec![background], dialog)
         }
     }.into_any()

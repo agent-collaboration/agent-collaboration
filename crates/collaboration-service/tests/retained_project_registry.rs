@@ -1,10 +1,15 @@
 //! Forced real-pool interleavings at the writable-to-superseded registry boundary.
-#![allow(clippy::panic_in_result_fn)]
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 
 use board_fixture::{BoardFixture, TestError};
-use collaboration_service::{ProjectReadHandle, ProjectRegistryError, ProjectStoreRegistry};
+use collaboration_runtime::ProjectReadHandle;
+use collaboration_runtime::ProjectRegistryError;
+use collaboration_runtime::ProjectStoreRegistry;
 use fleet_sync_protocol::{CommitSequence, Epoch, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use message_board::*;
 use runtime_primitives::{Clock, SystemClock};
@@ -105,6 +110,10 @@ async fn supersede(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable()
 -> Result<(), TestError> {
     timeout(BOUND, async {
@@ -149,6 +158,10 @@ async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retried()
 -> Result<(), TestError> {
     timeout(BOUND, async {
@@ -201,6 +214,10 @@ async fn cancelled_native_close_stays_unavailable_until_the_same_drain_is_retrie
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn completed_supersession_retries_without_reopening_the_closed_file() -> Result<(), TestError>
 {
     timeout(BOUND, async {

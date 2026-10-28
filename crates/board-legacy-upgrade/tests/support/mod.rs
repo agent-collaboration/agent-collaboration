@@ -1,4 +1,7 @@
-#![allow(dead_code)]
+#![expect(
+    dead_code,
+    reason = "Shared fixture helpers serve different subsets of integration targets."
+)]
 use board_legacy_upgrade::{PreparedUpgrade, prepare_sources};
 use fleet_admission::ImportProvenance;
 use message_board::*;
@@ -8,7 +11,7 @@ pub fn create_host_identity(root: &Path) -> TestResult<PathBuf> {
     use std::os::unix::fs::DirBuilderExt;
     let directory = codex_router_host::router_collaboration_directory(root);
     std::fs::DirBuilder::new().mode(0o700).create(&directory)?;
-    collaboration_service::load_service_identity(&directory)?;
+    collaboration_runtime::load_service_identity(&directory)?;
     Ok(directory.join("service-identity.json"))
 }
 pub fn fixture_copy(name: &str) -> TestResult<(tempfile::TempDir, PathBuf)> {

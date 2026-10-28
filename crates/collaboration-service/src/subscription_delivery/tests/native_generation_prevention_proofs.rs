@@ -8,7 +8,7 @@ use collaboration_mail_protocol::NotificationSource;
 async fn forged_prevention_references_are_refused_before_the_locked_replacement_allocation() {
     use super::follow_admission_proofs::{current_membership, proposal};
     // Arrange an actual prevented original, but stop the reader before it can replace it.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -134,7 +134,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
 #[tokio::test]
 async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_client() {
     // Arrange actual project admission, reader windows and native SDK custody.
-    let fixture = OwnerFixture::new().await;
+    let fixture = Box::pin(OwnerFixture::new()).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;

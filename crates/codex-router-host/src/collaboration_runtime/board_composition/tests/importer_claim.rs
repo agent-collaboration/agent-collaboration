@@ -22,12 +22,12 @@ async fn fault(root: &Path, statement: &'static str) -> TestResult {
 #[tokio::test]
 async fn actual_legacy_publication_claim_and_first_live_piece_preserve_the_imported_prefix()
 -> TestResult {
-    run_claim_after_import(false).await
+    Box::pin(run_claim_after_import(false)).await
 }
 
 #[tokio::test]
 async fn claim_advances_the_real_copy_before_interrupted_import_completion_resumes() -> TestResult {
-    run_claim_after_import(true).await
+    Box::pin(run_claim_after_import(true)).await
 }
 
 async fn run_claim_after_import(interrupted: bool) -> TestResult {
@@ -140,7 +140,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
         loop {
             let answer = claim.claim(&request).await?;
             if !matches!(answer, ProjectClaimReply::Pending { .. }) {
-                return Ok::<_, collaboration_service::ProjectClaimError>(answer);
+                return Ok::<_, collaboration_contracts::ProjectClaimError>(answer);
             }
         }
     })

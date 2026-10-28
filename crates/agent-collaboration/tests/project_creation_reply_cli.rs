@@ -1,14 +1,23 @@
 //! Actual CLI exit codes and stable project identity through accepted-pending and local creation.
-#![allow(clippy::panic_in_result_fn)]
+
 #[path = "support/board_cli_execution.rs"]
 mod board_cli_execution;
+
 #[path = "../../collaboration-service/tests/support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "Shared test fixture helpers serve different callers."
+)]
 pub mod board_fixture;
 use board_cli_execution::{accepted, cli};
 use board_fixture::{BoardFixture, TestError};
 use message_board::{ProjectId, RequestId};
 use serde_json::json;
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[tokio::test]
 async fn accepted_pending_project_create_is_exit_zero_then_local_and_keyed_replay()
 -> Result<(), TestError> {

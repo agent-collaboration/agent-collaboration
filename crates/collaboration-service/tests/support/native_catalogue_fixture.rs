@@ -7,9 +7,10 @@ use collaboration_protocol::{
     EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionRef,
 };
-use collaboration_service::{
-    ProviderOperationStore, ProviderSessionEventHub, ProviderSessionRecord, ServiceIdentity,
-};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionEventHub;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::PathBuf, sync::Arc};
 use tokio::sync::Mutex;
@@ -83,7 +84,7 @@ impl CatalogueFixture {
             },
         )
         .await?;
-        let identity = ServiceIdentity::new(SERVICE, EPOCH)?
+        let identity = ApplicationFixture::new(SERVICE, EPOCH)?
             .with_endpoints(vec![description])?
             .with_provider_operation_store(store)
             .with_provider_session_hub(hub)
@@ -91,7 +92,7 @@ impl CatalogueFixture {
             .with_claude_background_jobs(Arc::new(NativeClaudeJobReader::for_executable(
                 executable.clone(),
             )));
-        let api = ServedApi::start(identity).await?;
+        let api = ServedApi::start(identity)?;
         let client = api.client("native-catalogue-fixture").await?;
         Ok(Self {
             api,

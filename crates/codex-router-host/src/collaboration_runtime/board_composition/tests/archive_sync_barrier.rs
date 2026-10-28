@@ -3,6 +3,10 @@ use super::*;
 use futures_util::FutureExt;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn archive_observer_waits_for_a_fresh_sync_while_admission_is_busy() -> TestResult {
     let runtime = Box::pin(Runtime::new()).await?;
     let mut archive_reports = runtime.central.archive_reports.subscribe();
@@ -96,7 +100,7 @@ async fn archive_observer_waits_for_a_fresh_sync_while_admission_is_busy() -> Te
         .acknowledged_project_copy(&runtime.project)
         .await?;
     assert!(acknowledged.is_some_and(|position| position >= report.position));
-    let reported_through = collaboration_service::project_replication_cursor(
+    let reported_through = collaboration_runtime::project_replication_cursor(
         &store,
         report.position,
         fact_position.epoch,

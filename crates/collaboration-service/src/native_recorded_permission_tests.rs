@@ -1,12 +1,15 @@
 //! Cold native message attachment must preserve the broker's recorded authority.
-use crate::native_message_dispatch::{
+use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
+use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
+use collaboration_contracts::LoadPolicy;
+use collaboration_protocol::{CodexGeneration, EndpointDescription, MessageDelivery, SessionRef};
+use collaboration_runtime::NativeControlBackend;
+use collaboration_runtime::NativeGenerationGate;
+use collaboration_runtime::ServiceInteractionBroker;
+use collaboration_runtime::test_support::native_message_dispatch::{
     NativeMessageBody, NativeMessageOutcome, NativeMessageParams, NativeMessageRequest,
     dispatch_message,
 };
-use crate::{LoadPolicy, NativeControlBackend, NativeGenerationGate, ServiceInteractionBroker};
-use codex_acp_adapter::{ApprovalBroker, ApprovalRoute};
-use codex_native_integration::{NativePayloadSchemas, NativeSchemaBundle};
-use collaboration_protocol::{CodexGeneration, EndpointDescription, MessageDelivery, SessionRef};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{collections::BTreeMap, path::Path, sync::Arc, time::Duration};
@@ -441,21 +444,23 @@ async fn cold_native_message_rejects_missing_or_invalid_authority_before_resume(
         (
             RecordedAuthority::Expired,
             true,
-            crate::UnsentCause::Holdable {
-                otherwise: crate::NativeRefusalCode::NativeUnavailable,
+            collaboration_contracts::UnsentCause::Holdable {
+                otherwise: collaboration_contracts::NativeRefusalCode::NativeUnavailable,
             },
         ),
         (
             RecordedAuthority::InvalidScratch,
             true,
-            crate::UnsentCause::Refused(crate::NativeRefusalCode::Rejection(
-                collaboration_protocol::DeliveryRejectionReason::SettingsUnresolved,
-            )),
+            collaboration_contracts::UnsentCause::Refused(
+                collaboration_contracts::NativeRefusalCode::Rejection(
+                    collaboration_protocol::DeliveryRejectionReason::SettingsUnresolved,
+                ),
+            ),
         ),
         (
             RecordedAuthority::Valid,
             false,
-            crate::UnsentCause::InvalidInput,
+            collaboration_contracts::UnsentCause::InvalidInput,
         ),
     ] {
         let observation = cold_message_probe(ProbeCase {
@@ -471,7 +476,7 @@ async fn cold_native_message_rejects_missing_or_invalid_authority_before_resume(
             panic!("invalid authority accepted");
         };
         assert!(
-            matches!(failure.disposition, crate::message_effect_state::NativeFailureDisposition::Unsent(cause) if cause == expected_cause)
+            matches!(failure.disposition, collaboration_runtime::test_support::message_effect_state::NativeFailureDisposition::Unsent(cause) if cause == expected_cause)
         );
         assert_eq!(
             failure.response.pointer("/error/data/effects/resume"),
@@ -521,19 +526,19 @@ async fn native_delivery_does_not_retain_its_broker_owner() {
     let retained_broker = Arc::downgrade(&broker);
     let broker_port: Arc<dyn ApprovalBroker> = broker.clone();
     let weak_port = Arc::downgrade(&broker_port);
-    let native_route: Arc<dyn crate::SessionDeliveryRoute> = Arc::new(
-        crate::CodexAppServerDeliveryRoute::new(
+    let native_route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> = Arc::new(
+        collaboration_runtime::CodexAppServerDeliveryRoute::new(
             service_id.clone(),
-            crate::EndpointDirectory::new(service_id),
+            collaboration_runtime::EndpointDirectory::new(service_id),
             backend,
-            Arc::new(crate::UnmaterializedThreadHolder::new()),
+            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
         )
         .with_approval_broker(&broker),
     );
     broker
-        .install_session_delivery(Arc::new(crate::SessionDeliveryRouter::new(vec![
-            native_route,
-        ])))
+        .install_session_delivery(Arc::new(collaboration_runtime::SessionDeliveryRouter::new(
+            vec![native_route],
+        )))
         .expect("install delivery");
     drop(broker_port);
     drop(broker);

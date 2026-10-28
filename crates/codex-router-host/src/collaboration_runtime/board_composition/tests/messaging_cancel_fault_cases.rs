@@ -6,6 +6,10 @@ type NativeAnswer = OperationAnswer<board_sync_protocol::BoardConsumerProtocol>;
 type ProofResult<Value> = Result<Value, Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> TestResult {
     let mut fixture = RuleFixture::open(true).await?;
     let mut competing_calls = tokio::task::JoinSet::new();
@@ -110,6 +114,10 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() -> TestResult {
     let mut fixture = RuleFixture::open(true).await?;
     let mut held_calls = tokio::task::JoinSet::new();
@@ -211,6 +219,10 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
     proof
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 fn assert_competing_answers(answers: Vec<(&str, NativeAnswer)>) -> TestResult {
     assert_eq!(answers.len(), 2);
     for (kind, answer) in answers {

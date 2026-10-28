@@ -3,6 +3,7 @@
 
 #[path = "native_http/support.rs"]
 mod configuration;
+
 #[path = "mail_submit_http/grants.rs"]
 mod grants;
 #[path = "mail_submit_http/historical_piece.rs"]
@@ -22,6 +23,10 @@ async fn shared_offline_mailbox_alarm_oracle() -> ConformanceResult<()> {
     jwks.shutdown().await?;
     result
 }
+#[expect(
+    dead_code,
+    reason = "shared fixture module serves separate integration targets with different helper subsets"
+)]
 #[path = "mail_submit_http/registry_setup.rs"]
 mod registry_setup;
 #[path = "mail_submit_http/relay.rs"]

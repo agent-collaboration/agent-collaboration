@@ -1,5 +1,5 @@
 //! Literal claim names preserve native replication identities and reject loose inputs.
-#![allow(clippy::panic_in_result_fn)]
+
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
 use fleet_sync_protocol::{
     CommitSequence, Epoch, PeerId, ReplicationPosition, SchemaIdentity, SyncTime, TransferId,
@@ -9,6 +9,10 @@ use serde_json::json;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 const ID: &str = "019f0000-0000-7000-8000-000000009700";
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn claim_request_authorizes_the_installation_without_a_declared_actor() -> TestResult {
     let value = json!({"requestId":ID,"protocolVersion":1,"projectId":ID});
@@ -28,6 +32,10 @@ fn claim_request_authorizes_the_installation_without_a_declared_actor() -> TestR
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
 #[test]
 fn claim_grant_and_all_six_refusals_keep_exact_native_payloads() -> TestResult {
     let claimed = ProjectClaimReply::Claimed {

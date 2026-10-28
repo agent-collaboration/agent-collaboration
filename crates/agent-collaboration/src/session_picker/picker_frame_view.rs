@@ -5,6 +5,7 @@ use super::{
     render_start_new_details, root_label, runtime_view_label, session_visible_row_budget,
     sort_label,
 };
+use crate::presentation::session_picker::picker_rendering::iocraft_cell_count;
 use codex_router_tui::{
     DialogAction, DialogFrame, DialogHost, DialogMargins, DialogPresentation, SurfaceHeader,
 };
@@ -50,7 +51,7 @@ pub(super) fn render_picker_view(
     } else {
         vec![element! {
         View(width: 100pct, column_gap: 2, flex_shrink: 0.0_f32) {
-            View(width: control_width as u32, min_width: 0, overflow: Overflow::Hidden) {
+            View(width: iocraft_cell_count(control_width), min_width: 0, overflow: Overflow::Hidden) {
                 #(super::super::picker_machine_view::render_machine_control(model, model_state, control_width))
             }
             View(flex_grow: 1.0_f32, min_width: 0, overflow: Overflow::Hidden) {
@@ -130,11 +131,11 @@ pub(super) fn render_picker_view(
         let visible_row_budget = session_visible_row_budget(model, body_budget);
         children.push(
             element! {
-                View(width: 100pct, height: body_budget as u32) {
+                View(width: 100pct, height: iocraft_cell_count(body_budget)) {
                     #(render_session_list(model, model_state, selected_outcome, list_width, visible_row_budget, body_budget))
                     View(width: 2) { Text(content: "") }
                     #(focused_record
-                        .map(|record| render_details(record, detail_width, selected_conversation, Size::Length(body_budget as u32)))
+                        .map(|record| render_details(record, detail_width, selected_conversation, Size::Length(iocraft_cell_count(body_budget))))
                         .unwrap_or_else(|| render_start_new_details(model, detail_width, body_budget)))
                 }
             }
@@ -156,8 +157,8 @@ pub(super) fn render_picker_view(
     let picker_height = height.max(minimum_render_height);
     let background = element! {
         View(
-            width: model.width as u32,
-            height: picker_height as u32,
+            width: iocraft_cell_count(model.width),
+            height: iocraft_cell_count(picker_height),
             border_style: BorderStyle::Round,
             border_color: Color::Cyan,
             overflow: Overflow::Hidden,
@@ -247,7 +248,7 @@ pub(super) fn render_picker_view(
         None
     };
     element! {
-        View(width: model.width as u32, height: picker_height as u32) {
+        View(width: iocraft_cell_count(model.width), height: iocraft_cell_count(picker_height)) {
             DialogHost(width: viewport_width, height: viewport_height, background: vec![background], dialog)
         }
     }

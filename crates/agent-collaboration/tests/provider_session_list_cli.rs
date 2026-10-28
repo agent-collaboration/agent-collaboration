@@ -5,7 +5,9 @@ use collaboration_client::protocol::{
     EndpointDescription, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
     SessionRef,
 };
-use collaboration_service::{ProviderOperationStore, ProviderSessionRecord, ServiceIdentity};
+use collaboration_runtime::ProviderOperationStore;
+use collaboration_runtime::ProviderSessionRecord;
+use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use tokio::sync::Mutex;
 
@@ -80,7 +82,7 @@ async fn cli_dispatches_provider_session_list_by_endpoint_channel() {
             "schemaDigest":null,"generation":null}]
     }))
     .expect("native endpoint");
-    let identity = ServiceIdentity::new(service_id, epoch)
+    let identity = ApplicationFixture::new(service_id, epoch)
         .expect("identity")
         .with_endpoints(vec![endpoint, native_endpoint])
         .expect("endpoint inventory")
@@ -88,9 +90,8 @@ async fn cli_dispatches_provider_session_list_by_endpoint_channel() {
         .with_claude_code_sessions(Arc::new(ClaudeCodeSessionRegistry::new(registry_directory)));
     let served = collaboration_mcp::test_support::ServedCollaborationApi::start(
         root.path(),
-        collaboration_service::CollaborationApplication::new(identity),
+        (identity).build(),
     )
-    .await
     .expect("serve collaboration API");
     let run = |endpoint_id: &str, view: &str, source: Option<&str>| {
         let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"));

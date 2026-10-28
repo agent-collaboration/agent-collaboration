@@ -115,6 +115,10 @@ async fn exchange_before_welcome(socket: &mut WebSocket, database: DatabaseId) -
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResult {
     // Arrange a real registered native writer through the generic FleetService.
     // Only the subsequent peer's ordering is scripted; native release, persisted
@@ -146,7 +150,7 @@ async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResu
     );
     fleet_service.release()?;
     wait_welcome(ready).await?;
-    collaboration_service::ProjectRegistration::start(projects.as_ref(), &request.project_id)
+    collaboration_contracts::ProjectRegistration::start(projects.as_ref(), &request.project_id)
         .await?;
     let writer = projects.ensure(&request.project_id).await?;
     assert!(matches!(

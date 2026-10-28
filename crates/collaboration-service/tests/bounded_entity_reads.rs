@@ -1,13 +1,20 @@
 //! Entity pages select keys before decoding the returned records.
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/read_cost_counter.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod read_cost_counter;
 use board_fixture::{BoardFixture, TestError};
 use read_cost_counter::{ReadCost, current_cost};
 use serde_json::{Value, json};
 
-#[allow(clippy::panic_in_result_fn)]
 async fn task_page_cost(size: usize) -> Result<ReadCost, TestError> {
     let fixture = BoardFixture::start().await?;
     let (project, workstream) = fixture.project().await?;
@@ -46,7 +53,10 @@ async fn task_page_cost(size: usize) -> Result<ReadCost, TestError> {
     Ok(cost)
 }
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
 async fn entity_page_cost_does_not_grow_with_unreturned_tasks() -> Result<(), TestError> {
     read_cost_counter::install();
     let small = task_page_cost(8).await?;

@@ -1,6 +1,14 @@
 #[path = "support/board_fixture.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 pub mod board_fixture;
 #[path = "support/board_read_setup.rs"]
+#[expect(
+    dead_code,
+    reason = "This integration target consumes only a subset of the shared fixture's capabilities."
+)]
 mod board_read_setup;
 use board_fixture::{BoardFixture, TestError, accepted};
 use board_read_setup::*;
@@ -8,7 +16,10 @@ use message_board::*;
 use serde_json::json;
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Missing roots and name collisions must retain their exact typed refusals.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Missing roots and name collisions must retain their exact typed refusals."
+)]
 async fn thread_root_failures_stay_specific_and_directory_collisions_create_no_native_file()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
@@ -90,7 +101,10 @@ async fn thread_root_failures_stay_specific_and_directory_collisions_create_no_n
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Changed and already-so replies are followed by real posts, rather than relying on guidance prose.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Changed and already-so replies are followed by real posts, rather than relying on guidance prose."
+)]
 async fn unresolve_changed_and_already_so_allow_replies_on_an_active_board() -> Result<(), TestError>
 {
     let fixture = BoardFixture::start().await?;
@@ -138,7 +152,10 @@ async fn unresolve_changed_and_already_so_allow_replies_on_an_active_board() -> 
 }
 
 #[tokio::test]
-#[allow(clippy::panic_in_result_fn)] // Fleet metadata updates preserve project history and reader state.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Fleet metadata updates preserve project history and reader state."
+)]
 async fn board_update_preserves_history_watch_bookmark_and_thread_list_filter()
 -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;

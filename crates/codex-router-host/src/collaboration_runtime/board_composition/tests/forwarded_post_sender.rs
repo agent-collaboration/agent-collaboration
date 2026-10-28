@@ -1,7 +1,7 @@
 //! A sender's board entry uses the real machine session, central and holder ledger.
 use super::*;
 use board_central_test_support::EnrolledTestMachine;
-use collaboration_service::{CollaborationApplication, ServiceIdentity};
+use collaboration_service::{ApplicationFixture, CollaborationApplication};
 use message_board::public_replies::WriteReply;
 
 #[cfg(feature = "runtime-test-support")]
@@ -56,13 +56,12 @@ impl SenderFixture {
         let admission = board.admission.clone();
         let running = board.start().ok_or("sender runtime")?;
         wait_welcome(welcomed).await?;
-        let application = CollaborationApplication::new(
-            ServiceIdentity::new(
-                origin.installation.as_str(),
-                "00000000-0000-4000-8000-000000000002",
-            )?
-            .with_project_admission(admission.clone()),
-        );
+        let application = (ApplicationFixture::new(
+            origin.installation.as_str(),
+            "00000000-0000-4000-8000-000000000002",
+        )?
+        .with_project_admission(admission.clone()))
+        .build();
         Ok(Self {
             application,
             admission,
@@ -166,11 +165,15 @@ async fn claimed_project(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_admits_both_post_families_and_replays_at_the_holder() -> TestResult {
-    let holder = claim_fixture::ClaimFixture::start().await?;
+    let holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = claimed_project(&holder).await?;
-    let sender = SenderFixture::start(&holder).await?;
-    let proof = async {
+    let sender = Box::pin(SenderFixture::start(&holder)).await?;
+    let proof = Box::pin(async {
         let request = post_request(&project)?;
         grant_posting_role(&holder, &request).await?;
         let BoardOperation::ThreadCreate {
@@ -365,7 +368,7 @@ async fn non_holder_sender_admits_both_post_families_and_replays_at_the_holder()
             "sender created a local writer"
         );
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }
+    })
     .await;
     let sender_closed = sender.shutdown().await;
     let holder_closed = holder.shutdown().await;
@@ -376,10 +379,14 @@ async fn non_holder_sender_admits_both_post_families_and_replays_at_the_holder()
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_reports_offline_holder_presence_without_queuing() -> TestResult {
-    let mut holder = claim_fixture::ClaimFixture::start().await?;
+    let mut holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = claimed_project(&holder).await?;
-    let sender = SenderFixture::start(&holder).await?;
+    let sender = Box::pin(SenderFixture::start(&holder)).await?;
     holder.disconnect_holder().await?;
     let proof = async {
         let preview: serde_json::Value = reqwest::Client::builder()
@@ -465,8 +472,12 @@ async fn non_holder_sender_reports_offline_holder_presence_without_queuing() -> 
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_reports_an_imported_unheld_project() -> TestResult {
-    let holder = claim_fixture::ClaimFixture::start().await?;
+    let holder = Box::pin(claim_fixture::ClaimFixture::start()).await?;
     let project = ProjectId::generate();
     project_claim::imported_snapshot(
         &holder.central,
@@ -474,7 +485,7 @@ async fn non_holder_sender_reports_an_imported_unheld_project() -> TestResult {
         &project,
     )
     .await?;
-    let sender = SenderFixture::start(&holder).await?;
+    let sender = Box::pin(SenderFixture::start(&holder)).await?;
     let proof = async {
         let reply = sender
             .application
@@ -512,18 +523,21 @@ async fn non_holder_sender_reports_an_imported_unheld_project() -> TestResult {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
 async fn non_holder_sender_without_a_machine_session_refuses_without_queuing() -> TestResult {
     let directory = tempfile::tempdir()?;
     let board = open_board_admission(directory.path(), identity()?, None).await?;
     let admission = board.admission.clone();
     assert!(board.start().is_none());
-    let application = CollaborationApplication::new(
-        ServiceIdentity::new(
-            origin()?.installation.as_str(),
-            "00000000-0000-4000-8000-000000000002",
-        )?
-        .with_project_admission(admission.clone()),
-    );
+    let application = (ApplicationFixture::new(
+        origin()?.installation.as_str(),
+        "00000000-0000-4000-8000-000000000002",
+    )?
+    .with_project_admission(admission.clone()))
+    .build();
     let proof = async {
         let reply = application
             .board()

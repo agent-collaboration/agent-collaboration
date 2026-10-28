@@ -1,7 +1,15 @@
 //! Register and settle concurrent provider Session admissions.
+#[cfg(any(test, feature = "test-observation"))]
+use super::ExternalProviderToolCall;
 
 use super::provider_setting_application::{SettingSetupFailure, apply_initial_settings};
-use super::*;
+use super::{
+    ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderCreatedSession,
+    ExternalProviderRuntimeError, HashMap, InteractionPort, NewSessionRequest,
+    PendingSessionAdmission, ProviderFrameObservation, ProviderSessionCommand,
+    ProviderSessionRegistration, ProviderSessionRuntimeHandles, acp_operation_error,
+    run_provider_session,
+};
 use crate::provider_item_projection::ProviderItemProjection;
 use agent_client_protocol::schema::v1::CloseSessionRequest;
 

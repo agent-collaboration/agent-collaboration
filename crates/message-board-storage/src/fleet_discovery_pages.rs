@@ -4,7 +4,10 @@ use crate::{
     RouterLocalStorageError, fleet_record_codec::decode_fleet_reference,
     project_record_io::record_kind_tag,
 };
-use message_board::*;
+use message_board::{
+    BoardId, DiscoveryKind, DiscoveryScope, DiscoverySearchRequest, RecordKind, RecordRef,
+    WorkspaceId,
+};
 
 pub struct FleetDiscoveryKey {
     pub reference: RecordRef,
