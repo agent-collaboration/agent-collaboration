@@ -152,3 +152,5 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - Log each fix we carry for an upstream library's defect in
   `docs/upstream-workarounds/`, with its evidence, how to recreate it, and the
   check that says it can be removed.
+- Fork an upstream dependency, or pin a fork of one, only with the owner's
+  explicit approval.

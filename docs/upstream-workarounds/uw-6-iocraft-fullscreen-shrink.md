@@ -2,11 +2,13 @@
 
 **Status:** in place, 2026-10-25
 **Dependency:** iocraft 0.9.2, pinned fork revision `829ebd86bd07fe2100c096ec6d785875ec2e0c79`
+**Upstream:** reported as [ccbrown/iocraft#309](https://github.com/ccbrown/iocraft/issues/309), fix in
+[ccbrown/iocraft#310](https://github.com/ccbrown/iocraft/pull/310) (open, 2026-10-28).
 
 ## Lives in
 
-The workspace `Cargo.toml` pins `ShravanSunder/iocraft` to the
-[backend correction and its regression tests](https://github.com/ShravanSunder/iocraft/commit/829ebd86bd07fe2100c096ec6d785875ec2e0c79).
+The workspace `Cargo.toml` pins `agent-collaboration/iocraft` to the
+[backend correction and its regression tests](https://github.com/agent-collaboration/iocraft/commit/829ebd86bd07fe2100c096ec6d785875ec2e0c79).
 The carried fix is in the dependency's `packages/iocraft/src/backend/crossterm.rs`.
 
 ## Problem and evidence

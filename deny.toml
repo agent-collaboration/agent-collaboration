@@ -30,7 +30,7 @@ allow-git = [
     "https://github.com/cloudflare/workers-rs",
     "https://github.com/agent-collaboration/agent-fleet-sync",
     # The renderer repair is pinned to an exact version and revision in Cargo.toml.
-    "https://github.com/ShravanSunder/iocraft",
+    "https://github.com/agent-collaboration/iocraft",
 ]
 unknown-registry = "deny"
 unknown-git = "deny"
