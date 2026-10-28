@@ -37,7 +37,7 @@ G4's caller supplies:
 - An explicitly authorized central **origin**, without a path, user info, query
   or fragment. Staging must use HTTPS. The same origin serves `/v1/session`,
   normal admin import, owner Copy Health/status and the owner-only
-  `/admin/v1/conformance/runtime` control. Ports 8787, 8788 and 43127 refuse.
+  `/admin/v1/conformance/runtime` control. Ports 8787, 8788, 19741, 19742 and 43127 refuse.
   A production Worker without conformance controls cannot run the fault case.
 - One disposable, already-enrolled staging machine's installation, UUIDv7
   peer, authoritative receiver and relay identities, plus its machine credential

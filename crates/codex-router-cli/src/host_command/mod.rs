@@ -115,6 +115,10 @@ impl HostCommand {
         }
     }
 
+    fn effective_mcp_bind(&self, isolated_debug: bool) -> SocketAddr {
+        self.mcp_bind.unwrap_or(default_mcp_bind(isolated_debug))
+    }
+
     #[cfg(test)]
     pub(crate) fn router_root(&self) -> Option<&Path> {
         self.router_root.as_deref()
@@ -235,9 +239,7 @@ pub(crate) async fn run_host_command<W: Write + Send>(
                 launch_mode,
                 owner_home,
                 port: command.port.unwrap_or(launch_mode.default_port()),
-                mcp_bind: command
-                    .mcp_bind
-                    .unwrap_or(default_mcp_bind(launch_mode.is_isolated())),
+                mcp_bind: command.effective_mcp_bind(launch_mode.is_isolated()),
                 remote_access: command.remote_access,
                 provider_operation_retention_days: command.provider_operation_retention_days,
                 coordination_paths,
@@ -375,7 +377,7 @@ pub(crate) const fn default_mcp_bind(isolated_debug: bool) -> SocketAddr {
     if isolated_debug {
         SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 18788)
     } else {
-        SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 8788)
+        SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST), 19742)
     }
 }
 
@@ -448,6 +450,54 @@ pub enum HostCommandError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parsed_host_mcp_bind_resolves_the_effective_launch_input() {
+        let cases = [
+            (
+                "normal omitted bind",
+                Vec::new(),
+                false,
+                SocketAddr::from(([127, 0, 0, 1], 19742)),
+            ),
+            (
+                "isolated debug omitted bind",
+                Vec::new(),
+                true,
+                SocketAddr::from(([127, 0, 0, 1], 18788)),
+            ),
+            (
+                "explicit ephemeral bind",
+                vec![OsString::from("--mcp-bind"), OsString::from("127.0.0.1:0")],
+                false,
+                SocketAddr::from(([127, 0, 0, 1], 0)),
+            ),
+            (
+                "explicit nondefault bind",
+                vec![
+                    OsString::from("--mcp-bind"),
+                    OsString::from("127.0.0.1:19000"),
+                ],
+                false,
+                SocketAddr::from(([127, 0, 0, 1], 19000)),
+            ),
+        ];
+
+        for (case, arguments, isolated_debug, expected_bind) in cases {
+            let cli_arguments = std::iter::once(OsString::from("codex-router"))
+                .chain(std::iter::once(OsString::from("host")))
+                .chain(arguments);
+            let parsed = crate::CliCommand::parse(cli_arguments).expect("Host command parses");
+            let crate::CliCommand::Host(command) = parsed else {
+                panic!("expected parsed Host command, got {parsed:?}");
+            };
+            assert_eq!(
+                command.effective_mcp_bind(isolated_debug),
+                expected_bind,
+                "{case}"
+            );
+        }
+    }
 
     #[test]
     fn explicit_host_port_overrides_keep_the_selected_port() {

@@ -88,7 +88,7 @@ at most 5 GiB total task footprint, and stop/reap below 15 GiB during a run.
 Record space before and after. The agent monitors the running owned Host; these
 lightweight limits do not change this Mac's build-heavy storage policy.
 
-Ports 8787, 8788 and 43127 are refused. Production and the standing debug Router
+Ports 8787, 8788, 19741, 19742 and 43127 are refused. Production and the standing debug Router
 remain untouched. Normal Codex/Router homes stay read-only. The recipient Host
 has an absent native Codex backend and launches its declared Claude ACP provider.
 

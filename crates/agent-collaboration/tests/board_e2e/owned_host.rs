@@ -29,7 +29,7 @@ enum ReadyListener {
 pub(super) fn protected_listener_port(actual_port: u16, reported_port: u16) -> Option<u16> {
     [actual_port, reported_port]
         .into_iter()
-        .find(|port| matches!(*port, 8787 | 8788 | 43127))
+        .find(|port| matches!(*port, 8787 | 8788 | 19741 | 19742 | 43127))
 }
 
 #[derive(Deserialize)]

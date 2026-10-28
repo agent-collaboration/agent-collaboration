@@ -39,7 +39,7 @@ token environment, receiver/relay identities and two already-enrolled stopped
 fixture installations. No staging enrollment operation exists in this driver.
 It copies only declared private stopped fixture roots into owned system-temp
 roots and verifies actual installation and peer identities before attaching
-credentials. Normal account roots and ports 8787, 8788 and 43127 are excluded.
+credentials. Normal account roots and ports 8787, 8788, 19741, 19742 and 43127 are excluded.
 
 Deploy cases also pin the exact guarded deploy executable, arguments, working
 directory, source/configuration hashes and namespace pin. Private fleet-ops

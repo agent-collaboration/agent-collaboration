@@ -34,11 +34,16 @@ registration; they do not prove a live server call or agent behavior. If the
 selected current manifest is absent or has no `mcp.url`, report missing setup.
 Do not restart or replace the production Router to manufacture a manifest.
 
-Normal and debug Host defaults are `http://127.0.0.1:8788/mcp` and
+Normal and debug Host defaults are `http://127.0.0.1:19742/mcp` and
 `http://127.0.0.1:18788/mcp`, respectively, but they are documentation fallbacks
-only: an explicit bind and the current manifest win. The current release accepts
-only loopback, unauthenticated plain HTTP and does not support remote exposure,
-authentication, or TLS. The running server's tool descriptions and input/output
+only: an explicit bind and the current manifest win. The MCP backend stays on
+loopback HTTP. For private tailnet access, the owner can start the Host with
+`--remote-access tailscale --tailscale-https-port 8443`; the Host manages a
+Tailscale Serve HTTPS proxy to that backend and retains Origin checks. This does
+not expose the service publicly through Funnel. Use the advertised private URL
+from the current Host rather than deriving one from a machine name. Configuration
+or installation does not authorize replacing a running production process.
+The running server's tool descriptions and input/output
 schemas are authoritative; do not copy a static tool catalog. Tool approval is
 a policy decision, not proof of OS or filesystem confinement. Use supported
 typed operations and never read, tail, parse, copy, or store provider session

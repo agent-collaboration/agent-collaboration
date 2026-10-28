@@ -20,7 +20,7 @@ async fn main() -> ExampleResult<()> {
             "provider-only-debug-host RUN_DIRECTORY ROUTER_PORT MCP_PORT CLAUDE_ACP_EXECUTABLE\n\
              RUN_DIRECTORY: existing owner-private direct child of /tmp, with a task-owned\n\
              debug Router snapshot in router/. Start the separate signed debug Router there.\n\
-             Ports must be distinct, unused loopback ports (never 8787, 8788 or 43127).\n\
+             Ports must be distinct, unused loopback ports (never 8787, 8788, 19741, 19742 or 43127).\n\
              Reuse the same directory after this Host exits to observe a fresh generation.\n\
              SIGTERM/Ctrl-C shuts down the actual provider; SIGKILL tests abrupt Host death.\n\
              No model input is sent. Select and observe the model through conversation create."
@@ -122,7 +122,7 @@ async fn main() -> ExampleResult<()> {
 
 fn parse_port(value: &str) -> ExampleResult<u16> {
     let port = value.parse::<u16>()?;
-    if matches!(port, 0 | 8787 | 8788 | 43127) {
+    if matches!(port, 0 | 8787 | 8788 | 19741 | 19742 | 43127) {
         return Err("select an unprotected nonzero debug port".into());
     }
     Ok(port)
