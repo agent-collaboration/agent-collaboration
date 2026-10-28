@@ -43,7 +43,7 @@ async fn composed_acp_connection_admits_provider_without_codex_generation() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
     let provider = root.path().join("acp-provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &provider,
         "host-composition-agent.ts",
         &serde_json::json!({"mode":"acp"}),
@@ -175,7 +175,7 @@ async fn app_server_socket_creates_and_prompts_with_the_owner_identity() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
     let provider = root.path().join("tui-provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &provider,
         "host-composition-agent.ts",
         &serde_json::json!({"mode":"tui"}),

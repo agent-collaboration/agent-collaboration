@@ -33,7 +33,10 @@ mod dialog_tests;
 mod form_field;
 #[cfg(test)]
 mod typography_tests;
-pub use form_field::{FormField, FormFieldProps, SelectableRow, SelectableRowProps};
+pub use form_field::{
+    FormField, FormFieldProps, FormFields, FormFieldsChild, FormFieldsProps, SelectableRow,
+    SelectableRowProps,
+};
 mod search_select;
 pub use search_select::{
     ChoiceAvailability, ChoiceOption, ChoiceTransition, SearchSelect, SearchSelectProps,

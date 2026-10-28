@@ -100,7 +100,7 @@ fn quota_refresh_http_provider_projects_weekly_window_when_primary_is_null() {
         }
     });
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = must_ok(HttpQuotaRefreshProvider::new());
     let mut stdout = Vec::new();
 

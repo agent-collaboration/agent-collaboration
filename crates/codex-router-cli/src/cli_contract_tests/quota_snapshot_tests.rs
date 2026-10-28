@@ -1,5 +1,5 @@
 use super::*;
-use crate::quota::QuotaWindowHeadroom;
+use codex_router_quota_service::quota::QuotaWindowHeadroom;
 use sqlx::Connection;
 
 pub(super) struct FaultingFloorRefreshProvider {
@@ -11,7 +11,10 @@ impl QuotaRefreshProvider for FaultingFloorRefreshProvider {
     async fn fetch_quota(
         &self,
         request: QuotaRefreshProviderRequest,
-    ) -> Result<QuotaRefreshProviderResponse, crate::quota::QuotaCommandError> {
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
         if request.route_band() == "responses" {
             let trigger = match self.failure_stage {
                 "history" => {
@@ -107,7 +110,7 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
             mutation.close().await;
         });
         let resolver =
-            RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+            contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
         let provider = FaultingFloorRefreshProvider {
             database_path: state_path.clone(),
             failure_stage: stage,
@@ -123,7 +126,7 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
             &provider,
             QuotaRefreshObservationContext {
                 observed_unix_seconds: 1_100,
-                schedule: crate::quota::QuotaRefreshSchedule::Manual,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
                 weekly_floor_observer: Some(&observer),
             },
         ));
@@ -180,7 +183,7 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
         ),
     );
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = StaticQuotaRefreshProvider::new(vec![
         QuotaRefreshProviderWindow {
             limit_window_seconds: 18_000,
@@ -222,7 +225,7 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
         &provider,
         QuotaRefreshObservationContext {
             observed_unix_seconds: 1_100,
-            schedule: crate::quota::QuotaRefreshSchedule::Manual,
+            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
             weekly_floor_observer: Some(&floor_observer),
         },
     ));
@@ -333,7 +336,7 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
         );
     }
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     test_async_runtime().block_on(async {
         let mutation = must_ok(
             AsyncWeeklyQuotaFloorMutationStore::open(&router_root.join("state.sqlite")).await,
@@ -366,7 +369,7 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
         &provider,
         QuotaRefreshObservationContext {
             observed_unix_seconds: 1_100,
-            schedule: crate::quota::QuotaRefreshSchedule::Manual,
+            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
             weekly_floor_observer: Some(floor_observer.as_ref()),
         },
     ));
@@ -413,7 +416,7 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
     .with_expires_unix_seconds(2_000);
     must_ok(secrets.write_secret(&key, &must_ok(bundle.to_secret_string())));
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     test_async_runtime().block_on(async {
         let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
         must_ok(
@@ -464,7 +467,7 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
             &provider,
             QuotaRefreshObservationContext {
                 observed_unix_seconds,
-                schedule: crate::quota::QuotaRefreshSchedule::Manual,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
                 weekly_floor_observer: Some(&observer),
             },
         ));
@@ -528,7 +531,7 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
         ),
     );
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = StaticQuotaRefreshProvider::new(vec![QuotaRefreshProviderWindow {
         limit_window_seconds: 604_800,
         headroom: QuotaWindowHeadroom::Percent(80),
@@ -642,7 +645,7 @@ fn quota_refresh_missing_reset_response_is_unknown_fallback() {
         ),
     );
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = StaticQuotaRefreshProvider::new(vec![
         QuotaRefreshProviderWindow {
             limit_window_seconds: 18_000,

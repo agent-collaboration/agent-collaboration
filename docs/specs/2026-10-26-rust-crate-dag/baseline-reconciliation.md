@@ -25,3 +25,18 @@ The ratchet's bless step refuses growth, and a crate split looks like growth: cy
 **A cycle removed rather than baselined:** {codex_session_inventory, collaboration_application, inventory_failures, provider_session_inventory} appeared after the dependency-injection change. Part of it was cargo-modules attributing trait-impl methods to the type's module. It was fixed in source by moving `CollaborationRejection` into its own module, with the inventory types' impls next to those types (`1cb49eda`). The final scan has no such SCC.
 
 The scan is native-target with the default feature resolution described in `architecture/README.md`, and it keeps the documented blind spots for function-body and `super::` paths.
+
+## PR 2 (CLI quota split and session picker split)
+
+The baseline was re-keyed from a fresh cargo-modules 0.28.0 scan at 97d7ad79, run on Sunclaw. Against the committed baseline, the ratchet failed only with "baseline SCC … shrank or disappeared" for the two cycles this PR targets. No cycle grew.
+
+| Crate | Before | After | Why |
+| --- | --- | --- | --- |
+| `agent-collaboration` | {session_picker, sessions} | none | The picker and inventory left the crate. The inventory → picker data edge was cut by moving the data types down. |
+| `codex-router-cli` | {account, cli_argument_parsing, cli_command_errors, live, presentation, quota, quota_reset} | {account, cli_argument_parsing, cli_command_errors, live, quota} | Shrink. presentation and quota_reset left the crate. The parser ↔ command cycle stays inside the thin CLI by design (alternative C rejected). |
+| `agent-session-inventory` (new) | part of agent-collaboration's {session_picker, sessions} | {picker_data_query, sessions, source_inventory_binding, source_inventory_request} | Moved. This is the same sessions ↔ inventory-data cycle without the picker UI; the folding now shows its four top-level modules. |
+| `codex-router-quota-service` (new) | part of the CLI's {quota, …} | {credit_usage_summary, quota, quota_display_model} | Moved. These are pure data and formatting items that the quota logic and its view-model share. |
+| `codex-router-quota-tui` (new) | folded inside the CLI's single `presentation` node | {quota_account_options, quota_browse_rendering, quota_provider_filters, quota_reset_detail_content, quota_reset_detail_rendering, responsive_quota_layout} | Became visible, not new. These modules were nested under `presentation`, which the scan folds to one node. As top-level modules of their own crate they show their existing cycles. The ratchet now holds them, and any growth fails. |
+| `agent-session-picker`, `node-test-fixture`, `codex-router-tailnet-verification-host` | none | none | The crates are acyclic. |
+
+Follow-up, not in this PR: the quota-tui cycle among its six UI modules is the largest remaining in-crate cycle the split exposed.

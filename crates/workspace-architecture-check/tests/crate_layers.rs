@@ -6,7 +6,27 @@ use std::process::Command;
 
 use serde::Deserialize;
 
-const LAYER_POLICY: [(&str, &[&str]); 4] = [
+const LAYER_POLICY: [(&str, &[&str]); 15] = [
+    ("node-test-fixture", &[]),
+    ("codex-router-quota", &[]),
+    ("codex-router-selection", &["codex-router-quota"]),
+    (
+        "codex-router-proxy",
+        &["codex-router-quota", "codex-router-selection"],
+    ),
+    (
+        "codex-router-quota-service",
+        &[
+            "codex-router-quota",
+            "codex-router-selection",
+            "codex-router-proxy",
+        ],
+    ),
+    ("codex-router-tui", &[]),
+    (
+        "codex-router-quota-tui",
+        &["codex-router-quota-service", "codex-router-tui"],
+    ),
     ("collaboration-contracts", &[]),
     ("collaboration-runtime", &["collaboration-contracts"]),
     (
@@ -14,9 +34,52 @@ const LAYER_POLICY: [(&str, &[&str]); 4] = [
         &["collaboration-contracts", "collaboration-runtime"],
     ),
     (
+        "agent-session-inventory",
+        &[
+            "node-test-fixture",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "agent-session-picker",
+        &[
+            "agent-session-inventory",
+            "codex-router-tui",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "agent-collaboration",
+        &[
+            "agent-session-inventory",
+            "agent-session-picker",
+            "codex-router-tui",
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
         "codex-router-host",
         &[
             "collaboration-contracts",
+            "collaboration-runtime",
+            "collaboration-service",
+        ],
+    ),
+    (
+        "codex-router-cli",
+        &[
+            "codex-router-quota-service",
+            "codex-router-quota-tui",
+            "codex-router-tui",
+            "codex-router-host",
+            "codex-router-proxy",
+            "codex-router-selection",
             "collaboration-runtime",
             "collaboration-service",
         ],

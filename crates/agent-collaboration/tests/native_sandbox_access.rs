@@ -98,9 +98,8 @@ async fn codex_sandbox_requires_exact_control_socket_permission() -> ProofResult
     let forbidden = root.join("other-control.sock");
     let listener = tokio::net::UnixListener::bind(&forbidden)?;
     let probe = vec![
-        codex_router_test_support::node_fixture::node_executable()?.into_os_string(),
-        codex_router_test_support::node_fixture::fixture_program("unix-access-probe.ts")
-            .into_os_string(),
+        node_test_fixture::node_executable()?.into_os_string(),
+        node_test_fixture::fixture_program("unix-access-probe.ts").into_os_string(),
         forbidden.clone().into_os_string(),
     ];
     let denied_other = sandbox

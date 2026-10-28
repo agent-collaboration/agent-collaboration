@@ -6,11 +6,7 @@ use collaboration_service::ApplicationFixture;
 use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc};
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod fake_api_support;
+use agent_session_inventory::test_support::fake_api_support;
 #[path = "provider_conversation_cli/scripted_provider_backend.rs"]
 mod scripted_provider_backend;
 use fake_api_support::{FakeCollaborationApi, FakeReply};

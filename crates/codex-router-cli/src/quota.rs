@@ -1,202 +1,72 @@
 //! Quota command glue for persisted router-owned quota state.
 
-use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
-use std::thread;
-use std::thread::JoinHandle;
 use std::time::Duration;
-use std::time::Instant;
+#[cfg(test)]
 use std::time::SystemTime;
+#[cfg(test)]
 use std::time::UNIX_EPOCH;
 
 use codex_router_auth::live_quota::DEFAULT_CHATGPT_BACKEND_BASE_URL;
-use codex_router_auth::live_quota::UsageResponse;
-use codex_router_auth::live_quota::WindowPair;
-use codex_router_auth::live_quota::reset_credits_url;
-use codex_router_auth::live_quota::usage_url;
-use codex_router_auth::resolver::CredentialResolverError;
-use codex_router_core::credit_usage::CreditProviderObservation;
 use codex_router_core::ids::AccountId;
-use codex_router_core::redaction::SecretString;
-use codex_router_core::redaction::safe_account_label;
-use codex_router_core::routes::RouteBand;
 use codex_router_proxy::websocket::WebSocketQuotaFloorNotifier;
-use codex_router_selection::burn_down::AccountAvailability;
-use codex_router_selection::burn_down::BurnDownAccountAssessment;
-use codex_router_selection::burn_down::BurnDownAccountInput;
-use codex_router_selection::burn_down::BurnDownRouteBandAssessmentInput;
-use codex_router_selection::burn_down::LimitingWindow;
-use codex_router_selection::burn_down::QuotaEvidenceFreshness;
-use codex_router_selection::burn_down::QuotaEvidenceReason;
-use codex_router_selection::burn_down::QuotaWindowFact;
-use codex_router_selection::burn_down::QuotaWindowStatus;
-use codex_router_selection::burn_down::RoutingExclusion;
-use codex_router_selection::burn_down::RoutingReason;
-use codex_router_selection::burn_down::SelectedPool;
-use codex_router_selection::burn_down::V1_SHORT_WINDOW_SECONDS;
-use codex_router_selection::burn_down::V1_WEEKLY_WINDOW_SECONDS;
-use codex_router_selection::burn_down::assess_route_band;
-use codex_router_selection::burn_down::weekly_quota_switch_at_basis_points;
-use codex_router_selection::run_rate::QuotaRunRateConfidence;
-use codex_router_selection::run_rate::QuotaRunRateEstimate;
-use codex_router_selection::run_rate::QuotaRunRateEstimator;
-use codex_router_selection::run_rate::QuotaRunRateObservation;
+#[cfg(test)]
 use codex_router_state::account::AccountRecord;
 use codex_router_state::account::AccountStatus;
 use codex_router_state::account_routing_policy::WeeklyQuotaFloorBasisPoints;
-use codex_router_state::credential_maintenance::CredentialMaintenanceRecord;
 use codex_router_state::credit_store::AsyncCreditUsagePolicyMutationStore;
-use codex_router_state::credit_store::CreditRefreshAttempt;
+#[cfg(test)]
 use codex_router_state::quota_snapshot::PersistedQuotaHistoryObservation;
-use codex_router_state::quota_snapshot::PersistedQuotaSnapshot;
-use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
-use codex_router_state::quota_snapshot::QuotaHistoryRefreshOutcome;
-use codex_router_state::quota_snapshot::QuotaRefreshErrorClass;
-use codex_router_state::quota_snapshot::QuotaRefreshStatusSource;
-use codex_router_state::quota_snapshot::QuotaRefreshStatusView;
-use codex_router_state::quota_snapshot::QuotaSnapshotSource;
-use codex_router_state::quota_snapshot::SelectorQuotaInput;
-use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-use codex_router_state::selection_projection::project_route_band_selection_inputs_read_only;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
 use codex_router_state::sqlite::AsyncWeeklyQuotaFloorMutationStore;
 use codex_router_state::sqlite::StateStoreError;
-use opentelemetry::KeyValue;
-use opentelemetry::global;
-use serde::Serialize;
-use serde_json::Value;
-use sha2::Digest;
-use sha2::Sha256;
 use thiserror::Error;
 
 use crate::ArgumentParser;
 use crate::CliError;
-use crate::credential_runtime::AsyncProviderCredentialResolver;
 use crate::credential_runtime::CliCredentialResolver;
 use crate::credential_runtime::CliCredentialResolverOpenError;
-use crate::presentation::quota::CreditUsagePolicySaveError;
-use crate::presentation::quota::CreditUsagePolicySaver;
-use crate::presentation::quota::CreditUsageRefreshError;
-use crate::presentation::quota::CreditUsageRefresher;
-use crate::presentation::quota::QuotaSelectedAccountViewModel;
-use crate::presentation::quota::QuotaStatusAccountViewModel;
-use crate::presentation::quota::QuotaStatusViewModel;
-use crate::presentation::quota::QuotaStatusViewModelLoader;
-use crate::presentation::quota::ResetPaceMeterSegments;
-use crate::presentation::quota::ResetPaceState;
-use crate::presentation::quota::ResetPaceViewModel;
-use crate::presentation::quota::SampleConfidence;
-use crate::presentation::quota::SampleMetadata;
-use crate::presentation::quota::WeeklyQuotaFloorSaveError;
-use crate::presentation::quota::WeeklyQuotaFloorSaver;
-use crate::presentation::quota::run_quota_status_view;
-use crate::presentation::quota::write_quota_status_view;
 use crate::router_root_or_default;
+use codex_router_quota_tui::CreditUsagePolicySaveError;
+use codex_router_quota_tui::CreditUsagePolicySaver;
+use codex_router_quota_tui::CreditUsageRefreshError;
+use codex_router_quota_tui::CreditUsageRefresher;
+use codex_router_quota_tui::WeeklyQuotaFloorSaveError;
+use codex_router_quota_tui::WeeklyQuotaFloorSaver;
+use codex_router_quota_tui::run_quota_status_view;
 
-const DEFAULT_ROUTE_BANDS: &[&str] = &["responses", "models"];
-const USER_QUOTA_ROUTE_BAND: &str = "responses";
-pub(crate) const DEFAULT_REFRESH_STALE_AFTER_GRACE_SECONDS: u64 = 360;
-const QUOTA_STATUS_SAMPLE_FRESH_SECONDS: u64 = 900;
-const QUOTA_STATUS_SHORT_BURN_LOOKBACK_SECONDS: u64 = 30 * 60;
-const QUOTA_STATUS_WEEKLY_BURN_LOOKBACK_SECONDS: u64 = 3 * 60 * 60;
-const QUOTA_STATUS_DISPLAY_MIN_RATE_SAMPLES: usize = 3;
-const QUOTA_STATUS_DISPLAY_NORMAL_CONFIDENCE_SAMPLES: usize = 5;
-const RESET_PACE_RUNOUT_LABEL_THRESHOLD_HUNDREDTHS: u32 = 200;
-const ACTIVE_CLIENT_LEASE_MAX_AGE_SECONDS: u64 = 7_200;
-const DEPLETED_QUOTA_LABEL: &str = "Exhausted";
-
-fn current_unix_seconds() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |duration| duration.as_secs())
-}
-
-mod claude_quota_fetcher;
-mod quota_background_refresh_worker;
-mod quota_command_dispatch;
-mod quota_refresh_command;
-mod quota_refresh_history;
-mod quota_refresh_provider;
-mod quota_refresh_service;
-
-pub(crate) use quota_background_refresh_worker::*;
-pub use quota_command_dispatch::*;
-pub(crate) use quota_refresh_command::*;
-use quota_refresh_history::{
-    append_failure_quota_history_observations, append_success_quota_history_observation,
-    failure_quota_history_observations, purge_old_quota_history, success_quota_history_observation,
-};
-pub(crate) use quota_refresh_provider::*;
-pub(crate) use quota_refresh_service::*;
-
+pub(crate) mod quota_command_dispatch;
 mod quota_command_options;
-mod quota_reset_pace_projection;
-mod quota_route_selection_projection;
+mod quota_credential_resources;
+mod quota_refresh_command;
 mod quota_status_command;
-mod quota_status_formatting;
-mod quota_status_json;
-mod quota_status_loader;
-mod quota_status_metrics;
-mod quota_status_projection;
-mod quota_status_view_model;
-
+mod quota_status_rendering;
+use codex_router_quota_service::quota::{
+    HttpQuotaRefreshProvider, current_unix_seconds,
+    load_quota_status_report_with_availability_async, quota_status_view_model,
+    refresh_quota_with_dependencies, write_quota_json, write_quota_plain,
+};
+use codex_router_quota_tui::quota_status_view_model_loader;
+pub(crate) use quota_command_dispatch::run_quota_command;
+#[cfg(test)]
+use quota_command_dispatch::should_run_interactive_quota;
+pub use quota_command_dispatch::{QuotaCommand, QuotaCommandError, QuotaStatusFormat};
 use quota_command_options::{QuotaRefreshOptions, QuotaStatusOptions};
-use quota_reset_pace_projection::{
-    quota_connection_rate_summary, quota_display_pace_snapshot, quota_pace_snapshot,
-    quota_pace_summary, quota_safe_pace_meter, quota_total_rate_summary,
-    reset_pace_view_model_from_snapshot, sample_metadata_from_display_window,
-    sample_metadata_from_display_windows, sample_metadata_from_observed_windows,
-    short_reset_pace_view_model_from_snapshot,
-};
-use quota_route_selection_projection::{
-    attach_history_estimates_to_display_windows, burn_down_input_from_display_windows,
-    display_windows_from_selector_input,
-};
+use quota_credential_resources::{QuotaCredentialResources, load_quota_status_report_async};
+pub(crate) use quota_refresh_command::is_allowed_quota_refresh_base_url;
+use quota_refresh_command::refresh_quota;
 use quota_status_command::{
     effective_human_quota_format, render_interactive_quota_status, render_quota_status,
 };
-use quota_status_formatting::{
-    QuotaTableStyle, active_clients_label, format_active_clients, format_burn_cell,
-    format_burn_rate_basis_points_per_hour, format_duration, format_next_use,
-    format_next_use_from_routing_reason, format_pace_cell, format_refresh_status,
-    format_relative_time, format_reset_credits, format_routing_cell, format_routing_reason,
-    format_window_cell, quota_account_list_window_summary, quota_account_status,
-    quota_window_label, quota_window_status_from_selector_status, quota_window_visual_summary,
-    reason_summary, reset_credits_account_list_label, routing_reason_is_preferred,
-    run_rate_confidence_label, write_quota_json, write_quota_plain, write_quota_table_with_style,
-};
-use quota_status_json::{
-    JsonQuotaStatusReport, oauth_maintenance_state, routing_reason_json, selected_pool_json,
-    window_display_note, window_display_note_with_reset, window_pressure_and_surplus,
-};
-use quota_status_loader::{
-    QuotaCredentialResources, load_quota_status_report_async,
-    load_quota_status_report_with_availability_async,
-};
-use quota_status_metrics::{
-    emit_quota_status_metrics, record_claude_usage_auth_rejected_after_renewal,
-    record_quota_refresh_metric, telemetry_hash,
-};
-use quota_status_projection::quota_status_view_model;
-use quota_status_view_model::{
-    ActiveClientMirrorLoad, ActiveClientMirrorStatus, CredentialStoreAvailability,
-    DisplayQuotaWindow, QuotaPaceSnapshot, QuotaStatusAccountInput, QuotaStatusReport,
-    QuotaStatusRow, SelectionProjectionSource,
-};
-
-pub(crate) use quota_status_command::interactive_credit_usage_refresher;
-
-pub(crate) use quota_status_view_model::CreditUsageFreshness;
-pub(crate) use quota_status_view_model::CreditUsageStatus;
-
+use quota_status_rendering::{QuotaTableStyle, write_quota_table_with_style};
+mod quota_background_composition;
 #[cfg(test)]
+#[path = "quota/quota_command_family_test.rs"]
 mod quota_command_family_test;
-
+pub(crate) use quota_background_composition::start_background_quota_refresh_worker;
 #[cfg(test)]
-#[path = "quota/claude_quota_refresh_ingestion_tests.rs"]
-mod claude_quota_refresh_ingestion_tests;
+#[path = "quota/quota_credential_resources_test.rs"]
+mod quota_credential_resources_test;

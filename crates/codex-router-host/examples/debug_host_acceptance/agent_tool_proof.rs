@@ -130,9 +130,8 @@ impl DeniedTargets {
         Ok(&self.task_file)
     }
     fn command(&self) -> Result<String, Box<dyn Error>> {
-        let node = codex_router_test_support::node_fixture::node_executable()?;
-        let program =
-            codex_router_test_support::node_fixture::fixture_program("narrow-access-probe.ts");
+        let node = node_test_fixture::node_executable()?;
+        let program = node_test_fixture::fixture_program("narrow-access-probe.ts");
         Ok(format!(
             "{} {} {} {} NARROW_ACCESS_DENIED",
             quote(node.to_str().ok_or("Node path")?),

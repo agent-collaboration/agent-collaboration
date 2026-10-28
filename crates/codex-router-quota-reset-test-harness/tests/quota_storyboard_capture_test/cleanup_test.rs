@@ -230,6 +230,7 @@ async fn controlled_image_lifecycle(cooperative_stop: bool) -> TestResult<()> {
         "hung checker cannot pass image verification",
     )?;
     if cooperative_stop {
+        eprintln!("controlled image stop result: {result:?}");
         ensure(
             result
                 .as_ref()
