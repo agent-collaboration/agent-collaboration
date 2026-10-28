@@ -265,10 +265,9 @@ pub(crate) fn render_weekly_floor_editor(
     height: usize,
     state: State<Option<WeeklyFloorEditorState>>,
 ) -> AnyElement<'static> {
-    let content = render_weekly_floor_editor_content(editor, width.saturating_sub(4), state, 0);
+    let content = render_floor_fields(editor, width.saturating_sub(4), state, 0, true);
     element! {View(width:u32::try_from(width).unwrap_or(u32::MAX),height:u32::try_from(height).unwrap_or(u32::MAX),flex_direction:FlexDirection::Column,border_style:BorderStyle::Single,border_color:Color::DarkGrey,padding_left:1,padding_right:1,overflow:Overflow::Hidden) {
         UiHeading(content:"Weekly floor".to_owned(),level:UiHeadingLevel::Section)
-        codex_router_tui::FormField(label:"Account".to_owned(),label_width:10u16) {Text(content:editor.account_label.clone(),color:Color::White)}
         #(content)
     }}.into_any()
 }
@@ -276,8 +275,18 @@ pub(crate) fn render_weekly_floor_editor(
 pub(crate) fn render_weekly_floor_editor_content(
     editor: &WeeklyFloorEditorState,
     width: usize,
+    state: State<Option<WeeklyFloorEditorState>>,
+    section_gap: u16,
+) -> AnyElement<'static> {
+    render_floor_fields(editor, width, state, section_gap, false)
+}
+
+fn render_floor_fields(
+    editor: &WeeklyFloorEditorState,
+    width: usize,
     mut state: State<Option<WeeklyFloorEditorState>>,
     section_gap: u16,
+    include_account: bool,
 ) -> AnyElement<'static> {
     let status = match editor.phase {
         WeeklyFloorEditorPhase::Editing => None,
@@ -299,8 +308,10 @@ pub(crate) fn render_weekly_floor_editor_content(
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,row_gap:section_gap,margin_top:context_margin) {
             #(status.map(|(message,color)|element!(Text(content:message,color))))
-            codex_router_tui::FormField(label:"Current".to_owned(),label_width:10u16) {Text(content:current,color:Color::White)}
-            codex_router_tui::FormField(label:"Floor".to_owned(),label_width:10u16,has_focus:true) {
+            codex_router_tui::FormFields(row_gap:section_gap) {
+            #(include_account.then(||element!(codex_router_tui::FormField(label:"Account".to_owned()) {Text(content:editor.account_label.clone(),color:Color::White)})))
+            codex_router_tui::FormField(label:"Current".to_owned()) {Text(content:current,color:Color::White)}
+            codex_router_tui::FormField(label:"Floor".to_owned(),has_focus:true) {
                 View(column_gap:2,align_items:AlignItems::Center) {
                     DialogAction(label:"◀",handler:move |_| {
                         let mut next=state.read().clone();
@@ -312,6 +323,7 @@ pub(crate) fn render_weekly_floor_editor_content(
                         if next.as_ref().is_some_and(|editor|editor.account_id==increase_target) {step_weekly_floor_editor(&mut next,WeeklyFloorStep::Increase);state.set(next);}
                     })
                 }
+            }
             }
             Text(content:"0% disables protection · maximum 15%",color:Color::Grey)
         }

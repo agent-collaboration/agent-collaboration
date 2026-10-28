@@ -363,6 +363,58 @@ mod presentation_projection_tests {
         }
     }
     #[test]
+    fn luna_422_unknown_freshness_preserves_available_routing_status() {
+        let mut row = observed_row();
+        row.freshness = QuotaEvidenceFreshness::Unknown;
+        assert_eq!(quota_account_status(&row).label(), "available");
+    }
+
+    #[test]
+    fn luna_422_unknown_freshness_preserves_held_routing_status() {
+        let mut row = observed_row();
+        row.freshness = QuotaEvidenceFreshness::Unknown;
+        row.availability = AccountAvailability::Reserve;
+        row.routing_reason = RoutingReason::HeldReserve;
+        assert_eq!(quota_account_status(&row).label(), "held");
+    }
+
+    #[test]
+    fn luna_422_unknown_freshness_preserves_blocked_routing_status() {
+        for availability in [
+            AccountAvailability::Blocked,
+            AccountAvailability::Excluded,
+            AccountAvailability::Unknown,
+        ] {
+            let mut row = observed_row();
+            row.freshness = QuotaEvidenceFreshness::Unknown;
+            row.availability = availability;
+            assert_eq!(quota_account_status(&row).label(), "blocked");
+        }
+    }
+
+    #[test]
+    fn luna_422_preferred_and_stale_precedence_remains() {
+        let mut row = observed_row();
+        row.freshness = QuotaEvidenceFreshness::Stale;
+        assert_eq!(quota_account_status(&row).label(), "stale");
+        row.preferred_next = true;
+        assert_eq!(quota_account_status(&row).label(), "preferred");
+    }
+
+    #[test]
+    fn luna_422_unknown_freshness_json_bytes_are_unchanged() {
+        let mut row = observed_row();
+        row.freshness = QuotaEvidenceFreshness::Unknown;
+        let mut report = report(vec![row]);
+        report.app_version = "fixture-version".to_owned();
+        let bytes = serde_json::to_vec(
+            &super::super::quota_status_json::JsonQuotaStatusReport::from_report(&report),
+        )
+        .unwrap();
+        assert_eq!(bytes, include_bytes!("quota_unknown_freshness.json"));
+    }
+
+    #[test]
     fn row_projection_preserves_preference_freshness_and_credential_override_precedence() {
         for (preferred, freshness, availability, reason, expected) in [
             (
@@ -384,7 +436,7 @@ mod presentation_projection_tests {
                 QuotaEvidenceFreshness::Unknown,
                 AccountAvailability::Usable,
                 RoutingReason::AvailableSamePool,
-                QuotaAccountStatus::Unknown,
+                QuotaAccountStatus::Available,
             ),
             (
                 false,

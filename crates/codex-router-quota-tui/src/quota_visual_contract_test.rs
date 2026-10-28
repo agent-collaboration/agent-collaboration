@@ -54,16 +54,25 @@ fn compact_windows_keep_known_amount_when_reset_is_unknown_and_missing_has_no_me
     let canvas = super::super::quota_account_groups::render_interactive_account(row, 110, false)
         .render(None);
     let frame = canvas.to_string();
-    assert!(frame.contains("92% · week · —"), "{frame}");
-    assert!(frame.contains("No data · 5h"), "{frame}");
+    assert!(
+        frame.contains("92% · week") && !frame.contains("· —"),
+        "{frame}"
+    );
+    assert!(
+        !frame.contains("No data") && !frame.contains("5h"),
+        "{frame}"
+    );
     assert!(
         !frame.contains("DO NOT") && !frame.contains("fabricated") && !frame.contains("Resets"),
         "{frame}"
     );
-    let missing = frame.lines().find(|line| line.contains("No data")).unwrap();
-    assert!(
-        !missing.contains('█') && !missing.contains('░'),
-        "{missing}"
+    assert_eq!(
+        frame
+            .chars()
+            .filter(|glyph| matches!(*glyph, '█' | '░'))
+            .count(),
+        7,
+        "only the known weekly meter remains: {frame}"
     );
 }
 
@@ -686,8 +695,7 @@ async fn pool_census_all_ten_facts_are_reachable_in_body_at_six_grids_and_restor
 
 #[test]
 fn unknown_reset_keeps_known_amount_and_staleness_in_actual_row() {
-    for (reset_in_seconds, expected) in [(None, "5% · week · —"), (Some(0), "5% · week · 0m")]
-    {
+    for (reset_in_seconds, expected) in [(None, "5% · week"), (Some(0), "5% · week · 0m")] {
         let mut model = quota_two_account_view_model();
         let row = &mut model.rows[0];
         row.display_weekly = QuotaDisplayWindow::Known {

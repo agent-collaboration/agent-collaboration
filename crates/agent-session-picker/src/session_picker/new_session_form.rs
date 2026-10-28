@@ -5,7 +5,7 @@ use agent_session_inventory::sessions::{
 };
 use codex_router_tui::{
     ChoiceAvailability, ChoiceOption, ChoiceTransition, DialogAction, DialogFrame,
-    DialogKeyboardOwner, DialogMargins, DialogPresentation, FormField, SearchSelect,
+    DialogKeyboardOwner, DialogMargins, DialogPresentation, FormField, FormFields, SearchSelect,
     SearchSelectState,
 };
 use iocraft::prelude::*;
@@ -433,10 +433,12 @@ pub(super) fn render_new_form(
     element! {
         DialogFrame(width,height,title:"New session".to_owned(),scroll_keys:if draft.choice.is_open() {codex_router_tui::DialogScrollKeys::Disabled}else {codex_router_tui::DialogScrollKeys::Navigation},keyboard_owner:DialogKeyboardOwner::Caller,
             margins:DialogMargins {top:1,right:2,bottom:1,left:2},help_action:Some(super::picker_help_view::help_action(state)),actions) {
-            FormField(label:"Client".to_owned(),label_width:10u16,stacked,has_focus:draft.focus==NewFormFocus::Client) {#(if expanded&&draft.focus==NewFormFocus::Client {client_field}else {element!(codex_router_tui::SelectableRow(selected:false) {#(client_field)}).into_any()})}
-            FormField(label:"Machine".to_owned(),label_width:10u16,stacked,has_focus:draft.focus==NewFormFocus::Machine) {#(if expanded&&draft.focus==NewFormFocus::Machine {machine_field}else {element!(codex_router_tui::SelectableRow(selected:false) {#(machine_field)}).into_any()})}
-            FormField(label:"Directory".to_owned(),label_width:10u16,stacked,has_focus:draft.focus==NewFormFocus::Directory) {Text(content:if draft.directory.as_os_str().is_empty() {"Not configured".to_owned()}else {draft.directory.display().to_string()},color:Color::White,wrap:TextWrap::Wrap)}
-            #((!arguments.is_empty()).then(||element! {FormField(label:"Arguments".to_owned(),label_width:10u16,stacked) {Text(content:arguments,color:Color::Grey,wrap:TextWrap::Wrap)}}))
+            FormFields(stacked) {
+            FormField(label:"Client".to_owned(),has_focus:draft.focus==NewFormFocus::Client) {#(client_field)}
+            FormField(label:"Machine".to_owned(),has_focus:draft.focus==NewFormFocus::Machine) {#(machine_field)}
+            FormField(label:"Directory".to_owned(),has_focus:draft.focus==NewFormFocus::Directory) {Text(content:if draft.directory.as_os_str().is_empty() {"Not configured".to_owned()}else {draft.directory.display().to_string()},color:Color::White,wrap:TextWrap::Wrap)}
+            #((!arguments.is_empty()).then(||element! {FormField(label:"Arguments".to_owned()) {Text(content:arguments,color:Color::Grey,wrap:TextWrap::Wrap)}}))
+            }
             #(unavailable_reason.map(|reason|element!(Text(content:reason,color:Color::Grey))))
             #(super::source_action_view::source_error(model))
         }

@@ -357,5 +357,8 @@ mod tests;
 #[path = "picker_machine_input.rs"]
 mod picker_machine_input;
 
+#[cfg(test)]
+#[path = "form_alignment_tests.rs"]
+mod form_alignment_tests;
 #[path = "picker_input.rs"]
 mod picker_input;

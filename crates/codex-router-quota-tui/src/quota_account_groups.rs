@@ -1,5 +1,5 @@
 //! Interactive account composition; the static renderer keeps its own format.
-use super::quota_browse_rendering::reset_pace_color;
+use super::quota_browse_rendering::{reset_pace_color, reset_pace_meter};
 use codex_router_quota_service::quota_display_model::{
     QuotaDisplayWindow, QuotaStatusAccountViewModel,
 };
@@ -58,14 +58,20 @@ fn render_window(
     role: UiTextRole,
 ) -> AnyElement<'static> {
     match window {
-        QuotaDisplayWindow::Unknown => element!(UiText(content:format!("No data · {label} · —"),role:UiTextRole::Secondary,wrap:TextWrap::Wrap)).into_any(),
-        QuotaDisplayWindow::Known {remaining_percent,reset_in_seconds,stale} => {
-            let filled=((*remaining_percent).min(100) as usize*7/100).min(7);
-            let meter=format!("{}{}","█".repeat(filled),"░".repeat(7-filled));
-            let reset=reset_in_seconds.map_or_else(||"—".to_owned(),reset_duration);
+        QuotaDisplayWindow::Unknown => element!(View).into_any(),
+        QuotaDisplayWindow::Known {
+            remaining_percent,
+            reset_in_seconds,
+            stale,
+        } => {
+            let filled = ((*remaining_percent).min(100) as usize * 7 / 100).min(7);
+            let meter = format!("{}{}", "█".repeat(filled), "░".repeat(7 - filled));
+            let reset = reset_in_seconds
+                .map(|seconds| format!(" · {}", reset_duration(seconds)))
+                .unwrap_or_default();
             element! {
                 View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-                    UiText(content:format!("{meter} {remaining_percent}% · {label} · {reset}"),role,wrap:TextWrap::Wrap)
+                    UiText(content:format!("{meter} {remaining_percent}% · {label}{reset}"),role,wrap:TextWrap::Wrap)
                     #((*stale).then(||element!(UiText(content:format!("{label} stale"),role:UiTextRole::Warning))))
                 }
             }.into_any()
@@ -99,13 +105,13 @@ fn extra_group(row: &QuotaStatusAccountViewModel) -> AnyElement<'static> {
         CreditAvailability::Available { balance: None } => "Credits available".to_owned(),
         CreditAvailability::Unlimited => "Unlimited credits".to_owned(),
         CreditAvailability::Depleted => "Credits depleted".to_owned(),
-        CreditAvailability::Unknown => "Credits unknown".to_owned(),
+        CreditAvailability::Unknown => String::new(),
     };
     element! {
         View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            UiText(content:credits,role:UiTextRole::Secondary,wrap:TextWrap::Wrap)
+            #((!credits.is_empty()).then(||element!(UiText(content:credits,role:UiTextRole::Secondary,wrap:TextWrap::Wrap))))
             #((row.credit_usage.freshness==codex_router_quota_service::quota::CreditUsageFreshness::Stale).then(||element!(UiText(content:"Credits stale",role:UiTextRole::Warning))))
-            UiText(content:row.reset_credits.clone(),role:UiTextRole::Secondary,wrap:TextWrap::Wrap)
+            #((row.reset_credits!="resets unknown").then(||element!(UiText(content:row.reset_credits.clone(),role:UiTextRole::Secondary,wrap:TextWrap::Wrap))))
         }
     }.into_any()
 }
@@ -117,10 +123,14 @@ pub(crate) fn render_interactive_account(
 ) -> AnyElement<'static> {
     let widths = group_widths(width.saturating_sub(2));
     let pace = &row.reset_pace;
-    let pace_label = pace
-        .impact_label
-        .clone()
-        .unwrap_or_else(|| pace.semantic_label.to_owned());
+    let pace_label = pace.impact_label.clone().unwrap_or_else(|| {
+        if pace.semantic_label == "burn unavailable" {
+            "⏳"
+        } else {
+            pace.semantic_label
+        }
+        .to_owned()
+    });
     let pace_detail = if pace.state
         == codex_router_quota_service::quota_display_model::ResetPaceState::Unavailable
     {
@@ -147,6 +157,9 @@ pub(crate) fn render_interactive_account(
         ("Weekly pace",element!(View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             Text(content:pace_label,color:reset_pace_color(pace.state),wrap:TextWrap::Wrap)
             #(pace_detail.map(|detail|element!(Text(content:detail,color:Color::Grey,wrap:TextWrap::Wrap))))
+            #((pace.state != codex_router_quota_service::quota_display_model::ResetPaceState::Unavailable).then(||element! {
+                View(flex_shrink:0.0_f32) {Text(content:reset_pace_meter(pace),color:reset_pace_color(pace.state),wrap:TextWrap::NoWrap)}
+            }))
         }).into_any()),
         ("Extra",extra_group(row)),
     ];

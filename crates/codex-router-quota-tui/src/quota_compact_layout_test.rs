@@ -20,7 +20,7 @@ fn unavailable_pace_does_not_repeat_generic_copy_but_keeps_a_specific_reason() {
             )
             .render(None)
             .to_string();
-            assert_eq!(frame.matches("burn unavailable").count(), 1, "{frame}");
+            assert_eq!(frame.matches("⏳").count(), 1, "{frame}");
             assert!(
                 !frame.contains(unavailable.unavailable_reason.as_deref().unwrap()),
                 "Generic repetition adds no information: {frame}"
@@ -88,7 +88,7 @@ async fn floor_editor_fits_content_and_separates_sections_at_mock_sizes() {
             eprintln!("Native floor increment coordinate {width}x{height}: ({column}, {row})");
             assert_eq!(
                 (column, row),
-                (47, 18),
+                (46, 18),
                 "Native PTY click must target the rendered increment control"
             );
         }

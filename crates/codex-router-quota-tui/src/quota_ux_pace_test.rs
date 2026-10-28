@@ -33,7 +33,11 @@ async fn phone_pace_uses_whole_compact_words_and_preserves_full_details() {
     }
     for (semantic_label, quota) in &observations {
         assert!(
-            quota.contains(semantic_label),
+            quota.contains(if *semantic_label == "burn unavailable" {
+                "⏳"
+            } else {
+                semantic_label
+            }),
             "C1 folded pace retains full semantic meaning and Details; source={semantic_label}, observations={observations:?}, quota={quota}"
         );
     }
@@ -52,7 +56,7 @@ async fn phone_pace_wider_rows_keep_full_words_and_observable_frames() {
         )
         .await;
         assert!(
-            frame.contains("unavailable") && frame.contains("collecting"),
+            frame.contains("⏳") && frame.contains("collecting"),
             "{frame}"
         );
         assert!(

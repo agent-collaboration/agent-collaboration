@@ -74,8 +74,10 @@ pub(super) fn render_machine_choices(
             })).into_any());
             ("Choose machine".to_owned(),element! {
                 View(flex_direction:FlexDirection::Column) {
-                    codex_router_tui::FormField(label:"Machine".to_owned(),label_width:14u16,stacked:width<52,has_focus:true) {
+                    codex_router_tui::FormFields(stacked:width<52) {
+                    codex_router_tui::FormField(label:"Machine".to_owned(),has_focus:true) {
                         codex_router_tui::SearchSelect<super::picker_machine_controls::MachineChoiceKey>(state:model.machine_controls.search.clone(),options,on_select:selection_handler)
+                    }
                     }
                     #(notice.as_ref().map(|notice|element!(Text(content:notice.message(),color:codex_router_tui::UiTextRole::Warning.color()))))
                 }

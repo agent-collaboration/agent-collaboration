@@ -231,7 +231,7 @@ pub(super) fn render_picker_view(
                 scroll_keys:if model.provider_choice.is_open() {codex_router_tui::DialogScrollKeys::Disabled}else {codex_router_tui::DialogScrollKeys::Pages},
                 presentation, margins,
                 actions: super::super::provider_filter_view::render_provider_actions(model, model_state, apply_filters)) {
-                #(super::super::provider_filter_view::render_provider_chooser(model, model_state,usize::from(frame_width.saturating_sub(4)), short_filters))
+                #(super::super::provider_filter_view::render_provider_chooser(model, model_state,usize::from(frame_width.saturating_sub(4))))
             }
         }.into_any())
     } else if model.details_dialog.is_some() {

@@ -6,7 +6,7 @@ use super::{
 };
 use codex_router_tui::{
     DialogAction, DialogFrame, DialogKeyboardOwner, DialogMargins, DialogPresentation, FormField,
-    SearchSelect,
+    FormFields, SearchSelect,
 };
 use iocraft::prelude::*;
 
@@ -104,11 +104,13 @@ pub(super) fn render_fork_confirmation(
                         if let Some(key)=selected && let Some(confirmation)=state.write().fork_confirmation.as_mut() {confirmation.select_destination(key);}
                     }else {confirm_fork(state,outcome);}
                 })).into_any()]) {
-                FormField(label:"Source".to_owned(),label_width:11u16,stacked) {Text(content:confirmation.source_label.clone(),color:Color::Grey,wrap:TextWrap::Wrap)}
-                FormField(label:"Directory".to_owned(),label_width:11u16,stacked) {Text(content:confirmation.directory_label.clone(),color:Color::White,wrap:TextWrap::Wrap)
+                FormFields(stacked) {
+                FormField(label:"Source".to_owned()) {Text(content:confirmation.source_label.clone(),color:Color::Grey,wrap:TextWrap::Wrap)}
+                FormField(label:"Directory".to_owned()) {Text(content:confirmation.directory_label.clone(),color:Color::White,wrap:TextWrap::Wrap)
                     Text(content:format!("Directory origin: {}",confirmation.directory_origin),color:Color::Grey)}
-                FormField(label:"Destination".to_owned(),label_width:11u16,stacked,has_focus:true) {
-                    #(if expanded {field}else {element!(codex_router_tui::SelectableRow(selected:false) {#(field)}).into_any()})
+                FormField(label:"Destination".to_owned(),has_focus:true) {
+                    #(field)
+                }
                 }
                 #(explanation.map(|message|element!(View(padding_left:if stacked {4}else {15}) {Text(content:message,color:Color::Grey)})))
             }

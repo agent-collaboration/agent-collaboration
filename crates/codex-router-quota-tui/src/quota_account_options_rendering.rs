@@ -241,7 +241,6 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
         editing: is_editing,
         has_focus: pending_tab.is_none() && message.is_none(),
         editor,
-        width,
         on_select,
         on_open,
     });
@@ -296,13 +295,15 @@ pub(crate) fn render_credit_usage_body(props: CreditUsageBodyProps<'_>) -> AnyEl
 
     element! {
         View(width: u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction: FlexDirection::Column) {
+            codex_router_tui::FormFields(stacked:width<52) {
             #(balance_heading)
-            #(account_options_field_line(if form {"Balance"}else {"Status"}, &entitlement, width, Color::White))
-            #((!form||usage.freshness!=codex_router_quota_service::quota::CreditUsageFreshness::Fresh).then(||account_options_field_line("Freshness",freshness,width,freshness_color(usage.freshness))))
-            #((!form).then(||account_options_field_line("Observation",&age,width,Color::Grey)))
-            View(height: 1, flex_shrink: 0.0_f32) {}
+            #(account_options_field_line(if form {"Balance"}else {"Status"}, &entitlement, Color::White))
+            #((!form||usage.freshness!=codex_router_quota_service::quota::CreditUsageFreshness::Fresh).then(||account_options_field_line("Freshness",freshness,freshness_color(usage.freshness))))
+            #((!form).then(||account_options_field_line("Observation",&age,Color::Grey)))
+             #([element!(View(height: 1, flex_shrink: 0.0_f32)).into_any()])
             #(usage_heading)
             #(policy_row)
+            }
             #(has_notices.then(||element! {View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32,margin_top:1,row_gap:1) {#(notices)}}))
         }
     }
@@ -401,12 +402,7 @@ fn render_resets_tab_body(
     let explanation =
         unavailable_reason.or_else(|| reset_target.map(|_| "Checking reset eligibility…"));
     if explanation.is_none() && options.message.is_none() {
-        return Some(account_options_field_line(
-            "Eligibility",
-            "Not checked",
-            width,
-            Color::White,
-        ));
+        return Some(element!(codex_router_tui::FormFields(stacked:width<52) {#(account_options_field_line("Eligibility", "Not checked", Color::White))}).into_any());
     }
     Some(element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
@@ -430,17 +426,17 @@ struct CreditPolicyRowProps<'a> {
     editing: bool,
     has_focus: bool,
     editor: Option<&'a super::CreditPolicyEditorState>,
-    width: usize,
     on_select: Handler<codex_router_core::credit_usage::CreditUsagePolicy>,
     on_open: Handler<()>,
 }
-fn render_policy_row(props: CreditPolicyRowProps<'_>) -> AnyElement<'static> {
+fn render_policy_row(
+    props: CreditPolicyRowProps<'_>,
+) -> Element<'static, codex_router_tui::FormField> {
     let CreditPolicyRowProps {
         policy,
         editing,
         has_focus,
         editor,
-        width,
         on_select,
         on_open,
     } = props;
@@ -450,7 +446,7 @@ fn render_policy_row(props: CreditPolicyRowProps<'_>) -> AnyElement<'static> {
         "Disallow"
     };
     if !editing {
-        return element!(codex_router_tui::FocusReveal(has_focus:editor.is_none()&&has_focus) {#(account_options_field_line("Use credits",label,width,Color::White))}).into_any();
+        return element!(codex_router_tui::FormField(label:"Use credits".to_owned(),has_focus:editor.is_none()&&has_focus) {Text(content:label,color:Color::White)});
     }
     let choice = editor
         .map(|editor| editor.choice.clone())
@@ -462,25 +458,15 @@ fn render_policy_row(props: CreditPolicyRowProps<'_>) -> AnyElement<'static> {
         element! {codex_router_tui::DialogButton(handler:on_open) {Text(content:format!("{label} ▾"),color:if has_focus {Color::Yellow}else {Color::White})}}
             .into_any()
     };
-    let body = if expanded {
-        body
-    } else {
-        element!(codex_router_tui::SelectableRow(selected:false) {#(body)}).into_any()
-    };
-    element! {codex_router_tui::FormField(label:"Use credits".to_owned(),label_width:if width<52 {11u16}else {14u16},stacked:width<34,has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {#(body)}}.into_any()
+    element! {codex_router_tui::FormField(label:"Use credits".to_owned(),has_focus:has_focus&&editor.is_some_and(|editor|editor.phase==CreditPolicyEditorPhase::Editing)) {#(body)}}
 }
 
 fn account_options_field_line(
     label: &str,
     value: &str,
-    width: usize,
     value_color: Color,
-) -> AnyElement<'static> {
-    element! {
-        View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_shrink:0.0_f32) {
-            codex_router_tui::FormField(label:label.to_owned(),label_width:14u16,stacked:width<52) {Text(content:value.to_owned(),color:value_color)}
-        }
-    }.into_any()
+) -> Element<'static, codex_router_tui::FormField> {
+    element! {codex_router_tui::FormField(label:label.to_owned()) {Text(content:value.to_owned(),color:value_color)}}
 }
 
 fn credit_entitlement_label(usage: &CreditUsageStatus) -> String {

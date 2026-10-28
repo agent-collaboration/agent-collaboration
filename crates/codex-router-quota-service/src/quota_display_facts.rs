@@ -10,7 +10,6 @@ pub enum QuotaAccountStatus {
     Held,
     Blocked,
     Stale,
-    Unknown,
 }
 impl QuotaAccountStatus {
     pub const fn label(self) -> &'static str {
@@ -20,7 +19,6 @@ impl QuotaAccountStatus {
             Self::Held => "held",
             Self::Blocked => "blocked",
             Self::Stale => "stale",
-            Self::Unknown => "unknown",
         }
     }
     pub const fn glyph(self) -> &'static str {
@@ -30,7 +28,6 @@ impl QuotaAccountStatus {
             Self::Held => "◇",
             Self::Blocked => "⊘",
             Self::Stale => "◷",
-            Self::Unknown => "?",
         }
     }
 }
@@ -224,7 +221,6 @@ mod tests {
             (QuotaAccountStatus::Held, "◇ held", "◇ held"),
             (QuotaAccountStatus::Blocked, "blocked", "⊘ blocked"),
             (QuotaAccountStatus::Stale, "◷ stale", "◷ stale"),
-            (QuotaAccountStatus::Unknown, "unknown", "? unknown"),
         ] {
             let row = QuotaRowStatus::Account(status);
             assert_eq!(row.compact(7), at_seven, "{status:?} at seven cells");
@@ -240,7 +236,6 @@ mod tests {
             (QuotaAccountStatus::Held, "◇", "held"),
             (QuotaAccountStatus::Blocked, "⊘", "blocked"),
             (QuotaAccountStatus::Stale, "◷", "stale"),
-            (QuotaAccountStatus::Unknown, "?", "unknown"),
         ] {
             let row = QuotaRowStatus::Account(status);
             assert_eq!(row.label(), label);

@@ -249,7 +249,7 @@ async fn phone_accounts_scroll_lower_quota_facts_and_keep_geometry_after_resize(
                         .split_once("Quota left · reset in")
                         .map(|(_, tail)| tail.split("Weekly pace").next().unwrap().replace(' ', ""))
                         .unwrap_or_default();
-                    let expected_pace = "burnunavailable";
+                    let expected_pace = "⏳";
                     let pace = beta
                         .split_once("Weekly pace")
                         .map(|(_, tail)| tail.split("Extra").next().unwrap().replace(' ', ""))

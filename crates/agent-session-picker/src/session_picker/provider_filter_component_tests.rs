@@ -400,11 +400,11 @@ async fn compact_folder_checkout_explains_refusal_and_cancel_preserves_folder() 
                         .collect::<Vec<_>>()
                         .join(" ");
                     let words = reason_lines
-                        .split_whitespace()
-                        .collect::<Vec<_>>()
-                        .join(" ");
+                        .chars()
+                        .filter(|character| !character.is_whitespace())
+                        .collect::<String>();
                     assert!(
-                        words.contains("Checkout scope is supported by CLI --checkout --list only"),
+                        words.contains("CheckoutscopeissupportedbyCLI--checkout--listonly"),
                         "complete existing eligibility reason: {body}"
                     );
                     assert!(
@@ -414,11 +414,7 @@ async fn compact_folder_checkout_explains_refusal_and_cancel_preserves_folder() 
                     let (row, line) = frame
                         .lines()
                         .enumerate()
-                        .find(|(_, line)| {
-                            line.contains("Checkout")
-                                && !line.contains("Search:")
-                                && !line.contains("scope")
-                        })
+                        .find(|(_, line)| line.contains("Checkout") && !line.contains("Search:"))
                         .unwrap();
                     let column = line.chars().position(|character| character == 'C').unwrap();
                     sender.send(key(KeyCode::Enter)).unwrap();

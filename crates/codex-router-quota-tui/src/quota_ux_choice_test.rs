@@ -97,12 +97,13 @@ async fn all_grid_credit_choices_keep_selection_empty_query_and_cancelled_policy
                     }
                     5 if frame.contains("No matching choices") => {
                         let dialog = actual_dialog_text(&frame, "Credit usage");
-                        let words = dialog.split_whitespace().collect::<Vec<_>>().join(" ");
+                        let content = dialog.replace('│', " ");
+                        let words = content.split_whitespace().collect::<Vec<_>>().join(" ");
                         assert!(
                             words.contains("[alpha-tag]")
-                                && words.contains("Use credits Search: zznomatchzz")
+                                && words.contains("Use credits ❯ Search: zznomatchzz")
                                 && words.contains("No matching choices"),
-                            "{frame}"
+                            "{words:?}: {frame}"
                         );
                         let (row, line) = frame
                             .lines()
@@ -252,7 +253,7 @@ async fn no_match_select_is_disabled_and_pointer_and_enter_preserve_query_throug
                         );
                         let words = dialog.split_whitespace().collect::<Vec<_>>().join(" ");
                         assert!(
-                            words.contains("Account provider Search: zznomatch")
+                            words.contains("Account provider ❯ Search: zznomatch")
                                 && words.contains("No matching choices"),
                             "field/query/result must stay together: {dialog}"
                         );

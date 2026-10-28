@@ -334,7 +334,7 @@ async fn assert_no_match_action_at(surface: ChoiceSurface, width: usize, height:
         .chars()
         .filter(|character| !character.is_whitespace())
         .collect::<String>();
-    let expected = format!("{}Search:{QUERY}", surface.field())
+    let expected = format!("{}❯Search:{QUERY}", surface.field())
         .chars()
         .filter(|character| !character.is_whitespace())
         .collect::<String>();

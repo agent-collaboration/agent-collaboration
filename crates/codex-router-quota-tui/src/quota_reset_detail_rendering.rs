@@ -222,7 +222,7 @@ fn render_section(
             flex_direction: FlexDirection::Column,
             margin_top: if decision {0}else {1},
         ) {
-            codex_router_tui::FocusReveal(has_focus:reveal) {#(title) #(rows)}
+            codex_router_tui::FocusReveal(has_focus:reveal) {#(title) codex_router_tui::FormFields(stacked:width<52) {#(rows)}}
         }
     }
     .into_any()
@@ -233,8 +233,8 @@ fn render_detail_row(
     width: usize,
     natural: bool,
     choices: &mut Option<AnyElement<'static>>,
-) -> AnyElement<'static> {
-    match row {
+) -> codex_router_tui::FormFieldsChild {
+    let content = match row {
         ResetDetailRow::Text(text) if natural=>element!(Text(content:text.content,color:text.color,weight:text.weight,wrap:TextWrap::Wrap)).into_any(),
         ResetDetailRow::Text(text) => render_styled_text(text, width),
         ResetDetailRow::Field {
@@ -242,7 +242,7 @@ fn render_detail_row(
             value,
             value_color,
         } => {
-            if natural {return element!(codex_router_tui::FormField(label,label_width:u16::try_from(DETAIL_LABEL_WIDTH).unwrap_or(u16::MAX),stacked:width<52) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into_any();}
+            if natural {return element!(codex_router_tui::FormField(label) {Text(content:value,color:value_color,wrap:TextWrap::Wrap)}).into();}
             let value_width = width.saturating_sub(DETAIL_LABEL_WIDTH);
             element! {
                 View(width: 100pct) {
@@ -267,7 +267,7 @@ fn render_detail_row(
                         Text(content:id_hint,color:Color::White,wrap:TextWrap::NoWrap)
                     }
                     Text(content:description,color:Color::White,wrap:TextWrap::Wrap)
-                }}.into_any();
+                }}.into_any().into();
             }
             let description_width = width
                 .saturating_sub(CREDIT_MARKER_WIDTH)
@@ -289,7 +289,7 @@ fn render_detail_row(
             no_label,
             yes_label,
         } => {
-            if let Some(controls)=choices.take() {return controls;}
+            if let Some(controls)=choices.take() {return controls.into();}
             element! {
             View(width:100pct,flex_direction:FlexDirection::Column) {
             codex_router_tui::UiText(content:"1 credit. Cannot undo.".to_owned(),role:codex_router_tui::UiTextRole::Warning,wrap:TextWrap::Wrap)
@@ -302,7 +302,8 @@ fn render_detail_row(
         .into_any()
         },
         ResetDetailRow::Spacer => element! { Text(content: "") }.into_any(),
-    }
+    };
+    content.into()
 }
 
 fn render_styled_text(text: StyledText, width: usize) -> AnyElement<'static> {

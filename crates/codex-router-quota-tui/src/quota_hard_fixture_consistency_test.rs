@@ -198,7 +198,7 @@ async fn hard_fixture_browse_and_captured_details_agree_on_literal_windows() {
             .unwrap()
             .to_string();
         println!("WINDOW ORIGINAL BETA BROWSE:\n{beta}");
-        assert!(beta.contains("75% · week · —") && beta.contains("No data · 5h · —"));
+        assert!(beta.contains("75% · week") && !beta.contains("· —") && !beta.contains("No data"));
         sender.send(provider_filter_key(KeyCode::F(4))).unwrap();
         let frame = super::super::quota_frame_observation::next_current_frame(frames.as_mut())
             .await

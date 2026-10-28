@@ -50,7 +50,13 @@ pub fn quota_account_status(
         return QuotaAccountStatus::Stale;
     }
     if row.freshness == QuotaEvidenceFreshness::Unknown {
-        return QuotaAccountStatus::Unknown;
+        return match row.availability {
+            AccountAvailability::Usable => QuotaAccountStatus::Available,
+            AccountAvailability::Reserve => QuotaAccountStatus::Held,
+            AccountAvailability::Blocked
+            | AccountAvailability::Excluded
+            | AccountAvailability::Unknown => QuotaAccountStatus::Blocked,
+        };
     }
     match quota_human_group(row) {
         QuotaHumanGroup::Preferred => QuotaAccountStatus::Preferred,

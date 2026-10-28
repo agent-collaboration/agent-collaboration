@@ -256,9 +256,11 @@ pub(crate) fn render_account_row(
                     }
                     View(width:u32::try_from(quota_width).unwrap_or(u32::MAX),min_width:0,flex_shrink:0.0_f32,flex_direction:FlexDirection::Column) {
                         Text(content:row.reason.clone(),color:Color::Grey)
-                        codex_router_tui::FormField(label:"Weekly".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:row.weekly_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
-                        codex_router_tui::FormField(label:"5h".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:row.short_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
-                        codex_router_tui::FormField(label:"Weekly pace".to_owned(),label_width:11u16,stacked:quota_width<28) {Text(content:pace_summary,color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)}
+                        codex_router_tui::FormFields(stacked:quota_width<28) {
+                        codex_router_tui::FormField(label:"Weekly".to_owned()) {Text(content:row.weekly_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
+                        codex_router_tui::FormField(label:"5h".to_owned()) {Text(content:row.short_window.clone(),color:Color::White,wrap:TextWrap::Wrap)}
+                        codex_router_tui::FormField(label:"Weekly pace".to_owned()) {Text(content:pace_summary,color:reset_pace_color(row.reset_pace.state),wrap:TextWrap::Wrap)}
+                        }
                     }
                 }
             }
@@ -311,16 +313,16 @@ pub(crate) fn render_selected_details(
     detail_width: usize,
     interactive: bool,
 ) -> AnyElement<'static> {
-    let line = |label: &str, value: &str, color: Color| {
+    let line = |label: &str, value: &str, color: Color| -> codex_router_tui::FormFieldsChild {
         if interactive {
             element! {
-                codex_router_tui::FormField(label:label.to_owned(),label_width:u16::try_from(DETAIL_LABEL_WIDTH).unwrap_or(u16::MAX),stacked:detail_width<32) {
+                codex_router_tui::FormField(label:label.to_owned()) {
                     Text(content:value.to_owned(),color,wrap:TextWrap::Wrap)
                 }
             }
-            .into_any()
+            .into()
         } else {
-            detail_line(label, value, detail_width, color)
+            codex_router_tui::FormFieldsChild::from(detail_line(label, value, detail_width, color))
         }
     };
     let pace_line = |label: &str, pace: &ResetPaceViewModel| {
@@ -331,7 +333,7 @@ pub(crate) fn render_selected_details(
                 reset_pace_color(pace.state),
             )
         } else {
-            reset_pace_detail_line(label, pace, detail_width)
+            reset_pace_detail_line(label, pace, detail_width).into()
         }
     };
     element! {
@@ -342,31 +344,30 @@ pub(crate) fn render_selected_details(
             row_gap: 0,
             padding_top: 0,
         ) {
+            codex_router_tui::FormFields(stacked:detail_width<32) {
             #((!interactive).then(||element!(Text(content:"Selected account",color:Color::Cyan,weight:Weight::Bold)).into_any()))
             #(if interactive {
-                element! {View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-                    #(line("Status",&selected.status,Color::White))
-                    #(line("Reason",&selected.reason,Color::White))
-                }}.into_any()
+                vec![line("Status",&selected.status,Color::White),line("Reason",&selected.reason,Color::White)]
             }else {
-                element!(Text(content:fit_line(&format!("{}    {}    {}",selected.account,selected.status,selected.reason),detail_width),color:Color::White,weight:Weight::Bold,wrap:TextWrap::NoWrap)).into_any()
+                vec![element!(Text(content:fit_line(&format!("{}    {}    {}",selected.account,selected.status,selected.reason),detail_width),color:Color::White,weight:Weight::Bold,wrap:TextWrap::NoWrap)).into_any().into()]
             })
-            #(if interactive { element!(codex_router_tui::UiHeading(content: "Quota windows".to_owned(), level: codex_router_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Quota windows", color: Color::Cyan, weight: Weight::Bold)).into_any() })
-            #(line("weekly", &selected.weekly_window, Color::White))
-            #(line("5h", &selected.short_window, Color::White))
-            #(quota_gap())
-            #(if interactive { element!(codex_router_tui::UiHeading(content: "Reset pace".to_owned(), level: codex_router_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Reset pace", color: Color::Cyan, weight: Weight::Bold)).into_any() })
-            #(pace_line("weekly", &selected.reset_pace))
-            #(line("sample", &sample_metadata_summary(&selected.sample_metadata), Color::White))
-            #(line("rate", &selected.total_rate, Color::White))
-            #(line("conn", &selected.connection_rate, Color::White))
-            #(pace_line("5h", &selected.short_reset_pace))
-            #(quota_gap())
-            #(if interactive { element!(codex_router_tui::UiHeading(content: "Activity".to_owned(), level: codex_router_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Activity", color: Color::Cyan, weight: Weight::Bold)).into_any() })
-            #(line("clients", &selected.active_clients, Color::White))
-            #(line("guards", &selected.guards, Color::White))
-            #(line("reset", &selected.reset, Color::White))
-            #(line("note", &selected.note, Color::Grey))
+            #([if interactive { element!(codex_router_tui::UiHeading(content: "Quota windows".to_owned(), level: codex_router_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Quota windows", color: Color::Cyan, weight: Weight::Bold)).into_any() }])
+            #([line("weekly", &selected.weekly_window, Color::White)])
+            #([line("5h", &selected.short_window, Color::White)])
+            #([quota_gap()])
+            #([if interactive { element!(codex_router_tui::UiHeading(content: "Reset pace".to_owned(), level: codex_router_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Reset pace", color: Color::Cyan, weight: Weight::Bold)).into_any() }])
+            #([pace_line("weekly", &selected.reset_pace)])
+            #([line("sample", &sample_metadata_summary(&selected.sample_metadata), Color::White)])
+            #([line("rate", &selected.total_rate, Color::White)])
+            #([line("conn", &selected.connection_rate, Color::White)])
+            #([pace_line("5h", &selected.short_reset_pace)])
+            #([quota_gap()])
+            #([if interactive { element!(codex_router_tui::UiHeading(content: "Activity".to_owned(), level: codex_router_tui::UiHeadingLevel::Section)).into_any() } else { element!(Text(content: "Activity", color: Color::Cyan, weight: Weight::Bold)).into_any() }])
+            #([line("clients", &selected.active_clients, Color::White)])
+            #([line("guards", &selected.guards, Color::White)])
+            #([line("reset", &selected.reset, Color::White)])
+            #([line("note", &selected.note, Color::Grey)])
+            }
         }
     }
     .into_any()

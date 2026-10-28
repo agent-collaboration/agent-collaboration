@@ -20,7 +20,7 @@ async fn normal_browse_page_positions_reveal_exact_fixture_facts_and_restore_all
         let model = super::super::quota_storyboard_fixture_test::fixture_model();
         assert_eq!(model.rows[0].credit_usage_summary, "62.5k fresh");
         assert_eq!(model.rows[0].reset_pace.semantic_label, "burn unavailable");
-        let expected_pace = "burnunavailable";
+        let expected_pace = "⏳";
         let mut component = element!(QuotaStatusComponent(view_model:model,width,height));
         let frames = component.mock_terminal_render_loop(MockTerminalConfig::with_events(events));
         tokio::pin!(frames);

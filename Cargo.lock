@@ -1529,6 +1529,7 @@ dependencies = [
  "chrono",
  "codex-router-core",
  "codex-router-quota-service",
+ "codex-router-selection",
  "codex-router-tui",
  "crossterm",
  "futures-util",
@@ -1641,6 +1642,7 @@ dependencies = [
  "futures-util",
  "iocraft",
  "tokio",
+ "unicode-width 0.2.2",
 ]
 
 [[package]]

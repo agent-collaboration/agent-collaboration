@@ -111,12 +111,11 @@ pub(crate) fn render_quota_filter_chooser(
         } else {
             element!(QuotaFilterButton(label:format!("{value} ▾"),selected:false,has_focus:draft.focus==field,enabled:true,on_click:move |_|controller.open_choice(field))).into_any()
         };
-        let body=if expanded {body}else {element!(codex_router_tui::SelectableRow(selected:false) {#(body)}).into_any()};
-        element! {codex_router_tui::FormField(label:label.to_owned(),label_width:17u16,stacked:width<52,has_focus:draft.focus==field) {#(body)}}.into_any()
+        element! {codex_router_tui::FormField(label:label.to_owned(),has_focus:draft.focus==field) {#(body)}}
     }).collect::<Vec<_>>();
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            #(fields)
+            codex_router_tui::FormFields(stacked:width<52) {#(fields)}
         }
     }.into_any()
 }

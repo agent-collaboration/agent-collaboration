@@ -606,8 +606,8 @@ mod quota_reset_pty_test {
         )?;
         let click_start = terminal.transcript_len();
         // floor_editor_fits_content_and_separates_sections_at_mock_sizes pins
-        // the rendered increment arrow at zero-based (47, 18) at 120x36.
-        terminal.send_sgr_mouse_left_down(47, 18)?;
+        // the rendered increment arrow at zero-based (46, 18) at 120x36.
+        terminal.send_sgr_mouse_left_down(46, 18)?;
         stage(
             terminal.wait_for_text_after("1%", click_start, SEMANTIC_WAIT),
             "pointer-incremented floor",

@@ -675,7 +675,7 @@ fn quota_status_list_shows_weekly_5h_and_weekly_forecast() {
     assert!(quota_text.contains("runs out 2d 4h"), "{text}");
     let weekly_line = text
         .lines()
-        .find(|line| line.contains("94% weekly"))
+        .find(|line| line.contains("██████████"))
         .unwrap();
     let forecast_line = text.lines().find(|line| line.contains("□□□□□□□│")).unwrap();
     assert_eq!(

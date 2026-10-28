@@ -181,11 +181,12 @@ async fn assert_source_choice_frame(width: usize, height: usize) {
                     assert!(normalized.contains("InteractiveExternalproviderinventoriesrequireAllsourcesSubagentsExternalproviderinventoriesrequireAllsources❯Allsources"), "{frame}");
                     if width >= 48 {
                         assert_eq!(
-                            body.matches("External provider inventories").count(),
+                            normalized
+                                .matches("ExternalproviderinventoriesrequireAllsources")
+                                .count(),
                             2,
                             "{frame}"
                         );
-                        assert_eq!(body.matches("require All sources").count(), 2, "{frame}");
                     }
                     assert!(
                         body.contains("Interactive") && body.contains("Subagents"),

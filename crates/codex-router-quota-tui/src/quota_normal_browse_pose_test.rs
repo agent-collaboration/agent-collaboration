@@ -10,7 +10,7 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
 };
 
-const FACTS: [&str; 3] = ["62.5k credits", "Weekly pace", "burn unavailable"];
+const FACTS: [&str; 3] = ["62.5k credits", "Weekly pace", "⏳"];
 
 fn body_bounds(frame: &str) -> (usize, usize) {
     let rows = frame.lines().collect::<Vec<_>>();
@@ -52,14 +52,12 @@ where
     let bottom = super::super::quota_frame_observation::next_matching_frame(
         frames.as_mut(),
         Duration::from_secs(2),
-        |canvas| normalized_body(canvas).as_slice() == &reference_rows[32..36],
+        |canvas| normalized_body(canvas).as_slice() == &reference_rows[31..35],
     )
     .await
     .unwrap();
     let bottom_rows = normalized_body(&bottom);
-    for literal in ["Credits unknown", "2 resets"] {
-        assert!(bottom_rows.iter().any(|(_, text)| text == literal));
-    }
+    assert!(bottom_rows.iter().any(|(_, text)| text == "2 resets"));
     println!("NORMAL SHORT SATURATED BOTTOM:\n{bottom}");
     for _ in 0..reverse_page_count {
         sender.send(provider_filter_key(KeyCode::PageUp)).unwrap();
@@ -67,7 +65,11 @@ where
     let mut canvas = super::super::quota_frame_observation::next_matching_frame(
         frames.as_mut(),
         Duration::from_secs(2),
-        |canvas| normalized_body(canvas).as_slice() == &reference_rows[16..20],
+        |canvas| {
+            normalized_body(canvas).as_slice()
+                == &reference_rows[reference_rows.len() - 4 - reverse_page_count * 4
+                    ..reference_rows.len() - reverse_page_count * 4]
+        },
     )
     .await
     .unwrap();
@@ -79,7 +81,7 @@ where
                 6,
             )))
             .unwrap();
-        let start = 16 - step * 3;
+        let start = reference_rows.len() - 4 - reverse_page_count * 4 - step * 3;
         canvas = super::super::quota_frame_observation::next_matching_frame(
             frames.as_mut(),
             Duration::from_secs(2),
@@ -160,17 +162,21 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
     let reference_rows = normalized_body(&reference_canvas);
     assert_eq!(
         reference_rows.len(),
-        36,
+        35,
         "independent natural row count: {reference_rows:?}"
     );
     assert_eq!(reference_rows[10], (true, "Weekly pace".to_owned()));
-    assert_eq!(reference_rows[12], (true, "burn unavailable".to_owned()));
+    assert_eq!(reference_rows[12], (true, "⏳".to_owned()));
     assert_eq!(reference_rows[13], (true, "Extra".to_owned()));
     assert_eq!(reference_rows[15], (true, "62.5k credits".to_owned()));
     assert_eq!(reference_rows[16], (true, "2 resets".to_owned()));
     assert_eq!(reference_rows[32], (false, "Extra".to_owned()));
-    assert_eq!(reference_rows[34], (false, "Credits unknown".to_owned()));
-    assert_eq!(reference_rows[35], (false, "2 resets".to_owned()));
+    assert_eq!(reference_rows[34], (false, "2 resets".to_owned()));
+    assert!(
+        !reference_rows
+            .iter()
+            .any(|(_, text)| text == "Credits unknown")
+    );
 
     let (sender, receiver) = tokio::sync::mpsc::unbounded_channel();
     let events = futures_util::stream::unfold(receiver, |mut receiver| async {
@@ -192,8 +198,8 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
             "{initial}"
         );
         for (reverse_page_count, wheel_steps, reference_row_slice, literals) in [
-            (4, 1, 13..17, &["Extra", "62.5k credits", "2 resets"][..]),
-            (4, 2, 10..14, &["Weekly pace", "burn unavailable"][..]),
+            (3, 2, 13..17, &["Extra", "62.5k credits", "2 resets"][..]),
+            (3, 3, 10..14, &["Weekly pace", "⏳"][..]),
         ] {
             let pose_canvas = reach_normal_short_group(
                 &sender,

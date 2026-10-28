@@ -164,10 +164,10 @@ fn render_structured_details(
 ) -> AnyElement<'static> {
     let field = |label: &str, value: String, secondary: bool| {
         element! {
-        codex_router_tui::FormField(label:label.to_owned(),label_width:18u16,stacked:width<52) {
-            codex_router_tui::UiText(content:value,role:if secondary {codex_router_tui::UiTextRole::Secondary}else {codex_router_tui::UiTextRole::Body},wrap:TextWrap::Wrap)
+            codex_router_tui::FormField(label:label.to_owned()) {
+                codex_router_tui::UiText(content:value,role:if secondary {codex_router_tui::UiTextRole::Secondary}else {codex_router_tui::UiTextRole::Body},wrap:TextWrap::Wrap)
+            }
         }
-    }.into_any()
     };
     let mut fields = vec![field("Session ID:", record.session_id.clone(), false)];
     if record.identity.is_provider() {
@@ -227,7 +227,7 @@ fn render_structured_details(
     };
     element! {
         View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
-            #(fields)
+            codex_router_tui::FormFields(stacked:width<52) {#(fields)}
             UiHeading(content:"Original title",level:UiHeadingLevel::Section)
             codex_router_tui::UiText(content:if record.full_title.is_empty() {record.title.clone()}else {record.full_title.clone()},role:codex_router_tui::UiTextRole::Body,wrap:TextWrap::Wrap)
             UiHeading(content:"Conversation",level:UiHeadingLevel::Section)
