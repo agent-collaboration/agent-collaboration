@@ -73,6 +73,13 @@ filter = "package(=collaboration-service) & (test(=mail_push_delivery::tests::lo
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# Snapshot-install restart journeys own parent/child processes and real receivers.
+# Reserve their scheduling window without changing any step deadline.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(collaboration_runtime::board_composition::tests::claim_restart::)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # Real local Host/central journeys run in the required slower CI job.
 [[profile.ci.overrides]]
 filter = "binary(/^(board_records_e2e|board_central_e2e|local_mail_e2e|board_takeover_e2e|messaging_rules_e2e|installation_directory_e2e|mail_reconcile_e2e|mail_retirement_e2e|upgrade_binary_e2e|forwarding_real_timer)$/)"
