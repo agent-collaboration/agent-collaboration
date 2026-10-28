@@ -25,7 +25,7 @@ fn runtime_inputs(directory: &Path) -> CollaborationRuntimeInputs {
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn fixture_provider(directory: &Path) -> std::path::PathBuf {
     let executable = directory.join("fixture-provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &executable,
         "host-composition-agent.ts",
         &serde_json::json!({"mode":"startup"}),
@@ -123,7 +123,7 @@ async fn failed_initialize_isolated_from_other_provider() {
         .expect("private root");
     let cursor = fixture_provider(root.path());
     let failing = root.path().join("failing-provider.ts");
-    codex_router_test_support::node_fixture::write_node_fixture(
+    node_test_fixture::write_node_fixture(
         &failing,
         "host-composition-agent.ts",
         &serde_json::json!({"mode":"failure"}),

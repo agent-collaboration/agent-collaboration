@@ -1,11 +1,7 @@
 //! A lost API response after transmission preserves inspect-before-retry evidence.
 use serde_json::{Value, json};
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod fake_api_support;
+use agent_session_inventory::test_support::fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";

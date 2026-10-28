@@ -187,9 +187,11 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
             crate::DialogButton(handler:move |_|if available && enabled { handler(key.clone()); }) {
                 View(width:100pct,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
                     SelectableRow(selected) {
-                        Text(content:label,color:if !available { Color::Grey } else if selected { Color::Yellow } else { Color::White })
+                        MixedText(contents:vec![
+                            MixedTextContent::new(label).color(if !available { Color::Grey } else if selected { Color::Yellow } else { Color::White }),
+                            MixedTextContent::new(reason.map(|reason|format!(" {reason}")).unwrap_or_default()).color(Color::Grey),
+                        ],wrap:TextWrap::Wrap)
                         #(secondary.map(|content|element!(Text(content,color:Color::Grey))))
-                        #(reason.map(|content|element!(Text(content,color:Color::Grey))))
                     }
                 }
             }
@@ -198,10 +200,10 @@ pub fn SearchSelect<TKey: Clone + Eq + Send + Sync + 'static>(
     element! {
         View(flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) {
             crate::FocusReveal(has_focus:reveal_empty) {
-                View(padding_left:2) { Text(content:format!("Search: {query}▏"),color:crate::UiTextRole::Label.color(),wrap:TextWrap::Wrap) }
-                #(rows.is_empty().then(||element!(View(padding_left:2) {Text(content:"No matching choices",color:Color::Grey,wrap:TextWrap::Wrap)})))
+                Text(content:format!("Search: {query}▏"),color:crate::UiTextRole::Label.color(),wrap:TextWrap::Wrap)
+                #(rows.is_empty().then(||element!(Text(content:"No matching choices",color:Color::Grey,wrap:TextWrap::Wrap))))
             }
-            View(padding_left:4,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) { #(rows) }
+            View(padding_left:2,flex_direction:FlexDirection::Column,flex_shrink:0.0_f32) { #(rows) }
         }
     }
     .into_any()

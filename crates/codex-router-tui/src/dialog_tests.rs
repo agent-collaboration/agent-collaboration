@@ -345,8 +345,10 @@ fn default_frames_keep_header_and_actions_usable_at_supported_and_constrained_si
 fn form_field_columns_use_terminal_layout_for_wide_labels() {
     let frame = element! {
         View(width:40,flex_direction:FlexDirection::Column) {
-            FormField(label:"機械".to_owned(),label_width:8u16) {Text(content:"Sunbook")}
-            FormField(label:"Folder".to_owned(),label_width:8u16) {Text(content:"/repo")}
+          crate::FormFields {
+            FormField(label:"機械".to_owned()) {Text(content:"Sunbook")}
+            FormField(label:"Folder".to_owned()) {Text(content:"/repo")}
+          }
         }
     }
     .to_string();
@@ -355,7 +357,7 @@ fn form_field_columns_use_terminal_layout_for_wide_labels() {
         let prefix = line
             .get(..line.find(label).unwrap())
             .expect("matched label starts at UTF-8 boundary");
-        // The CJK label occupies four cells, with four remaining label cells and a two-cell gap.
+        // Folder is the widest label (six cells), followed by the gap and value gutter.
         let cells = prefix
             .chars()
             .map(|character| if "機械".contains(character) { 2 } else { 1 })

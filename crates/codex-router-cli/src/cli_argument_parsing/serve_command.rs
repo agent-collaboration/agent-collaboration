@@ -3,7 +3,6 @@
 use super::super::CliError;
 use super::super::DEFAULT_CHATGPT_BACKEND_BASE_URL;
 use super::super::DEFAULT_MAX_SNAPSHOT_AGE_SECONDS;
-use super::super::DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS;
 use super::super::DEFAULT_ROUTER_PORT;
 use super::super::DEFAULT_SESSION_PIN_IDLE_TTL_SECONDS;
 use super::super::default_router_root;
@@ -14,6 +13,7 @@ use super::parse_u64_option;
 use super::parse_usize_option;
 use codex_router_core::route_profile::ClaudeFiveHourReservePercent;
 use codex_router_core::route_profile::DEFAULT_CLAUDE_FIVE_HOUR_RESERVE_PERCENT;
+use codex_router_quota_service::quota::quota_refresh_service::DEFAULT_QUOTA_REFRESH_INTERVAL_SECONDS;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 

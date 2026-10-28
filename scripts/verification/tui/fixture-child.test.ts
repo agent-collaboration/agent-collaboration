@@ -33,7 +33,7 @@ afterEach(() => {
 });
 
 const COMPONENT_ARGUMENTS = [
-	'presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture',
+	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture',
 	'--exact',
 	'--ignored',
 	'--nocapture',

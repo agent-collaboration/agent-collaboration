@@ -1,8 +1,7 @@
 //! Vendor-shaped fixtures cross the actual child/decoder; no vendor is invoked.
 use super::*;
+use node_test_fixture as node_fixture;
 use serde_json::{Value, json};
-#[path = "../../codex-router-test-support/src/node_fixture.rs"]
-mod node_fixture;
 
 fn job(state: &str) -> Value {
     json!({"kind":"background","id":"job-handle-42","sessionId":"00000000-0000-4000-8000-000000000042","cwd":"/source/project","startedAt":1790162100123_i64,"state":state,"name":"Before first prompt"})

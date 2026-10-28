@@ -1,5 +1,5 @@
 use super::*;
-use crate::quota::QuotaWindowHeadroom;
+use codex_router_quota_service::quota::QuotaWindowHeadroom;
 
 struct ReversedResponsesRefreshProvider {
     older_responses_read_started: tokio::sync::Notify,
@@ -58,12 +58,15 @@ impl QuotaRefreshProvider for ReversedResponsesRefreshProvider {
     async fn fetch_quota(
         &self,
         request: QuotaRefreshProviderRequest,
-    ) -> Result<QuotaRefreshProviderResponse, QuotaCommandError> {
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
         match (request.base_url(), request.route_band()) {
             ("older-run", "responses") => {
                 self.older_responses_read_started.notify_one();
                 self.allow_older_responses_failure.notified().await;
-                Err(QuotaCommandError::ProviderStatus { status: 429 })
+                Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderStatus { status: 429 })
             }
             ("newer-run", "responses") => Ok(Self::quota_response("responses")),
             ("newer-run", "models") => {
@@ -113,7 +116,7 @@ async fn older_responses_provider_failure_cannot_replace_newer_service_commit() 
         ),
     );
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let policy_state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     must_ok(
         policy_state
@@ -225,7 +228,7 @@ async fn older_responses_provider_failure_cannot_replace_newer_service_commit() 
 
 struct FixedClaudeQuotaCredentialResolver;
 
-impl crate::credential_runtime::AsyncProviderCredentialResolver
+impl codex_router_quota_service::credential_resolution::AsyncProviderCredentialResolver
     for FixedClaudeQuotaCredentialResolver
 {
     async fn resolve_provider_credentials_async(
@@ -389,7 +392,7 @@ fn quota_refresh_http_provider_fetches_usage_and_persists_sqlite_state() {
         }
     });
     let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+        contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     let provider = must_ok(HttpQuotaRefreshProvider::new());
     let mut stdout = Vec::new();
 

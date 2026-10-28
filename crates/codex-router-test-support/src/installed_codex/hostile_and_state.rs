@@ -263,7 +263,7 @@ pub(super) fn reset_fixture_route_band_state(
 ) -> Result<(), String> {
     let mut command = Command::new("node");
     command
-        .arg(crate::node_fixture::fixture_program(
+        .arg(node_test_fixture::fixture_program(
             "sqlite-pressure-agent.ts",
         ))
         .arg("reset")
