@@ -1,8 +1,10 @@
+#[cfg(debug_assertions)]
+use super::ClaudeUpstreamEndpoint;
 use super::{
     Arc, AsyncHttpAffinityOwnerRecorder, AsyncLoopbackServerRuntime,
     AsyncProxyCredentialResolverFactory, AsyncSqliteStateStore, AtomicU64, AuditFileSink,
     CancellationToken, ClaudeEdgeRuntimeConfig, ClaudeFiveHourReservePercent,
-    ClaudeUpstreamEndpoint, CredentialStoreAvailability, DEFAULT_CLAUDE_FIVE_HOUR_RESERVE_PERCENT,
+    CredentialStoreAvailability, DEFAULT_CLAUDE_FIVE_HOUR_RESERVE_PERCENT,
     DEFAULT_SESSION_PIN_IDLE_TTL, DbWriteActor, DbWriteAffinityOwnerRecorder, Duration,
     HyperHttpUpstreamTransport, JoinSet, LocalAuthReloader, LocalRouterAuth,
     LocalRouterTokenRecord, LoopbackBindAddress, LoopbackProtocolConnectionHandler,

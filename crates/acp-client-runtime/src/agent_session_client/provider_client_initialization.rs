@@ -1,7 +1,9 @@
 //! Public initialization entry points for one ACP provider connection.
 
+#[cfg(any(test, feature = "test-observation"))]
+use super::Duration;
 use super::{
-    AgentSessionClient, Arc, Duration, ExternalProviderLaunch, ExternalProviderRuntimeError,
+    AgentSessionClient, Arc, ExternalProviderLaunch, ExternalProviderRuntimeError,
     INITIALIZE_TIMEOUT, InteractionPort, McpServer, McpServerHttp, SessionEventSink,
 };
 
