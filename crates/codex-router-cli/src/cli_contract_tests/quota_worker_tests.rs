@@ -193,11 +193,17 @@ fn background_quota_refresh_worker_uses_fresh_time_for_each_cycle() {
 #[test]
 fn background_quota_refresh_cycle_delay_subtracts_elapsed_work() {
     assert_eq!(
-        crate::quota::refresh_cycle_delay(Duration::from_secs(180), Duration::from_secs(17),),
+        codex_router_quota_service::quota::refresh_cycle_delay(
+            Duration::from_secs(180),
+            Duration::from_secs(17),
+        ),
         Duration::from_secs(163)
     );
     assert_eq!(
-        crate::quota::refresh_cycle_delay(Duration::from_secs(180), Duration::from_secs(181),),
+        codex_router_quota_service::quota::refresh_cycle_delay(
+            Duration::from_secs(180),
+            Duration::from_secs(181),
+        ),
         Duration::ZERO
     );
 }

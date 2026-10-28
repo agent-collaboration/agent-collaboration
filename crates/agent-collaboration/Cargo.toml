@@ -9,13 +9,15 @@ publish.workspace = true
 workspace = true
 
 [features]
-quota-reset-test-harness = ["dep:sqlx"]
+quota-reset-test-harness = ["dep:sqlx", "agent-session-picker/quota-reset-test-harness"]
 
 [[bin]]
 name = "agent-sessions"
 path = "src/bin/agent-sessions.rs"
 
 [dependencies]
+agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory" }
+agent-session-picker = { version = "0.1.105", path = "../agent-session-picker" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 chrono.workspace = true
@@ -44,6 +46,8 @@ tokio = { workspace = true, features = ["io-std", "fs"] }
 unicode-width.workspace = true
 
 [dev-dependencies]
+agent-session-inventory = { version = "0.1.105", path = "../agent-session-inventory", features = ["test-support"] }
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }

@@ -259,7 +259,7 @@ impl RegistryCase {
         let bin = root.join("bin");
         std::fs::create_dir(&bin)?;
         let claude = bin.join("claude");
-        codex_router_test_support::node_fixture::write_node_fixture(
+        node_test_fixture::write_node_fixture(
             &claude,
             "native-cli-catalogue-agent.ts",
             &serde_json::json!({"kind":"text","text":"[]"}),

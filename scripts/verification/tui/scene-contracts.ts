@@ -9,7 +9,7 @@ export const viewports: readonly TerminalViewport[] = [
 	{ columns: 32, rows: 24 },
 ];
 export const componentFixtureTest =
-	'presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
+	'quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';
 export const captureTest = 'compiled_compact_current_storyboard_exports_both_real_tuis';
 export const quotaCaptureTest = 'compiled_compact_current_quota_storyboard_exports_real_tui';
 export const sessionsCaptureTest = 'compiled_compact_current_sessions_storyboard_exports_real_tui';

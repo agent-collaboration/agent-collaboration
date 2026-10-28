@@ -149,7 +149,7 @@ async fn assert_delayed_initial_failure_preserves_newer_authority(successful_gen
     }
     {
         let resolver_state = must_ok(SqliteStateStore::open(&state_path));
-        let newer_resolver = RouterCredentialResolver::new(
+        let newer_resolver = contract_credential_resolver(
             &resolver_state,
             &secrets,
             NoopCredentialRefreshClient,
@@ -198,7 +198,7 @@ async fn assert_delayed_initial_failure_preserves_newer_authority(successful_gen
     assert!(
         matches!(
             older_result,
-            Err(crate::quota::QuotaCommandError::ProviderResponse { .. })
+            Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderResponse { .. })
         ),
         "the older initial resolver error must make its refresh command fail"
     );
@@ -426,7 +426,9 @@ async fn newer_initial_resolver_failure_stales_quota_and_suppresses_credit() {
         .expect("failed refresh must join");
     assert!(matches!(
         result,
-        Err(crate::quota::QuotaCommandError::ProviderResponse { .. })
+        Err(
+            codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderResponse { .. }
+        )
     ));
     stop_server.notify_one();
     assert_eq!(provider_server.await.expect("fixture must join"), 4);
@@ -549,7 +551,7 @@ async fn assert_initial_success_generation_handling(returned_generation: u64) {
     } else {
         assert!(matches!(
             result,
-            Err(crate::quota::QuotaCommandError::ProviderResponse { .. })
+            Err(codex_router_quota_service::quota_service_error::QuotaServiceError::ProviderResponse { .. })
         ));
         assert_eq!(
             request_count, 0,

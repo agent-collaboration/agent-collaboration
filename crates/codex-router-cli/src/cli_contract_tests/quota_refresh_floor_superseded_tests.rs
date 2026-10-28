@@ -1,6 +1,6 @@
 use super::*;
-use crate::quota::QuotaRefreshSchedule;
 use codex_router_core::credit_usage::CreditProviderObservation;
+use codex_router_quota_service::quota::QuotaRefreshSchedule;
 use codex_router_state::credit_store::ResponsesRefreshSuccessCommit;
 use codex_router_state::quota_snapshot::QuotaHistoryRefreshOutcome;
 
@@ -72,13 +72,15 @@ fn provider_response_with_weekly_percent(
         windows: vec![
             QuotaRefreshProviderWindow {
                 limit_window_seconds: 18_000,
-                headroom: crate::quota::QuotaWindowHeadroom::Percent(80),
+                headroom: codex_router_quota_service::quota::QuotaWindowHeadroom::Percent(80),
                 reset_unix_seconds: Some(18_000),
                 effective: true,
             },
             QuotaRefreshProviderWindow {
                 limit_window_seconds: 604_800,
-                headroom: crate::quota::QuotaWindowHeadroom::Percent(weekly_remaining_percent),
+                headroom: codex_router_quota_service::quota::QuotaWindowHeadroom::Percent(
+                    weekly_remaining_percent,
+                ),
                 reset_unix_seconds: Some(604_800),
                 effective: true,
             },
@@ -165,7 +167,10 @@ impl QuotaRefreshProvider for SupersededResponsesQuotaProvider {
     async fn fetch_quota(
         &self,
         request: QuotaRefreshProviderRequest,
-    ) -> Result<QuotaRefreshProviderResponse, crate::quota::QuotaCommandError> {
+    ) -> Result<
+        QuotaRefreshProviderResponse,
+        codex_router_quota_service::quota_service_error::QuotaServiceError,
+    > {
         if request.route_band() == "responses" {
             self.response_started.notify_one();
             self.release_response.notified().await;

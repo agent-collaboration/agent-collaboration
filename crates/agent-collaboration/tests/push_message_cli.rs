@@ -2,11 +2,7 @@
 use serde_json::{Value, json};
 use std::{error::Error, ffi::OsString, time::Duration};
 
-#[expect(
-    dead_code,
-    reason = "shared fixture module serves separate integration targets with different helper subsets"
-)]
-mod fake_api_support;
+use agent_session_inventory::test_support::fake_api_support;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
