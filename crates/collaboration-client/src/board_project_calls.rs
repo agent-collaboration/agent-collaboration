@@ -264,16 +264,6 @@ impl CollaborationClient {
         self.board_mutation_call("project_close", request, resource)
             .await
     }
-    pub async fn project_notification_cancel(
-        &self,
-        request: ProjectRequest,
-    ) -> Result<collaboration_protocol::RequestedCancelResult, BoardClientError> {
-        let resource = ResourceIdentity::Project {
-            project_id: request.project_id.clone(),
-        };
-        self.board_mutation_call("project_notification_cancel", request, resource)
-            .await
-    }
     pub async fn fact_record(
         &self,
         request: ProjectRequest,

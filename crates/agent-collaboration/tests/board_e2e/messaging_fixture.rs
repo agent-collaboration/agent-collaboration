@@ -1,7 +1,7 @@
 //! Rule cases borrow the shared Host pair and own only their peer and fault holds.
 use super::owned_host::StoppedHost;
 use super::{central_pair, fixture::BoardFixture};
-use board_central_test_support::{DispatchCallSelector, ObjectAddress, RuntimeControl};
+use board_central_test_support::{ObjectAddress, RuntimeControl};
 use codex_router_test_support::{
     FixtureResult, owned_peer_fixture::PeerFixture, scenario_finalization::run_scenario,
 };
@@ -14,7 +14,6 @@ pub struct MessagingCase<'fixture> {
     pub recipient: &'fixture mut central_pair::SecondHost,
     peer: Option<PeerFixture>,
     target: Option<SessionRef>,
-    held_sources: Vec<ObjectAddress>,
 }
 
 impl MessagingCase<'_> {
@@ -36,14 +35,6 @@ impl MessagingCase<'_> {
         Ok(())
     }
 
-    pub async fn stop_peer(&mut self) -> FixtureResult {
-        self.peer
-            .take()
-            .ok_or("rule peer is already stopped")?
-            .shutdown()
-            .await
-    }
-
     pub fn peer(&mut self) -> FixtureResult<&mut PeerFixture> {
         self.peer.as_mut().ok_or_else(|| "rule peer absent".into())
     }
@@ -60,17 +51,6 @@ impl MessagingCase<'_> {
         ))
     }
 
-    pub fn sender_connection(&self) -> FixtureResult<ObjectAddress> {
-        let service = self
-            .sender
-            .installation
-            .as_ref()
-            .ok_or("sender identity absent")?
-            .service_id
-            .clone();
-        Ok(ObjectAddress::Connection(String::from(service).try_into()?))
-    }
-
     pub async fn control(
         &self,
         source: ObjectAddress,
@@ -81,30 +61,6 @@ impl MessagingCase<'_> {
                 .runtime_control(source, command)
                 .await?,
         )?)
-    }
-
-    pub async fn hold_object_call(
-        &mut self,
-        source: ObjectAddress,
-        destination: ObjectAddress,
-        selected_call: Option<DispatchCallSelector>,
-    ) -> FixtureResult {
-        if !self.held_sources.contains(&source) {
-            self.held_sources.push(source.clone());
-        }
-        let command = match selected_call {
-            Some(call) => RuntimeControl::HoldNextSelectedDispatch { destination, call },
-            None => RuntimeControl::HoldNextDispatch { destination },
-        };
-        self.control(source, command).await?;
-        Ok(())
-    }
-
-    pub async fn resume_object_calls(&mut self, source: ObjectAddress) -> FixtureResult {
-        self.control(source.clone(), RuntimeControl::ResumeDispatch)
-            .await?;
-        self.held_sources.retain(|held| held != &source);
-        Ok(())
     }
 
     pub async fn stop_sender_for_readback(&mut self) -> FixtureResult<StoppedHost> {
@@ -118,11 +74,6 @@ impl MessagingCase<'_> {
 
     async fn finalize(mut self) -> FixtureResult {
         let mut failures = Vec::new();
-        for source in std::mem::take(&mut self.held_sources) {
-            if let Err(error) = self.control(source, RuntimeControl::ResumeDispatch).await {
-                failures.push(format!("resume held object: {error}"));
-            }
-        }
         if let Some(peer) = self.peer.take()
             && let Err(error) = peer.shutdown().await
         {
@@ -147,7 +98,6 @@ where
                 recipient,
                 peer: None,
                 target: None,
-                held_sources: Vec::new(),
             },
             async move |scope: &mut MessagingCase<'_>| {
                 scope.start_peer().await?;

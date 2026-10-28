@@ -208,12 +208,6 @@ pub(super) fn prepare_project(
     command: ProjectCommand,
 ) -> Result<(PreparedBoardCommand, CommandContext), String> {
     match command {
-        ProjectCommand::NotificationCancel(args) => {
-            super::super::board_entity_preparation::file_write(
-                args,
-                super::super::board_entity_preparation::ProjectWriteKind::ProjectNotificationCancel,
-            )
-        }
         ProjectCommand::Show(arguments) => Ok((
             PreparedBoardCommand::ProjectShow(ProjectShowRequest {
                 project_id: parse_uuid_v7(arguments.project_id, "--project-id")?,

@@ -371,7 +371,6 @@ async fn task_graph_operands(
 
 fn direct_operand_keys(request: &ProjectRequest) -> Vec<RecordRef> {
     match &request.operation {
-        BoardOperation::NotificationCancel { .. } => Vec::new(),
         BoardOperation::WorkstreamCreate { workstream_id, .. }
         | BoardOperation::WorkstreamRename { workstream_id, .. }
         | BoardOperation::WorkstreamClose { workstream_id, .. } => {

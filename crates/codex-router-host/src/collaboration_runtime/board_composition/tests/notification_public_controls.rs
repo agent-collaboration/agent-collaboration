@@ -1,4 +1,4 @@
-//! Public project status and requested controls use current roles and native SDK custody.
+//! Public project status follows current roles and native SDK custody.
 use super::*;
 use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_mcp::test_support::ServedCollaborationApi;
@@ -28,8 +28,7 @@ fn assert_accepted(reply: &Value) {
     clippy::panic_in_result_fn,
     reason = "Contract asserts; setup may fail."
 )]
-async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_requester_without_project_writes()
--> Result<(), TestError> {
+async fn project_status_follows_current_lead() -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     let fixture = Box::pin(ProjectNotificationFixture::open(directory.path())).await?;
     let api_root = directory.path().join("public-project-api");
@@ -140,118 +139,6 @@ async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_req
         Some(&json!("notPermitted")),
         "{hidden}"
     );
-    // Queued describes the original seed's SDK custody. The preceding lead
-    // grant also emitted an intent: claiming it appends its HandedOff version,
-    // Request ledger row and frozen handoff. Finish that publisher work before
-    // attributing any project change to the requested controls below.
-    fixture
-        .publisher
-        .wait_project_idle_for_test(&fixture.project)
-        .await;
-    let mut snapshot = writer.store.snapshot().await?;
-    let before = (
-        snapshot.high_water(),
-        snapshot.record_counts().await?,
-        snapshot.mail_handoff_head().await?,
-    );
-    snapshot.finish().await?;
-    let rejected_id = collaboration_protocol::MailItemId::generate();
-    let denied = api
-        .call(
-            "project_notification_cancel",
-            request(
-                &fixture.project,
-                json!({"kind":"session","session":unrelated}),
-                json!({
-                    "kind":"notificationCancel","cancelId":rejected_id,"target":item,
-                }),
-            ),
-        )
-        .await?;
-    assert_eq!(
-        denied.pointer("/error/data/kind"),
-        Some(&json!("roleRequired")),
-        "{denied}"
-    );
-    assert!(
-        fixture
-            .harness
-            .mail
-            .owner
-            .local_cancel_delivery(&rejected_id.as_str().to_owned().try_into()?)
-            .await?
-            .is_none()
-    );
-    let cancel = collaboration_protocol::MailItemId::generate();
-    let command = || {
-        request(
-            &fixture.project,
-            lead_actor.clone(),
-            json!({
-                "kind":"notificationCancel","cancelId":cancel,"target":item,
-            }),
-        )
-    };
-    let first = api.call("project_notification_cancel", command()).await?;
-    assert_eq!(
-        first.pointer("/result/outcome/kind"),
-        Some(&json!("prevented")),
-        "{first}"
-    );
-    let replay = api.call("project_notification_cancel", command()).await?;
-    assert_eq!(
-        first, replay,
-        "a new project request ID must not change the canonical SDK control"
-    );
-    let stored = fixture
-        .harness
-        .mail
-        .owner
-        .local_cancel_delivery(&cancel.as_str().to_owned().try_into()?)
-        .await?
-        .ok_or("requester attribution")?;
-    let by: Identity = serde_json::from_value(lead_actor.clone())?;
-    assert_eq!(
-        stored.attribution,
-        collaboration_mail_protocol::CancelCause::ByRequester { by }
-    );
-    let mut snapshot = writer.store.snapshot().await?;
-    let after = (
-        snapshot.high_water(),
-        snapshot.record_counts().await?,
-        snapshot.mail_handoff_head().await?,
-    );
-    assert_eq!(
-        after, before,
-        "requested control appended a project record, decision or handoff"
-    );
-    let intents = snapshot.records(RecordKind::NotifyIntent).await?;
-    assert!(intents.iter().any(|record| matches!(record, Record::NotifyIntent(intent)
-        if matches!(intent.state(), IntentState::HandedOff { item: original } if original.as_str()==item))),
-        "manual control rewrote the terminal HandedOff intent");
-    snapshot.finish().await?;
-    assert!(
-        fixture
-            .harness
-            .mail
-            .owner
-            .get_push_record(&item.clone().try_into()?)
-            .await?
-            .is_none()
-    );
-    assert!(matches!(
-        fixture
-            .harness
-            .mail
-            .outbox_status(fixture.seed_item)
-            .await?
-            .state,
-        OutboxStatusState::Known {
-            status: DeliveryStatus::Cancelled,
-            ..
-        }
-    ));
-
     assert_accepted(
         &api.call(
             "role_release",
@@ -301,44 +188,9 @@ async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_req
         .await?;
     assert_eq!(
         current.pointer("/result/mail/status/kind"),
-        Some(&json!("cancelled")),
+        Some(&json!("queued")),
         "{current}"
     );
-    let another = collaboration_protocol::MailItemId::generate();
-    let canonical = api
-        .call(
-            "project_notification_cancel",
-            request(
-                &fixture.project,
-                next_actor,
-                json!({"kind":"notificationCancel","cancelId":another,"target":item}),
-            ),
-        )
-        .await?;
-    assert_eq!(
-        canonical, first,
-        "the new lead replaced the SDK's first control identity"
-    );
-    assert!(
-        fixture
-            .harness
-            .mail
-            .owner
-            .local_cancel_delivery(&another.as_str().to_owned().try_into()?)
-            .await?
-            .is_none()
-    );
-    let canonical_stored = fixture
-        .harness
-        .mail
-        .owner
-        .local_cancel_delivery(&cancel.as_str().to_owned().try_into()?)
-        .await?
-        .ok_or("saved requester")?;
-    assert_eq!(canonical_stored.target_item, stored.target_item);
-    assert_eq!(canonical_stored.attribution, stored.attribution);
-    assert_eq!(canonical_stored.outcome, stored.outcome);
-    assert_eq!(canonical_stored.recorded_at, stored.recorded_at);
     drop(writer);
     api.stop().await?;
     fixture.close().await

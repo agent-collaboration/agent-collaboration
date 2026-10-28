@@ -16,8 +16,6 @@ use collaboration_protocol::{
 };
 use interaction_storage::{InteractionStore, PushInboxQuery, StorageError};
 use std::sync::Arc;
-#[path = "message_cancel_operations.rs"]
-mod message_cancel_operations;
 #[path = "message_status_operations.rs"]
 mod message_status_operations;
 
