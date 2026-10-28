@@ -220,6 +220,7 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
     for blocks in [
         vec![],
         vec![text_block("one"), text_block("two")],
+        vec![text_block("task"), resource.clone()],
         vec![resource],
     ] {
         fixture
