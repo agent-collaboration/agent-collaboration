@@ -16,7 +16,9 @@ use crate::provider_prompt_observation::{observe_idle_session_update, read_bound
 use agent_client_protocol::schema::v1::{CancelNotification, PromptRequest};
 use agent_client_protocol::{ActiveSession, Agent, ConnectionTo, JsonRpcMessage, UntypedMessage};
 use serde_json::json;
-use session_event_model::{InputId, LocalCause, SessionEvent, TurnLostReason, TurnOutcome};
+use session_event_model::{
+    InputId, LocalCause, SessionEvent, SessionItem, SessionItemKind, TurnLostReason, TurnOutcome,
+};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_util::sync::CancellationToken;
@@ -165,6 +167,7 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                             continue;
                         }
                         let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
+                        let submitted_text = prompt.single_text().map(str::to_owned);
                         let prompt_request = PromptRequest::new(
                             session.session_id().clone(),
                             prompt.into_blocks(),
@@ -200,7 +203,11 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                         if runtime_handles.event_sink.publish(
                             session.session_id().0.as_ref(),
                             SessionEvent::TurnStarted { turn_id: turn_id.clone(), input_id },
-                        ).is_err() {
+                        ).and_then(|()| publish_submitted_user_item(
+                            runtime_handles.event_sink.as_ref(),
+                            session.session_id().0.as_ref(),
+                            submitted_text,
+                        )).is_err() {
                             runtime_handles.sink_closed.cancel();
                             shutdown.cancel();
                             let _result = reply.send(Err(ExternalProviderRuntimeError::SinkClosed));
@@ -430,6 +437,29 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
             }
         }
     }
+}
+
+// The admitted task is its own history item; provider user-message groups keep their IDs.
+fn publish_submitted_user_item(
+    event_sink: &dyn SessionEventSink,
+    session_id: &str,
+    submitted_text: Option<String>,
+) -> Result<(), crate::EventSinkClosed> {
+    let Some(text) = submitted_text else {
+        return Ok(());
+    };
+    let item_id = uuid::Uuid::now_v7().to_string();
+    event_sink.publish(
+        session_id,
+        SessionEvent::ItemStarted {
+            item: SessionItem {
+                item_id: item_id.clone(),
+                kind: SessionItemKind::UserMessage,
+                text: Some(text),
+            },
+        },
+    )?;
+    event_sink.publish(session_id, SessionEvent::ItemCompleted { item_id })
 }
 
 async fn steer_provider_turn<P: InteractionPort>(
