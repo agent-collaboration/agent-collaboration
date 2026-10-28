@@ -27,7 +27,7 @@ async fn stop_owned_host(owned: Option<BoardHost>) -> FixtureResult {
 
 #[test]
 fn a_port_report_cannot_permit_any_protected_actual_listener() {
-    for port in [8787, 8788, 19741, 19742, 43127] {
+    for port in [8787, 8788, 19741, 19742, 19743, 43127] {
         assert_eq!(protected_listener_port(port, 45000), Some(port));
         assert_eq!(protected_listener_port(45000, port), Some(port));
     }
@@ -72,7 +72,7 @@ async fn a_protected_ready_port_is_joined_before_a_new_host_is_accepted() -> Fix
             let port = reqwest::Url::parse(&accepted.mcp_url)?.port();
             assert!(!matches!(
                 port,
-                None | Some(8787 | 8788 | 19741 | 19742 | 43127)
+                None | Some(8787 | 8788 | 19741 | 19742 | 19743 | 43127)
             ));
             Ok(())
         },

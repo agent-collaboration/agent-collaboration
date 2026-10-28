@@ -48,6 +48,8 @@ pub use fleet_enrollment_file::{
     open_fleet_enrollment_store, persist_fleet_enrollment, read_fleet_enrollment_document,
 };
 mod host_configuration;
+mod host_port_selection;
+pub use host_port_selection::{HostPortSelection, HostPortSource, SelectedHostPort};
 mod host_replacement_activation;
 mod host_singleton_authority;
 mod lifecycle_owner;

@@ -15,9 +15,13 @@ use thiserror::Error;
 
 use crate::CliContext;
 use operator_client::OperatorClientError;
+use port_configuration::{HostPortOverrides, resolve_host_ports};
 
 mod foreground_launch;
 pub(crate) mod operator_client;
+mod port_configuration;
+#[cfg(test)]
+mod port_configuration_tests;
 mod provider_launch_configuration;
 pub(crate) mod replacement_outcome;
 #[cfg(test)]
@@ -67,7 +71,8 @@ pub(crate) struct HostCommand {
     router_root: Option<PathBuf>,
     port: Option<u16>,
     mcp_bind: Option<SocketAddr>,
-    remote_access: Option<codex_router_host::RemoteAccess>,
+    remote_access: Option<RemoteAccessMode>,
+    tailscale_https_port: Option<std::num::NonZeroU16>,
     provider_operation_retention_days: std::num::NonZeroU32,
     claude_acp_executable: Option<PathBuf>,
     claude_acp_arguments: Vec<String>,
@@ -92,13 +97,8 @@ impl HostCommand {
             router_root: parsed.router_root,
             port: parsed.port,
             mcp_bind: parsed.mcp_bind,
-            remote_access: parsed.remote_access.map(|mode| match mode {
-                RemoteAccessMode::Tailscale => codex_router_host::RemoteAccess::tailscale(
-                    parsed
-                        .tailscale_https_port
-                        .unwrap_or(DEFAULT_TAILSCALE_HTTPS_PORT),
-                ),
-            }),
+            remote_access: parsed.remote_access,
+            tailscale_https_port: parsed.tailscale_https_port,
             provider_operation_retention_days: parsed.provider_operation_retention_days,
             claude_acp_executable: parsed.claude_acp_executable,
             claude_acp_arguments: parsed.claude_acp_arguments,
@@ -115,8 +115,12 @@ impl HostCommand {
         }
     }
 
-    fn effective_mcp_bind(&self, isolated_debug: bool) -> SocketAddr {
-        self.mcp_bind.unwrap_or(default_mcp_bind(isolated_debug))
+    fn port_overrides(&self) -> HostPortOverrides {
+        HostPortOverrides {
+            router: self.port,
+            mcp_bind: self.mcp_bind,
+            tailscale_https: self.tailscale_https_port,
+        }
     }
 
     #[cfg(test)]
@@ -183,7 +187,9 @@ struct ClapHostCommand {
 }
 
 const DEFAULT_TAILSCALE_HTTPS_PORT: std::num::NonZeroU16 =
-    std::num::NonZeroU16::new(8443).expect("positive Tailscale HTTPS default");
+    std::num::NonZeroU16::new(19743).expect("positive Tailscale HTTPS default");
+const DEBUG_TAILSCALE_HTTPS_PORT: std::num::NonZeroU16 =
+    std::num::NonZeroU16::new(18789).expect("positive debug Tailscale HTTPS default");
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, clap::ValueEnum)]
 enum RemoteAccessMode {
@@ -231,6 +237,13 @@ pub(crate) async fn run_host_command<W: Write + Send>(
     );
     let coordination_paths = HostCoordinationPaths::for_router_root(&router_root);
     if command.runs_foreground() {
+        let port_overrides = command.port_overrides();
+        let ports = resolve_host_ports(&router_root, launch_mode.is_isolated(), port_overrides)?;
+        let remote_access = command.remote_access.map(|mode| match mode {
+            RemoteAccessMode::Tailscale => {
+                codex_router_host::RemoteAccess::tailscale(ports.tailscale_https_port())
+            }
+        });
         let provider_launches = external_provider_launches(&command)?;
         return Box::pin(foreground_launch::run_foreground_host(
             foreground_launch::ForegroundHostInputs {
@@ -238,9 +251,9 @@ pub(crate) async fn run_host_command<W: Write + Send>(
                 router_root,
                 launch_mode,
                 owner_home,
-                port: command.port.unwrap_or(launch_mode.default_port()),
-                mcp_bind: command.effective_mcp_bind(launch_mode.is_isolated()),
-                remote_access: command.remote_access,
+                ports,
+                port_overrides,
+                remote_access,
                 provider_operation_retention_days: command.provider_operation_retention_days,
                 coordination_paths,
                 external_provider_launches: provider_launches,
@@ -411,6 +424,8 @@ const fn operator_request_deadline(action: HostAction) -> Duration {
 
 #[derive(Debug, Error)]
 pub enum HostCommandError {
+    #[error(transparent)]
+    PortConfiguration(#[from] port_configuration::PortConfigurationError),
     #[error("Host restart failed: {0}")]
     RestartFailed(String),
     #[error("Host operation failed: {0}")]
@@ -448,178 +463,4 @@ pub enum HostCommandError {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parsed_host_mcp_bind_resolves_the_effective_launch_input() {
-        let cases = [
-            (
-                "normal omitted bind",
-                Vec::new(),
-                false,
-                SocketAddr::from(([127, 0, 0, 1], 19742)),
-            ),
-            (
-                "isolated debug omitted bind",
-                Vec::new(),
-                true,
-                SocketAddr::from(([127, 0, 0, 1], 18788)),
-            ),
-            (
-                "explicit ephemeral bind",
-                vec![OsString::from("--mcp-bind"), OsString::from("127.0.0.1:0")],
-                false,
-                SocketAddr::from(([127, 0, 0, 1], 0)),
-            ),
-            (
-                "explicit nondefault bind",
-                vec![
-                    OsString::from("--mcp-bind"),
-                    OsString::from("127.0.0.1:19000"),
-                ],
-                false,
-                SocketAddr::from(([127, 0, 0, 1], 19000)),
-            ),
-        ];
-
-        for (case, arguments, isolated_debug, expected_bind) in cases {
-            let cli_arguments = std::iter::once(OsString::from("codex-router"))
-                .chain(std::iter::once(OsString::from("host")))
-                .chain(arguments);
-            let parsed = crate::CliCommand::parse(cli_arguments).expect("Host command parses");
-            let crate::CliCommand::Host(command) = parsed else {
-                panic!("expected parsed Host command, got {parsed:?}");
-            };
-            assert_eq!(
-                command.effective_mcp_bind(isolated_debug),
-                expected_bind,
-                "{case}"
-            );
-        }
-    }
-
-    #[test]
-    fn explicit_host_port_overrides_keep_the_selected_port() {
-        for port in [8787, 9876] {
-            let command = HostCommand::parse(vec![
-                OsString::from("--port"),
-                OsString::from(port.to_string()),
-            ])
-            .expect("explicit Host port");
-
-            assert_eq!(command.port, Some(port));
-        }
-    }
-
-    #[test]
-    fn operator_deadlines_cover_their_owned_lifecycle_bounds() {
-        assert!(
-            operator_request_deadline(HostAction::Restart)
-                > codex_router_host::APP_SERVER_SHUTDOWN_TIMEOUT,
-            "whole-Host restart must outlive the app-server shutdown bound"
-        );
-        assert!(
-            operator_request_deadline(HostAction::AppServer {
-                action: AppServerAction::Restart
-            }) > codex_router_host::APP_SERVER_SHUTDOWN_TIMEOUT,
-            "app-server restart must outlive its complete shutdown bound"
-        );
-        assert!(
-            operator_request_deadline(HostAction::AppServer {
-                action: AppServerAction::Update
-            }) > Duration::from_secs(15 * 60),
-            "update transport must outlive the updater's own deadline"
-        );
-        assert_eq!(
-            replacement_outcome::REPLACEMENT_CONVERGENCE_DEADLINE,
-            Duration::from_secs(40),
-            "replacement convergence starts only after old-host EOF"
-        );
-    }
-
-    #[test]
-    fn provider_launch_arguments_require_and_retain_explicit_executables() {
-        let command = HostCommand::parse(vec![
-            OsString::from("--claude-acp-executable"),
-            OsString::from("/tmp/claude-agent-acp"),
-            OsString::from("--claude-acp-arguments"),
-            OsString::from("--permission-mode"),
-            OsString::from("--cursor-acp-executable"),
-            OsString::from("/tmp/agent"),
-            OsString::from("--cursor-acp-arguments"),
-            OsString::from("acp"),
-        ])
-        .expect("provider launch arguments");
-
-        let launches = external_provider_launches(&command).expect("validated launches");
-        assert_eq!(launches.len(), 2);
-        assert_eq!(launches[0].launch.arguments, vec!["--permission-mode"]);
-        assert_eq!(launches[1].launch.arguments, vec!["acp"]);
-    }
-
-    #[test]
-    fn provider_operation_retention_is_positive_configurable_and_defaults_to_sixty_days() {
-        let default = HostCommand::parse(Vec::new()).expect("default host command");
-        assert_eq!(default.provider_operation_retention_days().get(), 60);
-        let custom = HostCommand::parse(vec![
-            OsString::from("--provider-operation-retention-days"),
-            OsString::from("7"),
-        ])
-        .expect("custom retention");
-        assert_eq!(custom.provider_operation_retention_days().get(), 7);
-        assert!(
-            HostCommand::parse(vec![
-                OsString::from("--provider-operation-retention-days"),
-                OsString::from("0"),
-            ])
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn owner_human_id_override_is_validated_at_cli_boundary() {
-        let command = HostCommand::parse(vec![
-            OsString::from("--owner-human-id"),
-            OsString::from("chosen-owner"),
-        ])
-        .expect("valid owner id");
-        assert_eq!(
-            command
-                .owner_human_id
-                .as_ref()
-                .map(message_board::HumanId::as_str),
-            Some("chosen-owner")
-        );
-        assert!(
-            HostCommand::parse(vec![OsString::from("--owner-human-id"), OsString::from("")])
-                .is_err()
-        );
-    }
-
-    #[test]
-    fn router_root_parent_segment_is_a_typed_error() {
-        assert!(matches!(
-            validate_router_root(Path::new("/tmp/private/../router")),
-            Err(HostCommandError::RouterRootParentSegment)
-        ));
-    }
-
-    #[tokio::test]
-    async fn claude_upstream_override_requires_debug_isolation_before_launch() {
-        let context = CliContext::new(vec![(
-            "CODEX_ROUTER_DEBUG_CLAUDE_UPSTREAM_BASE_URL".to_owned(),
-            "http://127.0.0.1:18888".to_owned(),
-        )]);
-        let command = HostCommand::parse(Vec::new()).expect("default Host command");
-        let error = run_host_command(&mut Vec::new(), command, &context, None)
-            .await
-            .expect_err("a Claude endpoint override requires isolated debug Host mode");
-
-        assert!(matches!(
-            error,
-            HostCommandError::RouterRoot(message)
-                if message == "debug Claude upstream override requires --require-debug-isolation in a debug build"
-        ));
-    }
-}
+mod command_contract_tests;

@@ -19,6 +19,7 @@ pub(super) type StatusObservationFuture =
     Pin<Box<dyn Future<Output = StatusObservation> + Send + 'static>>;
 
 pub(super) struct StatusObservation {
+    port_selection: Option<crate::HostPortSelection>,
     router: RouterCondition,
     app_server: AppServerCondition,
     remote_control: RemoteControlCondition,
@@ -51,7 +52,8 @@ impl StatusObservation {
             router_executable_relation: self.router_executable_relation.clone(),
             recovery_budget: state.recovery_budget,
             last_lifecycle_outcome: state.last_lifecycle_outcome.clone(),
-        });
+        })
+        .with_port_selection(self.port_selection);
         (snapshot, self.pending_identity)
     }
 }
@@ -148,6 +150,7 @@ pub(super) fn observe_status(
         };
 
         StatusObservation {
+            port_selection: config.port_selection(),
             router,
             app_server,
             remote_control,

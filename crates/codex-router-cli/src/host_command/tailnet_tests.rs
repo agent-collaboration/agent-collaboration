@@ -9,19 +9,24 @@ fn parse_host(arguments: &[&str]) -> Result<HostCommand, String> {
 }
 
 #[test]
-fn tailnet_access_accepts_the_mode_and_normalizes_the_default_https_port() {
+fn tailnet_access_accepts_the_mode_and_retains_explicit_port_authority() {
     let implicit_port = parse_host(&["--remote-access", "tailscale"])
         .expect("R1: opt-in Tailscale access is a valid Host launch");
     let explicit_port = parse_host(&[
         "--remote-access",
         "tailscale",
         "--tailscale-https-port",
-        "8443",
+        "19743",
     ])
     .expect("R1: the literal default port is valid");
 
     assert!(implicit_port.runs_foreground());
-    assert_eq!(implicit_port, explicit_port);
+    assert_eq!(implicit_port.remote_access, explicit_port.remote_access);
+    assert_eq!(implicit_port.tailscale_https_port, None);
+    assert_eq!(
+        explicit_port.tailscale_https_port,
+        std::num::NonZeroU16::new(19743)
+    );
     assert_ne!(
         implicit_port,
         parse_host(&[]).expect("existing local-only launch"),
