@@ -50,12 +50,12 @@ use codex_router_quota_service::quota::{
     refresh_quota_with_dependencies, write_quota_json, write_quota_plain,
 };
 use codex_router_quota_tui::quota_status_view_model_loader;
+pub(crate) use quota_command_dispatch::run_quota_command;
+#[cfg(any(test, feature = "quota-reset-test-harness"))]
+pub(crate) use quota_command_dispatch::run_quota_command_with_reset_session_factory;
 #[cfg(test)]
 use quota_command_dispatch::should_run_interactive_quota;
 pub use quota_command_dispatch::{QuotaCommand, QuotaCommandError, QuotaStatusFormat};
-pub(crate) use quota_command_dispatch::{
-    run_quota_command, run_quota_command_with_reset_session_factory,
-};
 use quota_command_options::{QuotaRefreshOptions, QuotaStatusOptions};
 use quota_credential_resources::{QuotaCredentialResources, load_quota_status_report_async};
 pub(crate) use quota_refresh_command::is_allowed_quota_refresh_base_url;
