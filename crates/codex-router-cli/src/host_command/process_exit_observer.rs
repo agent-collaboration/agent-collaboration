@@ -1,7 +1,7 @@
 //! Bounded kernel process-exit waits for a connected operator peer, without polling timers.
 
 use std::io;
-use std::time::Duration;
+use std::time::Instant;
 
 pub(super) struct ProcessExitObserver {
     #[cfg(target_os = "macos")]
@@ -11,10 +11,10 @@ pub(super) struct ProcessExitObserver {
 }
 
 impl ProcessExitObserver {
-    pub(super) async fn wait(self, remaining: Duration) -> io::Result<()> {
+    pub(super) async fn wait(self, deadline: Instant) -> io::Result<()> {
         // These safe syscall wrappers block on the exact process event. Keep the
         // bounded wait off Tokio's executor, and join it before returning.
-        tokio::task::spawn_blocking(move || self.wait_for_exit(remaining))
+        tokio::task::spawn_blocking(move || self.wait_for_exit(deadline))
             .await
             .map_err(io::Error::other)?
     }
@@ -38,7 +38,7 @@ impl ProcessExitObserver {
         Ok(Self { queue })
     }
 
-    fn wait_for_exit(&self, remaining: Duration) -> io::Result<()> {
+    fn wait_for_exit(&self, deadline: Instant) -> io::Result<()> {
         use nix::sys::event::{EventFilter, EventFlag, FilterFlag, KEvent};
         let event = KEvent::new(
             0,
@@ -48,7 +48,6 @@ impl ProcessExitObserver {
             0,
             0,
         );
-        let deadline = std::time::Instant::now() + remaining;
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             let timeout = nix::libc::timespec {
@@ -81,9 +80,8 @@ impl ProcessExitObserver {
         Ok(Self { descriptor })
     }
 
-    fn wait_for_exit(&self, remaining: Duration) -> io::Result<()> {
+    fn wait_for_exit(&self, deadline: Instant) -> io::Result<()> {
         use rustix::event::{PollFd, PollFlags, Timespec, poll};
-        let deadline = std::time::Instant::now() + remaining;
         loop {
             let remaining = deadline.saturating_duration_since(std::time::Instant::now());
             let timeout = Timespec {

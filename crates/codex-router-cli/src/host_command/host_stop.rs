@@ -44,7 +44,7 @@ pub(super) async fn stop_host(
     paths: &HostCoordinationPaths,
     deadline: Duration,
 ) -> Result<HostStopOutcome, HostStopError> {
-    let started = std::time::Instant::now();
+    let deadline_at = std::time::Instant::now() + deadline;
     let exit = tokio::time::timeout(deadline, async {
         let mut stream = match UnixStream::connect(paths.operator_socket()).await {
             Ok(stream) => stream,
@@ -80,15 +80,13 @@ pub(super) async fn stop_host(
     let Some(exit) = exit else {
         return Ok(HostStopOutcome::NotRunning);
     };
-    exit.wait(deadline.saturating_sub(started.elapsed()))
-        .await
-        .map_err(|error| {
-            if error.kind() == io::ErrorKind::TimedOut {
-                HostStopError::Deadline
-            } else {
-                HostStopError::Io(error)
-            }
-        })?;
+    exit.wait(deadline_at).await.map_err(|error| {
+        if error.kind() == io::ErrorKind::TimedOut {
+            HostStopError::Deadline
+        } else {
+            HostStopError::Io(error)
+        }
+    })?;
     require_released_lock(paths.instance_lock())?;
     Ok(HostStopOutcome::Stopped)
 }
