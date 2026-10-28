@@ -25,4 +25,33 @@
 <tr><td>What changes in what order?</td><td><a href="implementation-plan.html">Implementation Plan</a></td></tr>
 </tbody></table></div>
 </ex-document>
+<ex-presentation id="skills-path" title="Skills, end to end" description="Follow the skill need, native contract, provider adaptation and planned proof.">
+<ex-step to="requirements.html#requirements--what-you-need">Start with the skill needs.</ex-step>
+<ex-step to="specification.html#specification--r1-list-the-right-provider-s-skills-c1-v1">Inspect listing and conversation binding.</ex-step>
+<ex-step to="specification.html#specification--r2-run-the-selected-skill-c2-v2">Read invocation and refusal rules.</ex-step>
+<ex-step to="program-design.html#program--the-metadata-gap-handled-at-the-provider-boundary">Inspect metadata adaptation.</ex-step>
+<ex-step to="program-design.html#program--invocation-and-commands">Follow the invocation path.</ex-step>
+<ex-step to="verification-design.html#verification--target-and-shared-journeys">Read the planned observations.</ex-step>
+</ex-presentation>
+<ex-presentation id="commands-path" title="Commands, end to end" description="Follow existing command behavior through its owners and planned observations.">
+<ex-step to="requirements.html#requirements--what-you-need">Start with command and preservation needs.</ex-step>
+<ex-step to="specification.html#specification--r3-map-existing-operations-separately-c3-v3">Read existing operations and unsupported cases.</ex-step>
+<ex-step to="specification.html#specification--r4-preserve-conversations-c4-v4">Read preservation obligations.</ex-step>
+<ex-step to="program-design.html#program--invocation-and-commands">Inspect command ownership.</ex-step>
+<ex-step to="program-design.html#program--state-failure-and-trust">Follow terminal and error behavior.</ex-step>
+<ex-step to="verification-design.html#verification--target-and-shared-journeys">Read the planned effect observations.</ex-step>
+</ex-presentation>
+<ex-presentation id="injection-path" title="Provider injection" description="Follow the shared constraint to the injected trait and its proof.">
+<ex-step to="requirements.html#requirements--what-you-need">Start with provider isolation needs.</ex-step>
+<ex-step to="specification.html#specification--r5-inject-the-differences-keep-one-bridge-c5-v5">Read the shared constraint.</ex-step>
+<ex-step to="program-design.html#program--crates-and-injection">Inspect the trait and crate boundaries.</ex-step>
+<ex-step to="program-design.html#program--why-this-much-and-no-more">Read the structure tradeoff.</ex-step>
+<ex-step to="verification-design.html#verification--u5-provider-rules-stay-replaceable">Inspect its planned proof.</ex-step>
+</ex-presentation>
+<ex-presentation id="implementation-path" title="Implementation route" description="Move from components to the canonical plan, ordered slices and proof map.">
+<ex-step to="program-design.html#program--crates-and-injection">Inspect component ownership.</ex-step>
+<ex-step to="implementation-plan.html#plan--canonical-planning-result">Check plan scope and authority.</ex-step>
+<ex-step to="implementation-plan.html#plan--order-and-integration-gates">Follow the ordered slices.</ex-step>
+<ex-step to="implementation-plan.html#plan--obligation-to-proof-map">Inspect the proof mapping.</ex-step>
+</ex-presentation>
 </body></html>
