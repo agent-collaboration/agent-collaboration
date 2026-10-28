@@ -193,9 +193,11 @@ async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_req
         )
     };
     let first = api.call("project_notification_cancel", command()).await?;
+    // Durable project custody may have been submitted by an earlier holder.
+    // This fixture never starts its mail worker, so remote prevention is pending.
     assert_eq!(
         first.pointer("/result/outcome/kind"),
-        Some(&json!("prevented")),
+        Some(&json!("pending")),
         "{first}"
     );
     let replay = api.call("project_notification_cancel", command()).await?;
@@ -247,7 +249,7 @@ async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_req
             .await?
             .state,
         OutboxStatusState::Known {
-            status: DeliveryStatus::Cancelled,
+            status: DeliveryStatus::Queued,
             ..
         }
     ));
@@ -301,7 +303,7 @@ async fn project_status_and_public_cancel_follow_current_lead_and_keep_first_req
         .await?;
     assert_eq!(
         current.pointer("/result/mail/status/kind"),
-        Some(&json!("cancelled")),
+        Some(&json!("queued")),
         "{current}"
     );
     let another = collaboration_protocol::MailItemId::generate();
