@@ -239,9 +239,37 @@ async fn assert_recovery() -> Result<(), TestError> {
 
     // No board mutation, copy acknowledgement, explicit publisher prompt or
     // unrelated hint follows. This is the actual generic registry renewal reply.
+    let (submission_entered, release_submission) =
+        fixture.harness.transport.observer.hold_next_mail_submit();
     release_renewal
         .send(())
         .map_err(|_| io::Error::other("renewal gate closed"))?;
+    tokio::time::timeout(BOUND, submission_entered)
+        .await
+        .map_err(|_| {
+            io::Error::other("publication after actual renewal did not reach its reply gate")
+        })??;
+    // Observe the initial publication before its NotWriter answer permits an SDK
+    // retry. Later wire attempts are valid replays of the same retained item.
+    let initial_submissions: Vec<_> = fixture
+        .harness
+        .transport
+        .observer
+        .events()
+        .into_iter()
+        .filter_map(|event| match event {
+            transport::WireEvent::MailSubmit(item) => Some(item),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        initial_submissions,
+        vec![fixture.seed_item],
+        "renewal duplicated the initial frozen publication"
+    );
+    release_submission
+        .send(())
+        .map_err(|_| io::Error::other("publication reply gate closed"))?;
     tokio::time::timeout(
         BOUND,
         fixture
@@ -284,8 +312,6 @@ async fn assert_recovery() -> Result<(), TestError> {
         writer.store.writer_state().await?,
         fleet_sync_lease::WriterState::Writing { .. }
     ));
-    let submitted=fixture.harness.transport.observer.events().into_iter().filter(|event|matches!(event,transport::WireEvent::MailSubmit(item) if *item==fixture.seed_item)).count();
-    assert_eq!(submitted, 1, "renewal duplicated the frozen publication");
     let shown = fixture
         .application
         .messages()
@@ -342,6 +368,27 @@ async fn assert_recovery() -> Result<(), TestError> {
             ..
         }
     ));
+    let retry_submissions: Vec<_> = fixture
+        .harness
+        .transport
+        .observer
+        .events()
+        .into_iter()
+        .filter_map(|event| match event {
+            transport::WireEvent::MailSubmit(item) => Some(item),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        retry_submissions.len() >= 2,
+        "lost authority was not observed through an actual retry"
+    );
+    assert!(
+        retry_submissions
+            .iter()
+            .all(|item| *item == fixture.seed_item),
+        "a retry minted another frozen item: {retry_submissions:?}"
+    );
     eprintln!(
         "native renewal recovered one frozen publication; confirmed and lost NotWriter diagnostics: {confirmed:?}; {lost:?}"
     );
