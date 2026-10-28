@@ -91,11 +91,24 @@ impl MailDeliveryRuntime {
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let (admission, operation) =
-                        Outbox::<_, RouterDeliveryTypes>::new(scope, limits)
-                            .enqueue_and_admit::<SubmitMailTask>(item, relay)
+                    let original_id = item.id();
+                    let mut outbox = Outbox::<_, RouterDeliveryTypes>::new(scope, limits);
+                    let (admission, operation) = outbox
+                        .enqueue_and_admit::<SubmitMailTask>(item, relay)
+                        .await
+                        .map_err(delivery_rollback)?;
+                    if matches!(
+                        &admission,
+                        OutboxAdmission::Queued { .. } | OutboxAdmission::Replayed { .. }
+                    ) {
+                        // A frozen project handoff may already be Held under an earlier holder.
+                        // Mark it in this transaction before any cancel can withdraw it locally.
+                        // All project cancels consequently go remote, even before our first submit.
+                        outbox
+                            .mark_submit_attempted(original_id)
                             .await
                             .map_err(delivery_rollback)?;
+                    }
                     #[cfg(test)]
                     if let Some(socket) = probe {
                         pause_project_admission(&socket).await?;

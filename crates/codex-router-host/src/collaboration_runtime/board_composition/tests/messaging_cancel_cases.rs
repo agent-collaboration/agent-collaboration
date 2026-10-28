@@ -28,6 +28,9 @@ async fn lost_custody_receipt_then_takeover_replays_the_batch_and_cancel_without
 #[path = "messaging_cancel_fault_cases.rs"]
 mod fault_selection;
 
+#[path = "messaging_inherited_cancel.rs"]
+mod inherited_cancel;
+
 async fn hold_lost_receipt_submit(
     fixture: &RuleFixture,
     mailbox: ObjectAddress,

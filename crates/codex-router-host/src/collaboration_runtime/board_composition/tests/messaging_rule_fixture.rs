@@ -1,4 +1,5 @@
 //! Native capture and the actual owner path establish each confirmed prefix.
+use super::super::forwarded_notification_fixture::MailWorkerStart;
 use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_conformance::{
@@ -29,6 +30,18 @@ impl RuleFixture {
     pub async fn open(
         holder_notifications: bool,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::open_with_worker(holder_notifications, MailWorkerStart::Immediate).await
+    }
+
+    pub async fn open_with_deferred_successor()
+    -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+        Self::open_with_worker(true, MailWorkerStart::Deferred).await
+    }
+
+    async fn open_with_worker(
+        holder_notifications: bool,
+        worker_start: MailWorkerStart,
+    ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let holder = if holder_notifications {
             Box::pin(claim_fixture::ClaimFixture::start_with_notifications()).await?
         } else {
@@ -50,7 +63,8 @@ impl RuleFixture {
                 .try_into()?,
             machine: "rule successor".to_owned().try_into()?,
         };
-        let successor = Box::pin(RuleMachine::open(&holder, &successor_origin)).await?;
+        let successor =
+            Box::pin(RuleMachine::open(&holder, &successor_origin, worker_start)).await?;
         let client = ConformanceClient::new(holder.central.base_url())?;
         let recipient = enroll_admitted_peer(
             &client,
