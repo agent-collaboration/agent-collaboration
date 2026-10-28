@@ -243,7 +243,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-inventory"
-version = "0.1.105"
+version = "0.1.107"
 dependencies = [
  "axum",
  "chrono",
@@ -277,7 +277,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-picker"
-version = "0.1.105"
+version = "0.1.107"
 dependencies = [
  "agent-session-inventory",
  "codex-native-integration",
@@ -1499,7 +1499,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-service"
-version = "0.1.105"
+version = "0.1.107"
 dependencies = [
  "chrono",
  "codex-router-auth",
@@ -1524,7 +1524,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-tui"
-version = "0.1.105"
+version = "0.1.107"
 dependencies = [
  "chrono",
  "codex-router-core",
@@ -4330,7 +4330,7 @@ dependencies = [
 
 [[package]]
 name = "node-test-fixture"
-version = "0.1.105"
+version = "0.1.107"
 dependencies = [
  "serde_json",
 ]
