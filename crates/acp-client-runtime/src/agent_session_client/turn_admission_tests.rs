@@ -22,7 +22,7 @@ const CANCELLED_PROMPT_ORDER_FIXTURE: &str = concat!(
     "/../../verification/fixtures/provider-failed-turn-agent.ts"
 );
 
-struct NoopInteractionPort;
+pub(super) struct NoopInteractionPort;
 impl InteractionPort for NoopInteractionPort {
     type Context = ();
     type OperationId = u64;
@@ -250,13 +250,28 @@ async fn ready_cancelled_turn_update_is_not_a_successor_turn_item() {
         })
         .expect("actual late item projected before successor admission");
     let successor_items = &observed[second_start..];
+    let submitted = successor_items
+        .iter()
+        .find_map(|event| match event {
+            SessionEvent::ItemStarted { item }
+                if item.kind == session_event_model::SessionItemKind::UserMessage =>
+            {
+                Some(item)
+            }
+            _ => None,
+        })
+        .expect("successor submitted task");
+    assert_eq!(submitted.text.as_deref(), Some("next"));
+    assert!(successor_items.iter().any(|event| matches!(event,
+        SessionEvent::ItemCompleted { item_id } if item_id == &submitted.item_id)));
     assert!(successor_items.iter().any(|event| matches!(event,
         SessionEvent::ItemStarted { item }
             if item.text.as_deref() == Some("CURRENT_OUTPUT") && item.item_id != late_item.item_id)),
         "successor must start a new CURRENT_OUTPUT item; actual events: {successor_items:?}");
     assert!(!successor_items.iter().any(|event| matches!(event,
         SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
-            if item.item_id == late_item.item_id || item.text.as_deref() != Some("CURRENT_OUTPUT"))),
+            if item.item_id == late_item.item_id ||
+                (item.item_id != submitted.item_id && item.text.as_deref() != Some("CURRENT_OUTPUT")))),
         "late item identity or prefix crossed successor admission: {successor_items:?}");
     assert!(
         !successor_items.iter().any(|event| matches!(event,
