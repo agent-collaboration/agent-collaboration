@@ -44,7 +44,7 @@ test.each(['none', 'source', 'artifact'])(
 		const fixture = controlledExecutable(
 			root,
 			'component-fixture',
-			`const name='presentation::quota::quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';process.stdout.write(name+': test\\n');`,
+			`const name='quota_browse_presentation_test::quota_storyboard_fixture_test::compiled_quota_component_storyboard_fixture';process.stdout.write(name+': test\\n');`,
 		);
 		// This real controlled driver implements only libtest discovery/publication.
 		// Real target hashes, Git enumeration, collection and post-run validation stay real.

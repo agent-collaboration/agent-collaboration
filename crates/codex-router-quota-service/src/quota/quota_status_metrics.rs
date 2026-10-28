@@ -192,6 +192,6 @@ pub fn quota_guard_bucket(guard_deficit: u32) -> &'static str {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "quota-reset-test-harness"))]
 #[path = "quota_status_metrics_diagnostic_tests.rs"]
 mod diagnostic_tests;

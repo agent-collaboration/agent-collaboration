@@ -1,5 +1,5 @@
 use super::*;
-#[cfg(feature = "quota-reset-test-harness")]
+
 #[test]
 fn storyboard_quota_diagnostics_omit_error_payloads() {
     let path = std::env::temp_dir().join(format!("quota-diagnostic-{}.log", std::process::id()));

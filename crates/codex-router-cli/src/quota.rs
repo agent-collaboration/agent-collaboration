@@ -38,7 +38,7 @@ use codex_router_quota_tui::WeeklyQuotaFloorSaveError;
 use codex_router_quota_tui::WeeklyQuotaFloorSaver;
 use codex_router_quota_tui::run_quota_status_view;
 
-mod quota_command_dispatch;
+pub(crate) mod quota_command_dispatch;
 mod quota_command_options;
 mod quota_credential_resources;
 mod quota_refresh_command;
@@ -51,8 +51,6 @@ use codex_router_quota_service::quota::{
 };
 use codex_router_quota_tui::quota_status_view_model_loader;
 pub(crate) use quota_command_dispatch::run_quota_command;
-#[cfg(any(test, feature = "quota-reset-test-harness"))]
-pub(crate) use quota_command_dispatch::run_quota_command_with_reset_session_factory;
 #[cfg(test)]
 use quota_command_dispatch::should_run_interactive_quota;
 pub use quota_command_dispatch::{QuotaCommand, QuotaCommandError, QuotaStatusFormat};

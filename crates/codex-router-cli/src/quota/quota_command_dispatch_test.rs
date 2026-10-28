@@ -8,6 +8,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 
 use super::*;
+use crate::quota::quota_command_dispatch::run_quota_command_with_reset_session_factory;
 
 static ASYNC_REFRESH_ROOT_COUNTER: AtomicU64 = AtomicU64::new(0);
 

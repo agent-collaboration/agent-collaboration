@@ -238,7 +238,7 @@ where
         .finish();
     let _diagnostic_guard = tracing::subscriber::set_default(diagnostic_subscriber);
     let reset_session_factory = build_factory(dispatch.provider_listener);
-    crate::quota::run_quota_command_with_reset_session_factory(
+    crate::quota::quota_command_dispatch::run_quota_command_with_reset_session_factory(
         stdout,
         dispatch.command,
         context.stdin_is_terminal(),

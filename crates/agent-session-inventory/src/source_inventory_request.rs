@@ -70,6 +70,7 @@ impl SourceInventoryResult {
         }
     }
 
+    #[cfg(any(test, feature = "test-support"))]
     pub fn into_snapshot(self) -> Result<PickerRecordsSnapshot, SourceInventoryRejection> {
         match self {
             Self::Ready { snapshot, .. } => Ok(snapshot),
