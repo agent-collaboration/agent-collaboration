@@ -22,7 +22,6 @@ use serde::de::DeserializeOwned;
 
 #[derive(Clone, Copy)]
 pub(super) enum ProjectWriteKind {
-    ProjectNotificationCancel,
     WorkstreamCreate,
     WorkstreamRename,
     WorkstreamClose,
