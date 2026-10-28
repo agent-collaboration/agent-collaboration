@@ -31,10 +31,10 @@ filter = "binary(=board_request_effects_cli) | (package(=codex-router-host) & (t
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
-# The real child must schedule its TERM recorder inside the unchanged 50 ms
-# fixture grace. Reserve the existing process-runtime window for this proof.
+# Keep the exact TERM recorder grace and compiled WebSocket frame/count proof
+# in the existing process-runtime window, apart from unrelated fixture load.
 [[profile.ci.overrides]]
-filter = "binary(=process_lifecycle) & test(=app_server_force_escalation_signals_and_reaps_once)"
+filter = "binary(=proxy_overload_passthrough) | (binary(=process_lifecycle) & test(=app_server_force_escalation_signals_and_reaps_once))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
