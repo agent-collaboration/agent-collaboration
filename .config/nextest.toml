@@ -37,6 +37,13 @@ threads-required = "num-test-threads"
 filter = "binary(wakeup_repeating_delivery) & test(=recurring_wake_stores_and_dispatches_two_distinct_pushes)"
 slow-timeout = { period = "60s", terminate-after = 6 }
 
+# The real ACP child emits FIFO receipts over a Unix socket within two seconds.
+# Give it the existing process reservation while keeping that deadline intact.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & test(=external_provider_supervisor::tests::router_queue_drains_provider_prompts_in_fifo_order)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # These cases deliberately fill the real production queue or construct 260
 # maximum descriptions / 31,000 historical effects. Keep those inputs and
 # deadlines intact, but allow only one heavy case while ordinary tests retain

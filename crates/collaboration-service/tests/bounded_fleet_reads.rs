@@ -90,9 +90,19 @@ async fn fleet_page_costs(size: usize) -> Result<BTreeMap<String, ReadCost>, Tes
         ),
     ] {
         fixture.api.call(tool, request.clone()).await?;
+        let alarms = read_cost_counter::alarm_read_costs::observe_alarm_costs();
         let before = current_cost();
         let response = fixture.api.call(tool, request).await?;
-        costs.insert(tool.to_owned(), current_cost().since(before));
+        let mut cost = current_cost().since(before);
+        let alarms = alarms.finish().await?;
+        eprintln!(
+            "fleet page SQL at size {size}, {tool}: total={}, alarms={alarms:?}",
+            cost.statements
+        );
+        // The live Core retention alarm owns these reads independently of this page.
+        // Keep its complete runs observable through the existing alarm-cost recorder.
+        cost.statements -= alarms.overlapping_statements;
+        costs.insert(tool.to_owned(), cost);
         assert_eq!(
             response
                 .pointer(records_path)
@@ -126,6 +136,7 @@ async fn fleet_pages_and_discovery_parent_batches_do_not_grow_with_directory_siz
         "fleet page loaded unrelated directory records"
     );
     for (tool, cost) in large {
+        assert_eq!(cost.statements, 2, "{tool}: exact foreground SQL budget");
         assert_eq!(
             cost.records,
             if tool == "discovery_search" { 7 } else { 5 },
