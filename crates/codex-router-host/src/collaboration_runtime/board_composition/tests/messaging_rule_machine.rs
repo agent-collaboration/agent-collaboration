@@ -1,5 +1,5 @@
 //! A successor uses the existing Host composition and a real independent enrollment.
-use super::super::super::forwarded_notification_fixture::HolderNotifications;
+use super::super::super::forwarded_notification_fixture::{HolderNotifications, MailWorkerStart};
 use super::*;
 use board_central_test_support::EnrolledTestMachine;
 
@@ -16,6 +16,7 @@ impl RuleMachine {
     pub async fn open(
         holder: &claim_fixture::ClaimFixture,
         origin: &ActorOrigin,
+        worker_start: MailWorkerStart,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let machine = holder
             .central
@@ -37,7 +38,9 @@ impl RuleMachine {
         let projects = session.projects.clone();
         let registry = projects.registry()?;
         let admission = board.admission.clone();
-        let notifications = HolderNotifications::prepare(&mut board, &root, identity).await?;
+        let notifications =
+            HolderNotifications::prepare_with_worker(&mut board, &root, identity, worker_start)
+                .await?;
         let running = board.start().ok_or("successor running session")?;
         wait_welcome(projects.welcomed.clone()).await?;
         Ok(Self {
