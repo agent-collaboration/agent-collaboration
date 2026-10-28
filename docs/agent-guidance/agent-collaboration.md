@@ -62,7 +62,7 @@ Before stopping children, the Host validates the replacement's current port file
 and checks availability of selected ports it does not already hold. A failed
 check reports the file or unavailable port and its reason, leaving the old Host
 serving. Bind-and-release checks do not reserve a port against a later race.
-Hosts started before 0.1.111 saved their resolved ports as explicit flags;
+Hosts started before 0.1.112 saved their resolved ports as explicit flags;
 those persist across replacements until a fresh Host start lets the file apply.
 
 An explicit `--mcp-bind 127.0.0.1:0` selects an ephemeral listener for disposable
