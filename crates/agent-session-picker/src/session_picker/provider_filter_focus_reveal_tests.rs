@@ -153,30 +153,28 @@ async fn assert_source_choice_frame(width: usize, height: usize) {
                 {
                     println!("SOURCE{width}x{height} SETTLED ORIGINAL:\n{frame}");
                     let lines = body.lines().collect::<Vec<_>>();
-                    let source = lines.iter().position(|line| {
-                        is_field_label(line, "Source")
-                            || (height < 16 && line.contains("Source") && line.contains("Search:"))
-                    });
+                    let source = lines.iter().position(|line| is_field_label(line, "Source"));
                     let search = lines.iter().position(|line| line.contains("Search:"));
                     let selected = lines
                         .iter()
                         .position(|line| line.contains('❯') && line.contains("All sources"));
                     assert!(
                         source.is_some(),
-                        "expanded Source label disappeared while its selected option stayed visible: {frame}"
+                        "expanded Source must have its own label row above the query: {frame}"
                     );
                     assert!(
                         search.is_some(),
                         "expanded Source query disappeared: {frame}"
                     );
                     assert!(
-                        (source < search || (height < 16 && source == search)) && search < selected,
-                        "field/query/selection must remain associated in this same dialog: {frame}"
+                        source < search && search < selected,
+                        "stacked field/query/selection must remain associated in this same dialog: {frame}"
                     );
-                    if source == search {
-                        let line = lines[source.unwrap()];
-                        assert!(line.find("Source") < line.find("Search:"), "{frame}");
-                    }
+                    assert_eq!(
+                        source.map(|row| row + 1),
+                        search,
+                        "the standalone Source label must be immediately above its query: {frame}"
+                    );
                     let normalized = rendered_text_without_spacing(&body);
                     assert!(normalized.contains("InteractiveExternalproviderinventoriesrequireAllsourcesSubagentsExternalproviderinventoriesrequireAllsources❯Allsources"), "{frame}");
                     if width >= 48 {
